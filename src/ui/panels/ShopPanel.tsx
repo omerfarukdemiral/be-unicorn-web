@@ -1,7 +1,10 @@
-// Mağaza: ring expansion + furniture catalog filtered by slot type, stage lock, price.
-import { useState } from 'react'
+// Mağaza: furniture catalog + ring expansion. "Satın al" places at once: on the tapped slot (slotTarget)
+// or the free slot nearest the center (engine findAutoSlot). No separate placing step.
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { SLOT_TYPES, type SlotType } from '../../engine/types'
+// Pure placement rules shared with the engine (same precedent as FounderActions → founderActionError).
+import { canPlaceAt, findAutoSlotFor } from '../../engine/office'
+import { SLOT_TYPES, type OfficeState, type Slot, type SlotId, type SlotType } from '../../engine/types'
 import { DEPT_TEXT, FURNITURE, type FurnitureEffects, type FurnitureItem } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
@@ -9,7 +12,6 @@ import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
 import { Button, Chip, cx, Empty, Pill, SectionTitle } from '../primitives'
 import { SLOT_ICON, slotTypeStage, stageName } from '../theme'
-import { useIsMobile } from '../hooks'
 
 export function effectTags(e: FurnitureEffects): string[] {
   const out: string[] = []
@@ -30,32 +32,81 @@ export function effectTags(e: FurnitureEffects): string[] {
   return out
 }
 
-export function ShopPanel() {
-  const [filter, setFilter] = useState<SlotType | 'all'>('all')
-  const { stage, cash, slots, rings } = useGameStore(
-    useShallow((s) => ({ stage: s.state.stage, cash: s.state.stats.cash, slots: s.state.office.slots, rings: s.state.office.rings })),
-  )
-  const setPlacing = useGameStore((s) => s.setPlacing)
-  const setDockTab = useGameStore((s) => s.setDockTab)
-  const placing = useGameStore((s) => s.ui.placing)
-  const mobile = useIsMobile()
+interface Placement {
+  /** Slot the item would land on (null: no room). */
+  slot: Slot | null
+  /** True when it goes to the tapped slot (slotTarget) rather than the auto slot. */
+  targeted: boolean
+}
 
-  const openRings = new Set(rings.filter((r) => r.unlocked).map((r) => r.index))
+/** Where "Satın al" puts `item`: the targeted slot when it fits, else the free slot nearest the center. */
+function placementFor(office: OfficeState, item: FurnitureItem, target: Slot | undefined): Placement {
+  const spec = { slotType: item.slotType, size: item.size }
+  if (target && target.type === item.slotType && canPlaceAt(office, target, spec)) return { slot: target, targeted: true }
+  return { slot: findAutoSlotFor(office, spec), targeted: false }
+}
+
+const BOUGHT_MS = 2400
+
+export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
+  const { stage, cash, office } = useGameStore(useShallow((s) => ({ stage: s.state.stage, cash: s.state.stats.cash, office: s.state.office })))
+  const dispatch = useGameStore((s) => s.dispatch)
+  const openPanel = useGameStore((s) => s.openPanel)
+  const target = slotTarget ? office.slots.find((x) => x.id === slotTarget) : undefined
+  const [filter, setFilter] = useState<SlotType | 'all'>(target?.type ?? 'all')
+  const [bought, setBought] = useState<{ text: string; key: number } | null>(null)
+
+  // A new target (another empty slot tapped) filters to its type.
+  const targetType = target?.type
+  useEffect(() => {
+    if (slotTarget && targetType) setFilter(targetType)
+  }, [slotTarget, targetType])
+  // The target got filled (bought here, or elsewhere): drop it, later buys go to the auto slot.
+  const targetGone = !!slotTarget && (!target || target.itemId !== undefined || target.spanOf !== undefined)
+  useEffect(() => {
+    if (targetGone) openPanel({ kind: 'shop' }, { replace: true })
+  }, [targetGone, openPanel])
+  useEffect(() => {
+    if (!bought) return
+    const id = window.setTimeout(() => setBought((b) => (b?.key === bought.key ? null : b)), BOUGHT_MS)
+    return () => window.clearTimeout(id)
+  }, [bought])
+
   const freeByType = (type: SlotType) =>
-    slots.filter((sl) => sl.type === type && !sl.itemId && (sl.ring === 0 || openRings.has(sl.ring))).length
+    office.slots.filter((sl) => sl.type === type && canPlaceAt(office, sl, { slotType: type, size: 1 })).length
 
   const items = FURNITURE.filter((f) => filter === 'all' || f.slotType === filter)
     .slice()
     .sort((a, b) => a.stageUnlock - b.stageUnlock || a.price - b.price)
 
-  const pick = (item: FurnitureItem) => {
-    setPlacing({ kind: 'place', itemId: item.id })
-    if (mobile) setDockTab(null)
+  const buy = (item: FurnitureItem, place: Placement) => {
+    // Untargeted buys use the engine's own auto placement (placeItem without slotId).
+    const r = dispatch(place.targeted && place.slot ? { type: 'placeItem', itemId: item.id, slotId: place.slot.id } : { type: 'placeItem', itemId: item.id })
+    if (!r.ok) return
+    const ev = [...r.state.events].reverse().find((e) => e.kind === 'itemPlaced')
+    const ring = r.state.office.slots.find((x) => x.id === ev?.refId)?.ring ?? place.slot?.ring ?? 1
+    setBought({ text: t('shop.bought', { item: item.name, ring }), key: performance.now() })
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <RingSection />
+      {target && !targetGone && (
+        <div className="flex items-center gap-2 rounded-2xl bg-lilac-100 py-1.5 pl-3 pr-1.5 text-xs font-bold text-lilac-500">
+          <Icon name={SLOT_ICON[target.type]} size={15} />
+          <span className="min-w-0 flex-1 truncate">{t('shop.forSlot', { ring: target.ring, type: t(`slot.${target.type}`) })}</span>
+          <Button
+            size="sm"
+            tone="ghost"
+            icon="close"
+            onClick={() => {
+              setFilter('all')
+              openPanel({ kind: 'shop' }, { replace: true })
+            }}
+          >
+            {t('shop.clearTarget')}
+          </Button>
+        </div>
+      )}
       <div>
         <SectionTitle>{t('shop.catalog')}</SectionTitle>
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2">
@@ -73,68 +124,104 @@ export function ShopPanel() {
             )
           })}
         </div>
+        {!target && <p className="mb-2 text-[11px] leading-snug text-ink-600">{t('shop.autoHint')}</p>}
         {filter !== 'all' && slotTypeStage(filter) > stage && (
           <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-600">
             <Icon name="lock" size={14} />
             {t('shop.slotLocked', { stage: stageName(slotTypeStage(filter)) })}
           </p>
         )}
+        {bought && (
+          <p role="status" key={bought.key} className="mb-2 flex animate-pop-in items-center gap-1.5 rounded-2xl bg-mint-100 px-3 py-2 text-xs font-bold text-mint-600">
+            <Icon name="check" size={14} />
+            {bought.text}
+          </p>
+        )}
         {items.length === 0 ? (
           <Empty text={t('shop.empty')} icon="bag" />
         ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {items.map((item) => {
-              const locked = item.stageUnlock > stage || slotTypeStage(item.slotType) > stage
-              const afford = cash >= item.price
-              const selected = placing?.kind === 'place' && placing.itemId === item.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  disabled={locked}
-                  onClick={() => pick(item)}
-                  className={cx(
-                    'group flex min-h-16 items-start gap-3 rounded-2xl border p-2.5 text-left transition-colors',
-                    selected ? 'border-lilac-500 bg-lilac-100' : 'border-cream-200 bg-cream-100/70 hover:border-cream-300 hover:bg-cream-50',
-                    locked && 'cursor-not-allowed opacity-60',
-                  )}
-                >
-                  <Swatch item={item} locked={locked} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-bold">{item.name}</span>
-                      {item.size === 2 && <Pill className="bg-cream-200 text-ink-600">2×</Pill>}
-                      {item.tier > 1 && <Pill className="bg-lemon-100 text-lemon-600">T{item.tier}</Pill>}
-                    </div>
-                    <p className="line-clamp-2 text-[11px] leading-snug text-ink-600">{item.description}</p>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {effectTags(item.effects).map((tag) => (
-                        <Pill key={tag} className="bg-mint-100 text-mint-600">
-                          {tag}
-                        </Pill>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {locked ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-600">
-                        <Icon name="lock" size={12} />
-                        {stageName(Math.max(item.stageUnlock, slotTypeStage(item.slotType)))}
-                      </span>
-                    ) : (
-                      <>
-                        <div className={cx('tabular text-sm font-extrabold', afford ? 'text-ink-900' : 'text-rose-600')}>{money(item.price)}</div>
-                        {item.upkeep ? <div className="tabular text-[10px] text-ink-600">{t('shop.upkeep', { v: money(item.upkeep) })}</div> : null}
-                      </>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+          <ul className="flex flex-col gap-2">
+            {items.map((item) => (
+              <ShopItem key={item.id} item={item} stage={stage} cash={cash} office={office} place={placementFor(office, item, target)} onBuy={buy} />
+            ))}
+          </ul>
         )}
       </div>
+      <RingSection />
     </div>
+  )
+}
+
+function ShopItem({
+  item,
+  stage,
+  cash,
+  office,
+  place,
+  onBuy,
+}: {
+  item: FurnitureItem
+  stage: number
+  cash: number
+  office: OfficeState
+  place: Placement
+  onBuy: (item: FurnitureItem, place: Placement) => void
+}) {
+  const dispatch = useGameStore((s) => s.dispatch)
+  const locked = item.stageUnlock > stage || slotTypeStage(item.slotType) > stage
+  const afford = cash >= item.price
+  const noRoom = !locked && !place.slot
+  // No room: offer the next ring when it has slots of this type.
+  const next = noRoom ? office.rings.filter((r) => !r.unlocked).sort((a, b) => a.index - b.index)[0] : undefined
+  const nextHasType = !!next && office.slots.some((x) => x.ring === next.index && x.type === item.slotType)
+  return (
+    <li className={cx('flex flex-col gap-2 rounded-2xl border border-cream-200 bg-cream-100/70 p-2.5', locked && 'opacity-60')}>
+      <div className="flex items-start gap-3">
+        <Swatch item={item} locked={locked} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-bold">{item.name}</span>
+            {item.size === 2 && <Pill className="bg-cream-200 text-ink-600">2×</Pill>}
+            {item.tier > 1 && <Pill className="bg-lemon-100 text-lemon-600">T{item.tier}</Pill>}
+          </div>
+          <p className="line-clamp-2 text-[11px] leading-snug text-ink-600">{item.description}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {effectTags(item.effects).map((tag) => (
+              <Pill key={tag} className="bg-mint-100 text-mint-600">
+                {tag}
+              </Pill>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        {locked ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-600">
+            <Icon name="lock" size={12} />
+            {stageName(Math.max(item.stageUnlock, slotTypeStage(item.slotType)))}
+          </span>
+        ) : (
+          <span className="min-w-0">
+            <span className={cx('tabular text-sm font-extrabold', afford ? 'text-ink-900' : 'text-rose-600')}>{money(item.price)}</span>
+            {item.upkeep ? <span className="tabular ml-1.5 text-[10px] text-ink-600">{t('shop.upkeep', { v: money(item.upkeep) })}</span> : null}
+          </span>
+        )}
+        {!locked &&
+          (noRoom ? (
+            next && nextHasType ? (
+              <Button size="sm" tone="mint" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
+                {t('shop.noRoomOpenRing', { n: next.index, cost: money(next.openCost) })}
+              </Button>
+            ) : (
+              <span className="text-right text-[11px] font-semibold text-ink-600">{t('shop.noRoomNextStage')}</span>
+            )
+          ) : (
+            <Button size="sm" tone="primary" icon="bag" disabled={!afford} onClick={() => onBuy(item, place)}>
+              {t('common.buy')}
+            </Button>
+          ))}
+      </div>
+    </li>
   )
 }
 

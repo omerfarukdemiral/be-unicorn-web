@@ -58,7 +58,7 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
   return (
     <article className="relative overflow-hidden rounded-[var(--radius-card)] bg-cream-50">
       <div className="h-3" style={{ background: concept.shelfColor }} />
-      <div className="flex flex-col gap-4 p-5 sm:p-6">
+      <div className="flex flex-col gap-4 p-4 @lg:p-6">
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-600">

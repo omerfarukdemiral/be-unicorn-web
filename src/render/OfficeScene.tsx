@@ -17,6 +17,7 @@ import { People } from './People'
 import { speakerPositions, useLayout } from './sceneRegistry'
 import { SlotsLayer } from './Slot'
 import { useGS, useUi } from './source'
+import { panelSelection } from '../store/gameStore'
 import { WorldBubbles } from './WorldBubbles'
 
 export interface OfficeSceneProps {
@@ -41,7 +42,7 @@ function focusOf(sel: Selection | null, layout: OfficeLayout): [number, number] 
 function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const cam = useRef<THREE.OrthographicCamera>(null)
   const layout = useLayout()
-  const selection = useUi((u) => u.selection)
+  const selection = useUi((u) => panelSelection(u.panel))
   const size = useThree((s) => s.size)
   const target = useRef(new THREE.Vector3(layout.center[0], 0, layout.center[1]))
   const first = useRef(true)

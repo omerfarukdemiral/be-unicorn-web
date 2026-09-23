@@ -5,7 +5,7 @@ import { answerDecision } from './decisions'
 import { recomputeDerived } from './derive'
 import { applyMorale, unlockTool } from './effects'
 import { startFounderAction } from './founder'
-import { anchorOf, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
+import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
 import { startRound } from './round'
@@ -148,8 +148,9 @@ const placeItem: Handler<'placeItem'> = ({ s, content }, a) => {
   const item = furnitureById(content, a.itemId)
   if (!item) return 'notFound'
   if (item.stageUnlock > s.stage) return 'notUnlocked'
-  const slot = findSlot(s.office, a.slotId)
-  if (!slot) return 'notFound'
+  // No slot given: buy → auto place on the free slot nearest the center.
+  const slot = a.slotId !== undefined ? findSlot(s.office, a.slotId) : findAutoSlot(s, item.id, content)
+  if (!slot) return a.slotId !== undefined ? 'notFound' : 'noFreeSlot'
   if (slot.id === FOUNDER_SLOT_ID) return 'invalid'
   if (!isRingUnlocked(s.office, slot.ring)) return 'slotLocked'
   if (slot.type !== item.slotType) return 'wrongSlotType'

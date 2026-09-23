@@ -3,10 +3,12 @@ import { STAGES } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
 import { applyEffects } from '../effects'
-import { buildOffice, relocateOffice } from '../office'
+import { buildOffice, findAutoSlot, findAutoSlotFor, relocateOffice } from '../office'
 import { deserialize, serialize } from '../save'
 import type { Action, GameState, TimedAction } from '../types'
 import { fakeCard, fakeConcept, fakeContent } from './fixtures'
+
+const dist2 = (p: { x: number; z: number }) => p.x * p.x + p.z * p.z
 
 const api = createEngine(fakeContent({ decisions: [fakeCard('c1')] }))
 
@@ -160,6 +162,76 @@ describe('office rings', () => {
     const n = relocateOffice(o, 2)
     expect(n.rings.map((r) => r.unlocked)).toEqual([true, true, false])
     expect(n.slots.find((x) => x.id === 'r2-s0')?.itemId).toBe('desk-basic')
+  })
+})
+
+describe('auto placement (findAutoSlot / placeItem without slotId)', () => {
+  it('buy without a slot places on the nearest free desk slot, charges the price, then noFreeSlot', () => {
+    let s = api.createGame({ seed: 1 })
+    const cash = s.stats.cash
+    const r = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' })
+    expect(r.ok).toBe(true)
+    s = r.state
+    expect(s.stats.cash).toBe(cash - 500)
+    const placed = s.office.slots.filter((x) => x.itemId === 'desk-basic')
+    expect(placed.map((x) => x.ring)).toEqual([1])
+    // Ring 1 fills up, ring 2 is locked: skipped, so the fifth desk has nowhere to go.
+    for (let i = 0; i < 3; i++) s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
+    expect(s.office.slots.filter((x) => x.ring === 1 && x.itemId).length).toBe(4)
+    const full = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' })
+    expect(full.ok).toBe(false)
+    expect(full.error).toBe('noFreeSlot')
+    expect(full.state).toBe(s)
+    expect(findAutoSlot(s, 'desk-basic', fakeContent())).toBeNull()
+  })
+  it('picks the inner ring first, then the slot closest to the center', () => {
+    let s = api.createGame({ seed: 1 })
+    s = { ...s, stage: 1, office: buildOffice(1, 1), stats: { ...s.stats, cash: 1e6 } }
+    for (let i = 0; i < 4; i++) s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
+    expect(findAutoSlot(s, 'desk-basic', fakeContent())).toBeNull()
+    const opened = api.applyAction(s, { type: 'openRing', ring: 2 })
+    expect(opened.ok).toBe(true)
+    s = opened.state
+    const slot = findAutoSlot(s, 'desk-basic', fakeContent())
+    expect(slot?.ring).toBe(2)
+    const ring2Desks = s.office.slots.filter((x) => x.ring === 2 && x.type === 'desk')
+    expect(dist2(slot!.pos)).toBe(Math.min(...ring2Desks.map((x) => dist2(x.pos))))
+    // Explicit slotId still wins over auto placement.
+    const far = ring2Desks.find((x) => dist2(x.pos) > dist2(slot!.pos))!
+    const r = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: far.id })
+    expect(r.state.office.slots.find((x) => x.id === far.id)?.itemId).toBe('desk-basic')
+  })
+  it('size-2 rooms need two adjacent free slots; deterministic', () => {
+    const office = buildOffice(2, 3)
+    const spec = { slotType: 'room' as const, size: 2 as const }
+    const a = findAutoSlotFor(office, spec)
+    expect(a).not.toBeNull()
+    expect(findAutoSlotFor(office, spec)?.id).toBe(a!.id)
+    // Block one slot of every pair but one: the remaining pair wins.
+    const rooms = office.slots.filter((x) => x.type === 'room')
+    expect(rooms.length).toBeGreaterThanOrEqual(4)
+    const partnerOf = (id: string) => rooms.find((x) => x.id !== id && Math.abs(x.pos.x - rooms.find((r) => r.id === id)!.pos.x) + Math.abs(x.pos.z - rooms.find((r) => r.id === id)!.pos.z) === 1)!
+    const blocked = rooms.find((x) => x.id === a!.id)!
+    blocked.itemId = 'x'
+    const b = findAutoSlotFor(office, spec)
+    expect(b).not.toBeNull()
+    expect([a!.id, partnerOf(a!.id).id]).not.toContain(b!.id)
+    for (const r of rooms) if (!r.itemId) r.itemId = 'x'
+    expect(findAutoSlotFor(office, spec)).toBeNull()
+    // A single free slot is not enough for a size-2 room.
+    rooms[0]!.itemId = undefined
+    delete rooms[0]!.itemId
+    expect(findAutoSlotFor(office, spec)).toBeNull()
+    expect(findAutoSlotFor(office, { slotType: 'room', size: 1 })?.id).toBe(rooms[0]!.id)
+  })
+  it('auto placement of a size-2 item spans two slots', () => {
+    let s = api.createGame({ seed: 1 })
+    s = { ...s, stage: 2, office: buildOffice(2, 3), stats: { ...s.stats, cash: 1e6 } }
+    const r = api.applyAction(s, { type: 'placeItem', itemId: 'meeting' })
+    expect(r.ok).toBe(true)
+    const held = r.state.office.slots.filter((x) => x.itemId === 'meeting')
+    expect(held.length).toBe(2)
+    expect(held.filter((x) => x.spanOf !== undefined).length).toBe(1)
   })
 })
 

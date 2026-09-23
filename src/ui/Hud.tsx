@@ -11,7 +11,18 @@ import { money } from './format'
 import { cx, IconButton } from './primitives'
 import { WIDGETS } from './widgets'
 import { useIsMobile } from './hooks'
-import { requestOverlay } from './modalQueue'
+
+/** Round button → Büyüme panel, scrolled to the round block. */
+function openRound() {
+  useGameStore.getState().openPanel({ kind: 'growth', section: 'round' }, { root: true })
+}
+
+/** Gear → settings in the single panel (again closes it). */
+function toggleSettings() {
+  const { ui, openPanel, closePanel } = useGameStore.getState()
+  if (ui.panel?.kind === 'settings') closePanel()
+  else openPanel({ kind: 'settings' }, { root: true })
+}
 
 const SPEEDS: GameSpeed[] = [0, 1, 2, 4]
 
@@ -130,7 +141,7 @@ function StageBar({ compact }: { compact?: boolean }) {
   const roundBtn = s.roundActive ? (
     <button
       type="button"
-      onClick={() => requestOverlay({ kind: 'round' })}
+      onClick={openRound}
       className="inline-flex min-h-9 items-center gap-1 rounded-full bg-lilac-100 px-3 text-xs font-bold text-lilac-500 max-md:min-h-11"
     >
       <Icon name="timer" size={14} />
@@ -139,7 +150,7 @@ function StageBar({ compact }: { compact?: boolean }) {
   ) : s.canStart ? (
     <button
       type="button"
-      onClick={() => requestOverlay({ kind: 'round' })}
+      onClick={openRound}
       className="inline-flex min-h-9 animate-pop-in items-center gap-1 rounded-full bg-ink-900 px-3 text-xs font-bold text-cream-50 max-md:min-h-11"
     >
       <Icon name="rocket" size={14} />
@@ -226,7 +237,7 @@ function ViewControls({ compact }: { compact?: boolean }) {
       <div className="ui-card flex shrink-0 items-center p-0.5">
         <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} />
         <IconButton icon="zoomIn" label={t('view.zoomIn')} onClick={() => z(1)} disabled={zoom === 2} />
-        <IconButton icon="gear" label={t('settings.title')} onClick={() => requestOverlay({ kind: 'settings' })} />
+        <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} />
       </div>
     )
   }
@@ -242,12 +253,12 @@ function ViewControls({ compact }: { compact?: boolean }) {
         title={t('view.languageSoon')}
         aria-label={t('view.language')}
         className="hidden h-10 min-w-10 items-center justify-center gap-1 rounded-full px-2 text-[11px] font-extrabold text-ink-700 hover:bg-cream-200/80 lg:flex"
-        onClick={() => requestOverlay({ kind: 'settings' })}
+        onClick={toggleSettings}
       >
         <Icon name="globe" size={16} />
         TR
       </button>
-      <IconButton icon="gear" label={t('settings.title')} onClick={() => requestOverlay({ kind: 'settings' })} size={40} />
+      <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={40} />
     </div>
   )
 }

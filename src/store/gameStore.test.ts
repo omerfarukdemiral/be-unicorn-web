@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FURNITURE } from '../content'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY } from '../engine/types'
-import { useGameStore } from './gameStore'
+import { panelSelection, useGameStore } from './gameStore'
 
 const store = () => useGameStore.getState()
 
@@ -116,5 +116,38 @@ describe('gameStore (engine wired)', () => {
     expect(s.concepts.learned).toContain('runway')
     expect(s.unlockedWidgets.length).toBeGreaterThan(startWidgets)
     expect(store().exportReplay().actions.length).toBeGreaterThan(5)
+  })
+})
+
+describe('single panel (ui)', () => {
+  beforeEach(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 }))
+
+  it('dock tabs replace each other and toggle closed', () => {
+    store().togglePanel('shop')
+    expect(store().ui.panel).toEqual({ kind: 'shop' })
+    store().togglePanel('journal')
+    expect(store().ui.panel).toEqual({ kind: 'journal' })
+    expect(store().ui.panelBack).toBeNull()
+    store().togglePanel('journal')
+    expect(store().ui.panel).toBeNull()
+  })
+
+  it('an empty slot opens the shop targeted at it; a filled slot opens its detail with back', () => {
+    const slot = store().state.office.slots.find((x) => x.ring === 1 && !x.itemId)!
+    store().togglePanel('team')
+    store().select({ kind: 'slot', id: slot.id })
+    expect(store().ui.panel).toEqual({ kind: 'shop', slotTarget: slot.id })
+    expect(panelSelection(store().ui.panel)).toEqual({ kind: 'slot', id: slot.id })
+    expect(store().ui.panelBack).toEqual({ kind: 'team' })
+    store().panelGoBack()
+    expect(store().ui.panel).toEqual({ kind: 'team' })
+
+    const desk = FURNITURE.find((f) => f.slotType === slot.type && f.stageUnlock === 0 && f.size === 1)!
+    expect(store().dispatch({ type: 'placeItem', itemId: desk.id }).ok).toBe(true)
+    const filled = store().state.office.slots.find((x) => x.itemId === desk.id)!
+    store().select({ kind: 'slot', id: filled.id })
+    expect(store().ui.panel).toEqual({ kind: 'detail', selection: { kind: 'slot', id: filled.id } })
+    store().select(null)
+    expect(store().ui.panel).toBeNull()
   })
 })

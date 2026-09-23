@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { founderActionError } from '../engine/founder'
 import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind } from '../engine/types'
 import { STAGES } from '../content'
-import { useGameStore } from '../store/gameStore'
+import { panelSelection, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { cx, Ring } from './primitives'
@@ -28,7 +28,7 @@ export function FounderActions() {
     useShallow((s) => Object.fromEntries(FOUNDER_ACTIONS.map((k) => [k, founderActionError(s.state, k)])) as Record<FounderActionKind, ActionErrorCode | null>),
   )
   const dispatch = useGameStore((s) => s.dispatch)
-  const selection = useGameStore((s) => s.ui.selection)
+  const selection = useGameStore(useShallow((s) => panelSelection(s.ui.panel)))
   const projects = useGameStore(useShallow((s) => s.state.projects))
   // Remember when each cooldown started so the ring can show the fraction left.
   const cdStart = useRef<Partial<Record<FounderActionKind, { start: number; end: number }>>>({})

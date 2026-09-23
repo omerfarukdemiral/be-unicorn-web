@@ -1,6 +1,5 @@
 // Small feedback layers: rejected-action toast and placing-mode banner.
 import { useEffect, useState } from 'react'
-import { FURNITURE } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
@@ -32,8 +31,7 @@ export function PlacingBanner() {
   const employees = useGameStore((s) => s.state.employees)
   if (!placing) return null
   let text: string
-  if (placing.kind === 'place') text = t('placing.place', { item: FURNITURE.find((f) => f.id === placing.itemId)?.name ?? '' })
-  else if (placing.kind === 'move') text = t('placing.move')
+  if (placing.kind === 'move') text = t('placing.move')
   else text = t('placing.seat', { name: employees.find((e) => e.id === placing.employeeId)?.name ?? '' })
   return (
     <div className="pointer-events-auto flex animate-pop-in items-center gap-2 rounded-full bg-lilac-500 py-1 pl-4 pr-1 text-xs font-bold text-cream-50 shadow-[var(--shadow-pop)]">

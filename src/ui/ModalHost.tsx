@@ -1,20 +1,12 @@
-// Renders store.ui.overlay (max one blocking), drains the UI queue, turns engine events
-// (stageUp / gameOver / victory) into overlays, and pauses the game while a modal is open.
+// Renders store.ui.overlay (max one blocking: move scene, post-mortem, victory), drains the UI queue,
+// turns engine events (stageUp / gameOver / victory) into overlays, and pauses the game while one is open.
+// Everything else (Defter cards, decisions, round, settings) opens in the single right panel.
 import { useCallback, useEffect, useRef } from 'react'
 import type { GameSpeed } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import type { Overlay } from '../store/types'
 import { requestOverlay, useModalQueue } from './modalQueue'
-import {
-  ConceptCardOverlay,
-  DecisionOverlay,
-  MoveSceneOverlay,
-  PostMortemOverlay,
-  ReflectionOverlay,
-  RoundOverlay,
-  SettingsOverlay,
-  VictoryOverlay,
-} from './overlays/Overlays'
+import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
 
 function gameOverOverlay(kind: 'bankrupt' | 'teamLost' | 'unicorn'): Overlay {
   return kind === 'unicorn' ? { kind: 'victory' } : { kind: 'postMortem' }
@@ -45,22 +37,12 @@ export function ModalHost() {
 
   if (!overlay) return null
   switch (overlay.kind) {
-    case 'conceptCard':
-      return <ConceptCardOverlay conceptId={overlay.conceptId} onClose={close} />
-    case 'decision':
-      return <DecisionOverlay cardId={overlay.cardId} onClose={close} />
-    case 'reflection':
-      return <ReflectionOverlay cardId={overlay.cardId} optionIndex={overlay.optionIndex} onClose={close} />
-    case 'round':
-      return <RoundOverlay onClose={close} />
     case 'moveScene':
       return <MoveSceneOverlay onClose={close} />
     case 'postMortem':
       return <PostMortemOverlay />
     case 'victory':
       return <VictoryOverlay />
-    case 'settings':
-      return <SettingsOverlay onClose={close} />
   }
 }
 

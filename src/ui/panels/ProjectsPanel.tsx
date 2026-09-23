@@ -52,7 +52,7 @@ export function ProjectsPanel() {
       </div>
       <div>
         <SectionTitle>{t('projects.new')}</SectionTitle>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
           {PROJECT_CATEGORIES.map((c) => (
             <button
               key={c}

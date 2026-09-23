@@ -1,6 +1,6 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
-import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, FurnitureId, GameSpeed, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
+import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameSpeed, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -11,30 +11,41 @@ export type Selection =
 
 export type DockTab = 'shop' | 'team' | 'projects' | 'growth' | 'journal'
 
-/** At most one blocking overlay at a time (PLAN §10). */
-export type Overlay =
-  | { kind: 'conceptCard'; conceptId: ConceptId }
-  | { kind: 'decision'; cardId: DecisionCardId }
-  | { kind: 'reflection'; cardId: DecisionCardId; optionIndex: number }
-  | { kind: 'round' }
-  | { kind: 'moveScene' }
-  | { kind: 'postMortem' }
-  | { kind: 'victory' }
+/**
+ * The single right panel (bottom sheet on phones). Dock tabs, scene selections, Defter cards,
+ * decisions and settings all live here: opening one replaces the other, the scene stays visible.
+ */
+export type Panel =
+  /** `slotTarget`: an empty slot was tapped, a purchase goes there (filtered to its type). */
+  | { kind: 'shop'; slotTarget?: SlotId }
+  | { kind: 'team' }
+  | { kind: 'projects' }
+  /** `section: 'round'` scrolls to the funding round block. */
+  | { kind: 'growth'; section?: 'round' }
+  /** `conceptId`: that Defter card is shown on top of the shelf. */
+  | { kind: 'journal'; conceptId?: ConceptId }
+  | { kind: 'detail'; selection: Selection }
+  /** `answered`: option picked, the panel shows the reflection. */
+  | { kind: 'decision'; cardId: DecisionCardId; answered?: number }
   | { kind: 'settings' }
 
-/** Pointer mode on the 3D floor. */
-export type PlacingMode =
-  | { kind: 'place'; itemId: FurnitureId }
-  | { kind: 'move'; fromSlotId: SlotId }
-  | { kind: 'seat'; employeeId: EmployeeId }
+export type PanelKind = Panel['kind']
+
+/** Only truly blocking moments are centered modals (they pause the game). */
+export type Overlay = { kind: 'moveScene' } | { kind: 'postMortem' } | { kind: 'victory' }
+
+/** Pointer mode on the 3D floor. Buying places automatically (no place mode). */
+export type PlacingMode = { kind: 'move'; fromSlotId: SlotId } | { kind: 'seat'; employeeId: EmployeeId }
 
 /** 0 = far (whole office), 1 = default, 2 = close. */
 export type ZoomLevel = 0 | 1 | 2
 
 export interface UiState {
-  selection: Selection | null
+  /** The one open panel (null = scene only). */
+  panel: Panel | null
+  /** One level of history for the panel's back button. */
+  panelBack: Panel | null
   hoverSlotId: SlotId | null
-  dockTab: DockTab | null
   overlay: Overlay | null
   placing: PlacingMode | null
   zoom: ZoomLevel
@@ -71,9 +82,16 @@ export interface GameStore {
   exportReplay(): ReplayLog
 
   // UI slice (never touches GameState)
+  /** Scene / list selection → detail panel. An empty open slot opens the shop targeted at it. null closes a detail panel. */
   select(selection: Selection | null): void
+  /** Opens `panel` in the single panel. `root` (dock tabs) clears history; `replace` keeps the current back entry. */
+  openPanel(panel: Panel, opts?: { root?: boolean; replace?: boolean }): void
+  /** Dock tab: opens it, or closes the panel when that tab is already open. */
+  togglePanel(tab: DockTab): void
+  closePanel(): void
+  /** Back to the previous panel content (if any). */
+  panelGoBack(): void
   setHoverSlot(slotId: SlotId | null): void
-  setDockTab(tab: DockTab | null): void
   openOverlay(overlay: Overlay): void
   closeOverlay(): void
   setPlacing(mode: PlacingMode | null): void

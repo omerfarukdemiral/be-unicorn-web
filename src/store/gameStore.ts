@@ -2,9 +2,9 @@
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by time.speed.
 import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
-import { FIXED_STEP_DAYS, SECONDS_PER_DAY, type GameState, type NewGameOptions } from '../engine/types'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readProfile, readSave, writeProfile, writeSave } from './save'
-import type { GameStore, ReplayLog, UiState } from './types'
+import type { GameStore, Panel, ReplayLog, Selection, UiState } from './types'
 
 export { SAVE_KEY } from './save'
 
@@ -12,9 +12,9 @@ export { SAVE_KEY } from './save'
 const MAX_DAYS_PER_TICK = 4
 
 const initialUi = (): UiState => ({
-  selection: null,
+  panel: null,
+  panelBack: null,
   hoverSlotId: null,
-  dockTab: null,
   overlay: null,
   placing: null,
   zoom: 1,
@@ -22,6 +22,31 @@ const initialUi = (): UiState => ({
   pausedFrom: null,
   generation: 0,
 })
+
+/** Scene selection shown by the panel (detail, or the slot a targeted shop buys for). Render highlights it. */
+export function panelSelection(panel: Panel | null): Selection | null {
+  if (!panel) return null
+  if (panel.kind === 'detail') return panel.selection
+  if (panel.kind === 'shop' && panel.slotTarget) {
+    // Stable per panel object, so selectors (tuples, useShallow) see the same reference every call.
+    let sel = targetSelections.get(panel)
+    if (!sel) targetSelections.set(panel, (sel = { kind: 'slot', id: panel.slotTarget }))
+    return sel
+  }
+  return null
+}
+const targetSelections = new WeakMap<Panel, Selection>()
+
+function samePanel(a: Panel | null, b: Panel | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/** Empty slot in an open ring (not the founder desk): tapping it goes straight to the shop. */
+function isEmptyOpenSlot(s: GameState, id: string): boolean {
+  const slot = s.office.slots.find((x) => x.id === id)
+  if (!slot || slot.id === FOUNDER_SLOT_ID || slot.itemId !== undefined || slot.spanOf !== undefined) return false
+  return slot.ring === 0 || s.office.rings.some((r) => r.index === slot.ring && r.unlocked)
+}
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31)
@@ -115,9 +140,32 @@ export const useGameStore = create<GameStore>()((set, get) => ({
 
   exportReplay: () => ({ ...replay, actions: [...replay.actions] }),
 
-  select: (selection) => set((s) => ({ ui: { ...s.ui, selection } })),
+  select(selection) {
+    const { ui, state, openPanel, closePanel } = get()
+    if (!selection) {
+      if (ui.panel?.kind === 'detail' || (ui.panel?.kind === 'shop' && ui.panel.slotTarget)) closePanel()
+      return
+    }
+    if (selection.kind === 'slot' && isEmptyOpenSlot(state, selection.id)) openPanel({ kind: 'shop', slotTarget: selection.id })
+    else openPanel({ kind: 'detail', selection })
+  },
+  openPanel(panel, opts) {
+    set((s) => {
+      const cur = s.ui.panel
+      if (samePanel(cur, panel)) return s
+      const panelBack = opts?.root ? null : opts?.replace ? s.ui.panelBack : cur
+      return { ui: { ...s.ui, panel, panelBack } }
+    })
+  },
+  togglePanel(tab) {
+    const { ui, openPanel, closePanel } = get()
+    // Same tab again closes (a targeted shop counts as the shop tab).
+    if (ui.panel?.kind === tab) closePanel()
+    else openPanel({ kind: tab }, { root: true })
+  },
+  closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: { ...s.ui, panel: null, panelBack: null } })),
+  panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: { ...s.ui, panel: s.ui.panelBack, panelBack: null } } : s)),
   setHoverSlot: (hoverSlotId) => set((s) => (s.ui.hoverSlotId === hoverSlotId ? s : { ui: { ...s.ui, hoverSlotId } })),
-  setDockTab: (dockTab) => set((s) => ({ ui: { ...s.ui, dockTab } })),
   openOverlay: (overlay) => set((s) => ({ ui: { ...s.ui, overlay } })),
   closeOverlay: () => set((s) => ({ ui: { ...s.ui, overlay: null } })),
   setPlacing: (placing) => set((s) => ({ ui: { ...s.ui, placing } })),

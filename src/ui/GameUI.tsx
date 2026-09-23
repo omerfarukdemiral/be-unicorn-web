@@ -1,17 +1,21 @@
 // UI root: full-screen HTML layer above the canvas. Root is pointer-events-none;
-// interactive parts opt in with pointer-events-auto.
+// interactive parts opt in with pointer-events-auto. One panel at a time (RightPanel), the office stays
+// visible in the middle; only move scene / post-mortem / victory are centered modals (ModalHost).
 import { useEffect, useMemo } from 'react'
 import type { DockTab } from '../store/types'
 import { Hud } from './Hud'
 import { Dock, DOCK_TABS } from './Dock'
-import { DetailPanel, type RenderPreview } from './DetailPanel'
+import type { RenderPreview } from './DetailPanel'
+import { RightPanel, PANEL_RESERVE } from './RightPanel'
 import { FounderActions } from './FounderActions'
 import { ActivityLine } from './ActivityLine'
 import { BubbleTray } from './bubbles'
 import { ModalHost } from './ModalHost'
 import { ErrorToast, PlacingBanner } from './Feedback'
 import { useKeyboardShortcuts } from './shortcuts'
+import { cx } from './primitives'
 import { useIsMobile, usePrefs } from './hooks'
+import { useGameStore } from '../store/gameStore'
 import { installMock, mockRequested } from './mock'
 
 export interface GameUIProps {
@@ -25,6 +29,9 @@ export interface GameUIProps {
 
 export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProps = {}) {
   const mobile = useIsMobile()
+  const panelOpen = useGameStore((s) => s.ui.panel !== null)
+  // Desktop: bottom-center UI (dock, toasts) stays in the scene area left of the open panel.
+  const sceneRight = !mobile && panelOpen ? PANEL_RESERVE : 0
   const screenAmbient = usePrefs((p) => p.screenBubbles)
   const tabKeys = useMemo(() => Object.fromEntries(DOCK_TABS.map((d) => [d.key, d.id])) as Record<string, DockTab>, [])
   useKeyboardShortcuts(tabKeys)
@@ -39,9 +46,11 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
         <Hud />
         {!worldBubbles && <BubbleTray ambient={screenAmbient} />}
 
-        {/* Center-bottom transient feedback */}
-        {/* z-40: above dock panels and sheets (z-20/30), below blocking modals (z-50). Rendered after them. */}
-        <div className={mobile ? 'pointer-events-none absolute inset-x-0 bottom-[calc(200px+env(safe-area-inset-bottom,0px))] z-40 flex flex-col items-center gap-2 px-2' : 'pointer-events-none absolute inset-x-0 bottom-[84px] z-40 flex flex-col items-center gap-2'}>
+        {/* Bottom of the scene area: transient feedback. z-40 = above the panel/sheet (z-20/30), below blocking modals (z-50). */}
+        <div
+          className={mobile ? 'pointer-events-none absolute inset-x-0 bottom-[calc(200px+env(safe-area-inset-bottom,0px))] z-40 flex flex-col items-center gap-2 px-2' : 'pointer-events-none absolute bottom-[84px] left-0 z-40 flex flex-col items-center gap-2 px-3'}
+          style={mobile ? undefined : { right: sceneRight }}
+        >
           <PlacingBanner />
           <ErrorToast />
         </div>
@@ -59,8 +68,15 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
           </div>
         )}
 
-        <DetailPanel renderPreview={renderPreview} />
-        <Dock />
+        <RightPanel renderPreview={renderPreview} />
+        {mobile ? (
+          <Dock />
+        ) : (
+          // With the panel open the dock hugs the panel's left edge, clear of the founder actions (bottom-left).
+          <div className={cx('pointer-events-none absolute bottom-0 left-0 flex p-3', panelOpen ? 'justify-end' : 'justify-center')} style={{ right: sceneRight ? sceneRight - 12 : 0 }}>
+            <Dock compact={panelOpen} />
+          </div>
+        )}
       </div>
       <ModalHost />
     </div>

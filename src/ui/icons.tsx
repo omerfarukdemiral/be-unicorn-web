@@ -44,6 +44,7 @@ const PATHS = {
   chevronDown: <path d="m6 9.5 6 6 6-6" />,
   chevronUp: <path d="m6 14.5 6-6 6 6" />,
   chevronRight: <path d="m9.5 6 6 6-6 6" />,
+  chevronLeft: <path d="m14.5 6-6 6 6 6" />,
   bolt: <path d="M13.5 2.5 5 13.5h6l-1 8 8.5-11h-6Z" />,
   coffee: <><path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5Z" /><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2.5M11 3.5v2.5M14 3.5v2.5" /></>,
   phone: <path d="M6.5 3.5h3l1.5 4.5-2 1.5a11 11 0 0 0 5.5 5.5l1.5-2 4.5 1.5v3a2 2 0 0 1-2 2A15 15 0 0 1 4.5 5.5a2 2 0 0 1 2-2Z" />,

@@ -139,6 +139,45 @@ export function findPartnerSlot(office: OfficeState, slot: Slot, ignoreIds: read
   )
 }
 
+/** What auto placement needs to know about an item. */
+export interface PlacementSpec {
+  slotType: SlotType
+  size: 1 | 2
+}
+
+/** True when `slot` can take a new item of `spec` right now (open ring, right type, free, partner for size 2). */
+export function canPlaceAt(office: OfficeState, slot: Slot, spec: PlacementSpec): boolean {
+  if (slot.id === FOUNDER_SLOT_ID || slot.type !== spec.slotType) return false
+  if (slot.itemId !== undefined || slot.spanOf !== undefined) return false
+  if (!isRingUnlocked(office, slot.ring)) return false
+  return spec.size !== 2 || findPartnerSlot(office, slot) !== undefined
+}
+
+/**
+ * Auto placement (buy → place): the free slot nearest the center that fits `spec`.
+ * Order: ring (inside out), then squared distance from the founder desk, then slot order. Deterministic.
+ */
+export function findAutoSlotFor(office: OfficeState, spec: PlacementSpec): Slot | null {
+  let best: Slot | null = null
+  let bestKey: [number, number] = [Infinity, Infinity]
+  for (const s of office.slots) {
+    if (!canPlaceAt(office, s, spec)) continue
+    const key: [number, number] = [s.ring, s.pos.x * s.pos.x + s.pos.z * s.pos.z]
+    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+      best = s
+      bestKey = key
+    }
+  }
+  return best
+}
+
+/** findAutoSlotFor by furniture id; null for unknown items or a full office. */
+export function findAutoSlot(state: GameState, itemId: string, content: EngineContent): Slot | null {
+  const item = furnitureById(content, itemId)
+  if (!item) return null
+  return findAutoSlotFor(state.office, { slotType: item.slotType, size: item.size === 2 ? 2 : 1 })
+}
+
 /** Desk slot an employee can sit on: desk type, open ring, not founder, free. */
 export function isFreeDesk(office: OfficeState, slot: Slot): boolean {
   return slot.type === 'desk' && slot.id !== FOUNDER_SLOT_ID && slot.occupantId === undefined && isRingUnlocked(office, slot.ring)

@@ -85,7 +85,7 @@ Bir dosyaya yalnızca sahibi yazar. Sözleşme dosyalarına yapılan değişikli
 - Kilitli halkalar karanlık/tozlu; `ringOpened` event'inde tadilat animasyonu. `stageUp` event'inde taşınma.
 - Karakterler: `employees[]` (`status`'a göre animasyon), kurucu (`founder.currentAction`), `visitors[]`. Yürüme/animasyon **yerel görsel durum**dur, engine'e yazılmaz.
 - Dünyaya bağlı balonlar (drei `<Html>`): ortam balonları (`state.bubbles`), aktif kavram balonu (`concepts.active`, tıklayınca `openOverlay({kind:'conceptCard'})` + `dispatch({type:'openConcept'})`), küçültülmüş kavram ikonları, aktif kararın kısa sorusu (tıklayınca `openOverlay({kind:'decision'})`), durum ikonları.
-- Etkileşim: slota tık → `ui.placing` varsa ilgili aksiyon (`placeItem` / `moveItem` / `assignDesk`) dispatch, yoksa `select({kind:'slot'})`. Hover → `setHoverSlot` (+ etki alanı parlaması, §3.4). Dokunmatik: tap = tık, pinch = `setZoom`. Kamera sabit izometrik, zoom yalnızca `ui.zoom` seviyeleri.
+- Etkileşim: slota tık → `ui.placing` varsa ilgili aksiyon (`moveItem` / `assignDesk`) dispatch, yoksa `select({kind:'slot'})` (store boş açık slotu hedefli Mağaza'ya çevirir). Seçim vurgusu `panelSelection(ui.panel)`; yeni yerleşen eşyanın slotu `itemPlaced` event'iyle kısa süre parlar. Hover → `setHoverSlot` (+ etki alanı parlaması, §3.4). Dokunmatik: tap = tık, pinch = `setZoom`. Kamera sabit izometrik, zoom yalnızca `ui.zoom` seviyeleri.
 - Performans: 60 karakter + Series C ofisi 60 fps (instancing, paylaşılan geometri/materyal).
 
 ## 6. UI şeridi
@@ -94,9 +94,9 @@ Bir dosyaya yalnızca sahibi yazar. Sözleşme dosyalarına yapılan değişikli
 
 - Giriş: `src/ui/GameUI.tsx` → `export function GameUI(): JSX.Element` (canvas'ın üstünde tam ekran katman; kök `pointer-events-none`, etkileşimli parçalar `pointer-events-auto`).
 - Üst sol: kasa (+ aylık net), kullanıcı, moral; diğerleri `state.unlockedWidgets` içerdikçe belirir. Üst orta: aşama, gün/ay, `derived.stageProgress`, hız (`setSpeed`). Üst sağ: zoom, ses, ayarlar.
-- Alt dock (`ui.dockTab`): Mağaza · Ekip · Projeler · Büyüme · Defter. Mağaza eşya seçince `setPlacing({kind:'place', itemId})`.
-- Sağ detay paneli (`ui.selection`): metrikler + aksiyonlar; yakın çekim için `ObjectPreview` (render henüz yoksa yer tutucu kutu).
-- Overlay'ler (`ui.overlay`, aynı anda **en fazla 1 blocking**): kavram kartı (Ne? / Sen nerede gördün? / Kural), karar kartı (seçenek + görünür takas) → yansıma, tur, taşınma, post-mortem, zafer.
+- **Tek panel** (`ui.panel`, `RightPanel.tsx`): Mağaza · Ekip · Projeler · Büyüme (tur bölümü dahil) · Defter (kavram kartı dahil) · sahne detayı · karar + yansıma · ayarlar aynı sağ panelde açılır ve birbirinin yerini alır; masaüstünde sağda ~400px sütun, mobilde tek alt sheet. Tek seviye geri (`ui.panelBack`). Alt dock yalnızca sekme çubuğu (`togglePanel`).
+- Mağaza: "Satın al" = `placeItem` (slotId'siz → engine `findAutoSlot`: merkeze en yakın uygun boş slot). Boş slota tık → Mağaza o slota hedefli (`slotTarget`). Yer yoksa sonraki halkayı açma önerisi. UI yer kontrolünü `engine/office.ts` saf yardımcılarıyla (`canPlaceAt`, `findAutoSlotFor`) yapar (FounderActions → `founderActionError` emsali).
+- Overlay'ler (`ui.overlay`, oyunu duraklatır): yalnızca taşınma sahnesi, post-mortem, zafer.
 - Alt sol aktivite satırı: `state.activity` + `ACTIVITY_TEXT[kind]` içindeki `{param}` doldurulur.
 - Hata geri bildirimi: `ui.lastError` kısa inline mesaj.
 - Mobil (< 768px): HUD sıkışır, dock alt çubuk, detay paneli alttan açılan sheet, dokunma hedefleri ≥ 44px, `safe-top/safe-bottom/safe-x` yardımcıları.

@@ -1,4 +1,4 @@
-// At most one blocking overlay (store.ui.overlay). Extra requests wait in this UI-local queue.
+// At most one blocking overlay (store.ui.overlay: move scene, post-mortem, victory). Extra requests wait here.
 import { create } from 'zustand'
 import { useGameStore } from '../store/gameStore'
 import type { Overlay } from '../store/types'
@@ -25,11 +25,11 @@ export function sameOverlay(a: Overlay, b: Overlay): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-/** Opens now if nothing blocks, otherwise queues. `urgent` replaces a settings overlay. */
+/** Opens now if nothing blocks, otherwise queues (post-mortem after a move scene, etc.). */
 export function requestOverlay(o: Overlay): void {
   const { ui, openOverlay } = useGameStore.getState()
   const cur = ui.overlay
-  if (!cur || (cur.kind === 'settings' && o.kind !== 'settings')) {
+  if (!cur) {
     openOverlay(o)
     return
   }

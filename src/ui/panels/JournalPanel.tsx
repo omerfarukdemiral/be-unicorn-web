@@ -6,6 +6,7 @@ import { Icon } from '../icons'
 import { t } from '../i18n'
 import { cx, Empty, SectionTitle } from '../primitives'
 import { conceptById, openConceptCard } from '../uiActions'
+import { NotebookCard } from '../NotebookCard'
 
 const PER_SHELF = 9
 
@@ -13,7 +14,9 @@ export function conceptTitle(id: ConceptId): string {
   return t(`concept.${id}`)
 }
 
-export function JournalPanel() {
+/** Defter shelf; `conceptId` shows that card on top (opened from a bubble, a decision or the shelf). */
+export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
+  const openPanel = useGameStore((s) => s.openPanel)
   const { learned, minimized } = useGameStore(useShallow((s) => ({ learned: s.state.concepts.learned, minimized: s.state.concepts.minimized })))
   const waiting = minimized.filter((id) => !learned.includes(id))
 
@@ -24,6 +27,11 @@ export function JournalPanel() {
 
   return (
     <div className="flex flex-col gap-4">
+      {conceptId && (
+        <div key={conceptId} className="animate-pop-in overflow-hidden rounded-[var(--radius-card)] border border-cream-300 shadow-[var(--shadow-card)]">
+          <NotebookCard conceptId={conceptId} onClose={() => openPanel({ kind: 'journal' }, { replace: true })} />
+        </div>
+      )}
       {waiting.length > 0 && (
         <section>
           <SectionTitle>{t('journal.waiting')}</SectionTitle>

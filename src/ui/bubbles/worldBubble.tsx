@@ -1,7 +1,7 @@
 // UI look for render's world-anchored bubbles. Integrate wires it as
 // <GameCanvas renderBubble={renderWorldBubble} /> together with <GameUI worldBubbles />.
 // The param type mirrors render/bubbles.ts `WorldBubble` structurally (ui may not import render).
-// Clicks go through the UI modal queue (max 1 blocking modal), not render's direct onOpen.
+// Clicks open the single right panel (Defter card / decision), never a blocking modal.
 import type { ReactNode } from 'react'
 import type { ConceptId, DecisionCardId, NpcRole } from '../../engine/types'
 import { NPC_TEXT } from '../../content'
@@ -9,7 +9,7 @@ import { Icon } from '../icons'
 import { AmbientBubbleView } from './AmbientBubble'
 import { ConceptBubbleView, ConceptIconView } from './ConceptBubble'
 import { conceptTitle } from '../panels/JournalPanel'
-import { requestOverlay } from '../modalQueue'
+import { useGameStore } from '../../store/gameStore'
 import { openConceptCard } from '../uiActions'
 
 interface Base {
@@ -38,7 +38,7 @@ export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
       return (
         <button
           type="button"
-          onClick={() => requestOverlay({ kind: 'decision', cardId: b.cardId })}
+          onClick={() => useGameStore.getState().openPanel({ kind: 'decision', cardId: b.cardId })}
           className="flex w-max max-w-[min(300px,60vw)] animate-pop-in items-center gap-2 rounded-3xl rounded-bl-md border border-sky-300 bg-cream-50 px-3 py-2 text-left shadow-[var(--shadow-card)] transition-transform hover:-translate-y-0.5"
         >
           <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-600">

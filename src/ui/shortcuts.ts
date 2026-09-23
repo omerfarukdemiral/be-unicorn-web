@@ -1,4 +1,4 @@
-// Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/D dock tabs, Esc back, +/- zoom.
+// Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/D panel tabs (again = close), Esc closes, +/- zoom.
 import { useEffect, useRef } from 'react'
 import type { GameSpeed } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
@@ -17,10 +17,9 @@ export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
       const key = e.key.toLowerCase()
 
       if (key === 'escape') {
-        if (blocking) return // OverlayFrame handles it
+        if (blocking) return // OverlayFrame handles it (move scene)
         if (st.ui.placing) st.setPlacing(null)
-        else if (st.ui.selection) st.select(null)
-        else if (st.ui.dockTab) st.setDockTab(null)
+        else if (st.ui.panel) st.closePanel()
         return
       }
       if (blocking || st.state.gameOver) return
@@ -43,7 +42,7 @@ export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
       }
       const tab = tabKeys[key]
       if (tab) {
-        st.setDockTab(st.ui.dockTab === tab ? null : tab)
+        st.togglePanel(tab)
         return
       }
       if (key === '+' || key === '=') st.setZoom(Math.min(2, st.ui.zoom + 1) as ZoomLevel)

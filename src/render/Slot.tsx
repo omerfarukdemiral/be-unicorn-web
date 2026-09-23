@@ -1,12 +1,12 @@
 // Floor slots: type markers, hover/tap highlight, influence area glow (PLAN §3.4),
-// and pointer → action routing (select / placeItem / moveItem / assignDesk).
+// and pointer → action routing (select / moveItem / assignDesk). Buying places automatically (shop).
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { memo, useMemo, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { ActionResult, GameState, RingState, Slot, SlotId } from '../engine/types'
+import { panelSelection } from '../store/gameStore'
 import type { PlacingMode } from '../store/types'
 import { CELL } from './constants'
-import { FurnitureModel, useBookColors } from './Furniture'
 import { resolveFurniture } from './furnitureCatalog'
 import type { OfficeLayout } from './layout'
 import { HIGHLIGHT, SLOT_COLORS } from './palette'
@@ -37,15 +37,10 @@ function hasPartner(slot: Slot, slots: readonly Slot[], ownIds: readonly string[
   )
 }
 
-/** Visual validity hint for the placing mode, using the same rules as placeItem/moveItem/assignDesk. */
+/** Visual validity hint for the placing mode, using the same rules as moveItem/assignDesk. */
 function classify(slot: Slot, placing: PlacingMode | null, slots: readonly Slot[], rings: readonly RingState[]): Cls {
   if (!placing) return 'none'
   if (!isUnlocked(rings, slot.ring) || slot.id === 'founder') return 'invalid'
-  if (placing.kind === 'place') {
-    const f = resolveFurniture(placing.itemId)
-    const fits = slot.type === f.slotType && !slot.itemId && !slot.spanOf
-    return fits && (f.size !== 2 || hasPartner(slot, slots)) ? 'valid' : 'invalid'
-  }
   if (placing.kind === 'move') {
     const from = slots.find((s) => s.id === placing.fromSlotId)
     if (!from || !from.itemId || slot.id === from.id || slot.type !== from.type) return 'invalid'
@@ -98,8 +93,7 @@ function onSlotClick(slot: Slot, e: ThreeEvent<MouseEvent>): void {
   const placing = api.ui.placing
   if (placing) {
     let res: ActionResult
-    if (placing.kind === 'place') res = dispatchAction({ type: 'placeItem', itemId: placing.itemId, slotId: anchorOf(slot) })
-    else if (placing.kind === 'move') res = dispatchAction({ type: 'moveItem', fromSlotId: placing.fromSlotId, toSlotId: anchorOf(slot) })
+    if (placing.kind === 'move') res = dispatchAction({ type: 'moveItem', fromSlotId: placing.fromSlotId, toSlotId: anchorOf(slot) })
     else res = dispatchAction({ type: 'assignDesk', employeeId: placing.employeeId, slotId: anchorOf(slot) })
     if (res.ok) api.setPlacing(null)
     return
@@ -170,6 +164,32 @@ const SlotView = memo(function SlotView({ slot, layout, locked, cls, hovered, se
   )
 })
 
+const FLASH_MS = 1600
+
+/** Latest itemPlaced / itemMoved event as "id|slot" (a primitive: stable across ticks). */
+function selectPlacedKey(s: GameState): string {
+  for (let i = s.events.length - 1; i >= 0; i--) {
+    const e = s.events[i]!
+    if (e.kind === 'itemPlaced' || e.kind === 'itemMoved') return `${e.id}|${e.refId ?? ''}`
+  }
+  return ''
+}
+
+/** Slot that just received furniture (auto placement): pulses for a moment so the player sees where it went. */
+function usePlacedFlash(): string | null {
+  const key = useGS(selectPlacedKey)
+  const first = useRef(key)
+  const [flash, setFlash] = useState<string | null>(null)
+  useEffect(() => {
+    if (!key || key === first.current) return
+    const slot = key.slice(key.indexOf('|') + 1)
+    setFlash(slot || null)
+    const id = window.setTimeout(() => setFlash((f) => (f === slot ? null : f)), FLASH_MS)
+    return () => window.clearTimeout(id)
+  }, [key])
+  return flash
+}
+
 interface PulseMats {
   valid: THREE.MeshBasicMaterial
   hover: THREE.MeshBasicMaterial
@@ -193,8 +213,8 @@ export function SlotsLayer() {
     }
     return m
   }, [heatKey])
-  const [hoverId, selection, placing] = useUi((u) => [u.hoverSlotId, u.selection, u.placing] as const)
-  const books = useBookColors()
+  const [hoverId, selection, placing] = useUi((u) => [u.hoverSlotId, panelSelection(u.panel), u.placing] as const)
+  const flashId = usePlacedFlash()
   const mats = useMemo<PulseMats>(
     () => ({ valid: makeMat(HIGHLIGHT.valid), hover: makeMat(HIGHLIGHT.hover), selected: makeMat(HIGHLIGHT.selected), aura: makeMat(HIGHLIGHT.aura) }),
     [],
@@ -211,20 +231,6 @@ export function SlotsLayer() {
   const hovered = hoverId ? slots.find((s) => s.id === hoverId) : undefined
   const aura = useMemo(() => auraCells(hovered?.itemId ? hovered : undefined, slots), [hovered, slots])
 
-  // Ghost preview of the item being placed on the hovered slot.
-  let ghost: ReactNode = null
-  if (placing?.kind === 'place' && hovered) {
-    const cls = classify(hovered, placing, slots, rings)
-    const c = layout.slotWorld.get(hovered.id)
-    if (cls === 'valid' && c) {
-      ghost = (
-        <group position={[c[0], 0.04, c[1]]} rotation={[0, -hovered.rotation * (Math.PI / 2), 0]}>
-          <FurnitureModel resolved={resolveFurniture(placing.itemId, hovered.type)} books={books} />
-        </group>
-      )
-    }
-  }
-
   return (
     <group>
       {slots.map((s) => (
@@ -235,13 +241,12 @@ export function SlotsLayer() {
           locked={!isUnlocked(rings, s.ring)}
           cls={classify(s, placing, slots, rings)}
           hovered={hoverId === anchorOf(s)}
-          selected={selectedId === anchorOf(s)}
+          selected={selectedId === anchorOf(s) || flashId === anchorOf(s)}
           aura={aura.has(s.id)}
           mats={mats}
           heat={heat.get(s.id)}
         />
       ))}
-      {ghost}
     </group>
   )
 }

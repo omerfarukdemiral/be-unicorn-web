@@ -5,6 +5,7 @@ import { EmployeeCharacter, FounderCharacter } from './Character'
 import { Npc } from './Npc'
 import { useLayout, useOffice } from './sceneRegistry'
 import { getGS, storeApi, useGS, useMockState, useUi } from './source'
+import { panelSelection } from '../store/gameStore'
 
 const selectPeople = (s: GameState) => [s.employees, s.visitors, s.founder.currentAction, s.time.speed, s.derived.overload > 0] as const
 
@@ -15,7 +16,7 @@ export function People() {
   const mock = useMockState()
   const getDay = useCallback(() => getGS(mock).time.day, [mock])
   const layout = useLayout()
-  const selection = useUi((u) => u.selection)
+  const selection = useUi((u) => panelSelection(u.panel))
 
   const selectEmployee = useCallback((id: string) => storeApi().select({ kind: 'employee', id }), [])
   const selectVisitor = useCallback((id: string) => storeApi().select({ kind: 'visitor', id }), [])

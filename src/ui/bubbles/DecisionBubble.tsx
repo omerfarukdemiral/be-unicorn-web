@@ -19,8 +19,8 @@ export function decisionById(id: DecisionCardId): DecisionCard | undefined {
   return DECISIONS.find((d) => d.id === id)
 }
 
-/** Shared card body (bubble + blocking overlay). */
-export function DecisionCardView({ card, onChoose, dense }: { card: DecisionCard; onChoose: (optionIndex: number) => void; dense?: boolean }) {
+/** Shared card body (screen bubble + panel). */
+export function DecisionCardView({ card, onChoose, dense, stacked }: { card: DecisionCard; onChoose: (optionIndex: number) => void; dense?: boolean; /** One option per row (narrow panel). */ stacked?: boolean }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2.5">
@@ -32,7 +32,7 @@ export function DecisionCardView({ card, onChoose, dense }: { card: DecisionCard
           <p className={cx('font-semibold leading-snug text-ink-900', dense ? 'text-sm' : 'text-base')}>{card.question}</p>
         </div>
       </div>
-      <div className={cx('grid gap-2', card.options.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+      <div className={cx('grid gap-2', !stacked && (card.options.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'))}>
         {card.options.map((o, i) => (
           <button
             key={i}
@@ -92,7 +92,7 @@ export function DecisionBubble() {
   const active = useGameStore(useShallow((s) => s.state.decisions.active))
   const last = useGameStore(useShallow((s) => s.state.decisions.lastAnswer))
   const dispatch = useGameStore((s) => s.dispatch)
-  const overlay = useGameStore((s) => s.ui.overlay)
+  const panel = useGameStore((s) => s.ui.panel)
   const mobile = useIsMobile()
   const [expanded, setExpanded] = useState(!mobile)
   const [reflection, setReflection] = useState<{ cardId: string; optionIndex: number; key: string } | null>(null)
@@ -110,10 +110,10 @@ export function DecisionBubble() {
   useEffect(() => setExpanded(!mobile), [active?.cardId, mobile])
 
   const card = active ? decisionById(active.cardId) : undefined
-  // The same card open as a blocking overlay: do not duplicate it.
-  const inOverlay = overlay?.kind === 'decision' && overlay.cardId === active?.cardId
+  // The same card open in the panel: do not duplicate it.
+  const inPanel = panel?.kind === 'decision' && panel.cardId === (active?.cardId ?? reflection?.cardId)
 
-  if (card && active && !inOverlay) {
+  if (card && active && !inPanel) {
     return (
       <div className="ui-card w-[min(560px,calc(100vw-1rem))] animate-pop-in p-3">
         {expanded ? (
@@ -136,7 +136,7 @@ export function DecisionBubble() {
     )
   }
 
-  if (reflection && overlay?.kind !== 'reflection') {
+  if (reflection && !inPanel) {
     const rc = decisionById(reflection.cardId)
     if (!rc) return null
     return (

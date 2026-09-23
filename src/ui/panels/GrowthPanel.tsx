@@ -1,4 +1,4 @@
-// Büyüme: product health, channels (ad budget), price, enterprise. Locked tools show a hint.
+// Büyüme: funding round, product health, channels (ad budget), price, enterprise. Locked tools show a hint.
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { ToolId } from '../../engine/types'
@@ -6,6 +6,7 @@ import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
 import { Bar, Empty, LockedHint, SectionTitle, Stat } from '../primitives'
+import { RoundSection } from './RoundSection'
 
 const AD_STEPS = [0, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000]
 
@@ -13,9 +14,15 @@ function useTool(id: ToolId): boolean {
   return useGameStore((s) => s.state.unlockedTools.includes(id))
 }
 
-export function GrowthPanel() {
+export function GrowthPanel({ section }: { section?: 'round' }) {
+  const showRound = useGameStore((s) => s.state.derived.canStartRound || !!s.state.round?.active || s.state.stage > 0)
+  // Opened from the HUD round button: bring the round block into view.
+  useEffect(() => {
+    if (section === 'round') document.getElementById('round-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [section])
   return (
     <div className="flex flex-col gap-5">
+      {(showRound || section === 'round') && <RoundSection />}
       <ProductSection />
       <ChannelSection />
       <PriceSection />
@@ -40,7 +47,7 @@ function ProductSection() {
   return (
     <section>
       <SectionTitle>{t('growth.product')}</SectionTitle>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 @lg:grid-cols-4">
         <Stat label={t('growth.avgMaturity')} value={pct(d.avg)} sub={<Bar value={d.avg} height={4} className="mt-1" />} />
         <Stat label={t('growth.liveProjects')} value={`${d.live}/${d.total}`} />
         <Stat
@@ -92,7 +99,7 @@ function ChannelSection() {
             onKeyUp={commit}
             onBlur={commit}
           />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
             <Stat label={t('growth.cac')} value={money(d.cac)} />
             <Stat label={t('growth.paidUsers')} value={`+${num(d.ch.paid)}`} sub={t('hud.monthly')} />
             {showLtv && <Stat label={t('hud.ltvCac')} value={d.ltvCac === null ? '—' : `${fixed(d.ltvCac, 1)}×`} sub={d.ltvCac !== null && d.ltvCac < 3 ? t('hud.ltvLow') : undefined} />}
@@ -100,7 +107,7 @@ function ChannelSection() {
         </div>
       )}
       {showChannels && (
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mt-2 grid grid-cols-2 gap-2 @lg:grid-cols-4">
           <Stat label={t('channel.organic')} value={`+${num(d.ch.organic)}`} />
           <Stat label={t('channel.paid')} value={`+${num(d.ch.paid)}`} />
           <Stat label={t('channel.manual')} value={`+${num(d.ch.manual)}`} />

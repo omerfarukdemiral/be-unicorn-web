@@ -1,5 +1,5 @@
-// Right detail panel (desktop) / bottom sheet (mobile) for the current selection.
-// Left/top: close-up 3D preview (render passes it via `renderPreview`), then metrics + actions.
+// Detail content for a scene selection (slot, employee, project, visitor, founder), shown in the single
+// right panel (RightPanel). Header + close-up preview + metrics + actions.
 import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { FOUNDER_SLOT_ID, type Employee, type Project, type Slot } from '../engine/types'
@@ -9,8 +9,8 @@ import type { Selection } from '../store/types'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { fixed, money, pct } from './format'
-import { Bar, Button, cx, IconButton, Pill, QualityStars, SectionTitle, Stat } from './primitives'
-import { moraleTone, SLOT_ICON, STATUS_TONE } from './theme'
+import { Bar, Button, cx, Pill, QualityStars, SectionTitle, Stat } from './primitives'
+import { moraleTone, STATUS_TONE } from './theme'
 import { useIsMobile } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AssignList, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
@@ -18,54 +18,12 @@ import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
 
 export type RenderPreview = (target: Selection) => ReactNode
 
-export function DetailPanel({ renderPreview }: { renderPreview?: RenderPreview }) {
-  const selection = useGameStore((s) => s.ui.selection)
-  const select = useGameStore((s) => s.select)
-  const setDockTab = useGameStore((s) => s.setDockTab)
-  const mobile = useIsMobile()
-
-  // Mobile: one sheet at a time (the dock clears the selection when it opens, see Dock/openShop).
-  useEffect(() => {
-    if (mobile && selection) setDockTab(null)
-  }, [mobile, selection, setDockTab])
-
-  if (!selection) return null
-  const close = () => select(null)
-  const preview = (
+/** Close-up of the selection (render's ObjectPreview when available). */
+export function DetailPreview({ selection, renderPreview }: { selection: Selection; renderPreview?: RenderPreview }) {
+  return (
     <div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-2xl bg-gradient-to-b from-cream-100 to-cream-200">
       {renderPreview ? renderPreview(selection) : <Icon name={previewIcon(selection)} size={40} className="text-ink-400" />}
     </div>
-  )
-
-  const body = <DetailBody selection={selection} />
-
-  if (mobile) {
-    return (
-      <div className="pointer-events-auto fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex max-h-[58vh] animate-slide-up flex-col rounded-t-[var(--radius-card)] border-t border-cream-300 bg-cream-50 shadow-[var(--shadow-pop)] landscape:max-h-[70vh]">
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-cream-300" />
-        <div className="flex items-start gap-3 px-3 pt-2">
-          <div className="w-24 shrink-0">{preview}</div>
-          <div className="min-w-0 flex-1">
-            <DetailHeader selection={selection} />
-          </div>
-          <IconButton icon="close" label={t('common.close')} onClick={close} />
-        </div>
-        <div className="ui-scroll min-h-0 flex-1 px-3 pb-3 pt-2">{body}</div>
-      </div>
-    )
-  }
-
-  return (
-    <aside className="pointer-events-auto ui-card absolute bottom-[92px] right-3 top-[76px] flex w-[380px] animate-slide-left flex-col overflow-hidden">
-      <div className="flex items-start gap-3 p-3">
-        <div className="w-32 shrink-0">{preview}</div>
-        <div className="min-w-0 flex-1 pt-1">
-          <DetailHeader selection={selection} />
-        </div>
-        <IconButton icon="close" label={t('common.close')} onClick={close} size={36} />
-      </div>
-      <div className="ui-scroll min-h-0 flex-1 px-3 pb-3">{body}</div>
-    </aside>
   )
 }
 
@@ -88,7 +46,7 @@ function previewIcon(sel: Selection): IconName {
 // Header (title + subtitle per kind)
 // ---------------------------------------------------------------------------
 
-function DetailHeader({ selection }: { selection: Selection }) {
+export function DetailHeader({ selection }: { selection: Selection }) {
   const info = useGameStore(
     useShallow((s): { title: string; sub: string; pill?: string; pillTone?: string } => {
       const st = s.state
@@ -133,7 +91,7 @@ export function resolveSlot(slots: Slot[], id: string): Slot | undefined {
   return s
 }
 
-function DetailBody({ selection }: { selection: Selection }) {
+export function DetailBody({ selection }: { selection: Selection }) {
   switch (selection.kind) {
     case 'slot':
       return <SlotDetail id={selection.id} />
@@ -158,8 +116,8 @@ function SlotDetail({ id }: { id: string }) {
   )
   const dispatch = useGameStore((s) => s.dispatch)
   const setPlacing = useGameStore((s) => s.setPlacing)
-  const setDockTab = useGameStore((s) => s.setDockTab)
   const select = useGameStore((s) => s.select)
+  const closePanel = useGameStore((s) => s.closePanel)
   const mobile = useIsMobile()
   const slot = resolveSlot(slots, id)
   if (!slot) return <p className="text-xs text-ink-600">{t('detail.gone')}</p>
@@ -191,7 +149,7 @@ function SlotDetail({ id }: { id: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {item ? (
+      {item && (
         <section>
           <p className="text-xs leading-relaxed text-ink-600">{item.description}</p>
           <div className="mt-2 flex flex-wrap gap-1">
@@ -202,25 +160,6 @@ function SlotDetail({ id }: { id: string }) {
             ))}
           </div>
         </section>
-      ) : (
-        !isFounder && (
-          <section className="flex flex-col gap-2">
-            <p className="flex items-center gap-2 text-xs text-ink-600">
-              <Icon name={SLOT_ICON[slot.type]} size={16} />
-              {t('detail.emptyHint')}
-            </p>
-            <Button
-              tone="primary"
-              icon="bag"
-              onClick={() => {
-                if (mobile) select(null)
-                setDockTab('shop')
-              }}
-            >
-              {t('detail.openShop')}
-            </Button>
-          </section>
-        )
       )}
 
       {slot.type === 'desk' && (
@@ -264,7 +203,7 @@ function SlotDetail({ id }: { id: string }) {
             onClick={() => {
               setPlacing({ kind: 'move', fromSlotId: slot.id })
               // Phones: close the sheet so the office and the placing banner are visible.
-              if (mobile) select(null)
+              if (mobile) closePanel()
             }}
           >
             {t('detail.move')}
@@ -286,7 +225,7 @@ function EmployeeDetail({ id }: { id: string }) {
   const projects = useGameStore(useShallow((s) => s.state.projects))
   const dispatch = useGameStore((s) => s.dispatch)
   const setPlacing = useGameStore((s) => s.setPlacing)
-  const select = useGameStore((s) => s.select)
+  const closePanel = useGameStore((s) => s.closePanel)
   const mobile = useIsMobile()
   if (!e) return <p className="text-xs text-ink-600">{t('detail.gone')}</p>
   return (
@@ -327,7 +266,7 @@ function EmployeeDetail({ id }: { id: string }) {
           icon="move"
           onClick={() => {
             setPlacing({ kind: 'seat', employeeId: e.id })
-            if (mobile) select(null)
+            if (mobile) closePanel()
           }}
         >
           {e.deskSlotId ? t('detail.changeDesk') : t('detail.pickDesk')}
@@ -338,7 +277,7 @@ function EmployeeDetail({ id }: { id: string }) {
           confirmLabel={t('detail.fireConfirm', { name: e.name.split(' ')[0] ?? e.name })}
           onConfirm={() => {
             const r = dispatch({ type: 'fire', employeeId: e.id })
-            if (r.ok) select(null)
+            if (r.ok) closePanel()
           }}
         />
       </section>

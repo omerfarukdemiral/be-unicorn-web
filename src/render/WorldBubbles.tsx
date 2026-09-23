@@ -49,16 +49,10 @@ function selectBubbleKey(s: GameState): string {
   return out.join('\n')
 }
 
-/** Fallback path (no UI renderer): never replaces an open blocking overlay. */
-function openIfFree(open: () => void): void {
-  if (storeApi().ui.overlay === null) open()
-}
-
+/** Fallback path (no UI renderer): concept/decision open in the single panel. */
 function openConcept(conceptId: ConceptId): void {
-  openIfFree(() => {
-    storeApi().openOverlay({ kind: 'conceptCard', conceptId })
-    dispatchAction({ type: 'openConcept', conceptId })
-  })
+  if (!storeApi().state.concepts.learned.includes(conceptId)) dispatchAction({ type: 'openConcept', conceptId })
+  storeApi().openPanel({ kind: 'journal', conceptId })
 }
 
 function buildList(key: string, ambient: boolean): WorldBubble[] {
@@ -84,7 +78,7 @@ function buildList(key: string, ambient: boolean): WorldBubble[] {
         role: decisionRole(id),
         speakerId,
         text: DECISIONS.find((d) => d.id === id)?.question ?? '…',
-        onOpen: () => openIfFree(() => storeApi().openOverlay({ kind: 'decision', cardId: id })),
+        onOpen: () => storeApi().openPanel({ kind: 'decision', cardId: id }),
       })
     }
   }

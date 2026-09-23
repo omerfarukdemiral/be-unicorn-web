@@ -566,7 +566,8 @@ export type Action =
   | { type: 'respondResignation'; employeeId: EmployeeId; response: 'raise' | 'talk' | 'letGo' }
   | { type: 'refreshCandidates' }
   // Office
-  | { type: 'placeItem'; itemId: FurnitureId; slotId: SlotId }
+  /** `slotId` omitted: auto place on the free slot nearest the center (findAutoSlot), else `noFreeSlot`. */
+  | { type: 'placeItem'; itemId: FurnitureId; slotId?: SlotId }
   | { type: 'sellItem'; slotId: SlotId }
   | { type: 'moveItem'; fromSlotId: SlotId; toSlotId: SlotId }
   | { type: 'upgradeItem'; slotId: SlotId; toItemId: FurnitureId }

@@ -231,6 +231,9 @@ export const CANDIDATE_DEPT_WEIGHT: Readonly<Record<Dept, number>> = { eng: 3, p
 export const FIRST_CARD_DAY = 8
 export const CARD_COOLDOWN_DAYS = 10
 export const CARD_DAILY_CHANCE = 0.35
+/** Repeatable (once: false) cards: days before the same card may show again, and max shows per run. */
+export const REPEAT_CARD_COOLDOWN_DAYS = 90
+export const REPEAT_CARD_MAX = 3
 export const CASH_PERCENT_CAP = 0.25
 /** Absolute cap of a cashPercent effect: this × monthly-ish scale (base rent × 20). */
 export const CASH_PERCENT_ABS_CAP: readonly number[] = [10_000, 50_000, 250_000, 1_000_000, 5_000_000, 30_000_000, 30_000_000]

@@ -348,6 +348,22 @@ describe('decisions', () => {
     s = api.step(s, 60)
     expect(s.decisions.active).toBeUndefined()
   })
+  it('a repeatable card with a lingering condition waits between shows and has a cap', () => {
+    const rapi = createEngine(fakeContent({ decisions: [fakeCard('crisis', { once: false, condition: () => true })] }))
+    let s = rapi.createGame({ seed: 3 })
+    const shownDays: number[] = []
+    for (let d = 0; d < 600; d++) {
+      s = rapi.step(s, 1)
+      if (s.decisions.active) {
+        shownDays.push(s.time.day)
+        s = rapi.applyAction(s, { type: 'answerDecision', cardId: 'crisis', optionIndex: 0 }).state
+      }
+      if (s.gameOver) break
+    }
+    expect(shownDays.length).toBeGreaterThan(1)
+    expect(shownDays.length).toBeLessThanOrEqual(B.REPEAT_CARD_MAX)
+    for (let i = 1; i < shownDays.length; i++) expect(shownDays[i]! - shownDays[i - 1]!).toBeGreaterThanOrEqual(B.REPEAT_CARD_COOLDOWN_DAYS)
+  })
   it('cashPercent is capped', () => {
     const dapi = createEngine(fakeContent({ decisions: [fakeCard('greedy', { options: [{ label: 'x', tradeoff: { gain: '', cost: '' }, effects: { cashPercent: 5 }, reflection: '' }] })] }))
     let s = dapi.createGame({ seed: 1 })

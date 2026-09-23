@@ -21,6 +21,13 @@ export function isCardEligible(c: DecisionCard, s: GameState): boolean {
   if (c.maxStage !== undefined && c.maxStage < s.stage) return false
   const once = c.once ?? true
   if (once && (s.decisions.history.some((h) => h.cardId === c.id) || s.decisions.active?.cardId === c.id)) return false
+  if (!once) {
+    // A crisis card whose condition lingers must not come back every cooldown.
+    const past = s.decisions.history.filter((h) => h.cardId === c.id)
+    if (past.length >= B.REPEAT_CARD_MAX) return false
+    const last = past[past.length - 1]
+    if (last && s.time.day - last.day < B.REPEAT_CARD_COOLDOWN_DAYS) return false
+  }
   return safeCondition(c, s)
 }
 

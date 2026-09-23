@@ -1,12 +1,13 @@
 // Close-up turntable of the selected object for the UI detail panel (PLAN §7.4). Own small <Canvas>.
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, type ReactNode } from 'react'
+import { NeutralToneMapping } from 'three'
 import type * as THREE from 'three'
 import type { GameState, ProjectCategory } from '../engine/types'
 import type { Selection } from '../store/types'
 import { CELL } from './constants'
 import { FOUNDER_LOOK, employeeLook } from './Character'
-import { CharacterModel, StatusIcon } from './CharacterModel'
+import { CharacterModel } from './CharacterModel'
 import { FurnitureModel, useBookColors } from './Furniture'
 import { resolveFurniture } from './furnitureCatalog'
 import { npcLook } from './Npc'
@@ -21,6 +22,20 @@ function Turntable({ children, height }: { children: ReactNode; height: number }
   })
   return (
     <group ref={g} position={[0, -height / 2, 0]}>
+      {children}
+    </group>
+  )
+}
+
+/** Head-and-shoulders framing for people: scaled up, facing the camera, with a gentle sway. */
+function Portrait({ children }: { children: ReactNode }) {
+  const g = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    // Camera sits on the +x/+z diagonal; π/4 turns the face toward it.
+    if (g.current) g.current.rotation.y = Math.PI / 4 + Math.sin(clock.elapsedTime * 0.8) * 0.35
+  })
+  return (
+    <group ref={g} scale={2.3} position={[0, -0.72 * 2.3, 0]}>
       {children}
     </group>
   )
@@ -88,6 +103,7 @@ function PreviewContent({ target }: { target: Selection }) {
   const [slots, employees, visitors, projects] = useGS(selectForPreview)
   const books = useBookColors()
   let body: ReactNode = null
+  let person: ReactNode = null
   let height = 1.1
   switch (target.kind) {
     case 'slot': {
@@ -109,24 +125,15 @@ function PreviewContent({ target }: { target: Selection }) {
     }
     case 'employee': {
       const e = employees.find((x) => x.id === target.id)
-      if (e)
-        body = (
-          <>
-            <CharacterModel look={employeeLook(e.id, e.dept)} />
-            <StatusIcon status={e.status} />
-          </>
-        )
-      height = 1.3
+      if (e) person = <CharacterModel look={employeeLook(e.id, e.dept)} />
       break
     }
     case 'founder':
-      body = <CharacterModel look={FOUNDER_LOOK} />
-      height = 1.2
+      person = <CharacterModel look={FOUNDER_LOOK} />
       break
     case 'visitor': {
       const v = visitors.find((x) => x.id === target.id)
-      if (v) body = <CharacterModel look={npcLook(v.id, v.role)} />
-      height = 1.2
+      if (v) person = <CharacterModel look={npcLook(v.id, v.role)} />
       break
     }
     case 'project': {
@@ -140,10 +147,14 @@ function PreviewContent({ target }: { target: Selection }) {
     <>
       <hemisphereLight args={['#fff6ea', '#d9cfc2', 1.5]} />
       <directionalLight position={[3, 5, 4]} intensity={1.4} color="#fff1dc" />
-      <Turntable height={height}>
-        <mesh geometry={GEO.disc} material={mat(PASTEL.cream200)} scale={[1.8, 1, 1.8]} position={[0, -0.005, 0]} />
-        {body}
-      </Turntable>
+      {person ? (
+        <Portrait>{person}</Portrait>
+      ) : (
+        <Turntable height={height}>
+          <mesh geometry={GEO.disc} material={mat(PASTEL.cream200)} scale={[1.8, 1, 1.8]} position={[0, -0.005, 0]} />
+          {body}
+        </Turntable>
+      )}
     </>
   )
 }
@@ -157,8 +168,8 @@ export interface ObjectPreviewProps {
 
 export function ObjectPreview({ target, className, mockState }: ObjectPreviewProps) {
   return (
-    <div className={className ?? 'h-full w-full'} style={{ minHeight: 120 }}>
-      <Canvas dpr={[1, 2]} camera={{ position: [2.2, 1.6, 2.2], fov: 32, near: 0.1, far: 50 }} gl={{ antialias: true, alpha: true }}>
+    <div className={className ?? 'h-full w-full'}>
+      <Canvas dpr={[1, 2]} camera={{ position: [2.2, 1.6, 2.2], fov: 32, near: 0.1, far: 50 }} gl={{ antialias: true, alpha: true }} onCreated={({ gl }) => { gl.toneMapping = NeutralToneMapping }}>
         <RenderStateProvider state={mockState}>
           <PreviewContent target={target} />
         </RenderStateProvider>

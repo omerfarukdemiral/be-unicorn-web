@@ -28,8 +28,10 @@ export const NPC_NAMES: Readonly<Record<NpcRole, readonly string[]>> = {
 
 /** Suggested project names when the player does not type one. */
 export const PROJECT_NAMES: readonly string[] = [
-  'Kanka', 'Pusula', 'Filiz', 'Mavi', 'Çınar', 'Işık', 'Dalga', 'Kıvılcım', 'Martı', 'Yörünge',
-  'Kovan', 'Rota', 'Şimşek', 'Liman', 'Çıra', 'Atlas', 'Nabız', 'Tohum', 'Köprü', 'Ufuk',
+  'Yakamoz', 'Tılsım AI', 'Anka Labs', 'Kervan.io', 'Poyraz', 'Lodos Pay', 'Pervane', 'Nabızly',
+  'Kovanix', 'Martı Go', 'Simurg', 'Rotacı', 'Şimşekpay', 'Mavibulut', 'Otağ', 'Yörünge Studio',
+  'Kıvılcım Labs', 'Limanhub', 'Hevesly', 'Tohum.app', 'Zemberek', 'Pusula AI', 'Dalgaverse', 'Kandil',
+  'Meltem', 'Kuzey Yıldızı', 'Gündoğan', 'Çıra.io', 'Fenerly', 'Köprüm',
 ]
 
 /** Fictional enterprise customers (enterprise sales, Series B+). */

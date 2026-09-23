@@ -22,7 +22,7 @@ export type RenderPreview = (target: Selection) => ReactNode
 export function DetailPreview({ selection, renderPreview }: { selection: Selection; renderPreview?: RenderPreview }) {
   return (
     <div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-control border border-border bg-surface-2">
-      {renderPreview ? renderPreview(selection) : <Icon name={previewIcon(selection)} size={40} className="text-ink-3" />}
+      {renderPreview ? <div className="absolute inset-0">{renderPreview(selection)}</div> : <Icon name={previewIcon(selection)} size={40} className="text-ink-3" />}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
-import { Button, Stat } from '../primitives'
+import { Button, Dot, IconBadge, Label, Stat } from '../primitives'
 import { NotebookCard } from '../NotebookCard'
 import { conceptTitle } from '../panels/JournalPanel'
 import { useModalQueue } from '../modalQueue'
@@ -24,25 +24,25 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
   return (
     <OverlayFrame onClose={onClose}>
       <div className="flex flex-col items-center gap-4 p-6 text-center">
-        <div className="flex items-center gap-3 text-ink-400">
+        <div className="flex items-center gap-3 text-ink-3">
           <OfficeGlyph size={48} muted />
           <Icon name="chevronRight" size={22} />
           <OfficeGlyph size={72} />
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-lilac-500">{t('move.kicker', { stage: def?.name ?? '' })}</p>
-          <h2 className="mt-1 text-2xl font-extrabold tracking-tight">{t('round.moveTitle')}</h2>
-          <p className="mt-0.5 text-base font-bold text-ink-700">{def?.officeName}</p>
-          {def?.tagline && <p className="mt-1 text-sm italic text-ink-600">{def.tagline}</p>}
-          {prev && <p className="mt-1 text-sm text-ink-600">{t('move.from', { office: prev.officeName })}</p>}
+          <Label>{t('move.kicker', { stage: def?.name ?? '' })}</Label>
+          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t('round.moveTitle')}</h2>
+          <p className="mt-0.5 text-base font-semibold text-ink">{def?.officeName}</p>
+          {def?.tagline && <p className="font-text mt-1 text-sm text-ink-2">{def.tagline}</p>}
+          {prev && <p className="font-text mt-1 text-sm text-ink-2">{t('move.from', { office: prev.officeName })}</p>}
         </div>
         {def && (
-          <div className="w-full rounded-2xl bg-mint-100 px-4 py-3 text-left">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-mint-600">{t('move.unlocks')}</div>
-            <p className="text-sm font-semibold text-ink-900">{def.unlocksText}</p>
+          <div className="w-full rounded-control border border-border px-4 py-3 text-left">
+            <Label>{t('move.unlocks')}</Label>
+            <p className="font-text mt-0.5 text-sm font-medium text-ink">{def.unlocksText}</p>
           </div>
         )}
-        <p className="text-xs text-ink-600">{t('round.moveBody')}</p>
+        <p className="font-text text-xs text-ink-2">{t('round.moveBody')}</p>
         <Button tone="primary" className="w-full" onClick={onClose} autoFocus>
           {t('move.go')}
         </Button>
@@ -54,9 +54,10 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
 function OfficeGlyph({ size, muted }: { size: number; muted?: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M32 6 58 20 32 34 6 20Z" fill={muted ? '#ece0cc' : '#c9a7f5'} />
-      <path d="M6 20v22l26 14V34Z" fill={muted ? '#dccbb0' : '#9fe0c3'} />
-      <path d="M58 20v22L32 56V34Z" fill={muted ? '#ece0cc' : '#9cc9f5'} />
+      {/* Neutral isometric block: muted = old office (hairline tones), new office = ink ramp. */}
+      <path d="M32 6 58 20 32 34 6 20Z" fill={muted ? 'var(--color-surface-2)' : 'var(--color-ink-3)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
+      <path d="M6 20v22l26 14V34Z" fill={muted ? 'var(--color-border)' : 'var(--color-ink)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
+      <path d="M58 20v22L32 56V34Z" fill={muted ? 'var(--color-surface-2)' : 'var(--color-ink-2)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
     </svg>
   )
 }
@@ -100,36 +101,39 @@ export function PostMortemOverlay() {
     <OverlayFrame wide>
       <div className="flex flex-col gap-5 p-5 sm:p-7">
         <header>
-          <p className="text-xs font-bold uppercase tracking-wider text-rose-600">{t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}</p>
-          <h2 className="mt-1 text-2xl font-extrabold tracking-tight">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}</h2>
-          <p className="mt-1 text-sm text-ink-600">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostBody' : 'gameOver.bankruptBody')}</p>
+          <div className="flex items-center gap-1.5">
+            <Dot color="var(--color-negative)" size={7} />
+            <Label>{t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}</Label>
+          </div>
+          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}</h2>
+          <p className="font-text mt-1 text-sm text-ink-2">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostBody' : 'gameOver.bankruptBody')}</p>
         </header>
-        <h3 className="-mb-2 text-xs font-bold uppercase tracking-wider text-ink-600">{t('gameOver.reasonsTitle')}</h3>
+        <h3 className="ui-label -mb-2">{t('gameOver.reasonsTitle')}</h3>
         <ol className="flex flex-col gap-2">
           {reasons.map((r, i) => (
             <ReasonRow key={`${r.code}-${i}`} index={i} reason={r} open={open} setOpen={setOpen} />
           ))}
         </ol>
         {open && (
-          <div className="overflow-hidden rounded-[var(--radius-card)] border border-cream-300 animate-fade-in">
+          <div className="overflow-hidden rounded-card border border-border animate-fade-in">
             <NotebookCard conceptId={open} />
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-lilac-100 px-4 py-3">
-          <Icon name="sparkle" size={22} className="text-lilac-500" />
+        <div className="flex flex-wrap items-center gap-3 rounded-control border border-border px-4 py-3">
+          <IconBadge icon="sparkle" size={32} filled />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-extrabold">{t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}</div>
-            <div className="text-xs text-ink-600">{t('pm.xpHint', { total: fixed(s.xp + s.go.xpEarned, 1) })}</div>
+            <div className="tabular text-sm font-semibold text-ink">{t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}</div>
+            <div className="tabular text-xs text-ink-2">{t('pm.xpHint', { total: fixed(s.xp + s.go.xpEarned, 1) })}</div>
           </div>
         </div>
         <div className="flex flex-col items-center gap-0.5 text-center">
-          <p className="text-xs italic text-ink-600">{t('pm.failureIsData')}</p>
+          <p className="font-text text-xs font-medium text-ink-2">{t('pm.failureIsData')}</p>
           <button
             type="button"
             onClick={() => setOpen(open === 'failure-is-data' ? null : 'failure-is-data')}
-            className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-lilac-500 hover:underline max-md:min-h-11"
+            className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
           >
-            <Icon name="book" size={13} />
+            <Icon name="book" size={13} className="text-ink-2" />
             {t('decision.notebookLink', { v: conceptTitle('failure-is-data') })}
           </button>
         </div>
@@ -144,19 +148,19 @@ export function PostMortemOverlay() {
 function ReasonRow({ index, reason, open, setOpen }: { index: number; reason: PostMortemReason; open: ConceptId | null; setOpen: (c: ConceptId | null) => void }) {
   const cid = reason.conceptId
   return (
-    <li className="flex items-start gap-3 rounded-2xl bg-cream-100 p-3">
-      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rose-100 text-xs font-extrabold text-rose-600">{index + 1}</span>
+    <li className="flex items-start gap-3 rounded-control border border-border p-3">
+      <span className="tabular w-6 shrink-0 pt-px text-sm font-semibold text-ink-2">{String(index + 1).padStart(2, '0')}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold leading-snug">{t(`postMortem.${reason.code}`)}</p>
-        <p className="text-sm leading-snug text-ink-700">{POST_MORTEM_TEXT[reason.code]}</p>
-        {reason.value !== undefined && <p className="tabular text-xs text-ink-600">{t('pm.yourNumber', { v: PM_FORMAT[reason.code](reason.value) })}</p>}
+        <p className="text-sm font-semibold leading-snug text-ink">{t(`postMortem.${reason.code}`)}</p>
+        <p className="font-text mt-0.5 text-sm leading-snug text-ink-2">{POST_MORTEM_TEXT[reason.code]}</p>
+        {reason.value !== undefined && <p className="tabular mt-1 text-xs font-medium text-ink">{t('pm.yourNumber', { v: PM_FORMAT[reason.code](reason.value) })}</p>}
         {cid && (
           <button
             type="button"
             onClick={() => setOpen(open === cid ? null : cid)}
-            className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-bold text-lilac-500 hover:underline max-md:min-h-11"
+            className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
           >
-            <Icon name="book" size={13} />
+            <Icon name="book" size={13} className="text-ink-2" />
             {t('decision.notebookLink', { v: conceptTitle(cid) })}
           </button>
         )}
@@ -172,14 +176,13 @@ export function VictoryOverlay() {
   return (
     <OverlayFrame wide>
       <div className="relative flex flex-col items-center gap-5 overflow-hidden p-6 text-center sm:p-8">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-lilac-100 via-rose-100 to-transparent" />
-        <span className="relative grid size-20 place-items-center rounded-full bg-cream-50 text-lilac-500 shadow-[var(--shadow-card)]">
-          <Icon name="unicorn" size={44} />
+        <span className="relative grid size-16 place-items-center rounded-card bg-ink text-on-ink">
+          <Icon name="unicorn" size={36} />
         </span>
         <div className="relative">
-          <p className="text-xs font-bold uppercase tracking-wider text-lilac-500">{t('victory.kicker')}</p>
-          <h2 className="mt-1 text-3xl font-extrabold tracking-tight">{t('victory.title')}</h2>
-          <p className="mt-1 text-sm text-ink-600">{t('victory.body', { days: Math.floor(s.day) })}</p>
+          <Label>{t('victory.kicker')}</Label>
+          <h2 className="mt-1.5 text-3xl font-semibold tracking-tight text-ink">{t('victory.title')}</h2>
+          <p className="font-text mt-1 text-sm text-ink-2">{t('victory.body', { days: Math.floor(s.day) })}</p>
         </div>
         <div className="relative grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label={t('victory.valuation')} value={money(s.valuation)} />
@@ -187,7 +190,7 @@ export function VictoryOverlay() {
           <Stat label={t('victory.team')} value={num(s.team)} />
           <Stat label={t('victory.learned')} value={s.learned} />
         </div>
-        {s.archetype && <p className="relative text-sm font-semibold">{t('victory.archetype', { v: t(`archetype.${s.archetype}`) })}</p>}
+        {s.archetype && <p className="relative text-sm font-semibold text-ink">{t('victory.archetype', { v: t(`archetype.${s.archetype}`) })}</p>}
         <Button tone="primary" icon="refresh" className="relative w-full" onClick={restart}>
           {t('victory.again')}
         </Button>

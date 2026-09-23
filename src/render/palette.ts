@@ -53,35 +53,44 @@ export interface StagePalette {
   ground: string
 }
 
-/** Index = StageIndex. Garage concrete grey → campus warm wood. */
+/**
+ * Index = StageIndex. Minimal look (docs/DESIGN.md): the world outside the office is one neutral a step
+ * darker than the UI canvas, so panels (#f6f5f2) sit on a calm grey instead of a warm beige. Floors keep
+ * a faint wood/concrete warmth only through value, walls stay near-white neutrals, and every stage accent
+ * comes from the same ink ramp (no pastel hues).
+ */
+const GROUND = '#d6d5d1'
 export const STAGE_PALETTES: readonly StagePalette[] = [
   // 0 Garaj — concrete
-  { background: UI_TONES.canvasBg, floor: '#bdbab4', floorAlt: '#b2afa9', wall: '#d6d2cb', wallTrim: '#a9a59e', accent: '#8fa3b8', locked: '#3a3942', ground: '#d9d3c8' },
+  { background: UI_TONES.canvasBg, floor: '#c4c3bf', floorAlt: '#bab9b5', wall: '#e1e0dc', wallTrim: '#aeada9', accent: '#8e8d93', locked: '#3a3942', ground: GROUND },
   // 1 Pre-seed — coworking, light birch
-  { background: UI_TONES.canvasBg, floor: '#e2d2b8', floorAlt: '#d8c6a9', wall: '#f2ebe0', wallTrim: '#c9b79a', accent: '#9fe0c3', locked: '#3b3845', ground: '#dcd5c8' },
+  { background: UI_TONES.canvasBg, floor: '#dcd8d0', floorAlt: '#d2cec6', wall: '#efeeea', wallTrim: '#bdbbb5', accent: '#6b6a70', locked: '#3b3845', ground: GROUND },
   // 2 Seed — small office, pale oak
-  { background: UI_TONES.canvasBg, floor: '#dcc6a2', floorAlt: '#d1b993', wall: '#efe6f5', wallTrim: '#b9a6cf', accent: '#c9a7f5', locked: '#393647', ground: '#d8d2c6' },
-  // 3 Series A — open floor, sky tint
-  { background: UI_TONES.canvasBg, floor: '#d6c2a0', floorAlt: '#cbb591', wall: '#e4eef7', wallTrim: '#9cb7d3', accent: '#9cc9f5', locked: '#363849', ground: '#d3d6d4' },
-  // 4 Series B — two floors, peach accents
-  { background: UI_TONES.canvasBg, floor: '#d3b58e', floorAlt: '#c7a780', wall: '#f7e7dd', wallTrim: '#d9a98d', accent: '#ffc1a1', locked: '#3a3644', ground: '#d6cfc6' },
-  // 5 Series C — building, warm walnut + glass
-  { background: UI_TONES.canvasBg, floor: '#c9a27a', floorAlt: '#bc956d', wall: '#eef3f1', wallTrim: '#9fc7b6', accent: '#9fe0c3', locked: '#383442', ground: '#cfd4cc' },
-  // 6 Unicorn — campus, warm wood + lawn
-  { background: UI_TONES.canvasBg, floor: '#c49366', floorAlt: '#b8875b', wall: '#fbf1e2', wallTrim: '#e0b88a', accent: '#f5a3b5', locked: '#3b3643', ground: '#a9d59a' },
+  { background: UI_TONES.canvasBg, floor: '#d8d3c9', floorAlt: '#cdc8be', wall: '#eeede9', wallTrim: '#b4b2ac', accent: '#55545a', locked: '#393647', ground: GROUND },
+  // 3 Series A — open floor
+  { background: UI_TONES.canvasBg, floor: '#d3cdc2', floorAlt: '#c8c2b7', wall: '#ecebe7', wallTrim: '#aaa8a2', accent: '#45444a', locked: '#363849', ground: GROUND },
+  // 4 Series B — two floors
+  { background: UI_TONES.canvasBg, floor: '#cec7ba', floorAlt: '#c3bcaf', wall: '#f0efeb', wallTrim: '#a3a19b', accent: '#38373c', locked: '#3a3644', ground: GROUND },
+  // 5 Series C — building, walnut + glass
+  { background: UI_TONES.canvasBg, floor: '#c8bfb0', floorAlt: '#bdb4a5', wall: '#eeeeeb', wallTrim: '#9c9ba1', accent: '#2c2b30', locked: '#383442', ground: GROUND },
+  // 6 Unicorn — campus
+  { background: UI_TONES.canvasBg, floor: '#c2b8a8', floorAlt: '#b7ad9d', wall: '#f2f1ed', wallTrim: '#8e8d93', accent: '#1c1b1f', locked: '#3b3643', ground: GROUND },
 ]
 
 export function stagePalette(stage: StageIndex | number): StagePalette {
   return STAGE_PALETTES[Math.max(0, Math.min(STAGE_PALETTES.length - 1, stage))] ?? STAGE_PALETTES[0]!
 }
 
-/** Clothing colour per department. */
+/**
+ * Clothing colour per department. Single source of department identity: mirrors --color-dept-* in
+ * src/index.css so the UI dot next to "Müh" matches the shirt in the scene.
+ */
 export const DEPT_COLORS: Record<Dept, string> = {
-  eng: '#8fb8f0',
-  product: '#c9a7f5',
-  marketing: '#ffb58f',
-  sales: '#f7d56e',
-  ops: '#8fd8b5',
+  eng: '#4c7bd9',
+  product: '#8a63d2',
+  marketing: '#e07a45',
+  sales: '#c9a227',
+  ops: '#2f9e8b',
 }
 
 /** Visitor clothing per NPC role. */
@@ -108,13 +117,16 @@ export const SLOT_COLORS: Record<SlotType, string> = {
   special: '#f7e08a',
 }
 
-/** Interaction colours. */
+/**
+ * Interaction colours. One calm accent for selection (same as the UI focus ring, --color-accent);
+ * placement validity reuses the positive / negative tokens.
+ */
 export const HIGHLIGHT = {
   hover: '#ffffff',
-  selected: '#ffd66e',
-  valid: '#7fdca6',
-  invalid: '#f19a9a',
-  aura: '#ffe38a',
+  selected: UI_TONES.accent,
+  valid: UI_TONES.positive,
+  invalid: UI_TONES.negative,
+  aura: '#8fa6ee',
 } as const
 
 /** Status icon colours above heads (PLAN §7.2). */

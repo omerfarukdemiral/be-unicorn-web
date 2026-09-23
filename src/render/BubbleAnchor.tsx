@@ -9,7 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Vector3, type Camera } from 'three'
 import type * as THREE from 'three'
-import { applyFrame, BubbleLayoutRegistry, createEntry, shiftBubble, runLayout, type Entry } from './bubbleDriver'
+import { applyFrame, BubbleLayoutRegistry, createEntry, resolveAnchor, shiftBubble, runLayout, type Entry } from './bubbleDriver'
 import { BUBBLE_PRIORITY, type BubbleKind, type Viewport } from './bubbleLayout'
 import { speakerPositions } from './sceneRegistry'
 import { storeApi } from './source'
@@ -59,7 +59,7 @@ function toScreen(v: Vector3, camera: Camera, size: { width: number; height: num
 }
 
 export interface BubbleAnchorProps {
-  /** Employee id, visitor id or 'founder'. Falls back to the founder, then `fallback`. */
+  /** Employee id, visitor id or 'founder'. Falls back to the founder, then `fallback` (see resolveAnchor). */
   speakerId: string
   /** Extra height above the head (world units), e.g. to stack icons. */
   offsetY?: number
@@ -102,7 +102,8 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
   }, [layout, layoutKey])
 
   useFrame((state) => {
-    const p = speakerPositions.get(speakerId) ?? speakerPositions.get('founder')
+    // Clickable bubbles whose speaker is outside/gone move to the founder or the scene centre.
+    const { pos: p, visible: show, anchorId } = resolveAnchor(speakerId, kind ?? (interactive ? 'decision' : undefined), speakerPositions)
     const g = group.current
     if (g) {
       const e0 = entry.current
@@ -119,8 +120,9 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
           shiftBubble(e0, after[0] - before[0], after[1] - before[1])
           layout.dirty = true
         }
-        if (e0.speakerId !== speakerId) {
-          e0.speakerId = speakerId
+        // Layout groups by the head the bubble sits above (after any founder / centre fallback).
+        if (e0.speakerId !== anchorId) {
+          e0.speakerId = anchorId
           layout.dirty = true
         }
       }
@@ -128,12 +130,11 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
     if (layout && kind && layoutKey && !entry.current && inner.current && stem.current) {
       const wraps: HTMLElement[] = []
       for (let w = inner.current.parentElement; w && wraps.length < 2; w = w.parentElement) wraps.push(w)
-      const e = createEntry({ key: layoutKey, kind, speakerId, el: inner.current, stem: stem.current, wraps, interactive }, performance.now())
+      const e = createEntry({ key: layoutKey, kind, speakerId: anchorId, el: inner.current, stem: stem.current, wraps, interactive }, performance.now())
       layout.entries.set(layoutKey, e)
       layout.dirty = true
       entry.current = e
     }
-    const show = !p || p.visible
     const e = entry.current
     if (e) {
       // The speaker (who says it) can change while the bubble stays: update in place, no re-register.
@@ -161,7 +162,7 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
           <div
             ref={stem}
             aria-hidden
-            style={{ display: 'none', position: 'absolute', top: '100%', width: 2, marginLeft: -1, borderRadius: 1, background: 'rgba(60, 52, 80, 0.35)', pointerEvents: 'none' }}
+            style={{ display: 'none', position: 'absolute', top: '100%', width: 2, marginLeft: -1, borderRadius: 1, background: 'rgba(28, 27, 31, 0.28)', pointerEvents: 'none' }}
           />
         </div>
       </Html>

@@ -1,5 +1,7 @@
 // HUD widget registry (PLAN §2 "Kullan"): each unlocked HudWidget maps to a small chip.
 // Widgets only display engine numbers; no formulas beyond presentation (shares, 1 − churn).
+// Look (docs/DESIGN.md): neutral chip, ink-2 icon without a disc, Oxanium uppercase label,
+// tabular value. Hue only on numbers (positive/negative) and the tiny alert dot.
 import type { ComponentType, ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { HudWidget } from '../engine/types'
@@ -7,7 +9,7 @@ import { useGameStore } from '../store/gameStore'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { compact, fixed, money, num, pct, signedMoney } from './format'
-import { cx } from './primitives'
+import { Bar, cx, Dot } from './primitives'
 
 export type WidgetTier = 'primary' | 'secondary' | 'hidden'
 
@@ -28,7 +30,8 @@ export function WidgetChip({
   label,
   value,
   sub,
-  tone,
+  alert,
+  warn,
   children,
   title,
   compact: isCompact,
@@ -37,31 +40,43 @@ export function WidgetChip({
   label: string
   value: ReactNode
   sub?: ReactNode
-  tone?: string
+  /** Warning state: a tiny red mark next to the label (no fills). */
+  alert?: boolean
+  /** Early warning (e.g. morale drifting into the tired band): a hollow red ring, quieter than `alert`. */
+  warn?: boolean
   children?: ReactNode
   title?: string
   compact?: boolean
 }) {
   return (
     <div
-      className={cx('flex min-w-0 items-center rounded-2xl bg-cream-50/70', isCompact ? 'gap-1 px-1.5 py-1' : 'gap-2 px-2.5 py-1.5')}
+      className={cx('flex min-w-0 items-start rounded-control', isCompact ? 'gap-1.5 px-1.5 py-1' : 'gap-2 px-2 py-1.5')}
       title={title ?? label}
     >
-      <span className={cx('grid shrink-0 place-items-center rounded-full', isCompact ? 'size-5' : 'size-7', tone ?? 'bg-cream-200 text-ink-700')}>
-        <Icon name={icon} size={isCompact ? 12 : 15} />
-      </span>
+      <Icon name={icon} size={isCompact ? 13 : 15} className={cx('shrink-0 text-ink-2', isCompact ? 'mt-[3px]' : 'mt-px')} />
       <div className="min-w-0 flex-1">
-        {!isCompact && <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-ink-600">{label}</div>}
+        {!isCompact && (
+          // Label never truncates (a cut label loses its meaning): tighter tracking, wraps to 2 lines if needed.
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="ui-label line-clamp-2 leading-[14px] tracking-[0.04em]">{label}</span>
+            <StatusMark alert={alert} warn={warn} size={6} />
+          </div>
+        )}
         {isCompact ? (
           // Phones: value on its own line, sub (e.g. monthly net) below it.
           <>
-            <div className="tabular truncate text-sm font-bold leading-tight text-ink-900">{value}</div>
-            {sub && <div className="tabular truncate text-[10px] font-semibold leading-tight">{sub}</div>}
+            <div className="tabular flex min-w-0 items-center gap-1 text-sm font-semibold leading-tight text-ink">
+              <span className="min-w-0 truncate">{value}</span>
+              <StatusMark alert={alert} warn={warn} size={5} />
+            </div>
+            {sub && <div className="tabular truncate text-[10px] font-medium leading-tight text-ink-2">{sub}</div>}
           </>
         ) : (
-          <div className="tabular flex min-w-0 items-baseline gap-1.5 text-sm font-bold leading-tight text-ink-900">
-            <span className="min-w-0 truncate">{value}</span>
-            {sub && <span className="min-w-0 truncate text-[11px] font-semibold">{sub}</span>}
+          // Values stay short (number + unit); the sub wraps under them when the column is narrow.
+          // Nothing is ellipsised: touch screens have no tooltip to recover a cut value.
+          <div className="tabular mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[15px] font-semibold leading-tight text-ink">
+            <span className="max-w-full break-words">{value}</span>
+            {sub && <span className="max-w-full break-words text-[11px] font-medium text-ink-2">{sub}</span>}
           </div>
         )}
         {children}
@@ -70,14 +85,25 @@ export function WidgetChip({
   )
 }
 
+function StatusMark({ alert, warn, size }: { alert?: boolean; warn?: boolean; size: number }) {
+  if (alert) return <Dot color="var(--color-negative)" size={size} />
+  if (warn) return <span aria-hidden="true" className="inline-block shrink-0 rounded-full border-[1.5px] border-negative" style={{ width: size, height: size }} />
+  return null
+}
+
+/** Stacked share bar in an ink ramp (no pastel hues). The last step (ink-4) still reads on the bg-border track. */
+const RAMP = ['var(--color-ink)', 'var(--color-ink-2)', 'var(--color-ink-3)', 'var(--color-ink-4)'] as const
+
 function StackBar({ parts }: { parts: { value: number; color: string; label: string }[] }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0)
   return (
-    <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-cream-200">
+    <div className="mt-1.5 flex h-1 w-full gap-px overflow-hidden rounded-full bg-border">
       {total > 0 &&
-        parts.map((p) => (
-          <div key={p.label} title={`${p.label}: ${compact(p.value)}`} style={{ width: `${(Math.max(0, p.value) / total) * 100}%`, background: p.color }} />
-        ))}
+        parts.map((p) =>
+          p.value > 0 ? (
+            <div key={p.label} title={`${p.label}: ${compact(p.value)}`} style={{ width: `${(Math.max(0, p.value) / total) * 100}%`, background: p.color }} />
+          ) : null,
+        )}
     </div>
   )
 }
@@ -89,9 +115,9 @@ function Spark({ values, line }: { values: number[]; line?: number }) {
   const max = Math.max(1, line ?? 0, ...pts)
   const path = pts.map((v, i) => `${pts.length === 1 ? 0 : (i / (pts.length - 1)) * w},${h - (v / max) * h}`).join(' ')
   return (
-    <svg width={w} height={h} className="mt-0.5 overflow-visible" aria-hidden="true">
-      {line !== undefined && <line x1={0} x2={w} y1={h - (line / max) * h} y2={h - (line / max) * h} stroke="var(--color-rose-300)" strokeDasharray="3 2" />}
-      {pts.length > 0 && <polyline points={path} fill="none" stroke="var(--color-mint-600)" strokeWidth={1.8} strokeLinejoin="round" />}
+    <svg width={w} height={h} className="mt-1 overflow-visible" aria-hidden="true">
+      {line !== undefined && <line x1={0} x2={w} y1={h - (line / max) * h} y2={h - (line / max) * h} stroke="var(--color-ink-3)" strokeDasharray="3 2" />}
+      {pts.length > 0 && <polyline points={path} fill="none" stroke="var(--color-ink)" strokeWidth={1.5} strokeLinejoin="round" />}
     </svg>
   )
 }
@@ -100,9 +126,9 @@ function Pie({ fraction }: { fraction: number }) {
   const r = 7
   const c = 2 * Math.PI * r
   return (
-    <svg width={18} height={18} viewBox="0 0 18 18" className="-rotate-90" aria-hidden="true">
-      <circle cx={9} cy={9} r={r} fill="var(--color-cream-200)" />
-      <circle cx={9} cy={9} r={r / 2} fill="none" stroke="var(--color-lilac-500)" strokeWidth={r} strokeDasharray={`${(fraction * c) / 2} ${c}`} />
+    <svg width={14} height={14} viewBox="0 0 18 18" className="-rotate-90" aria-hidden="true">
+      <circle cx={9} cy={9} r={r} fill="var(--color-border)" />
+      <circle cx={9} cy={9} r={r / 2} fill="none" stroke="var(--color-ink)" strokeWidth={r} strokeDasharray={`${(fraction * c) / 2} ${c}`} />
     </svg>
   )
 }
@@ -118,9 +144,8 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
       compact={c}
       icon="cash"
       label={t('hud.cash')}
-      tone={cash < 0 ? 'bg-rose-100 text-rose-600' : 'bg-mint-100 text-mint-600'}
-      value={<span className={cash < 0 ? 'text-rose-600' : undefined}>{money(cash)}</span>}
-      sub={<span className={net >= 0 ? 'text-mint-600' : 'text-rose-600'}>{t('hud.perMonth', { v: signedMoney(net) })}</span>}
+      value={<span className={cash < 0 ? 'text-negative-ink' : undefined}>{money(cash)}</span>}
+      sub={<span className={net >= 0 ? 'text-positive-ink' : 'text-negative-ink'}>{t('hud.perMonth', { v: signedMoney(net) })}</span>}
       title={debt > 0 ? t('hud.debtTitle', { v: money(debt) }) : t('hud.cashTitle')}
     />
   )
@@ -134,23 +159,21 @@ function UsersWidget({ compact: c }: { compact?: boolean }) {
       compact={c}
       icon="users"
       label={t('hud.users')}
-      tone="bg-sky-100 text-sky-600"
+      alert={overload > 0}
       value={num(users)}
-      sub={overload > 0 ? <span className="text-rose-600">{t('hud.overload')}</span> : undefined}
+      sub={overload > 0 ? t('hud.overload') : undefined}
     />
   )
 }
 
 function MoraleWidget({ compact: c }: { compact?: boolean }) {
   const morale = useGameStore((s) => s.state.stats.morale)
-  const tone = morale < 28 ? 'bg-rose-100 text-rose-600' : morale < 50 ? 'bg-lemon-100 text-lemon-600' : 'bg-rose-100 text-rose-300'
+  const critical = morale < 28
+  // 28–50 = the tired band: an early, quieter mark before it turns critical.
+  const tired = !critical && morale < 50
   return (
-    <WidgetChip compact={c} icon="heart" label={t('hud.morale')} tone={tone} value={Math.round(morale)}>
-      {!c && (
-        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-cream-200">
-          <div className={cx('h-full rounded-full', morale < 28 ? 'bg-rose-300' : morale < 50 ? 'bg-lemon-300' : 'bg-mint-300')} style={{ width: `${Math.max(0, Math.min(100, morale))}%` }} />
-        </div>
-      )}
+    <WidgetChip compact={c} icon="heart" label={t('hud.morale')} alert={critical} warn={tired} value={<span className={critical ? 'text-negative-ink' : undefined}>{Math.round(morale)}</span>}>
+      {!c && <Bar className="mt-1.5" height={4} value={Math.max(0, Math.min(100, morale)) / 100} tone={critical ? 'bg-negative' : 'bg-ink'} />}
     </WidgetChip>
   )
 }
@@ -163,9 +186,9 @@ function RunwayWidget({ compact: c }: { compact?: boolean }) {
       compact={c}
       icon="hourglass"
       label={t('hud.runway')}
-      tone={danger ? 'bg-rose-100 text-rose-600' : 'bg-lemon-100 text-lemon-600'}
-      value={runway === null ? '∞' : t('unit.months', { v: fixed(runway, 1) })}
-      sub={runway === null ? <span className="text-mint-600">{t('hud.profitable')}</span> : undefined}
+      alert={danger}
+      value={runway === null ? '∞' : <span className={danger ? 'text-negative-ink' : undefined}>{t('unit.months', { v: fixed(runway, 1) })}</span>}
+      sub={runway === null ? t('hud.profitable') : undefined}
     />
   )
 }
@@ -173,13 +196,13 @@ function RunwayWidget({ compact: c }: { compact?: boolean }) {
 function BurnWidget({ compact: c }: { compact?: boolean }) {
   const b = useGameStore(useShallow((s) => ({ burn: s.state.finance.burn, ...s.state.finance.burnBreakdown })))
   return (
-    <WidgetChip compact={c} icon="flame" label={t('hud.burn')} tone="bg-peach-100 text-peach-600" value={t('hud.perMonthPlain', { v: money(b.burn) })}>
+    <WidgetChip compact={c} icon="flame" label={t('hud.burn')} value={t('hud.perMonthPlain', { v: money(b.burn) })}>
       <StackBar
         parts={[
-          { value: b.salaries, color: '#9cc9f5', label: t('burn.salaries') },
-          { value: b.rent, color: '#c9a7f5', label: t('burn.rent') },
-          { value: b.infra, color: '#9fe0c3', label: t('burn.infra') },
-          { value: b.ads, color: '#ffc1a1', label: t('burn.ads') },
+          { value: b.salaries, color: RAMP[0], label: t('burn.salaries') },
+          { value: b.rent, color: RAMP[1], label: t('burn.rent') },
+          { value: b.infra, color: RAMP[2], label: t('burn.infra') },
+          { value: b.ads, color: RAMP[3], label: t('burn.ads') },
         ]}
       />
     </WidgetChip>
@@ -188,7 +211,7 @@ function BurnWidget({ compact: c }: { compact?: boolean }) {
 
 function RetentionWidget({ compact: c }: { compact?: boolean }) {
   const churn = useGameStore((s) => s.state.stats.churn)
-  return <WidgetChip compact={c} icon="magnet" label={t('hud.retention')} tone="bg-mint-100 text-mint-600" value={pct(1 - churn, 1)} sub={t('hud.monthly')} />
+  return <WidgetChip compact={c} icon="magnet" label={t('hud.retention')} value={pct(1 - churn, 1)} sub={t('hud.monthly')} />
 }
 
 function ProfitWidget({ compact: c }: { compact?: boolean }) {
@@ -198,8 +221,8 @@ function ProfitWidget({ compact: c }: { compact?: boolean }) {
       compact={c}
       icon="trend"
       label={t('hud.profitProjection')}
-      tone="bg-mint-100 text-mint-600"
-      value={net >= 0 ? <span className="text-mint-600">{t('hud.profitable')}</span> : t('hud.gap', { v: money(-net) })}
+      value={net >= 0 ? t('hud.profitable') : money(-net)}
+      sub={net >= 0 ? undefined : t('hud.gapSub')}
     >
       {!c && <Spark values={hist} line={burn} />}
     </WidgetChip>
@@ -209,37 +232,34 @@ function ProfitWidget({ compact: c }: { compact?: boolean }) {
 function CapTableWidget({ compact: c }: { compact?: boolean }) {
   const equity = useGameStore((s) => s.state.stats.equity)
   return (
-    <WidgetChip compact={c} icon="pie" label={t('hud.capTable')} tone="bg-lilac-100 text-lilac-500" value={<span className="inline-flex items-center gap-1.5"><Pie fraction={equity} />{pct(equity)}</span>} sub={t('hud.yours')} />
+    <WidgetChip compact={c} icon="pie" label={t('hud.capTable')} value={<span className="inline-flex items-center gap-1.5"><Pie fraction={equity} />{pct(equity)}</span>} sub={t('hud.yours')} />
   )
 }
 
 function RoundTimerWidget({ compact: c }: { compact?: boolean }) {
   const round = useGameStore(useShallow((s) => (s.state.round?.active ? { left: s.state.round.weeksLeft, total: s.state.round.weeksTotal } : null)))
-  if (!round) return <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} tone="bg-cream-200 text-ink-700" value={t('hud.noRound')} />
+  if (!round) return <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} value={<span className="text-ink-2">{t('hud.noRound')}</span>} />
   return (
-    <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} tone="bg-lilac-100 text-lilac-500" value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })}>
-      {!c && (
-        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-cream-200">
-          <div className="h-full rounded-full bg-lilac-300" style={{ width: `${round.total > 0 ? (1 - round.left / round.total) * 100 : 0}%` }} />
-        </div>
-      )}
+    <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })}>
+      {!c && <Bar className="mt-1.5" height={4} value={round.total > 0 ? 1 - round.left / round.total : 0} />}
     </WidgetChip>
   )
 }
 
 function ChurnWidget({ compact: c }: { compact?: boolean }) {
   const churn = useGameStore((s) => s.state.stats.churn)
-  return <WidgetChip compact={c} icon="leak" label={t('hud.churn')} tone={churn > 0.08 ? 'bg-rose-100 text-rose-600' : 'bg-cream-200 text-ink-700'} value={pct(churn, 1)} sub={t('hud.monthly')} />
+  const high = churn > 0.08
+  return <WidgetChip compact={c} icon="leak" label={t('hud.churn')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{pct(churn, 1)}</span>} sub={t('hud.monthly')} />
 }
 
 function ArpuWidget({ compact: c }: { compact?: boolean }) {
   const arpu = useGameStore((s) => s.state.stats.arpu)
-  return <WidgetChip compact={c} icon="coin" label={t('hud.arpu')} tone="bg-lemon-100 text-lemon-600" value={`$${fixed(arpu, 2)}`} sub={t('hud.perUser')} />
+  return <WidgetChip compact={c} icon="coin" label={t('hud.arpu')} value={`$${fixed(arpu, 2)}`} sub={t('hud.perUser')} />
 }
 
 function ReputationWidget({ compact: c }: { compact?: boolean }) {
   const rep = useGameStore((s) => s.state.stats.reputation)
-  return <WidgetChip compact={c} icon="megaphone" label={t('hud.reputation')} tone="bg-sky-100 text-sky-600" value={Math.round(rep)} sub="/100" />
+  return <WidgetChip compact={c} icon="megaphone" label={t('hud.reputation')} value={Math.round(rep)} sub="/100" />
 }
 
 /** Founder control (cap-table-health): exact stake and whether the founder still holds a majority. */
@@ -250,10 +270,10 @@ function EquityWidget({ compact: c }: { compact?: boolean }) {
     <WidgetChip
       compact={c}
       icon="key"
-      label={t('widget.equity')}
-      tone={majority ? 'bg-lilac-100 text-lilac-500' : 'bg-peach-100 text-peach-600'}
+      label={t('hud.founderStake')}
+      alert={!majority}
       value={pct(equity, 1)}
-      sub={<span className={majority ? 'text-lilac-500' : 'text-peach-600'}>{majority ? t('hud.control') : t('hud.controlShared')}</span>}
+      sub={majority ? t('hud.control') : t('hud.controlShared')}
     />
   )
 }
@@ -274,13 +294,14 @@ function MoraleMapWidget({ compact: c }: { compact?: boolean }) {
     }),
   )
   return (
-    <WidgetChip compact={c} icon="grid" label={t('hud.moraleMap')} tone={bands.low > 0 ? 'bg-rose-100 text-rose-600' : 'bg-mint-100 text-mint-600'} value={t('hud.moraleMapValue', bands)}>
+    <WidgetChip compact={c} icon="grid" label={t('hud.moraleMap')} alert={bands.low > 0} value={`${bands.low}/${bands.mid}/${bands.high}`} sub={t('hud.moraleMapSub')} title={t('hud.moraleMapValue', bands)}>
       {!c && (
         <StackBar
           parts={[
-            { value: bands.low, color: '#f4a3a8', label: t('status.burnout') },
-            { value: bands.mid, color: '#f7dc8b', label: t('status.tired') },
-            { value: bands.high, color: '#9fe0c3', label: t('status.working') },
+            // Burnout band is the one place a stacked bar may use red (DESIGN.md §5).
+            { value: bands.low, color: 'var(--color-negative)', label: t('status.burnout') },
+            { value: bands.mid, color: RAMP[2], label: t('status.tired') },
+            { value: bands.high, color: RAMP[0], label: t('status.working') },
           ]}
         />
       )}
@@ -296,9 +317,9 @@ function LtvCacWidget({ compact: c }: { compact?: boolean }) {
       compact={c}
       icon="scale"
       label={t('hud.ltvCac')}
-      tone={r === null ? 'bg-cream-200 text-ink-700' : bad ? 'bg-rose-100 text-rose-600' : 'bg-mint-100 text-mint-600'}
-      value={r === null ? '—' : `${fixed(r, 1)}×`}
-      sub={r !== null ? <span className={bad ? 'text-rose-600' : 'text-mint-600'}>{bad ? t('hud.ltvLow') : t('hud.ltvOk')}</span> : undefined}
+      alert={bad}
+      value={r === null ? <span className="text-ink-2">—</span> : <span className={bad ? 'text-negative-ink' : 'text-positive-ink'}>{`${fixed(r, 1)}×`}</span>}
+      sub={r !== null ? (bad ? t('hud.ltvLow') : t('hud.ltvOk')) : undefined}
     />
   )
 }
@@ -307,13 +328,13 @@ function ChannelsWidget({ compact: c }: { compact?: boolean }) {
   const ch = useGameStore(useShallow((s) => s.state.derived.channels))
   const total = ch.organic + ch.paid + ch.manual + ch.enterprise
   return (
-    <WidgetChip compact={c} icon="branch" label={t('hud.channels')} tone="bg-sky-100 text-sky-600" value={t('hud.perMonthPlain', { v: `+${num(total)}` })}>
+    <WidgetChip compact={c} icon="branch" label={t('hud.channels')} value={t('hud.perMonthPlain', { v: `+${num(total)}` })}>
       <StackBar
         parts={[
-          { value: ch.organic, color: '#9fe0c3', label: t('channel.organic') },
-          { value: ch.paid, color: '#ffc1a1', label: t('channel.paid') },
-          { value: ch.manual, color: '#c9a7f5', label: t('channel.manual') },
-          { value: ch.enterprise, color: '#9cc9f5', label: t('channel.enterprise') },
+          { value: ch.organic, color: RAMP[0], label: t('channel.organic') },
+          { value: ch.paid, color: RAMP[1], label: t('channel.paid') },
+          { value: ch.manual, color: RAMP[2], label: t('channel.manual') },
+          { value: ch.enterprise, color: RAMP[3], label: t('channel.enterprise') },
         ]}
       />
     </WidgetChip>
@@ -322,37 +343,33 @@ function ChannelsWidget({ compact: c }: { compact?: boolean }) {
 
 function DebtWidget({ compact: c }: { compact?: boolean }) {
   const debt = useGameStore((s) => s.state.techDebt)
-  return <WidgetChip compact={c} icon="bug" label={t('hud.techDebt')} tone={debt > 50 ? 'bg-rose-100 text-rose-600' : 'bg-peach-100 text-peach-600'} value={fixed(debt, 0)} />
+  const high = debt > 50
+  return <WidgetChip compact={c} icon="bug" label={t('hud.techDebt')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{fixed(debt, 0)}</span>} />
 }
 
 function CoordinationWidget({ compact: c }: { compact?: boolean }) {
   const coord = useGameStore((s) => s.state.derived.coordination)
-  if (coord >= 0.999) return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} tone="bg-mint-100 text-mint-600" value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
-  return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} tone="bg-rose-100 text-rose-600" value={`−${pct(1 - coord)}`} sub={t('hud.output')} />
+  if (coord >= 0.999) return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
+  return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} alert value={<span className="text-negative-ink">{`−${pct(1 - coord)}`}</span>} sub={t('hud.output')} />
 }
 
 function CultureWidget({ compact: c }: { compact?: boolean }) {
   const team = useGameStore((s) => s.state.derived.teamSize)
-  return <WidgetChip compact={c} icon="flag" label={t('hud.culture')} tone="bg-lilac-100 text-lilac-500" value={t('hud.cultureValue', { n: team })} />
+  return <WidgetChip compact={c} icon="flag" label={t('hud.culture')} value={t('hud.cultureValue', { n: team })} />
 }
 
 function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
   const { mrr, customers } = useGameStore(useShallow((s) => ({ mrr: s.state.finance.mrr, customers: s.state.finance.enterpriseCustomers })))
   const top = customers.reduce((a, x) => Math.max(a, x.mrr), 0)
   const share = mrr > 0 ? top / mrr : 0
+  const concentrated = share > 0.3
   return (
-    <WidgetChip
-      compact={c}
-      icon="bars"
-      label={t('hud.revenueDist')}
-      tone={share > 0.3 ? 'bg-rose-100 text-rose-600' : 'bg-sky-100 text-sky-600'}
-      value={t('hud.topCustomer', { v: pct(share) })}
-    >
+    <WidgetChip compact={c} icon="bars" label={t('hud.revenueDist')} alert={concentrated} value={pct(share)} sub={t('hud.topCustomerSub')}>
       {!c && (
         <StackBar
           parts={[
-            ...customers.map((cu, i) => ({ value: cu.mrr, color: i % 2 ? '#9cc9f5' : '#7fb6ee', label: cu.name })),
-            { value: Math.max(0, mrr - customers.reduce((a, x) => a + x.mrr, 0)), color: '#9fe0c3', label: t('hud.selfServe') },
+            ...customers.map((cu, i) => ({ value: cu.mrr, color: i % 2 ? RAMP[1] : RAMP[0], label: cu.name })),
+            { value: Math.max(0, mrr - customers.reduce((a, x) => a + x.mrr, 0)), color: RAMP[3], label: t('hud.selfServe') },
           ]}
         />
       )}
@@ -362,8 +379,8 @@ function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
 
 function ArchetypeWidget({ compact: c }: { compact?: boolean }) {
   const a = useGameStore((s) => s.state.archetype)
-  if (!a) return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} tone="bg-cream-200 text-ink-700" value={t('hud.archetypeUnknown')} />
-  return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} tone="bg-lemon-100 text-lemon-600" value={t(`archetype.${a}`)} />
+  if (!a) return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} value={<span className="text-ink-2">{t('hud.archetypeUnknown')}</span>} />
+  return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} value={t(`archetype.${a}`)} />
 }
 
 const Nothing = () => null

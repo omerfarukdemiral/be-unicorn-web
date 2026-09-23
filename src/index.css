@@ -1,5 +1,39 @@
-@import "@fontsource-variable/oxanium";
-@import "@fontsource-variable/inter";
+/* Fonts: Oxanium (UI) + Inter (reading text), latin + latin-ext only (Turkish ğ/ş/İ live in latin-ext).
+   The woff2 files are copied from @fontsource-variable/{oxanium,inter} into public/fonts so index.html can
+   preload them (no mixed-font frame while latin-ext arrives) and the unused cyrillic/greek/vietnamese
+   subsets stay out of the bundle. Keep the paths in sync with the <link rel="preload"> tags in index.html. */
+@font-face {
+  font-family: "Oxanium Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("/fonts/oxanium-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "Oxanium Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("/fonts/oxanium-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
 @import "tailwindcss";
 
 /* Design tokens: minimal "neutral + one accent" (docs/DESIGN.md). Owned by the foundation lane. */
@@ -15,8 +49,13 @@
   --color-ink-3: #9c9ba1;         /* tertiary text, disabled, placeholders */
   --color-on-ink: #f6f5f2;        /* text/icons on ink fills */
   --color-accent: #3e63dd;        /* focus ring + selection only */
-  --color-positive: #2f9e6b;      /* numbers / tiny status marks only */
-  --color-negative: #d2463c;      /* numbers / tiny status marks only */
+  --color-positive: #2f9e6b;      /* tiny status marks (dots, icons, bar fills) */
+  --color-negative: #d2463c;      /* tiny status marks (dots, icons, bar fills) */
+  /* Number text in green/red: darker so small figures pass WCAG AA (≥4.5:1 on surface and surface-2).
+     Text uses text-positive-ink / text-negative-ink; dots, icons and bar fills keep the brighter marks. */
+  --color-positive-ink: #1f7249;
+  --color-negative-ink: #b3372e;
+  --color-ink-4: #bdbbb5;         /* lightest ramp step that still reads on a bg-border track */
   /* Department dots (6-8px only, never fills). */
   --color-dept-eng: #4c7bd9;
   --color-dept-product: #8a63d2;
@@ -134,31 +173,43 @@ canvas {
 .safe-x { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
 
 /* Reading text (bubbles, notebook cards, decision copy, long descriptions): Inter.
-   `font-text` / `font-ui` utilities also come from @theme; this adds the numeric reset. */
-.font-text {
+   Declared with @utility so they live in the utilities layer: Tailwind utilities passed alongside
+   (text-ink-3, tracking-*, text-[12px]...) can override them, and they sort before them. */
+@utility font-text {
   font-family: var(--font-text);
   font-variant-numeric: normal;
   letter-spacing: 0;
 }
 
-/* Small uppercase label (KASA, KULLANICI...). */
-.ui-label {
-  font-family: var(--font-ui);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-ink-2);
+@utility tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Shared card surface: flat, 1px hairline, soft shadow. */
-.ui-card {
-  background: color-mix(in oklab, var(--color-surface) 96%, transparent);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+@layer components {
+  /* Small uppercase label (KASA, KULLANICI...). Components layer: any utility overrides it. */
+  .ui-label {
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-ink-2);
+  }
+
+  /* Shared card surface: flat, 1px hairline, soft shadow. */
+  .ui-card {
+    background: color-mix(in oklab, var(--color-surface) 96%, transparent);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+/* Keyboard hints use the UI font (preflight would give them the monospace stack: a third font). */
+kbd {
+  font-family: var(--font-ui);
 }
 
 .ui-scroll {
@@ -170,7 +221,6 @@ canvas {
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
-.tabular { font-variant-numeric: tabular-nums; }
 
 /* Range inputs (price / ad budget). */
 input[type="range"].ui-range {

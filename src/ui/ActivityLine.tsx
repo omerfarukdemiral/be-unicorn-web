@@ -40,11 +40,11 @@ export function ActivityLine() {
   return (
     <div className="pointer-events-auto flex w-full max-w-[min(420px,100%)] flex-col items-start gap-1">
       {open && (
-        <ul className="ui-card ui-scroll max-h-56 w-full animate-slide-up p-2 text-xs">
+        <ul className="ui-card ui-scroll max-h-56 w-full animate-slide-up divide-y divide-border px-1 py-1 text-xs">
           {history.map((e) => (
-            <li key={e.id} className="flex gap-2 rounded-lg px-2 py-1.5 odd:bg-cream-100/70">
-              <span className="tabular shrink-0 font-semibold text-ink-400">{t('activity.day', { d: Math.floor(e.day) + 1 })}</span>
-              <span className="text-ink-900">{activityText(e)}</span>
+            <li key={e.id} className="flex gap-2.5 px-2 py-1.5">
+              <span className="ui-label tabular w-12 shrink-0 pt-px">{t('activity.day', { d: Math.floor(e.day) + 1 })}</span>
+              <span className="font-text leading-snug text-ink">{activityText(e)}</span>
             </li>
           ))}
         </ul>
@@ -53,13 +53,13 @@ export function ActivityLine() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="ui-card flex min-h-10 max-w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-900 max-md:min-h-11"
+        className="ui-card flex min-h-10 max-w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink transition-colors hover:bg-surface-2 max-md:min-h-11"
       >
-        <span className={cx('size-2 shrink-0 rounded-full bg-mint-600', 'animate-pulse')} />
-        <span key={last.id} className="min-w-0 animate-fade-in truncate font-medium">
+        <span className={cx('size-1.5 shrink-0 rounded-full bg-positive', 'animate-pulse')} />
+        <span key={last.id} className="font-text min-w-0 animate-fade-in truncate">
           {activityText(last)}
         </span>
-        <Icon name={open ? 'chevronDown' : 'chevronUp'} size={14} className="shrink-0 text-ink-400" />
+        <Icon name={open ? 'chevronDown' : 'chevronUp'} size={14} className="shrink-0 text-ink-3" />
       </button>
     </div>
   )

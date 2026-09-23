@@ -11,7 +11,7 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
-import { Button, Chip, cx, Empty, Pill, SectionTitle } from '../primitives'
+import { Button, Chip, cx, Dot, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
 import { SLOT_ICON, slotTypeStage, stageName } from '../theme'
 
 export function effectTags(e: FurnitureEffects): string[] {
@@ -83,8 +83,8 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
   return (
     <div className="flex flex-col gap-4">
       {target && !targetGone && (
-        <div className="flex items-center gap-2 rounded-2xl bg-lilac-100 py-1.5 pl-3 pr-1.5 text-xs font-bold text-lilac-500">
-          <Icon name={SLOT_ICON[target.type]} size={15} />
+        <div className="flex items-center gap-2 rounded-control border border-border bg-surface-2 py-1.5 pl-3 pr-1.5 text-xs font-semibold text-ink">
+          <Icon name={SLOT_ICON[target.type]} size={15} className="shrink-0 text-ink-2" />
           <span className="min-w-0 flex-1 truncate">{t('shop.forSlot', { ring: target.ring, type: t(`slot.${target.type}`) })}</span>
           <Button
             size="sm"
@@ -111,28 +111,28 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
             return (
               <Chip key={type} active={filter === type} onClick={() => setFilter(type)} icon={locked ? 'lock' : SLOT_ICON[type]}>
                 {t(`slot.${type}`)}
-                {!locked && <span className="opacity-60">· {freeByType(type)}</span>}
+                {!locked && <span className="tabular opacity-60">· {freeByType(type)}</span>}
               </Chip>
             )
           })}
         </div>
-        {!target && <p className="mb-2 text-[11px] leading-snug text-ink-600">{t('shop.autoHint')}</p>}
+        {!target && <p className="font-text mb-2 text-[11px] leading-snug text-ink-2">{t('shop.autoHint')}</p>}
         {filter !== 'all' && slotTypeStage(filter) > stage && (
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-600">
+          <p className="font-text mb-2 flex items-center gap-1.5 text-xs text-ink-2">
             <Icon name="lock" size={14} />
             {t('shop.slotLocked', { stage: stageName(slotTypeStage(filter)) })}
           </p>
         )}
         {bought && (
-          <p role="status" key={bought.key} className="mb-2 flex animate-pop-in items-center gap-1.5 rounded-2xl bg-mint-100 px-3 py-2 text-xs font-bold text-mint-600">
-            <Icon name="check" size={14} />
+          <p role="status" key={bought.key} className="mb-2 flex animate-pop-in items-center gap-1.5 rounded-control border border-border px-3 py-2 text-xs font-semibold text-ink">
+            <Icon name="check" size={14} className="shrink-0 text-positive-ink" />
             {bought.text}
           </p>
         )}
         {items.length === 0 ? (
           <Empty text={t('shop.empty')} icon="bag" />
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col divide-y divide-border border-y border-border">
             {items.map((item) => (
               <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={placementFor(office, item, target)} onBuy={buy} />
             ))}
@@ -164,25 +164,25 @@ function ShopItem({
   // No room: offer the next ring when this office has room for the item in a locked ring (rings open in order).
   const next = noRoom && place.roomRing !== null ? place.nextRing : undefined
   return (
-    <li className={cx('flex flex-col gap-2 rounded-2xl border border-cream-200 bg-cream-100/70 p-2.5', locked && 'opacity-60')}>
+    <li className={cx('flex flex-col gap-2 px-1 py-3', locked && 'opacity-55')}>
       <div className="flex items-start gap-3">
         <Swatch item={item} locked={locked} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-bold">{item.name}</span>
-            {item.size === 2 && <Pill className="bg-cream-200 text-ink-600">2×</Pill>}
-            {item.tier > 1 && <Pill className="bg-lemon-100 text-lemon-600">T{item.tier}</Pill>}
+            <span className="truncate text-sm font-semibold">{item.name}</span>
+            {item.size === 2 && <Pill className="tabular">2×</Pill>}
+            {item.tier > 1 && <Pill className="tabular text-ink">T{item.tier}</Pill>}
           </div>
-          <p className="line-clamp-2 text-[11px] leading-snug text-ink-600">{item.description}</p>
+          <p className="font-text mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-2">{item.description}</p>
           {!locked && place.targetMisfit && (
-            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-peach-600">
-              <Icon name="warning" size={12} />
+            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-ink">
+              <Icon name="warning" size={12} className="shrink-0 text-negative" />
               {place.slot ? t('shop.targetMisfit', { ring: place.slot.ring }) : t('shop.targetMisfitNoRoom')}
             </p>
           )}
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {effectTags(item.effects).map((tag) => (
-              <Pill key={tag} className="bg-mint-100 text-mint-600">
+              <Pill key={tag} className="text-ink">
                 {tag}
               </Pill>
             ))}
@@ -191,29 +191,29 @@ function ShopItem({
       </div>
       <div className="flex items-center justify-between gap-2">
         {locked ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-600">
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-2">
             <Icon name="lock" size={12} />
             {stageName(Math.max(item.stageUnlock, slotTypeStage(item.slotType)))}
           </span>
         ) : (
           <span className="min-w-0">
-            <span className={cx('tabular text-sm font-extrabold', afford ? 'text-ink-900' : 'text-rose-600')}>{money(item.price)}</span>
-            {item.upkeep ? <span className="tabular ml-1.5 text-[10px] text-ink-600">{t('shop.upkeep', { v: money(item.upkeep) })}</span> : null}
+            <span className={cx('tabular text-sm font-semibold', afford ? 'text-ink' : 'text-negative-ink')}>{money(item.price)}</span>
+            {item.upkeep ? <span className="tabular ml-1.5 text-[10px] text-ink-2">{t('shop.upkeep', { v: money(item.upkeep) })}</span> : null}
           </span>
         )}
         {!locked &&
           (noRoom ? (
             next ? (
               <span className="flex min-w-0 flex-col items-end gap-1">
-                <Button size="sm" tone="mint" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
+                <Button size="sm" tone="primary" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
                   {t('shop.noRoomOpenRing', { n: next.index, cost: money(next.openCost) })}
                 </Button>
                 {place.roomRing !== null && place.roomRing !== next.index && (
-                  <span className="text-right text-[10px] leading-tight text-ink-600">{t('shop.roomInRing', { ring: place.roomRing })}</span>
+                  <span className="text-right text-[10px] leading-tight text-ink-2">{t('shop.roomInRing', { ring: place.roomRing })}</span>
                 )}
               </span>
             ) : (
-              <span className="text-right text-[11px] font-semibold text-ink-600">{t('shop.noRoomNextStage')}</span>
+              <span className="text-right text-[11px] font-semibold text-ink-2">{t('shop.noRoomNextStage')}</span>
             )
           ) : (
             <Button size="sm" tone="primary" icon="bag" disabled={!afford} onClick={() => onBuy(item, place)}>
@@ -228,10 +228,10 @@ function ShopItem({
 function Swatch({ item, locked }: { item: FurnitureItem; locked: boolean }) {
   const c = item.visual.colors
   return (
-    <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl" style={{ background: c.primary }}>
-      {c.secondary && <span className="absolute inset-x-0 bottom-0 h-1/3" style={{ background: c.secondary }} />}
-      {c.accent && <span className="absolute right-1 top-1 size-2.5 rounded-full" style={{ background: c.accent }} />}
-      <Icon name={locked ? 'lock' : SLOT_ICON[item.slotType]} size={18} className="relative text-ink-900/70" />
+    // Neutral tile + the item's own colour as a small mark (no pastel fills in the UI).
+    <span className="relative grid size-11 shrink-0 place-items-center rounded-control border border-border bg-surface-2 text-ink-2">
+      <Icon name={locked ? 'lock' : SLOT_ICON[item.slotType]} size={18} />
+      <Dot color={c.primary} size={7} className="absolute right-1 top-1 ring-1 ring-ink/10" />
     </span>
   )
 }
@@ -244,17 +244,15 @@ function RingSection() {
   const open = rings.filter((r) => r.unlocked).length
   return (
     <div>
-      <SectionTitle right={<span className="text-[11px] font-semibold text-ink-600">{t('shop.ringsOpen', { n: open, total: rings.length })}</span>}>
+      <SectionTitle right={<span className="tabular text-[11px] font-semibold text-ink-2">{t('shop.ringsOpen', { n: open, total: rings.length })}</span>}>
         {t('shop.expand')}
       </SectionTitle>
       {next ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-lilac-100/70 p-3">
-          <div className="grid size-11 place-items-center rounded-full bg-cream-50 text-lilac-500">
-            <Icon name="building" size={20} />
-          </div>
+        <div className="flex flex-wrap items-center gap-3 rounded-control border border-border p-3">
+          <IconBadge icon="building" size={40} filled />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold">{t('shop.ringTitle', { n: next.index })}</div>
-            <div className="tabular text-[11px] text-ink-600">
+            <div className="text-sm font-semibold">{t('shop.ringTitle', { n: next.index })}</div>
+            <div className="tabular text-[11px] text-ink-2">
               {`${t('shop.ringCost', { cost: money(next.openCost) })} · ${t('shop.ringRent', { v: money(next.rentPerMonth) })}`}
             </div>
           </div>
@@ -263,7 +261,7 @@ function RingSection() {
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-ink-600">{t('shop.allRingsOpen')}</p>
+        <p className="font-text text-xs text-ink-2">{t('shop.allRingsOpen')}</p>
       )}
     </div>
   )

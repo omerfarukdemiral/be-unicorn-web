@@ -19,10 +19,10 @@ export const DEPT_COLOR: Record<Dept, { bg: string; fg: string; dot: string }> =
 export const STATUS_TONE: Record<EmployeeStatus, string> = {
   working: 'text-ink-2',
   tired: 'text-ink',
-  burnout: 'text-negative',
+  burnout: 'text-ink',
   break: 'text-ink-2',
   onboarding: 'text-ink-2',
-  leaving: 'text-negative',
+  leaving: 'text-ink',
 }
 
 /** Small status mark colour (dot next to a status label). */
@@ -86,7 +86,7 @@ export function moraleTone(m: number): string {
 
 /** Text colour for a signed number (positive/negative only on numbers). */
 export function deltaTone(n: number): string {
-  if (n > 0) return 'text-positive'
-  if (n < 0) return 'text-negative'
+  if (n > 0) return 'text-positive-ink'
+  if (n < 0) return 'text-negative-ink'
   return 'text-ink-2'
 }

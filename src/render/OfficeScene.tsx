@@ -132,14 +132,14 @@ function Lights({ lowPower }: { lowPower: boolean }) {
   const mapSize = lowPower ? 1024 : 2048
   return (
     <>
-      <hemisphereLight args={['#fff6ea', '#d9cfc2', 1.35]} />
+      <hemisphereLight args={['#fbfaf7', '#d6d5d1', 1.35]} />
       <ambientLight intensity={0.25} />
       <directionalLight
         ref={light}
         key={mapSize}
         position={[layout.center[0] - 8, 16, layout.center[1] + 10]}
         intensity={1.6}
-        color="#fff1dc"
+        color="#fffaf3"
         castShadow
         shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}

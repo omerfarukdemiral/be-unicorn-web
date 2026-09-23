@@ -7,7 +7,7 @@ import { STAGES } from '../content'
 import { panelSelection, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
-import { cx, Ring } from './primitives'
+import { Bar, cx, Ring } from './primitives'
 import { FOUNDER_ICON, founderActionStage } from './theme'
 import { useIsMobile } from './hooks'
 
@@ -47,11 +47,11 @@ export function FounderActions() {
   return (
     <div className={cx('pointer-events-auto ui-card flex flex-col gap-1.5', mobile ? 'p-1.5' : 'p-2')}>
       <div className="flex items-center gap-2 px-1">
-        <Icon name="bolt" size={14} className={lowEnergy ? 'text-rose-600' : 'text-lemon-600'} />
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream-200" title={t('founder.energy')}>
-          <div className={cx('h-full rounded-full transition-[width] duration-500', lowEnergy ? 'bg-rose-300' : 'bg-lemon-300')} style={{ width: `${Math.max(0, Math.min(100, f.energy))}%` }} />
+        <Icon name="bolt" size={14} className="shrink-0 text-ink-2" />
+        <div className="flex-1" title={t('founder.energy')}>
+          <Bar value={Math.max(0, Math.min(100, f.energy)) / 100} height={4} tone={lowEnergy ? 'bg-negative' : 'bg-ink'} />
         </div>
-        <span className="tabular text-[11px] font-bold text-ink-600">{Math.round(f.energy)}</span>
+        <span className={cx('tabular min-w-[2ch] text-right text-[11px] font-semibold', lowEnergy ? 'text-negative-ink' : 'text-ink-2')}>{Math.round(f.energy)}</span>
       </div>
       <div className="flex items-center gap-1">
         {FOUNDER_ACTIONS.map((kind) => {
@@ -89,18 +89,18 @@ export function FounderActions() {
               title={label}
               aria-label={label}
               className={cx(
-                'group relative grid shrink-0 place-items-center rounded-full transition-colors',
-                running ? 'bg-lilac-100 text-lilac-500' : kind === 'rest' ? 'bg-sky-100 text-sky-600' : 'bg-cream-100 text-ink-900',
-                !disabled && 'hover:bg-lilac-100 active:scale-95',
-                disabled && !running && 'opacity-45',
+                'group relative grid shrink-0 place-items-center rounded-full border transition-colors',
+                running ? 'border-transparent bg-surface-2 text-ink' : 'border-border bg-transparent',
+                // Disabled: dashed frame + faded icon, clearly apart from the solid hairline of an available action.
+                !running && (disabled ? 'border-dashed border-border-strong text-ink-2 [&>svg:last-child]:opacity-40' : 'border-border-strong text-ink hover:bg-surface-2 active:scale-95'),
               )}
               style={{ width: size, height: size }}
             >
-              {cdFrac > 0 && <Ring value={cdFrac} size={size} tone="var(--color-ink-400)" />}
-              {running && <Ring value={runFrac} size={size} tone="var(--color-lilac-500)" />}
+              {cdFrac > 0 && <Ring value={cdFrac} size={size} tone="var(--color-ink-3)" />}
+              {running && <Ring value={runFrac} size={size} tone="var(--color-ink)" />}
               <Icon name={locked ? 'lock' : FOUNDER_ICON[kind]} size={mobile ? 18 : 20} />
               {!mobile && (
-                <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-ink-900 px-2 py-1 text-[10px] font-bold text-cream-50 group-hover:block">
+                <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10.5px] font-semibold tracking-wide text-on-ink shadow-pop group-hover:block">
                   {action}
                 </span>
               )}
@@ -110,7 +110,7 @@ export function FounderActions() {
           return mobile ? (
             <div key={kind} className="flex w-[46px] flex-col items-center gap-0.5">
               {button}
-              <span className={cx('w-full truncate text-center text-[9px] font-bold leading-none', disabled ? 'text-ink-400' : 'text-ink-700')}>{t(`founder.short.${kind}`)}</span>
+              <span className={cx('w-full truncate text-center text-[10px] font-semibold uppercase leading-none tracking-[0.02em]', disabled ? 'text-ink-2' : 'text-ink')}>{t(`founder.short.${kind}`)}</span>
             </div>
           ) : (
             button

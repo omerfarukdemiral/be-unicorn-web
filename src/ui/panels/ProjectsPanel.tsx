@@ -43,7 +43,7 @@ export function ProjectsPanel() {
         {projects.length === 0 ? (
           <Empty text={t('projects.empty')} icon="rocket" />
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col divide-y divide-border border-y border-border">
             {projects.map((p) => (
               <ProjectCard key={p.id} project={p} />
             ))}
@@ -58,14 +58,14 @@ export function ProjectsPanel() {
               key={c}
               type="button"
               onClick={() => dispatch({ type: 'startProject', category: c, name: nextProjectName() })}
-              className="flex min-h-16 flex-col items-start gap-1 rounded-2xl border border-cream-200 bg-cream-100/70 p-2.5 text-left transition-colors hover:border-lilac-300 hover:bg-lilac-100/60"
+              className="flex min-h-16 flex-col items-start gap-1 rounded-control border border-border p-2.5 text-left transition-colors hover:border-border-strong hover:bg-surface-2"
             >
-              <span className="flex items-center gap-1.5 text-sm font-bold">
-                <Icon name={CATEGORY_ICON[c]} size={16} className="text-lilac-500" />
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                <Icon name={CATEGORY_ICON[c]} size={16} className="shrink-0 text-ink-2" />
                 {PROJECT_CATEGORY_TEXT[c].name}
               </span>
-              <span className="text-[11px] leading-snug text-ink-600">{PROJECT_CATEGORY_TEXT[c].description}</span>
-              <span className="mt-auto inline-flex items-center gap-1 text-[11px] font-bold text-lilac-500">
+              <span className="font-text text-[11px] leading-snug text-ink-2">{PROJECT_CATEGORY_TEXT[c].description}</span>
+              <span className="mt-auto inline-flex items-center gap-1 pt-1 text-[11px] font-semibold text-ink">
                 <Icon name="plus" size={12} />
                 {t('projects.start')}
               </span>
@@ -80,8 +80,8 @@ export function ProjectsPanel() {
 export function MaturityBar({ value }: { value: number }) {
   return (
     <div className="relative">
-      <Bar value={value} marker={MVP_MATURITY} tone={value >= MVP_MATURITY ? 'bg-mint-300' : 'bg-lilac-300'} height={10} />
-      <span className="absolute -top-4 text-[9px] font-bold text-ink-600" style={{ left: `calc(${MVP_MATURITY * 100}% - 12px)` }}>
+      <Bar value={value} marker={MVP_MATURITY} tone="bg-ink" height={6} />
+      <span className="absolute -top-4 text-[10.5px] font-semibold tracking-wider text-ink-2" style={{ left: `calc(${MVP_MATURITY * 100}% - 12px)` }}>
         MVP
       </span>
     </div>
@@ -92,20 +92,20 @@ function ProjectCard({ project: p }: { project: Project }) {
   const [open, setOpen] = useState(false)
   const select = useGameStore((s) => s.select)
   return (
-    <li className="rounded-2xl bg-cream-100/80 p-3">
+    <li className="px-1 py-3">
       <div className="flex items-center gap-2">
-        <Icon name={CATEGORY_ICON[p.category]} size={18} className="text-lilac-500" />
-        <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-bold hover:underline max-md:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
+        <Icon name={CATEGORY_ICON[p.category]} size={18} className="shrink-0 text-ink-2" />
+        <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-semibold hover:underline max-md:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
           {p.name}
         </button>
-        {p.launched ? <Pill className="bg-mint-100 text-mint-600">{t('projects.live')}</Pill> : <Pill className="bg-cream-200 text-ink-600">{t('projects.building')}</Pill>}
-        <span className="tabular text-xs font-bold">{pct(p.maturity)}</span>
+        {p.launched ? <Pill className="text-ink" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
+        <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>
       </div>
       <div className="mt-4">
         <MaturityBar value={p.maturity} />
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-ink-600">{t('projects.assigned', { n: p.assignedIds.length })}</span>
+        <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>
         <Button size="sm" tone="ghost" icon={open ? 'chevronUp' : 'users'} onClick={() => setOpen((o) => !o)}>
           {t('projects.assign')}
         </Button>
@@ -119,10 +119,10 @@ export function AssignList({ project }: { project: Project }) {
   const employees = useGameStore(useShallow((s) => s.state.employees))
   const projects = useGameStore(useShallow((s) => s.state.projects))
   const dispatch = useGameStore((s) => s.dispatch)
-  if (employees.length === 0) return <p className="mt-2 text-[11px] text-ink-600">{t('team.empty')}</p>
+  if (employees.length === 0) return <p className="font-text mt-2 text-[11px] text-ink-2">{t('team.empty')}</p>
   const sorted = employees.slice().sort((a, b) => rank(a.dept) - rank(b.dept))
   return (
-    <ul className="mt-2 flex flex-col gap-1">
+    <ul className="mt-2 flex flex-col gap-0.5">
       {sorted.map((e) => {
         const here = e.projectId === project.id
         const elsewhere = e.projectId && !here ? projects.find((x) => x.id === e.projectId)?.name : undefined
@@ -132,14 +132,14 @@ export function AssignList({ project }: { project: Project }) {
               type="button"
               onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: here ? null : project.id })}
               aria-pressed={here}
-              className={cx('flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left', here ? 'bg-mint-100' : 'hover:bg-cream-50')}
+              className={cx('flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left transition-colors', here ? 'bg-surface-2' : 'hover:bg-surface-2')}
             >
               <Avatar name={e.name} dept={e.dept} size={28} />
               <span className="min-w-0 flex-1 truncate text-xs font-semibold">{e.name}</span>
               <DeptPill dept={e.dept} />
-              {elsewhere && <span className="max-w-24 truncate text-[10px] text-ink-600">{elsewhere}</span>}
-              <span className={cx('grid size-6 place-items-center rounded-full', here ? 'bg-mint-600 text-cream-50' : 'bg-cream-200 text-transparent')}>
-                <Icon name="check" size={14} />
+              {elsewhere && <span className="max-w-24 truncate text-[10.5px] text-ink-2">{elsewhere}</span>}
+              <span className={cx('grid size-5 shrink-0 place-items-center rounded-md border', here ? 'border-ink bg-ink text-on-ink' : 'border-border-strong text-transparent')}>
+                <Icon name="check" size={12} />
               </span>
             </button>
           </li>

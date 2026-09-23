@@ -119,7 +119,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   let head: ReactNode
   if (panel.kind === 'detail') {
     head = (
-      <div className="flex items-start gap-2 px-3 pb-2 pt-3">
+      <div className="flex items-start gap-2 border-b border-border px-3 pb-3 pt-3">
         {back}
         <div className={cx('shrink-0', mobile ? 'w-16' : 'w-24')}>
           <DetailPreview selection={panel.selection} renderPreview={renderPreview} />
@@ -132,10 +132,10 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
     )
   } else {
     head = (
-      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+      <div className="flex items-center gap-2 border-b border-border px-3 pb-2 pt-3">
         {back}
-        <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-base font-extrabold tracking-tight">
-          <Icon name={meta.icon} size={18} className="shrink-0 text-lilac-500" />
+        <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-base font-semibold tracking-wide text-ink">
+          <Icon name={meta.icon} size={18} className="shrink-0 text-ink-2" />
           <span className="truncate">{meta.title}</span>
         </h2>
         {close}
@@ -143,7 +143,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
     )
   }
   const body = (
-    <div key={panelKey(panel)} className={cx('@container ui-scroll min-h-0 flex-1 animate-fade-in', mobile ? 'px-3 pb-3' : 'px-4 pb-4')}>
+    <div key={panelKey(panel)} className={cx('@container ui-scroll min-h-0 flex-1 animate-fade-in', mobile ? 'px-3 pb-3 pt-3' : 'px-4 pb-4 pt-3')}>
       <PanelBody panel={panel} />
     </div>
   )
@@ -153,9 +153,9 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
       <section
         ref={insetRef}
         aria-label={meta.title || t('panel.label')}
-        className="pointer-events-auto fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex max-h-[52vh] animate-slide-up flex-col rounded-t-[var(--radius-card)] border-t border-cream-300 bg-cream-50 shadow-[var(--shadow-pop)] landscape:max-h-[72vh]"
+        className="pointer-events-auto fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex max-h-[52vh] animate-slide-up flex-col rounded-t-[var(--radius-card)] border-t border-border bg-surface shadow-[var(--shadow-pop)] landscape:max-h-[72vh]"
       >
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-cream-300" />
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border-strong" />
         {head}
         {body}
       </section>

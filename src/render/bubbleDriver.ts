@@ -2,7 +2,46 @@
 // The registry holds one entry per managed <BubbleAnchor>. `runLayout` measures every bubble and
 // runs layoutBubbles (~10×/s); `applyFrame` eases each bubble to its slot and writes transform,
 // stem and visibility straight to the DOM every frame (writes only, no layout reads).
-import { layoutBubbles, type BubbleBox, type BubbleKind, type Placement, type Viewport } from './bubbleLayout'
+import { isClickable, layoutBubbles, type BubbleBox, type BubbleKind, type Placement, type Viewport } from './bubbleLayout'
+
+/** Where a speaker's head is (mirrors sceneRegistry's SpeakerPos; kept structural for tests). */
+export interface AnchorPos {
+  x: number
+  y: number
+  z: number
+  /** False while the character is outside (walked out of the door). */
+  visible: boolean
+}
+
+/**
+ * Which head a bubble floats above. Ambient lines follow their speaker and hide while the speaker is
+ * outside. A clickable (decision / concept) bubble must never disappear: if its speaker is gone or
+ * outside (e.g. the visitor already left), it moves to the founder, and when the founder is outside
+ * too, to the scene centre (`pos: null` = use the anchor's fallback point). `visible` is always true
+ * for clickable bubbles. `anchorId` is the head the bubble actually sits above ('founder' after the
+ * fallback, CENTER_ANCHOR for the scene centre): layout groups bubbles by it, so the founder's own
+ * ambient line is suppressed while a moved decision bubble floats above the founder.
+ */
+export function resolveAnchor(
+  speakerId: string,
+  kind: BubbleKind | undefined,
+  positions: ReadonlyMap<string, AnchorPos>,
+): { pos: AnchorPos | null; visible: boolean; anchorId: string } {
+  const own = positions.get(speakerId)
+  if (own?.visible) return { pos: own, visible: true, anchorId: speakerId }
+  const founder = positions.get('founder')
+  if (kind && isClickable(kind)) {
+    return founder?.visible ? { pos: founder, visible: true, anchorId: 'founder' } : { pos: null, visible: true, anchorId: CENTER_ANCHOR }
+  }
+  const p = own ?? founder ?? null
+  return { pos: p, visible: !p || p.visible, anchorId: speakerId }
+}
+
+/** Layout speaker id for a bubble parked at the scene centre (no visible head). */
+export const CENTER_ANCHOR = '@center'
+
+/** Takes part in layout / may be shown. Clickable bubbles are never hidden for an absent speaker. */
+const present = (e: Entry): boolean => e.speakerVisible || isClickable(e.kind)
 
 /** Minimal element surface the driver touches (HTMLElement in the app, plain objects in tests). */
 export interface BubbleEl {
@@ -91,7 +130,7 @@ export function createEntry(
 export function measure(reg: BubbleLayoutRegistry): BubbleBox[] {
   const out: BubbleBox[] = []
   for (const e of reg.entries.values()) {
-    if (!e.speakerVisible || e.frames < 2 || e.done) continue
+    if (!present(e) || e.frames < 2 || e.done) continue
     const r = e.el.getBoundingClientRect()
     const w = e.el.offsetWidth
     const h = e.el.offsetHeight
@@ -161,7 +200,7 @@ export function applyFrame(reg: BubbleLayoutRegistry, dt: number, now: number): 
       if (e.done) reg.dirty = true
     }
     const p = reg.placements.get(e.key)
-    const show = e.speakerVisible && !e.done && !!p && !p.hidden
+    const show = present(e) && !e.done && !!p && !p.hidden
     if (show && p) {
       if (!e.shown) {
         e.cur.dx = p.dx

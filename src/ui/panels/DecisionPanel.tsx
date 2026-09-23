@@ -12,7 +12,7 @@ export function DecisionPanel({ cardId, answered }: { cardId: DecisionCardId; an
   const dispatch = useGameStore((s) => s.dispatch)
   const openPanel = useGameStore((s) => s.openPanel)
   const closePanel = useGameStore((s) => s.closePanel)
-  if (!card) return <p className="text-sm text-ink-600">{t('decision.expired')}</p>
+  if (!card) return <p className="font-text text-sm text-ink-2">{t('decision.expired')}</p>
 
   if (answered !== undefined) {
     return (
@@ -24,7 +24,7 @@ export function DecisionPanel({ cardId, answered }: { cardId: DecisionCardId; an
       </div>
     )
   }
-  if (!stillActive) return <p className="text-sm text-ink-600">{t('decision.expired')}</p>
+  if (!stillActive) return <p className="font-text text-sm text-ink-2">{t('decision.expired')}</p>
   return (
     <DecisionCardView
       card={card}

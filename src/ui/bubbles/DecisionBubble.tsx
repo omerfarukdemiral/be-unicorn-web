@@ -7,7 +7,7 @@ import { DECISIONS, type DecisionCard } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
-import { cx, IconButton } from '../primitives'
+import { cx, Dot, IconBadge, IconButton } from '../primitives'
 import { useIsMobile } from '../hooks'
 import { openConceptCard } from '../uiActions'
 import { conceptTitle } from '../panels/JournalPanel'
@@ -19,17 +19,19 @@ export function decisionById(id: DecisionCardId): DecisionCard | undefined {
   return DECISIONS.find((d) => d.id === id)
 }
 
-/** Shared card body (screen bubble + panel). */
+/** Shared card body (screen bubble + panel). Category is a small icon mark (crisis adds a red dot). */
 export function DecisionCardView({ card, onChoose, dense, stacked }: { card: DecisionCard; onChoose: (optionIndex: number) => void; dense?: boolean; /** One option per row (narrow panel). */ stacked?: boolean }) {
+  const crisis = card.category === 'crisis'
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2.5">
-        <span className={cx('grid size-9 shrink-0 place-items-center rounded-full', card.category === 'crisis' ? 'bg-rose-100 text-rose-600' : card.category === 'rival' ? 'bg-peach-100 text-peach-600' : 'bg-sky-100 text-sky-600')}>
-          <Icon name={card.category === 'crisis' ? 'warning' : 'chat'} size={18} />
+        <span className="relative">
+          <IconBadge icon={crisis ? 'warning' : card.category === 'rival' ? 'flag' : 'chat'} size={32} filled />
+          {crisis && <Dot color="var(--color-negative)" size={7} className="absolute -right-0.5 -top-0.5 ring-2 ring-surface" />}
         </span>
         <div className="min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink-600">{npcLabel(card.speaker)}</div>
-          <p className={cx('font-semibold leading-snug text-ink-900', dense ? 'text-sm' : 'text-base')}>{card.question}</p>
+          <div className="ui-label">{npcLabel(card.speaker)}</div>
+          <p className={cx('font-text mt-0.5 font-semibold leading-snug text-ink', dense ? 'text-sm' : 'text-base')}>{card.question}</p>
         </div>
       </div>
       <div className={cx('grid gap-2', !stacked && (card.options.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'))}>
@@ -38,15 +40,15 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
             key={i}
             type="button"
             onClick={() => onChoose(i)}
-            className="flex min-h-11 flex-col gap-1.5 rounded-2xl border border-cream-300 bg-cream-100/80 p-3 text-left transition-colors hover:border-lilac-300 hover:bg-lilac-100/60"
+            className="group flex min-h-11 flex-col gap-1.5 rounded-control border border-border bg-transparent p-3 text-left transition-colors hover:border-ink"
           >
-            <span className="text-sm font-bold leading-snug">{o.label}</span>
-            <span className="flex items-start gap-1 text-[11px] leading-snug text-mint-600">
-              <Icon name="plus" size={12} className="mt-px shrink-0" />
+            <span className="font-text text-sm font-semibold leading-snug text-ink">{o.label}</span>
+            <span className="font-text flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-2">
+              <Icon name="plus" size={12} className="mt-px shrink-0 text-positive" />
               {o.tradeoff.gain}
             </span>
-            <span className="flex items-start gap-1 text-[11px] leading-snug text-rose-600">
-              <Icon name="minus" size={12} className="mt-px shrink-0" />
+            <span className="font-text flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-2">
+              <Icon name="minus" size={12} className="mt-px shrink-0 text-negative" />
               {o.tradeoff.cost}
             </span>
           </button>
@@ -62,12 +64,10 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
   if (!opt) return null
   return (
     <div className="flex items-start gap-2.5">
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-lilac-100 text-lilac-500">
-        <Icon name="sparkle" size={16} />
-      </span>
+      <IconBadge icon="sparkle" size={32} filled />
       <div className="min-w-0 flex-1">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-ink-600">{t('decision.youChose', { v: opt.label })}</div>
-        <p className="text-sm leading-snug text-ink-900">{opt.reflection}</p>
+        <div className="ui-label">{t('decision.youChose', { v: opt.label })}</div>
+        <p className="font-text mt-0.5 text-sm leading-snug text-ink">{opt.reflection}</p>
         {opt.conceptId && (
           <button
             type="button"
@@ -75,9 +75,9 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
               onClose?.()
               if (opt.conceptId) openConceptCard(opt.conceptId)
             }}
-            className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-bold text-lilac-500 hover:underline max-md:min-h-11"
+            className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
           >
-            <Icon name="book" size={13} />
+            <Icon name="book" size={13} className="text-ink-2" />
             {t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
           </button>
         )}
@@ -125,11 +125,9 @@ export function DecisionBubble() {
           </>
         ) : (
           <button type="button" onClick={() => setExpanded(true)} className="flex min-h-11 w-full items-center gap-2 text-left">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-600">
-              <Icon name="chat" size={16} />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{card.question}</span>
-            <Icon name="chevronDown" size={16} className="shrink-0 text-ink-600" />
+            <IconBadge icon={card.category === 'crisis' ? 'warning' : 'chat'} size={28} filled />
+            <span className="font-text min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.question}</span>
+            <Icon name="chevronDown" size={16} className="shrink-0 text-ink-2" />
           </button>
         )}
       </div>

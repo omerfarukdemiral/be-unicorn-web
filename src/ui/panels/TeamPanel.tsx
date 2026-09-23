@@ -7,8 +7,8 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
-import { Bar, Button, Chip, cx, Empty, Pill, QualityStars } from '../primitives'
-import { DEPT_COLOR, moraleTone, STATUS_TONE } from '../theme'
+import { Bar, Button, Chip, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
+import { DEPT_COLOR, moraleTone, STATUS_DOT, STATUS_TONE } from '../theme'
 
 type Sub = 'hire' | 'team'
 
@@ -32,11 +32,11 @@ export function TeamPanel() {
 }
 
 export function DeptPill({ dept }: { dept: Dept }) {
-  const c = DEPT_COLOR[dept]
-  return <Pill className={cx(c.bg, c.fg)}>{DEPT_TEXT[dept].short}</Pill>
+  return <Pill dot={DEPT_COLOR[dept].dot}>{DEPT_TEXT[dept].short}</Pill>
 }
 
-export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; size?: number }) {
+// `dept` stays in the signature for callers; the avatar itself is neutral (department = the pill's dot).
+export function Avatar({ name, size = 36 }: { name: string; dept: Dept; size?: number }) {
   const initials = name
     .split(' ')
     .map((p) => p[0] ?? '')
@@ -44,7 +44,7 @@ export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; si
     .slice(0, 2)
     .toUpperCase()
   return (
-    <span className="grid shrink-0 place-items-center rounded-full text-[11px] font-extrabold text-ink-900" style={{ width: size, height: size, background: DEPT_COLOR[dept].dot }}>
+    <span className="grid shrink-0 place-items-center rounded-full border border-border bg-surface-2 text-[11px] font-semibold tracking-wide text-ink-2" style={{ width: size, height: size }}>
       {initials}
     </span>
   )
@@ -77,14 +77,14 @@ function HireView() {
         </Chip>
         {DEPTS.map((d) => (
           <Chip key={d} active={dept === d} onClick={() => setDept(d)}>
-            <span className="size-2 rounded-full" style={{ background: DEPT_COLOR[d].dot }} />
+            <Dot color={DEPT_COLOR[d].dot} size={6} />
             {DEPT_TEXT[d].name}
           </Chip>
         ))}
       </div>
-      <div className="flex items-center justify-between gap-2 text-[11px] text-ink-600">
-        <span className={cx('inline-flex items-center gap-1', freeDesks === 0 && 'font-semibold text-rose-600')}>
-          <Icon name="desk" size={14} />
+      <div className="flex items-center justify-between gap-2 text-[11px] text-ink-2">
+        <span className={cx('inline-flex items-center gap-1', freeDesks === 0 && 'font-semibold text-ink')}>
+          {freeDesks === 0 ? <Dot color="var(--color-negative)" size={6} /> : <Icon name="desk" size={14} />}
           {freeDesks > 0 ? t('team.freeDesks', { n: freeDesks }) : emptySlots > 0 ? t('team.needDeskItem') : t('team.noSlot')}
         </span>
         <Button size="sm" tone="ghost" icon="refresh" onClick={() => dispatch({ type: 'refreshCandidates' })}>
@@ -94,17 +94,17 @@ function HireView() {
       {list.length === 0 ? (
         <Empty text={t('team.noCandidates')} icon="users" />
       ) : (
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col divide-y divide-border border-y border-border">
           {list.map((c) => (
-            <li key={c.id} className="flex items-center gap-3 rounded-2xl bg-cream-100/80 p-2.5">
+            <li key={c.id} className="flex items-center gap-3 px-1 py-2.5">
               <Avatar name={c.name} dept={c.dept} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="truncate text-sm font-bold">{c.name}</span>
+                  <span className="truncate text-sm font-semibold">{c.name}</span>
                   <DeptPill dept={c.dept} />
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-ink-600">
-                  <span className="tabular font-semibold text-ink-900">{t('hud.perMonthPlain', { v: money(c.salary) })}</span>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-2">
+                  <span className="tabular font-semibold text-ink">{t('hud.perMonthPlain', { v: money(c.salary) })}</span>
                   {showQuality && <QualityStars quality={c.quality} />}
                   <span>{t('team.expires', { n: Math.max(0, Math.ceil(c.expiresDay - day)) })}</span>
                 </div>
@@ -126,13 +126,13 @@ function TeamList() {
   const sorted = employees.slice().sort((a, b) => Number(b.status === 'leaving') - Number(a.status === 'leaving') || a.dept.localeCompare(b.dept))
   if (sorted.length === 0) return <Empty text={t('team.empty')} icon="users" />
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className="flex flex-col divide-y divide-border border-y border-border">
       {sorted.map((e) => (
-        <li key={e.id}>
+        <li key={e.id} className="py-1">
           {e.status === 'leaving' ? (
             <ResignationCard employee={e} />
           ) : (
-            <button type="button" onClick={() => select({ kind: 'employee', id: e.id })} className="flex w-full items-center gap-3 rounded-2xl bg-cream-100/80 p-2.5 text-left hover:bg-cream-50">
+            <button type="button" onClick={() => select({ kind: 'employee', id: e.id })} className="flex w-full items-center gap-3 rounded-control px-1 py-1.5 text-left transition-colors hover:bg-surface-2">
               <EmployeeRow employee={e} />
             </button>
           )}
@@ -148,15 +148,20 @@ export function EmployeeRow({ employee: e }: { employee: Employee }) {
       <Avatar name={e.name} dept={e.dept} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-bold">{e.name}</span>
-          {e.star && <Icon name="star" size={13} fill="currentColor" className="text-lemon-600" />}
+          <span className="truncate text-sm font-semibold">{e.name}</span>
+          {e.star && <Icon name="star" size={13} fill="currentColor" className="shrink-0 text-ink" />}
           <DeptPill dept={e.dept} />
-          <Pill className={STATUS_TONE[e.status]}>{t(`status.${e.status}`)}</Pill>
+          <Pill className={STATUS_TONE[e.status]} dot={STATUS_DOT[e.status]}>{t(`status.${e.status}`)}</Pill>
         </div>
         <div className="mt-1 flex items-center gap-2">
           <Bar value={e.morale / 100} tone={moraleTone(e.morale)} height={5} className="max-w-28" />
-          <span className="tabular text-[11px] text-ink-600">{money(e.salary)}</span>
-          {!e.deskSlotId && <span className="text-[11px] font-semibold text-rose-600">{t('team.noSeat')}</span>}
+          <span className="tabular text-[11px] text-ink-2">{money(e.salary)}</span>
+          {!e.deskSlotId && (
+            <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-ink-2">
+              <Dot color="var(--color-negative)" size={6} />
+              <span className="truncate">{t('team.noSeat')}</span>
+            </span>
+          )}
         </div>
       </div>
     </>
@@ -170,16 +175,21 @@ export function ResignationCard({ employee: e }: { employee: Employee }) {
   const left = e.leaveDay !== undefined ? Math.max(0, Math.ceil(e.leaveDay - day)) : null
   const respond = (response: 'raise' | 'talk' | 'letGo') => dispatch({ type: 'respondResignation', employeeId: e.id, response })
   return (
-    <div className="rounded-2xl border border-rose-300 bg-rose-100/70 p-2.5">
+    <div className="rounded-control border border-border bg-surface p-2.5">
       <div className="flex items-center gap-3">
         <Avatar name={e.name} dept={e.dept} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold">{e.name}</div>
-          <div className="text-[11px] font-semibold text-rose-600">{left !== null ? t('team.leavingIn', { n: left }) : t('status.leaving')}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Icon name="warning" size={14} className="shrink-0 text-negative" />
+            <span className="truncate text-sm font-semibold">{e.name}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-ink">
+            <Dot color="var(--color-negative)" size={6} />
+            {left !== null ? t('team.leavingIn', { n: left }) : t('status.leaving')}</div>
         </div>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-1.5">
-        <Button size="sm" tone="mint" onClick={() => respond('raise')}>
+        <Button size="sm" tone="primary" onClick={() => respond('raise')}>
           {t('team.raise')}
         </Button>
         <Button size="sm" onClick={() => respond('talk')}>

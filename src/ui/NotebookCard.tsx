@@ -6,7 +6,7 @@ import { NPC_TEXT, type Concept } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
-import { Button, Pill } from './primitives'
+import { Button, cx, Dot, IconBadge, Label, Pill } from './primitives'
 import { conceptById } from './uiActions'
 import { conceptTitle } from './panels/JournalPanel'
 
@@ -43,10 +43,10 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
   const where = useGameStore((st) => (concept ? whereOf(concept, st.state) : null))
   if (!concept) {
     return (
-      <div className="p-6 text-center text-sm text-ink-600">
+      <div className="font-text p-6 text-center text-sm text-ink-2">
         {t('journal.missing', { id: conceptId })}
         {onClose && (
-          <div className="mt-4">
+          <div className="mt-4 font-ui">
             <Button onClick={onClose}>{t('common.close')}</Button>
           </div>
         )}
@@ -56,37 +56,40 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
   const speaker = NPC_TEXT[concept.speaker]
   const unlock = unlockLabel(concept.unlocks)
   return (
-    <article className="relative overflow-hidden rounded-[var(--radius-card)] bg-cream-50">
-      <div className="h-3" style={{ background: concept.shelfColor }} />
+    <article className="relative overflow-hidden rounded-card bg-surface">
       <div className="flex flex-col gap-4 p-4 @lg:p-6">
-        <header className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-600">
-              <Icon name="book" size={14} />
-              {t('journal.cardLabel')}
-            </div>
-            <h2 className="mt-0.5 text-xl font-extrabold tracking-tight">{conceptTitle(concept.id)}</h2>
-            <p className="mt-1 text-sm italic text-ink-600">
-              “{concept.bubble}” <span className="not-italic">— {speaker.name}, {speaker.title}</span>
-            </p>
+        <header className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            {/* Shelf colour survives only as a tiny mark (was a full-width colour strip). */}
+            <Dot color={concept.shelfColor} size={7} />
+            <Label>{t('journal.cardLabel')}</Label>
           </div>
+          <h2 className="mt-1.5 text-xl font-semibold leading-tight tracking-tight text-ink">{conceptTitle(concept.id)}</h2>
+          <p className="font-text mt-1.5 text-sm leading-snug text-ink-2">
+            “{concept.bubble}”{' '}
+            <span className="font-ui text-xs text-ink-2">
+              — {speaker.name}, {speaker.title}
+            </span>
+          </p>
         </header>
-        <Row label={t('journal.what')} tone="bg-sky-100 text-sky-600" icon="sparkle">
-          {concept.card.what}
-        </Row>
-        {where !== null && (
-          <Row label={t('journal.where')} tone="bg-lemon-100 text-lemon-600" icon="search">
-            {where}
+        <div className="flex flex-col divide-y divide-border border-y border-border">
+          <Row label={t('journal.what')} icon="sparkle">
+            {concept.card.what}
           </Row>
-        )}
-        <Row label={t('journal.rule')} tone="bg-mint-100 text-mint-600" icon="check">
-          <strong>{concept.card.rule}</strong>
-        </Row>
+          {where !== null && (
+            <Row label={t('journal.where')} icon="search">
+              {where}
+            </Row>
+          )}
+          <Row label={t('journal.rule')} icon="check" emphasis>
+            {concept.card.rule}
+          </Row>
+        </div>
         {(unlock || onClose) && (
-          <footer className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <footer className="flex flex-wrap items-center justify-between gap-2">
             {unlock ? (
-              <Pill className="bg-lilac-100 text-lilac-500">
-                <Icon name="plus" size={12} />
+              <Pill className="text-ink">
+                <Icon name="plus" size={12} className="text-ink-2" />
                 {t('journal.unlocked', { v: unlock })}
               </Pill>
             ) : (
@@ -104,15 +107,13 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
   )
 }
 
-function Row({ label, tone, icon, children }: { label: string; tone: string; icon: 'sparkle' | 'search' | 'check'; children: ReactNode }) {
+function Row({ label, icon, emphasis, children }: { label: string; icon: 'sparkle' | 'search' | 'check'; emphasis?: boolean; children: ReactNode }) {
   return (
-    <div className="flex gap-3">
-      <span className={`grid size-8 shrink-0 place-items-center rounded-full ${tone}`}>
-        <Icon name={icon} size={16} />
-      </span>
+    <div className="flex gap-3 py-3">
+      <IconBadge icon={icon} size={28} />
       <div className="min-w-0">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-ink-600">{label}</div>
-        <p className="text-sm leading-relaxed text-ink-900">{children}</p>
+        <Label>{label}</Label>
+        <p className={cx('font-text mt-0.5 text-sm leading-relaxed text-ink', emphasis && 'font-semibold')}>{children}</p>
       </div>
     </div>
   )

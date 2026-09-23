@@ -10,36 +10,30 @@ import { t } from '../i18n'
 import { cx } from '../primitives'
 import { conceptById, openConceptCard } from '../uiActions'
 import { conceptTitle } from '../panels/JournalPanel'
+import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, BubbleText, SpeakerLine } from './shell'
 
 export const CONCEPT_MINIMIZE_MS = 20_000
 
-/** Presentational bubble; render may embed this inside a drei <Html>. */
-export function ConceptBubbleView({ text, speaker, onClick, className }: { text: string; speaker?: string; onClick: () => void; className?: string }) {
+/** Presentational bubble; render may embed this inside a drei <Html>. Mark: book icon (vs. decision's chat). */
+export function ConceptBubbleView({ text, speaker, onClick, className, tail }: { text: string; speaker?: string; onClick: () => void; className?: string; tail?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cx(
-        'group relative flex max-w-[min(340px,86vw)] animate-pop-in items-start gap-2 rounded-3xl rounded-bl-md border border-lemon-300 bg-cream-50 px-3.5 py-2.5 text-left shadow-[var(--shadow-card)] transition-transform hover:-translate-y-0.5',
-        className,
-      )}
+      className={cx(BUBBLE_SHELL, BUBBLE_HOVER, 'group flex max-w-[min(340px,86vw)] animate-pop-in flex-col gap-1 px-3 py-2 text-left', className)}
     >
-      <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-lemon-300 text-ink-900">
-        <Icon name="chat" size={13} />
+      <SpeakerLine icon="book" speaker={speaker} />
+      <BubbleText>{text}</BubbleText>
+      <span className="flex items-center gap-1 font-ui text-[11px] font-semibold text-ink-2 transition-colors group-hover:text-ink">
+        {t('bubble.openNotebook')}
+        <Icon name="chevronRight" size={12} className="transition-transform group-hover:translate-x-0.5" />
       </span>
-      <span className="min-w-0">
-        {speaker && <span className="block text-[10px] font-bold uppercase tracking-wider text-ink-600">{speaker}</span>}
-        <span className="block text-sm font-semibold leading-snug text-ink-900">{text}</span>
-        <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-lilac-500">
-          <Icon name="book" size={12} />
-          {t('bubble.openNotebook')}
-        </span>
-      </span>
+      {tail && <BubbleTail />}
     </button>
   )
 }
 
-/** Minimized concept: a small pulsing icon (kept until opened). */
+/** Minimized concept: a small round icon with a tiny ink mark (kept until opened). */
 export function ConceptIconView({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -47,9 +41,10 @@ export function ConceptIconView({ label, onClick }: { label: string; onClick: ()
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="grid size-11 animate-pop-in place-items-center rounded-full border border-lemon-300 bg-lemon-100 text-lemon-600 shadow-[var(--shadow-card)]"
+      className="relative grid size-11 animate-pop-in place-items-center rounded-full border border-border bg-surface text-ink shadow-card transition-colors hover:border-border-strong"
     >
-      <Icon name="chat" size={18} className="animate-wiggle" />
+      <Icon name="book" size={17} className="animate-wiggle" />
+      <span aria-hidden="true" className="absolute right-2 top-2 size-1.5 rounded-full bg-ink ring-2 ring-surface" />
     </button>
   )
 }

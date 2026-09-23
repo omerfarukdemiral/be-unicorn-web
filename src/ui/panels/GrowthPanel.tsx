@@ -5,7 +5,7 @@ import type { ToolId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
-import { Bar, Empty, LockedHint, SectionTitle, Stat } from '../primitives'
+import { Bar, Dot, Empty, LockedHint, SectionTitle, Stat } from '../primitives'
 import { RoundSection } from './RoundSection'
 
 const AD_STEPS = [0, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000]
@@ -53,7 +53,7 @@ function ProductSection() {
         <Stat
           label={t('growth.capacity')}
           value={`${num(d.users)} / ${num(d.capacity)}`}
-          sub={d.overload > 0 ? <span className="font-semibold text-rose-600">{t('hud.overload')}</span> : undefined}
+          sub={d.overload > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-ink"><Dot color="var(--color-negative)" size={6} />{t('hud.overload')}</span> : undefined}
         />
         <Stat label={t('growth.mrr')} value={money(d.mrr)} sub={t('growth.mom', { v: pct(d.growth, 1) })} />
       </div>
@@ -81,10 +81,10 @@ function ChannelSection() {
       {!unlocked ? (
         <LockedHint text={t('growth.adLocked')} />
       ) : (
-        <div className="rounded-2xl bg-cream-100/80 p-3">
+        <div className="rounded-control border border-border px-3 pb-3 pt-2.5">
           <div className="flex items-baseline justify-between">
-            <span className="text-xs font-semibold text-ink-600">{t('growth.adBudget')}</span>
-            <span className="tabular text-sm font-extrabold">{t('hud.perMonthPlain', { v: money(AD_STEPS[idx] ?? 0) })}</span>
+            <span className="ui-label">{t('growth.adBudget')}</span>
+            <span className="tabular text-sm font-semibold">{t('hud.perMonthPlain', { v: money(AD_STEPS[idx] ?? 0) })}</span>
           </div>
           <input
             className="ui-range"
@@ -141,10 +141,10 @@ function PriceSection() {
       {!unlocked ? (
         <LockedHint text={t('growth.priceLocked')} />
       ) : (
-        <div className="rounded-2xl bg-cream-100/80 p-3">
+        <div className="rounded-control border border-border px-3 pb-3 pt-2.5">
           <div className="flex items-baseline justify-between">
-            <span className="text-xs font-semibold text-ink-600">{t('growth.priceMultiplier')}</span>
-            <span className="tabular text-sm font-extrabold">{fixed(v, 2)}×</span>
+            <span className="ui-label">{t('growth.priceMultiplier')}</span>
+            <span className="tabular text-sm font-semibold">{fixed(v, 2)}×</span>
           </div>
           <input
             className="ui-range"
@@ -159,9 +159,14 @@ function PriceSection() {
             onKeyUp={commit}
             onBlur={commit}
           />
-          <div className="flex items-center justify-between text-[11px] text-ink-600">
+          <div className="flex items-center justify-between gap-2 text-[11px] text-ink-2">
             <span>{t('growth.arpuNow', { v: `$${fixed(d.arpu, 2)}` })}</span>
-            {v > d.mult + 1e-6 && <span className="font-semibold text-peach-600">{t('growth.priceWarning')}</span>}
+            {v > d.mult + 1e-6 && (
+              <span className="inline-flex items-center gap-1 text-right font-semibold text-ink">
+                <Dot color="var(--color-negative)" size={6} />
+                {t('growth.priceWarning')}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -181,13 +186,13 @@ function EnterpriseSection() {
       ) : customers.length === 0 ? (
         <Empty text={t('growth.enterpriseEmpty')} icon="handshake" />
       ) : (
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col divide-y divide-border border-y border-border">
           {customers.map((c) => (
-            <li key={c.id} className="flex items-center justify-between gap-2 rounded-2xl bg-cream-100/80 px-3 py-2">
-              <span className="truncate text-sm font-bold">{c.name}</span>
+            <li key={c.id} className="flex items-center justify-between gap-2 px-1 py-2.5">
+              <span className="truncate text-sm font-semibold">{c.name}</span>
               <span className="tabular text-xs font-semibold">
                 {t('hud.perMonthPlain', { v: money(c.mrr) })}
-                {mrr > 0 && <span className="ml-1 text-ink-600">({pct(c.mrr / mrr)})</span>}
+                {mrr > 0 && <span className="ml-1 text-ink-2">({pct(c.mrr / mrr)})</span>}
               </span>
             </li>
           ))}

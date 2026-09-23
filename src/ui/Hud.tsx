@@ -50,14 +50,14 @@ function DesktopHud() {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3">
       <div className="pointer-events-auto flex w-[260px] flex-col gap-2 lg:w-[300px]">
-        <div className="ui-card grid gap-1 p-1.5">
+        <div className="ui-card grid divide-y divide-border p-1">
           {primary.map((id) => {
             const W = WIDGETS[id].Component
             return <W key={id} />
           })}
         </div>
         {secondary.length > 0 && (
-          <div className="ui-card ui-scroll grid max-h-[max(9rem,calc(100dvh-420px))] min-h-0 grid-cols-2 gap-1 p-1.5">
+          <div className="ui-card ui-scroll grid max-h-[max(9rem,calc(100dvh-420px))] min-h-0 grid-cols-2 gap-x-1 gap-y-0.5 p-1">
             {secondary.map((id) => {
               const W = WIDGETS[id].Component
               return (
@@ -99,7 +99,7 @@ function MobileHud() {
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
             aria-label={t('hud.more')}
-            className="flex min-h-11 min-w-11 shrink-0 flex-col items-center justify-center rounded-2xl bg-cream-200/80 text-[11px] font-bold text-ink-700"
+            className="flex min-h-11 min-w-11 shrink-0 flex-col items-center justify-center rounded-control border border-border text-[11px] font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink aria-expanded:bg-surface-2 aria-expanded:text-ink"
           >
             <Icon name={open ? 'chevronUp' : 'chevronDown'} size={16} />+{secondary.length}
           </button>
@@ -140,40 +140,52 @@ function StageBar({ compact }: { compact?: boolean }) {
   const dayOfMonth = Math.floor(s.day % 30) + 1
   const pctW = Math.max(0, Math.min(1, s.progress)) * 100
 
+  // Phones: the round buttons shrink to square icon buttons so stage name and date keep their width.
+  const roundInProgress = t('round.inProgressShort', { v: Math.max(0, Math.ceil(s.weeksLeft)) })
   const roundBtn = s.roundActive ? (
     <button
       type="button"
       onClick={openRound}
-      className="inline-flex min-h-9 items-center gap-1 rounded-full bg-lilac-100 px-3 text-xs font-bold text-lilac-500 max-md:min-h-11"
+      aria-label={roundInProgress}
+      title={roundInProgress}
+      className={cx(
+        'tabular inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-border-strong text-xs font-semibold text-ink transition-colors hover:bg-surface-2',
+        compact ? 'min-h-11 min-w-11 px-1.5' : 'min-h-9 px-3',
+      )}
     >
       <Icon name="timer" size={14} />
-      {t('round.inProgressShort', { v: Math.max(0, Math.ceil(s.weeksLeft)) })}
+      {compact ? Math.max(0, Math.ceil(s.weeksLeft)) : roundInProgress}
     </button>
   ) : s.canStart ? (
     <button
       type="button"
       onClick={openRound}
-      className="inline-flex min-h-9 animate-pop-in items-center gap-1 rounded-full bg-ink-900 px-3 text-xs font-bold text-cream-50 max-md:min-h-11"
+      aria-label={t('round.start')}
+      title={t('round.start')}
+      className={cx(
+        'inline-flex shrink-0 animate-pop-in items-center justify-center gap-1 rounded-control bg-ink text-xs font-semibold tracking-wide text-on-ink transition-colors hover:bg-ink/85',
+        compact ? 'size-11' : 'min-h-9 px-3',
+      )}
     >
-      <Icon name="rocket" size={14} />
-      {t('round.start')}
+      <Icon name="rocket" size={compact ? 18 : 14} />
+      {!compact && t('round.start')}
     </button>
   ) : null
 
   return (
     <div className={cx('pointer-events-auto ui-card flex min-w-0 items-center gap-2 p-1.5', compact ? 'flex-1' : 'w-[min(520px,46vw)] px-3')}>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="truncate text-sm font-extrabold tracking-tight">{STAGES[s.stage]?.name ?? '—'}</span>
-          <span className="tabular truncate text-[11px] font-semibold text-ink-600">{t('hud.date', { m: s.month + 1, d: dayOfMonth })}</span>
+        <div className={cx('flex gap-2', compact ? 'flex-wrap items-baseline gap-y-0' : 'items-baseline')}>
+          <span className="shrink-0 text-sm font-semibold tracking-wide text-ink">{STAGES[s.stage]?.name ?? '—'}</span>
+          <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">{t('hud.date', { m: s.month + 1, d: dayOfMonth })}</span>
         </div>
         {next ? (
           <div className="mt-1 flex items-center gap-2" title={t('hud.stageProgressTitle', { stage: next.name })}>
-            <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-cream-200">
-              <div className="h-full rounded-full bg-gradient-to-r from-lilac-300 to-rose-300 transition-[width] duration-700" style={{ width: `${pctW}%` }} />
+            <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-ink transition-[width] duration-700" style={{ width: `${pctW}%` }} />
             </div>
             {!compact && (
-              <span className="tabular shrink-0 text-[11px] font-semibold text-ink-600">
+              <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
                 {money(s.valuation)} / {money(next.targetValuation ?? 0)}
               </span>
             )}
@@ -197,7 +209,9 @@ function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange
         type="button"
         onClick={() => onChange(nextSpeed)}
         aria-label={t('speed.label')}
-        className={cx('flex min-h-11 min-w-11 items-center justify-center gap-0.5 rounded-full text-xs font-extrabold', speed === 0 ? 'bg-peach-300 text-ink-900' : 'bg-ink-900 text-cream-50')}
+        // Status, not a CTA: hairline frame while running; paused gets an ink ring on a surface-2 fill
+        // so "the game is stopped" reads louder than "running".
+        className={cx('tabular flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border text-xs font-semibold text-ink transition-colors', speed === 0 ? 'border-ink bg-surface-2' : 'border-border-strong hover:bg-surface-2')}
       >
         <Icon name={speed === 0 ? 'pause' : 'play'} size={14} />
         {speed > 0 && `${speed}×`}
@@ -205,7 +219,7 @@ function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange
     )
   }
   return (
-    <div className="flex shrink-0 items-center rounded-full bg-cream-200/80 p-0.5" role="group" aria-label={t('speed.label')}>
+    <div className="flex shrink-0 items-center rounded-control bg-surface-2 p-0.5" role="group" aria-label={t('speed.label')}>
       {SPEEDS.map((v) => (
         <button
           key={v}
@@ -214,8 +228,9 @@ function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange
           aria-pressed={speed === v}
           title={v === 0 ? t('speed.pauseHint') : t('speed.hint', { v })}
           className={cx(
-            'flex h-8 min-w-9 items-center justify-center rounded-full px-2 text-xs font-extrabold transition-colors',
-            speed === v ? (v === 0 ? 'bg-peach-300 text-ink-900' : 'bg-ink-900 text-cream-50') : 'text-ink-700 hover:bg-cream-50',
+            'tabular flex h-8 min-w-9 items-center justify-center rounded-[8px] px-2 text-xs font-semibold transition-colors',
+            // Segmented control: active = raised surface + hairline (ink fill stays reserved for the primary CTA).
+            speed === v ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--color-border-strong),var(--shadow-card)]' : 'text-ink-2 hover:bg-surface hover:text-ink',
           )}
         >
           {v === 0 ? <Icon name="pause" size={14} /> : `${v}×`}
@@ -248,13 +263,13 @@ function ViewControls({ compact }: { compact?: boolean }) {
       <div className="flex items-center gap-0.5">
         <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} size={40} />
         <IconButton icon="zoomIn" label={t('view.zoomIn')} onClick={() => z(1)} disabled={zoom === 2} size={40} />
-        <span className="mx-0.5 h-6 w-px bg-cream-300" />
+        <span className="mx-0.5 h-6 w-px bg-border" />
       </div>
       <button
         type="button"
         title={t('view.languageSoon')}
         aria-label={t('view.language')}
-        className="hidden h-10 min-w-10 items-center justify-center gap-1 rounded-full px-2 text-[11px] font-extrabold text-ink-700 hover:bg-cream-200/80 lg:flex"
+        className="hidden h-10 min-w-10 items-center justify-center gap-1 rounded-control px-2 text-[11px] font-semibold tracking-wide text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink lg:flex"
         onClick={toggleSettings}
       >
         <Icon name="globe" size={16} />

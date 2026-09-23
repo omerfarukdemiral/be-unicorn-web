@@ -4,7 +4,7 @@ import { CONCEPT_IDS, type ConceptId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
-import { cx, Empty, SectionTitle } from '../primitives'
+import { cx, Dot, Empty, SectionTitle } from '../primitives'
 import { conceptById, openConceptCard } from '../uiActions'
 import { NotebookCard } from '../NotebookCard'
 
@@ -28,7 +28,7 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
   return (
     <div className="flex flex-col gap-4">
       {conceptId && (
-        <div key={conceptId} className="animate-pop-in overflow-hidden rounded-[var(--radius-card)] border border-cream-300 shadow-[var(--shadow-card)]">
+        <div key={conceptId} className="animate-pop-in overflow-hidden rounded-card border border-border shadow-card">
           <NotebookCard conceptId={conceptId} onClose={() => openPanel({ kind: 'journal' }, { replace: true })} />
         </div>
       )}
@@ -41,9 +41,9 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
                 key={id}
                 type="button"
                 onClick={() => openConceptCard(id)}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-lemon-100 px-3 text-xs font-bold text-lemon-600 hover:bg-lemon-300/60"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-border px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
               >
-                <Icon name="chat" size={14} className="animate-wiggle" />
+                <Icon name="chat" size={14} className="animate-wiggle text-ink-2" />
                 {conceptTitle(id)}
               </button>
             ))}
@@ -51,35 +51,40 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
         </section>
       )}
       <section>
-        <SectionTitle right={<span className="tabular text-[11px] font-semibold text-ink-600">{t('journal.count', { n: learned.length, total: CONCEPT_IDS.length })}</span>}>
+        <SectionTitle right={<span className="tabular text-[11px] font-semibold text-ink-2">{t('journal.count', { n: learned.length, total: CONCEPT_IDS.length })}</span>}>
           {t('journal.shelf')}
         </SectionTitle>
         {learned.length === 0 && <Empty text={t('journal.empty')} icon="book" />}
         <div className="flex flex-col gap-3">
           {shelves.map((shelf, i) => (
             <div key={i} className="relative">
-              <div className="flex h-24 items-end gap-1 px-2">
+              <div className="flex h-28 items-end gap-1 px-2">
                 {shelf.map((b, j) => {
                   const c = conceptById(b.id)
-                  const h = 70 + ((j * 37 + i * 13) % 5) * 5
+                  const h = 90 + ((j * 37 + i * 13) % 5) * 5
                   return b.learned ? (
                     <button
                       key={b.id}
                       type="button"
                       onClick={() => openConceptCard(b.id)}
                       title={conceptTitle(b.id)}
-                      className="group relative flex w-9 shrink-0 items-center justify-center rounded-t-md rounded-b-sm shadow-[inset_-3px_0_0_rgb(0_0_0/0.08)] transition-transform hover:-translate-y-1.5"
-                      style={{ height: h, background: c?.shelfColor ?? '#c9a7f5' }}
+                      aria-label={conceptTitle(b.id)}
+                      className="group relative flex w-9 shrink-0 flex-col items-center gap-1.5 rounded-t-md rounded-b-sm border border-border-strong bg-surface px-0.5 pb-2 pt-2 transition-[transform,background-color] hover:-translate-y-1.5 hover:bg-surface-2"
+                      style={{ height: h }}
                     >
-                      <span className="max-h-full overflow-hidden text-[10px] font-extrabold text-ink-900/80 [writing-mode:vertical-rl] rotate-180">{conceptTitle(b.id)}</span>
-                      <span className="absolute inset-x-1 top-2 h-0.5 rounded bg-cream-50/60" />
+                      {/* The book's own colour survives only as a small mark on the spine. */}
+                      <Dot color={c?.shelfColor ?? 'var(--color-ink-3)'} size={6} />
+                      {/* One line, bottom-to-top; a title longer than the spine ends in an ellipsis (full title in aria-label/title). */}
+                      <span aria-hidden="true" className="min-h-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px] font-semibold leading-none tracking-[0.02em] text-ink [writing-mode:vertical-rl] rotate-180">
+                        {conceptTitle(b.id)}
+                      </span>
                     </button>
                   ) : (
-                    <span key={b.id} aria-hidden="true" className={cx('w-9 shrink-0 rounded-t-md border border-dashed border-cream-300 bg-cream-100/50')} style={{ height: h - 10 }} />
+                    <span key={b.id} aria-hidden="true" className={cx('w-9 shrink-0 rounded-t-md border border-dashed border-border-strong')} style={{ height: h - 10 }} />
                   )
                 })}
               </div>
-              <div className="h-2.5 rounded-full bg-[#caa983] shadow-[0_3px_0_#a8865f]" />
+              <div className="h-1 rounded-full bg-border-strong" />
             </div>
           ))}
         </div>

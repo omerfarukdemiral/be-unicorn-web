@@ -6,7 +6,7 @@ import type { ConceptId, Dept, Employee, GameState, NpcRole, Visitor } from '../
 import { CONCEPT_MINIMIZE_MS } from './constants'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, WorldBubble } from './bubbles'
-import { PASTEL } from './palette'
+import { UI_TONES } from './palette'
 import { useLayout } from './sceneRegistry'
 import { dispatchAction, storeApi, useGS, useMockState } from './source'
 
@@ -120,10 +120,14 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
 // Default look (used until ui passes its own renderer)
 // ---------------------------------------------------------------------------
 
-function Tail({ color }: { color: string }) {
+const T = UI_TONES
+
+/** Neutral tail: surface fill, hairline sides (the top edge overlaps the bubble's border). */
+function Tail() {
   return (
     <svg width="14" height="8" viewBox="0 0 14 8" style={{ display: 'block', margin: '-1px auto 0' }} aria-hidden>
-      <path d="M0 0 L7 8 L14 0 Z" fill={color} />
+      <path d="M0 0 L7 7.5 L14 0 Z" fill={T.surface} />
+      <path d="M0.5 0.5 L7 7.5 L13.5 0.5" fill="none" stroke={T.border} strokeWidth="1" />
     </svg>
   )
 }
@@ -131,11 +135,14 @@ function Tail({ color }: { color: string }) {
 function BookIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-      <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" fill={PASTEL.lilac} stroke="#2b2a33" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M4 21V5" stroke="#2b2a33" strokeWidth="1.5" />
+      <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" fill={T.surface2} stroke={T.ink} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M4 21V5" stroke={T.ink} strokeWidth="1.5" />
     </svg>
   )
 }
+
+const TEXT_FONT = 'var(--font-text)'
+const UI_FONT = 'var(--font-ui)'
 
 export function DefaultBubble({ bubble }: { bubble: WorldBubble }) {
   if (bubble.kind === 'conceptIcon') {
@@ -143,30 +150,44 @@ export function DefaultBubble({ bubble }: { bubble: WorldBubble }) {
       <button
         type="button"
         onClick={bubble.onOpen}
-        className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-cream-50 shadow-md transition-transform hover:scale-110"
-        style={{ minWidth: 36, minHeight: 36 }}
+        className="flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-110"
+        style={{ minWidth: 36, minHeight: 36, background: T.surface, border: `1px solid ${T.border}`, boxShadow: 'var(--shadow-card)' }}
       >
         <BookIcon />
       </button>
     )
   }
-  const fill = PASTEL.cream50
-  const accent = bubble.kind === 'concept' ? PASTEL.lilac : bubble.kind === 'decision' ? PASTEL.peach : 'transparent'
   const clickable = bubble.kind !== 'ambient'
+  // Kind is told apart by a small mark, not a coloured frame.
+  const mark = bubble.kind === 'concept' ? '?' : bubble.kind === 'decision' ? '!' : null
   const body = (
     <div
-      className="max-w-[220px] rounded-2xl px-3 py-2 text-[13px] leading-snug text-ink-900 shadow-md"
-      style={{ background: fill, border: `2px solid ${accent === 'transparent' ? fill : accent}`, whiteSpace: 'normal', width: 'max-content' }}
+      className="max-w-[220px] rounded-[14px] px-3 py-2 text-[13px] leading-snug"
+      style={{
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        color: T.ink,
+        fontFamily: TEXT_FONT,
+        boxShadow: 'var(--shadow-card)',
+        whiteSpace: 'normal',
+        width: 'max-content',
+      }}
     >
-      {bubble.kind === 'concept' && <span className="mr-1 font-bold" style={{ color: '#8a63d2' }}>?</span>}
-      {bubble.kind === 'decision' && <span className="mr-1 font-bold" style={{ color: '#d9774a' }}>!</span>}
+      {mark && (
+        <span
+          className="mr-1.5 inline-grid size-4 place-items-center rounded-full align-[-2px] text-[10px] font-semibold"
+          style={{ background: T.ink, color: T.surface, fontFamily: UI_FONT }}
+        >
+          {mark}
+        </span>
+      )}
       {bubble.text}
     </div>
   )
   return (
     <div className={clickable ? 'cursor-pointer select-none transition-transform hover:scale-[1.03]' : 'select-none opacity-95'} onClick={clickable ? bubble.onOpen : undefined}>
       {body}
-      <Tail color={accent === 'transparent' ? fill : accent} />
+      <Tail />
     </div>
   )
 }

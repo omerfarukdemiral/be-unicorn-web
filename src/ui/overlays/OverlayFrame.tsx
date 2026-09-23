@@ -31,7 +31,7 @@ export function OverlayFrame({
   }, [onClose])
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-ink-900/35 backdrop-blur-[2px] animate-fade-in sm:items-center sm:p-4" onClick={onClose}>
+    <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-ink/35 backdrop-blur-[2px] animate-fade-in sm:items-center sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -40,7 +40,7 @@ export function OverlayFrame({
         className={cx(
           'relative flex max-h-[92dvh] w-full animate-slide-up flex-col overflow-hidden sm:animate-pop-in',
           wide ? 'sm:max-w-2xl' : 'sm:max-w-md',
-          bare ? 'rounded-t-[var(--radius-card)] bg-cream-50 shadow-[var(--shadow-pop)] sm:rounded-[var(--radius-card)]' : 'ui-card rounded-b-none sm:rounded-[var(--radius-card)]',
+          bare ? 'rounded-t-card border border-border bg-surface shadow-pop sm:rounded-card' : 'ui-card rounded-b-none shadow-pop sm:rounded-card',
         )}
       >
         {onClose && (

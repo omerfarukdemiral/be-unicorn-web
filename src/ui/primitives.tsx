@@ -18,19 +18,25 @@ export function Card({ className, children }: { className?: string; children: Re
  * secondary = hairline frame, transparent (alias: soft)
  * ghost     = text only, hover tint
  * danger    = hairline frame, red text
+ * onInk     = secondary for dark (ink) surfaces: toasts, banners
  * mint      = DEPRECATED alias of primary (kept so old callers compile)
+ *
+ * Disabled: primary drops to a neutral frame with ink-2 text (readable, clearly inactive) instead of
+ * fading its light label into a grey fill; the other tones fade with opacity.
  */
-type Tone = 'primary' | 'secondary' | 'ghost' | 'soft' | 'danger' | 'mint'
+type Tone = 'primary' | 'secondary' | 'ghost' | 'soft' | 'danger' | 'onInk' | 'mint'
 
-const PRIMARY = 'bg-ink text-on-ink hover:bg-ink/85 disabled:bg-ink-3'
-const SECONDARY = 'border border-border-strong bg-transparent text-ink hover:bg-surface-2'
+const PRIMARY =
+  'border border-ink bg-ink text-on-ink enabled:hover:bg-ink/85 disabled:border-border-strong disabled:bg-surface-2 disabled:text-ink-2'
+const SECONDARY = 'border border-border-strong bg-transparent text-ink enabled:hover:bg-surface-2 disabled:opacity-50'
 
 const TONE: Record<Tone, string> = {
   primary: PRIMARY,
   secondary: SECONDARY,
   soft: SECONDARY,
-  ghost: 'bg-transparent text-ink-2 hover:bg-surface-2 hover:text-ink',
-  danger: 'border border-border-strong bg-transparent text-negative hover:bg-negative/5',
+  ghost: 'bg-transparent text-ink-2 enabled:hover:bg-surface-2 enabled:hover:text-ink disabled:opacity-50',
+  danger: 'border border-border-strong bg-transparent text-negative-ink enabled:hover:bg-negative/5 disabled:opacity-50',
+  onInk: 'border border-on-ink/30 bg-transparent text-on-ink enabled:hover:bg-on-ink/10 disabled:opacity-50',
   mint: PRIMARY,
 }
 
@@ -46,7 +52,7 @@ export function Button({
     <button
       type="button"
       className={cx(
-        'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-semibold tracking-wide transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-semibold tracking-wide transition-colors enabled:active:scale-[0.98] disabled:cursor-not-allowed',
         size === 'md' ? 'min-h-11 px-4 text-sm' : 'min-h-9 px-3 text-xs max-md:min-h-11',
         TONE[tone],
         className,
@@ -168,7 +174,7 @@ export function Label({ className, children }: { className?: string; children: R
 /** Signed number: green when > 0, red when < 0. Pass the formatted text as children. */
 export function Delta({ value, className, children }: { value: number; className?: string; children: ReactNode }) {
   return (
-    <span className={cx('tabular font-semibold', value > 0 ? 'text-positive' : value < 0 ? 'text-negative' : 'text-ink-2', className)}>{children}</span>
+    <span className={cx('tabular font-semibold', value > 0 ? 'text-positive-ink' : value < 0 ? 'text-negative-ink' : 'text-ink-2', className)}>{children}</span>
   )
 }
 
@@ -215,12 +221,16 @@ export function Empty({ text, icon = 'sparkle' }: { text: string; icon?: IconNam
   )
 }
 
+/**
+ * Metric: same pattern as the HUD widgets: no frame, a hairline on top, tracked label, 15px tabular value.
+ * Grids of Stats read as rows separated by hairlines (no card-in-card). Labels and values wrap, never ellipsise.
+ */
 export function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-control border border-border px-3 py-2">
-      <div className="ui-label truncate">{label}</div>
-      <div className="tabular truncate text-sm font-semibold text-ink">{value}</div>
-      {sub && <div className="truncate text-[11px] text-ink-2">{sub}</div>}
+    <div className="min-w-0 border-t border-border pt-2">
+      <div className="ui-label line-clamp-2 leading-[14px] tracking-[0.04em]">{label}</div>
+      <div className="tabular mt-0.5 break-words text-[15px] font-semibold leading-tight text-ink">{value}</div>
+      {sub && <div className="break-words text-[11px] font-medium text-ink-2">{sub}</div>}
     </div>
   )
 }

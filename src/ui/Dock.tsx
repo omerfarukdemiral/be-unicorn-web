@@ -37,7 +37,7 @@ export function Dock({ compact }: { /** Desktop with the panel open and little r
 
   if (mobile) {
     return (
-      <nav className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 border-t border-cream-300 bg-cream-50/95 backdrop-blur safe-bottom safe-x" aria-label={t('dock.label')}>
+      <nav className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur safe-bottom safe-x" aria-label={t('dock.label')}>
         <div className="flex h-16 items-stretch justify-around">
           {DOCK_TABS.map((d) => (
             <button
@@ -45,9 +45,9 @@ export function Dock({ compact }: { /** Desktop with the panel open and little r
               type="button"
               onClick={() => togglePanel(d.id)}
               aria-pressed={active === d.id}
-              className={cx('relative flex min-w-11 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-bold', active === d.id ? 'text-ink-900' : 'text-ink-600')}
+              className={cx('relative flex min-w-11 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold tracking-wide', active === d.id ? 'text-ink' : 'text-ink-2')}
             >
-              <span className={cx('grid h-8 w-12 place-items-center rounded-full transition-colors', active === d.id && 'bg-lilac-100 text-lilac-500')}>
+              <span className={cx('grid h-8 w-12 place-items-center rounded-control transition-colors', active === d.id && 'bg-ink text-on-ink')}>
                 <Icon name={d.icon} size={20} />
               </span>
               {t(`dock.${d.id}`)}
@@ -70,14 +70,14 @@ export function Dock({ compact }: { /** Desktop with the panel open and little r
           aria-label={t(`dock.${d.id}`)}
           title={`${t(`dock.${d.id}`)} (${d.key.toUpperCase()})`}
           className={cx(
-            'relative flex h-11 items-center gap-2 rounded-full text-sm font-bold transition-colors',
+            'relative flex h-11 items-center gap-2 rounded-control text-sm font-semibold tracking-wide transition-colors',
             compact ? 'px-3 lg:px-4' : 'px-4',
-            active === d.id ? 'bg-ink-900 text-cream-50' : 'text-ink-700 hover:bg-cream-200/80',
+            active === d.id ? 'bg-ink text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
           )}
         >
           <Icon name={d.icon} size={18} />
           <span className={cx(compact && 'hidden lg:inline')}>{t(`dock.${d.id}`)}</span>
-          <kbd className={cx('hidden rounded px-1 text-[10px] font-bold', !compact && 'xl:inline', active === d.id ? 'bg-ink-700 text-cream-200' : 'bg-cream-200 text-ink-600')}>{d.key.toUpperCase()}</kbd>
+          <kbd className={cx('hidden rounded-md border px-1 font-ui text-[10.5px] font-semibold', !compact && 'xl:inline', active === d.id ? 'border-on-ink/25 text-on-ink/80' : 'border-border-strong text-ink-2')}>{d.key.toUpperCase()}</kbd>
           <Badge n={badges[d.id]} />
         </button>
       ))}
@@ -88,7 +88,7 @@ export function Dock({ compact }: { /** Desktop with the panel open and little r
 function Badge({ n }: { n?: number }) {
   if (!n) return null
   return (
-    <span className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-extrabold leading-4 text-cream-50 md:-right-1 md:-top-1">
+    <span className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-negative px-1 text-[10px] font-semibold leading-4 text-on-ink md:-right-1 md:-top-1">
       {n}
     </span>
   )

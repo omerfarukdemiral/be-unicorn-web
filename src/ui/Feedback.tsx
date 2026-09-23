@@ -18,8 +18,8 @@ export function ErrorToast() {
   }, [err])
   if (!err || !visible) return null
   return (
-    <div role="alert" key={err.at} className="pointer-events-none flex animate-pop-in items-center gap-2 rounded-full bg-ink-900 px-4 py-2 text-xs font-semibold text-cream-50 shadow-[var(--shadow-pop)]">
-      <Icon name="warning" size={15} className="text-peach-300" />
+    <div role="alert" key={err.at} className="pointer-events-none flex animate-pop-in items-center gap-2 rounded-control bg-ink px-3.5 py-2 text-xs font-medium text-on-ink shadow-pop">
+      <Icon name="warning" size={15} className="shrink-0 text-negative" />
       {t(`error.${err.code}`)}
     </div>
   )
@@ -34,10 +34,10 @@ export function PlacingBanner() {
   if (placing.kind === 'move') text = t('placing.move')
   else text = t('placing.seat', { name: employees.find((e) => e.id === placing.employeeId)?.name ?? '' })
   return (
-    <div className="pointer-events-auto flex animate-pop-in items-center gap-2 rounded-full bg-lilac-500 py-1 pl-4 pr-1 text-xs font-bold text-cream-50 shadow-[var(--shadow-pop)]">
+    <div className="pointer-events-auto flex animate-pop-in items-center gap-2 rounded-control bg-ink py-1 pl-3.5 pr-1 text-xs font-semibold text-on-ink shadow-pop">
       <Icon name="move" size={15} />
       <span className="max-w-[60vw] truncate">{text}</span>
-      <Button size="sm" tone="soft" onClick={() => setPlacing(null)}>
+      <Button size="sm" tone="onInk" onClick={() => setPlacing(null)}>
         {t('common.cancel')}
       </Button>
     </div>

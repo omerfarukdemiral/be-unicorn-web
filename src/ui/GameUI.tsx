@@ -43,7 +43,7 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
   }, [mock])
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none overflow-hidden safe-top safe-x text-ink-900">
+    <div className="pointer-events-none absolute inset-0 select-none overflow-hidden safe-top safe-x text-ink">
       <div className="relative h-full w-full">
         <Hud />
         {!worldBubbles && <BubbleTray ambient={screenAmbient} />}

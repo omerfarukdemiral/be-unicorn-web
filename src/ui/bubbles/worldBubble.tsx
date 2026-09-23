@@ -11,6 +11,9 @@ import { ConceptBubbleView, ConceptIconView } from './ConceptBubble'
 import { conceptTitle } from '../panels/JournalPanel'
 import { useGameStore } from '../../store/gameStore'
 import { openConceptCard } from '../uiActions'
+import { t } from '../i18n'
+import { cx } from '../primitives'
+import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, BubbleText, SpeakerLine } from './shell'
 
 interface Base {
   key: string
@@ -29,25 +32,25 @@ const WORLD_W = 'w-max max-w-[min(260px,60vw)]'
 export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
   switch (b.kind) {
     case 'ambient':
-      return <AmbientBubbleView text={b.text} className={WORLD_W} />
+      return <AmbientBubbleView text={b.text} className={WORLD_W} tail />
     case 'concept':
-      return <ConceptBubbleView text={b.text} speaker={NPC_TEXT[b.role].name} onClick={() => openConceptCard(b.conceptId)} className={WORLD_W} />
+      return <ConceptBubbleView text={b.text} speaker={NPC_TEXT[b.role].name} onClick={() => openConceptCard(b.conceptId)} className={WORLD_W} tail />
     case 'conceptIcon':
       return <ConceptIconView label={conceptTitle(b.conceptId)} onClick={() => openConceptCard(b.conceptId)} />
     case 'decision':
+      // Mark: chat icon + "Karar" (vs. the concept's book icon); no coloured frame.
       return (
         <button
           type="button"
           onClick={() => useGameStore.getState().openPanel({ kind: 'decision', cardId: b.cardId })}
-          className="flex w-max max-w-[min(300px,60vw)] animate-pop-in items-center gap-2 rounded-3xl rounded-bl-md border border-sky-300 bg-cream-50 px-3 py-2 text-left shadow-[var(--shadow-card)] transition-transform hover:-translate-y-0.5"
+          className={cx(BUBBLE_SHELL, BUBBLE_HOVER, 'group flex w-max max-w-[min(300px,60vw)] animate-pop-in items-center gap-2 py-2 pl-3 pr-2 text-left')}
         >
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-600">
-            <Icon name="chat" size={13} />
+          <span className="flex min-w-0 flex-col gap-1">
+            <SpeakerLine icon="chat" speaker={`${t('decision.title')} · ${NPC_TEXT[b.role].name}`} />
+            <BubbleText className="line-clamp-2">{b.text}</BubbleText>
           </span>
-          <span className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-ink-600">{NPC_TEXT[b.role].name}</span>
-            <span className="line-clamp-2 block text-sm font-semibold leading-snug">{b.text}</span>
-          </span>
+          <Icon name="chevronRight" size={14} className="shrink-0 text-ink-2 transition-transform group-hover:translate-x-0.5 group-hover:text-ink" />
+          <BubbleTail />
         </button>
       )
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { AMBIENT_VISIBLE_MS, AMBIENT_WAIT_MS, applyFrame, BubbleLayoutRegistry, createEntry, measure, runLayout, shiftBubble, type BubbleEl, type MeasuredEl } from './bubbleDriver'
-import type { BubbleKind, Viewport } from './bubbleLayout'
+import { AMBIENT_VISIBLE_MS, AMBIENT_WAIT_MS, applyFrame, BubbleLayoutRegistry, CENTER_ANCHOR, createEntry, measure, resolveAnchor, runLayout, shiftBubble, type AnchorPos, type BubbleEl, type MeasuredEl } from './bubbleDriver'
+import { layoutBubbles, type BubbleBox, type BubbleKind, type Viewport } from './bubbleLayout'
 
 const VP: Viewport = { left: 8, top: 8, right: 1432, bottom: 892 }
 
@@ -161,5 +161,73 @@ describe('bubble layout driver', () => {
     const r2 = con.el.getBoundingClientRect()
     expect(r2.left).toBeCloseTo(400)
     expect(r2.top).toBeCloseTo(250)
+  })
+
+  it('never hides a decision/concept bubble whose speaker is outside (question stays readable)', () => {
+    const reg = new BubbleLayoutRegistry()
+    const dec = add(reg, 'dec', 'decision', 300, 300, 260, 70)
+    const con = add(reg, 'con', 'concept', 700, 300, 220, 60)
+    const amb = add(reg, 'amb', 'ambient', 1000, 300, 200, 30)
+    // Every speaker already walked out before the first layout pass.
+    for (const e of reg.entries.values()) e.speakerVisible = false
+    let t = frames(reg, 4, 0)
+    expect(dec.el.style.visibility).toBe('visible')
+    expect(dec.el.style.opacity).toBe('1')
+    expect(con.el.style.visibility).toBe('visible')
+    expect(amb.el.style.visibility).not.toBe('visible')
+    expect(measure(reg).map((b) => b.key).sort()).toEqual(['con', 'dec'])
+    // Speaker leaves while the decision is already on screen: it stays.
+    reg.entries.get('dec')!.speakerVisible = true
+    t = frames(reg, 4, t)
+    reg.entries.get('dec')!.speakerVisible = false
+    reg.dirty = true
+    frames(reg, 10, t)
+    expect(dec.el.style.visibility).toBe('visible')
+  })
+})
+
+describe('resolveAnchor', () => {
+  const at = (x: number, visible = true): AnchorPos => ({ x, y: 1, z: 0, visible })
+
+  it('follows a visible speaker', () => {
+    const pos = new Map([['v1', at(3)], ['founder', at(0)]])
+    expect(resolveAnchor('v1', 'decision', pos)).toEqual({ pos: pos.get('v1'), visible: true, anchorId: 'v1' })
+    expect(resolveAnchor('v1', 'ambient', pos)).toEqual({ pos: pos.get('v1'), visible: true, anchorId: 'v1' })
+  })
+
+  it('moves a clickable bubble to the founder when its speaker left or walked out', () => {
+    const founder = at(0)
+    const gone = new Map([['founder', founder]])
+    const outside = new Map([['v1', at(9, false)], ['founder', founder]])
+    for (const kind of ['decision', 'concept', 'conceptIcon'] as const) {
+      expect(resolveAnchor('v1', kind, gone)).toEqual({ pos: founder, visible: true, anchorId: 'founder' })
+      expect(resolveAnchor('v1', kind, outside)).toEqual({ pos: founder, visible: true, anchorId: 'founder' })
+    }
+  })
+
+  it('falls back to the scene centre (pos null) when the founder is outside too, still visible', () => {
+    const pos = new Map([['v1', at(9, false)], ['founder', at(0, false)]])
+    expect(resolveAnchor('v1', 'decision', pos)).toEqual({ pos: null, visible: true, anchorId: CENTER_ANCHOR })
+    expect(resolveAnchor('v1', 'concept', new Map())).toEqual({ pos: null, visible: true, anchorId: CENTER_ANCHOR })
+  })
+
+  it('still hides ambient lines of a speaker who is outside', () => {
+    const pos = new Map([['v1', at(9, false)], ['founder', at(0)]])
+    expect(resolveAnchor('v1', 'ambient', pos).visible).toBe(false)
+    expect(resolveAnchor('nobody', 'ambient', new Map()).visible).toBe(true)
+  })
+
+  it("hides the founder's ambient line while a decision moved from an absent visitor sits above the founder", () => {
+    const pos = new Map([['v1', at(9, false)], ['founder', at(0)]])
+    const dec = resolveAnchor('v1', 'decision', pos)
+    const amb = resolveAnchor('founder', 'ambient', pos)
+    expect(dec.anchorId).toBe('founder')
+    const items: BubbleBox[] = [
+      { key: 'dec', speakerId: dec.anchorId, kind: 'decision', left: 100, top: 100, w: 120, h: 60 },
+      { key: 'amb', speakerId: amb.anchorId, kind: 'ambient', left: 400, top: 100, w: 100, h: 30 },
+    ]
+    const res = layoutBubbles(items, { left: 0, top: 0, right: 800, bottom: 600 })
+    expect(res.get('amb')?.hidden).toBe(true)
+    expect(res.get('dec')?.hidden).toBeFalsy()
   })
 })

@@ -10,7 +10,7 @@ if (!root) throw new Error('#root missing')
 
 createRoot(root).render(
   <StrictMode>
-    <div className="relative h-full w-full bg-[radial-gradient(circle_at_50%_55%,#e9dfcf_0,#f6efe4_60%)]">
+    <div className="relative h-full w-full bg-canvas-bg">
       <GameUI mock />
     </div>
   </StrictMode>,

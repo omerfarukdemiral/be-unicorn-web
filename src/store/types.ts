@@ -45,8 +45,9 @@ export interface SceneInset {
 }
 
 /**
- * Automatic focus pauses: a blocking modal, an unanswered decision card or a Defter (concept) card open
- * in the panel. Shop / team / projects / growth panels never pause.
+ * Automatic focus pauses: a blocking modal, an unanswered decision card open in the panel or expanded in
+ * the scene bubble (ui.decisionExpanded), or a Defter (concept) card open in the panel.
+ * Shop / team / projects / growth panels never pause; a bubble merely appearing never pauses.
  */
 export type PauseReason = 'modal' | 'decision' | 'concept'
 
@@ -76,6 +77,12 @@ export interface UiState {
   generation: number
   /** Area hidden by the panel (set by ui RightPanel, read by render CameraRig). */
   sceneInset: SceneInset
+  /** The scene decision bubble is expanded (the player is reading the card there): a `decision` focus pause. */
+  decisionExpanded: boolean
+  /** "Önemli anda yavaşla": at 4× an important moment drops the speed to 1× (never pauses). Default on. */
+  slowOnMoments: boolean
+  /** performance.now() of the last automatic 4× → 1× slowdown (UI shows a short note), null = none yet. */
+  slowdownAt: number | null
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
@@ -118,4 +125,8 @@ export interface GameStore {
   setPlacing(mode: PlacingMode | null): void
   setZoom(zoom: ZoomLevel): void
   setSceneInset(inset: SceneInset): void
+  /** Scene decision bubble expanded / collapsed (focus pause while expanded). */
+  setDecisionExpanded(expanded: boolean): void
+  /** Settings: slow 4× down to 1× on important moments. */
+  setSlowOnMoments(on: boolean): void
 }

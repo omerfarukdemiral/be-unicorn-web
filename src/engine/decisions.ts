@@ -37,7 +37,7 @@ export function eligibleCards(s: GameState, cards: readonly DecisionCard[]): Dec
 
 function showCard(s: GameState, card: DecisionCard): void {
   const vid = newId(s, 'v')
-  s.visitors.push({ id: vid, role: card.speaker, purpose: 'decision', targetSlotId: 'founder', arriveDay: s.time.day, leaveDay: s.time.day + B.DECISION_VISITOR_DAYS, refId: card.id })
+  s.visitors.push({ id: vid, role: card.speaker, purpose: 'decision', targetSlotId: 'founder', arriveDay: s.time.day, leaveDay: s.time.day + B.DECISION_VISITOR_WAIT_DAYS, refId: card.id })
   s.decisions.active = { cardId: card.id, shownDay: s.time.day, visitorId: vid }
   s.decisions.lastCardDay = s.time.day
   pushEvent(s, { kind: 'visitorArrived', refId: vid })

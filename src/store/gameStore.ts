@@ -1,9 +1,11 @@
 // zustand store: the only bridge between the pure engine and render/ui.
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by the effective speed
 // (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card).
+// After each tick: an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS of game time, and at 4× an
+// important moment slows the run to 1× (docs/CORE_LOOP.md §3.2).
 import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type Action, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type Action, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readProfile, readSave, writeProfile, writeSave } from './save'
 import type { GameStore, Panel, PauseReason, ReplayLog, Selection, UiState } from './types'
 
@@ -13,6 +15,21 @@ export { SAVE_KEY } from './save'
 const MAX_DAYS_PER_TICK = 4
 
 const NO_INSET = { top: 0, right: 0, bottom: 0 }
+
+/**
+ * An unclicked concept bubble shrinks to an icon after this many GAME days (10 days = 20 s at 1×).
+ * Counted in game time, so it never shrinks while time is still (paused, card open).
+ */
+export const CONCEPT_MINIMIZE_DAYS = 10
+
+/** Events that are worth watching at 1×: at 4× they slow the run down (never pause). */
+export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
+  'projectLaunched',
+  'decisionShown',
+  'milestone',
+  'bankruptWarning',
+  'roundClosed',
+])
 
 const initialUi = (): UiState => ({
   panel: null,
@@ -26,14 +43,20 @@ const initialUi = (): UiState => ({
   runStarted: false,
   generation: 0,
   sceneInset: NO_INSET,
+  decisionExpanded: false,
+  slowOnMoments: true,
+  slowdownAt: null,
 })
 
+/** UI fields that survive newGame()/load() (player preferences of this session). */
+const keptUi = (ui: UiState): Pick<UiState, 'zoom' | 'slowOnMoments' | 'generation'> => ({ zoom: ui.zoom, slowOnMoments: ui.slowOnMoments, generation: ui.generation + 1 })
+
 /** Focus pauses implied by what is open (one mechanism for modals, decision cards and Defter cards). */
-export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'>): PauseReason[] {
+export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean }): PauseReason[] {
   const r: PauseReason[] = []
   if (ui.overlay) r.push('modal')
   const p = ui.panel
-  if (p?.kind === 'decision' && p.answered === undefined) r.push('decision')
+  if ((p?.kind === 'decision' && p.answered === undefined) || ui.decisionExpanded) r.push('decision')
   if (p?.kind === 'journal' && p.conceptId) r.push('concept')
   return r
 }
@@ -105,6 +128,11 @@ function resetReplay(s: GameState, fromSave: boolean): void {
   replay = { seed: s.rng.seed, runIndex: s.meta.runIndex, fromSave, actions: [] }
 }
 
+/** Id of the newest engine event (the events buffer is ordered by id). */
+function lastEventId(s: GameState): number {
+  return s.events[s.events.length - 1]?.id ?? 0
+}
+
 /** Fractional days not yet stepped (below one fixed chunk). Reset on new game / load. */
 let pendingDays = 0
 
@@ -142,6 +170,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     set(starts ? (s) => ({ state: res.state, ui: { ...s.ui, runStarted: true } }) : { state: res.state })
     retargetEmptiedDetail(action, res.state)
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
+    // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
+    if (!res.state.decisions.active && get().ui.decisionExpanded) get().setDecisionExpanded(false)
     return res
   },
 
@@ -157,7 +187,11 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const next = step(state, chunks * FIXED_STEP_DAYS)
     if (next === state) return
     set({ state: next })
-    if (next.gameOver && !state.gameOver) onGameOver(next)
+    if (next.gameOver && !state.gameOver) {
+      onGameOver(next)
+      return
+    }
+    afterStep(state, next)
   },
 
   newGame(opts) {
@@ -165,7 +199,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const state = pausedStart(freshState(opts))
     writeProfile({ founderXp: state.meta.founderXp, runIndex: state.meta.runIndex })
     resetReplay(state, false)
-    set({ state, ui: { ...initialUi(), zoom: get().ui.zoom, generation: get().ui.generation + 1 } })
+    set({ state, ui: { ...initialUi(), ...keptUi(get().ui) } })
     writeSave(state)
   },
 
@@ -182,7 +216,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const state = pausedStart(saved)
     pendingDays = 0
     resetReplay(state, true)
-    set({ state, ui: { ...initialUi(), zoom: get().ui.zoom, generation: get().ui.generation + 1 } })
+    set({ state, ui: { ...initialUi(), ...keptUi(get().ui) } })
     return true
   },
 
@@ -227,4 +261,26 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       const c = s.ui.sceneInset
       return c.top === inset.top && c.right === inset.right && c.bottom === inset.bottom ? s : { ui: { ...s.ui, sceneInset: inset } }
     }),
+  setDecisionExpanded: (decisionExpanded) =>
+    set((s) => (s.ui.decisionExpanded === decisionExpanded ? s : { ui: withPause({ ...s.ui, decisionExpanded }) })),
+  setSlowOnMoments: (slowOnMoments) => set((s) => (s.ui.slowOnMoments === slowOnMoments ? s : { ui: { ...s.ui, slowOnMoments } })),
 }))
+
+/**
+ * Store-side rules that follow game time (run after every tick that advanced the world):
+ * - an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS game days;
+ * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it).
+ * Both go through dispatch, so the replay log reproduces them.
+ */
+function afterStep(prev: GameState, next: GameState): void {
+  const { dispatch, ui } = useGameStore.getState()
+  const ac = next.concepts.active
+  if (ac && next.time.day - ac.shownDay >= CONCEPT_MINIMIZE_DAYS) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
+  if (ui.slowOnMoments && next.time.speed === 4) {
+    const since = lastEventId(prev)
+    if (next.events.some((e) => e.id > since && IMPORTANT_EVENT_KINDS.has(e.kind))) {
+      dispatch({ type: 'setSpeed', speed: 1 })
+      useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownAt: performance.now() } }))
+    }
+  }
+}

@@ -17,7 +17,7 @@ import { cx } from './primitives'
 import { useIsMobile, usePrefs } from './hooks'
 import { useGameStore } from '../store/gameStore'
 import { installMock, mockRequested } from './mock'
-import { PauseVeil, StartCall } from './time'
+import { PauseVeil, ScreenFrame, StartCall } from './time'
 
 export interface GameUIProps {
   /** Close-up 3D for the detail panel, e.g. `(t) => <ObjectPreview target={t} />` from render. */
@@ -96,6 +96,8 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
         )}
       </div>
       <ModalHost />
+      {/* Viewport edge in the time colour (above modals' backdrop, never takes pointer events). */}
+      <ScreenFrame />
     </div>
   )
 }

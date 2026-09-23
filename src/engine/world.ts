@@ -128,8 +128,10 @@ const AMBIENT_ROLES: readonly NpcRole[] = ['customer', 'mentor', 'journalist']
 
 export function dailyVisitors(s: GameState, rng: Rng): void {
   const day = s.time.day
-  // Decision visitors stay while their card is open.
+  // Decision visitors wait while their card is open (old saves carried a 20-day leaveDay: push it out once,
+  // so render never walks the visitor away from an unanswered card).
   const activeCardVisitor = s.decisions.active?.visitorId
+  for (const v of s.visitors) if (v.id === activeCardVisitor && v.leaveDay < day + 1) v.leaveDay = v.arriveDay + B.DECISION_VISITOR_WAIT_DAYS
   const leaving = s.visitors.filter((v) => v.leaveDay <= day && v.id !== activeCardVisitor)
   for (const v of leaving) pushEvent(s, { kind: 'visitorLeft', refId: v.id })
   if (leaving.length) s.visitors = s.visitors.filter((v) => !leaving.includes(v))

@@ -85,6 +85,28 @@ export function useTween(target: number, ms = 450): number {
 
 /** Ms a "Zaman akıyor" label stays after the clock (re)starts. */
 const FLOW_LABEL_MS = 4500
+/** Ms the "Önemli an · 1×'e yavaşladı" note stays after an automatic 4× → 1× slowdown. */
+const SLOWED_LABEL_MS = 3500
+
+/** True for a few seconds after the store slowed 4× down to 1× on an important moment. */
+function useRecentSlowdown(): boolean {
+  const at = useGameStore((s) => s.ui.slowdownAt)
+  const [recent, setRecent] = useState(false)
+  useEffect(() => {
+    if (at === null) return
+    const left = SLOWED_LABEL_MS - (performance.now() - at)
+    if (left <= 0) return
+    setRecent(true)
+    const id = window.setTimeout(() => setRecent(false), left)
+    return () => window.clearTimeout(id)
+  }, [at])
+  return recent
+}
+
+/** Focus pause (the game holds time while a card is read), as opposed to the player's own pause. */
+export function isFocusHold(hold: TimeHold): hold is PauseReason {
+  return hold === 'decision' || hold === 'concept' || hold === 'modal'
+}
 
 export function DayClock({ compact }: { compact?: boolean }) {
   const { day, month } = useGameStore(useShallow((s) => ({ day: s.state.time.day, month: s.state.time.month })))
@@ -94,6 +116,7 @@ export function DayClock({ compact }: { compact?: boolean }) {
   const dayOfMonth = Math.floor(day % 30) + 1
   const monthFrac = (day % 30) / 30
   const flowing = status.effective > 0
+  const slowed = useRecentSlowdown()
 
   // "Zaman akıyor" for a few seconds after every start / resume, so the switch is unmistakable.
   const [flowLabel, setFlowLabel] = useState(false)
@@ -128,7 +151,7 @@ export function DayClock({ compact }: { compact?: boolean }) {
       <span key={flowing ? dayInt : 'still'} className={cx('tabular inline-block shrink-0 text-[11px] font-semibold text-ink', flowing && 'animate-day-tick')}>
         {t('hud.date', { m: month + 1, d: dayOfMonth })}
       </span>
-      <TimeStatusPill status={status} compact={compact} flowLabel={flowLabel} />
+      <TimeStatusPill status={status} compact={compact} flowLabel={flowLabel} slowed={slowed} />
     </span>
   )
 }
@@ -138,7 +161,7 @@ function holdLabel(hold: TimeHold): string {
 }
 
 /** Red "DURAKLATILDI" (+ why) while still; a beating dot (+ "Zaman akıyor" just after a start) while flowing. */
-function TimeStatusPill({ status, compact, flowLabel }: { status: TimeStatus; compact?: boolean; flowLabel: boolean }) {
+function TimeStatusPill({ status, compact, flowLabel, slowed }: { status: TimeStatus; compact?: boolean; flowLabel: boolean; slowed: boolean }) {
   if (status.gameOver) return null
   if (status.effective === 0) {
     return (
@@ -150,6 +173,12 @@ function TimeStatusPill({ status, compact, flowLabel }: { status: TimeStatus; co
         <Icon name="pause" size={10} className="shrink-0" />
         <span className="truncate">{t(compact ? 'time.pausedShort' : 'time.paused')}</span>
         {!compact && <span className="truncate font-semibold normal-case tracking-normal text-ink-2">· {holdLabel(status.hold)}</span>}
+        {/* Focus pause: the speed time returns to once the card closes, in its own (faded) colour. */}
+        {!compact && isFocusHold(status.hold) && status.chosen > 0 && (
+          <span className="shrink-0 font-semibold normal-case tracking-normal opacity-75" style={{ color: 'var(--color-ink-2)' }}>
+            · <span style={{ textDecoration: `underline dashed ${SPEED_COLOR[status.chosen]}`, textUnderlineOffset: 3 }}>{t('time.resumeTo', { v: status.chosen })}</span>
+          </span>
+        )}
       </span>
     )
   }
@@ -157,9 +186,59 @@ function TimeStatusPill({ status, compact, flowLabel }: { status: TimeStatus; co
   return (
     <span role="status" className="inline-flex min-w-0 items-center gap-1 text-[10.5px] font-semibold text-ink-2">
       <span aria-hidden="true" className="size-2 shrink-0 animate-heartbeat rounded-full" style={{ background: SPEED_COLOR[status.effective], animationDuration: beat }} />
-      {flowLabel && !compact && <span className="animate-fade-in truncate">{t('time.flowing')}</span>}
+      {slowed ? (
+        <span className="animate-fade-in truncate text-ink">{t(compact ? 'speed.hint' : 'time.slowed', { v: 1 })}</span>
+      ) : (
+        flowLabel && !compact && <span className="animate-fade-in truncate">{t('time.flowing')}</span>
+      )}
       <span className="sr-only">{t('time.speedState', { v: `${status.effective}×` })}</span>
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Screen frame: the whole viewport edge carries the time colour (docs/CORE_LOOP.md §3.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Thin frame around the viewport in the time colour: red still, yellow 1×, orange 2×, green 4×.
+ * A focus pause (decision / Defter card / modal) draws it red and DASHED with a faint inner band in the chosen
+ * speed's colour (the speed time returns to). While time flows a soft glow runs along it once per game day.
+ * Colour is never the only signal: solid vs dashed + the HUD pill label carry the same state.
+ */
+export function ScreenFrame() {
+  const mobile = useIsMobile()
+  const status = useTimeStatus()
+  const dayInt = useGameStore((s) => Math.floor(s.state.time.day))
+  if (status.gameOver) return null
+  const color = timeColor(status)
+  const focus = isFocusHold(status.hold) && status.chosen > 0
+  const w = mobile ? 2 : 3
+  const flowing = status.effective > 0
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="screen-frame"
+      data-state={flowing ? `${status.effective}x` : focus ? 'focus' : 'paused'}
+      className="pointer-events-none fixed z-[55]"
+      style={{
+        top: 'env(safe-area-inset-top, 0px)',
+        right: 'env(safe-area-inset-right, 0px)',
+        bottom: 'env(safe-area-inset-bottom, 0px)',
+        left: 'env(safe-area-inset-left, 0px)',
+        border: `${w}px ${focus ? 'dashed' : 'solid'} ${color}`,
+        boxShadow: focus ? `inset 0 0 0 ${w + 3}px ${soft(SPEED_COLOR[status.chosen], 22)}` : `inset 0 0 0 1px ${soft(color, 25)}`,
+        transition: 'border-color 300ms ease, box-shadow 300ms ease',
+      }}
+    >
+      {flowing && (
+        <div
+          key={dayInt}
+          className="absolute inset-0 animate-frame-beat"
+          style={{ boxShadow: `inset 0 0 ${mobile ? 10 : 16}px ${soft(color, 55)}`, animationDuration: `${Math.max(250, 700 / status.effective)}ms` }}
+        />
+      )}
+    </div>
   )
 }
 

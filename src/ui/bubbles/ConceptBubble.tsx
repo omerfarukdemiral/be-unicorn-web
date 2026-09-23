@@ -1,6 +1,6 @@
-// Concept bubble (PLAN §6.1): ≤ 12 words, click → Defter card; after 20 s real time
-// without a click it shrinks to an icon (dispatch minimizeConcept) and never disappears.
-import { useEffect } from 'react'
+// Concept bubble (PLAN §6.1): ≤ 12 words, click → Defter card; after CONCEPT_MINIMIZE_DAYS of GAME time
+// without a click the store shrinks it to an icon (minimizeConcept); it never disappears and never shrinks
+// while time is still.
 import { useShallow } from 'zustand/react/shallow'
 import type { ConceptId } from '../../engine/types'
 import { NPC_TEXT } from '../../content'
@@ -12,7 +12,7 @@ import { conceptById, openConceptCard } from '../uiActions'
 import { conceptTitle } from '../panels/JournalPanel'
 import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, BubbleText, SpeakerLine } from './shell'
 
-export const CONCEPT_MINIMIZE_MS = 20_000
+export { CONCEPT_MINIMIZE_DAYS } from '../../store/gameStore'
 
 /** Presentational bubble; render may embed this inside a drei <Html>. Mark: violet book (vs. decision's orange chat). */
 export function ConceptBubbleView({ text, speaker, onClick, className, tail }: { text: string; speaker?: string; onClick: () => void; className?: string; tail?: boolean }) {
@@ -49,18 +49,9 @@ export function ConceptIconView({ label, onClick }: { label: string; onClick: ()
   )
 }
 
-/** Connected: current active concept bubble with the 20 s minimize timer. */
+/** Connected: current active concept bubble (the store shrinks it after CONCEPT_MINIMIZE_DAYS game days). */
 export function ConceptBubble() {
-  const active = useGameStore(useShallow((s) => s.state.concepts.active))
-  const dispatch = useGameStore((s) => s.dispatch)
-  const id = active?.id
-  const shownDay = active?.shownDay
-
-  useEffect(() => {
-    if (!id) return
-    const timer = window.setTimeout(() => dispatch({ type: 'minimizeConcept', conceptId: id }), CONCEPT_MINIMIZE_MS)
-    return () => window.clearTimeout(timer)
-  }, [id, shownDay, dispatch])
+  const id = useGameStore((s) => s.state.concepts.active?.id)
 
   if (!id) return null
   const c = conceptById(id)

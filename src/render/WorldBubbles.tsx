@@ -1,14 +1,13 @@
 // Decides which world-anchored bubbles exist (ambient lines, concept, minimized concepts, decision)
 // and anchors them above their speakers. Content is drawn by the BubbleRenderer (ui) or DefaultBubble.
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CONCEPTS, DECISIONS, OFFICE_LINES } from '../content'
 import type { ConceptId, Dept, Employee, GameState, NpcRole, Visitor } from '../engine/types'
-import { CONCEPT_MINIMIZE_MS } from './constants'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, WorldBubble } from './bubbles'
 import { UI_TONES } from './palette'
 import { useLayout } from './sceneRegistry'
-import { dispatchAction, storeApi, useGS, useMockState } from './source'
+import { dispatchAction, storeApi, useGS } from './source'
 
 const ROLE_DEPT: Partial<Record<NpcRole, Dept>> = { engineer: 'eng', accountant: 'ops' }
 
@@ -88,18 +87,10 @@ function buildList(key: string, ambient: boolean): WorldBubble[] {
 export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: BubbleRenderer; ambient?: boolean }) {
   const key = useGS(selectBubbleKey)
   const layout = useLayout()
-  const mock = useMockState()
   const list = useMemo(() => buildList(key, ambient), [key, ambient])
 
-  // Shrink an unclicked concept bubble to an icon after 20 s real time (PLAN §6.1).
-  const activeId = list.find((b) => b.kind === 'concept')?.conceptId
-  useEffect(() => {
-    if (!activeId || mock) return
-    const t = window.setTimeout(() => {
-      if (storeApi().state.concepts.active?.id === activeId) dispatchAction({ type: 'minimizeConcept', conceptId: activeId })
-    }, CONCEPT_MINIMIZE_MS)
-    return () => window.clearTimeout(t)
-  }, [activeId, mock])
+  // An unclicked concept bubble shrinks to an icon after CONCEPT_MINIMIZE_DAYS of GAME time: the store does it
+  // after each tick (store/gameStore.ts afterStep), so it never shrinks while time is still.
 
   // Overlaps (same or different speakers) are resolved in screen space by the layout driver.
   const [registry] = useState(() => new BubbleLayoutRegistry())

@@ -19,7 +19,7 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
   const s: GameState = {
     meta: { saveVersion: SAVE_VERSION, founderXp: xp, runIndex: opts.runIndex ?? 0 },
     rng: createRngState(opts.seed),
-    time: { day: 0, month: 0, speed: 1 },
+    time: { day: 0, month: 0, speed: 0 }, // starts paused: the player presses Başlat (sim steps directly)
     stage: 0,
     stats: { cash: Math.round(startCash(xp)), users: 0, morale: B.START_MORALE, reputation: B.START_REPUTATION, arpu: 0, churn: B.CHURN_BASE, equity: 1 },
     finance: {

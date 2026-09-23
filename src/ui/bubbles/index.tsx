@@ -7,7 +7,7 @@ import { ConceptBubble, MinimizedConcepts } from './ConceptBubble'
 import { DecisionBubble } from './DecisionBubble'
 
 export { AmbientBubbleView, AmbientBubbles, AMBIENT_MS } from './AmbientBubble'
-export { ConceptBubbleView, ConceptIconView, ConceptBubble, MinimizedConcepts, CONCEPT_MINIMIZE_MS } from './ConceptBubble'
+export { ConceptBubbleView, ConceptIconView, ConceptBubble, MinimizedConcepts, CONCEPT_MINIMIZE_DAYS } from './ConceptBubble'
 export { DecisionBubble, DecisionCardView, ReflectionView, decisionById, REFLECTION_MS } from './DecisionBubble'
 
 /** Non-blocking bubble area. Concept + decision always (they need clicks); ambient lines optional. */

@@ -87,14 +87,18 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
   )
 }
 
-/** Connected non-blocking bubble for `state.decisions.active`, then the reflection. */
+/**
+ * Connected non-blocking bubble for `state.decisions.active`, then the reflection. It appears collapsed (time keeps
+ * flowing); expanding it to read the card is a `decision` focus pause (store ui.decisionExpanded).
+ */
 export function DecisionBubble() {
   const active = useGameStore(useShallow((s) => s.state.decisions.active))
   const last = useGameStore(useShallow((s) => s.state.decisions.lastAnswer))
   const dispatch = useGameStore((s) => s.dispatch)
   const panel = useGameStore((s) => s.ui.panel)
   const mobile = useIsMobile()
-  const [expanded, setExpanded] = useState(!mobile)
+  const setDecisionExpanded = useGameStore((s) => s.setDecisionExpanded)
+  const [expanded, setExpanded] = useState(false)
   const [reflection, setReflection] = useState<{ cardId: string; optionIndex: number; key: string } | null>(null)
 
   // Show the reflection whenever a new answer lands.
@@ -107,11 +111,18 @@ export function DecisionBubble() {
     return () => window.clearTimeout(id)
   }, [lastKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => setExpanded(!mobile), [active?.cardId, mobile])
+  // A new card arrives collapsed: its appearance never stops time.
+  useEffect(() => setExpanded(false), [active?.cardId])
 
   const card = active ? decisionById(active.cardId) : undefined
   // The same card open in the panel: do not duplicate it.
   const inPanel = panel?.kind === 'decision' && panel.cardId === (active?.cardId ?? reflection?.cardId)
+  // Reading the card in the scene holds time still, like the panel does.
+  const reading = expanded && !!card && !inPanel
+  useEffect(() => {
+    setDecisionExpanded(reading)
+  }, [reading, setDecisionExpanded])
+  useEffect(() => () => setDecisionExpanded(false), [setDecisionExpanded])
 
   if (card && active && !inPanel) {
     return (

@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FURNITURE } from '../content'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY } from '../engine/types'
-import { effectiveSpeed, panelSelection, useGameStore } from './gameStore'
+import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, panelSelection, useGameStore } from './gameStore'
 
 const store = () => useGameStore.getState()
 
@@ -295,5 +295,115 @@ describe('time: paused start and focus pauses', () => {
     store().closeOverlay()
     expect(speedSets()).toHaveLength(1)
     expect(store().state.time.speed).toBe(1)
+  })
+})
+
+describe('focus (CORE_LOOP phase 0)', () => {
+  beforeEach(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 }))
+
+  function withDecision(): string {
+    const st = store().state
+    const cardId = st.decisions.active?.cardId ?? 'remote-vs-office'
+    if (!st.decisions.active) useGameStore.setState({ state: { ...st, decisions: { ...st.decisions, active: { cardId, shownDay: st.time.day } } } })
+    return cardId
+  }
+  /** Puts a triggered concept bubble on screen at the current day. */
+  function withConcept(id = 'runway' as const): void {
+    const st = store().state
+    useGameStore.setState({
+      state: { ...st, concepts: { ...st.concepts, triggered: [...st.concepts.triggered, id], queue: [], active: { id, shownDay: st.time.day } } },
+    })
+  }
+
+  it('the expanded scene decision bubble pauses; collapsing it resumes the previous speed', () => {
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    withDecision()
+    store().setDecisionExpanded(true)
+    expect(store().ui.pauseReasons).toEqual(['decision'])
+    expect(effectiveSpeed(store())).toBe(0)
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY * 3)
+    expect(store().state.time.day).toBe(day)
+    expect(store().state.time.speed).toBe(2) // never written as setSpeed
+    store().setDecisionExpanded(false)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(2)
+  })
+
+  it('expanded bubble + the same card in the panel count as one decision pause', () => {
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    const cardId = withDecision()
+    store().setDecisionExpanded(true)
+    store().openPanel({ kind: 'decision', cardId })
+    expect(store().ui.pauseReasons).toEqual(['decision'])
+  })
+
+  it('answering the card ends the expanded-bubble pause', () => {
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    const cardId = withDecision()
+    store().setDecisionExpanded(true)
+    expect(store().dispatch({ type: 'answerDecision', cardId, optionIndex: 0 }).ok).toBe(true)
+    expect(store().ui.decisionExpanded).toBe(false)
+    expect(effectiveSpeed(store())).toBe(1)
+  })
+
+  it('a new game clears the expanded flag and keeps the slow-on-moments preference', () => {
+    withDecision()
+    store().setDecisionExpanded(true)
+    store().setSlowOnMoments(false)
+    store().newGame({ seed: 8, founderXp: 0, runIndex: 0 })
+    expect(store().ui.decisionExpanded).toBe(false)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(store().ui.slowOnMoments).toBe(false)
+    store().setSlowOnMoments(true)
+  })
+
+  it('an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS of game time, never while still', () => {
+    withConcept()
+    // Paused (start): real seconds pass, the bubble stays.
+    store().tick(SECONDS_PER_DAY * (CONCEPT_MINIMIZE_DAYS + 5))
+    expect(store().state.concepts.active?.id).toBe('runway')
+    // Flowing at 1×: just before the limit it is still up, after it it is an icon.
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    for (let i = 0; i < (CONCEPT_MINIMIZE_DAYS - 1) * 4; i++) store().tick(SECONDS_PER_DAY / 4)
+    expect(store().state.concepts.active?.id).toBe('runway')
+    // A Defter card open elsewhere holds time: no shrinking while reading.
+    store().openPanel({ kind: 'journal', conceptId: 'burn' })
+    store().tick(SECONDS_PER_DAY * 5)
+    expect(store().state.concepts.active?.id).toBe('runway')
+    store().closePanel()
+    for (let i = 0; i < 8; i++) store().tick(SECONDS_PER_DAY / 4)
+    expect(store().state.concepts.active).toBeUndefined()
+    expect(store().state.concepts.minimized).toContain('runway')
+    // Recorded like any action: a replay reproduces it.
+    expect(store().exportReplay().actions.some((a) => a.action.type === 'minimizeConcept')).toBe(true)
+  })
+
+  it('at 4× an important moment slows the run to 1× (not a pause); 2× is left alone', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    // Run until the engine shows a decision card (an important moment).
+    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.decisions.active).toBeDefined()
+    expect(store().state.time.speed).toBe(1)
+    expect(effectiveSpeed(store())).toBe(1)
+    expect(store().ui.slowdownAt).not.toBeNull()
+    const sets = store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed')
+    expect(sets.at(-1)?.action).toEqual({ type: 'setSpeed', speed: 1 })
+
+    // Same moment at 2×: no change.
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.decisions.active).toBeDefined()
+    expect(store().state.time.speed).toBe(2)
+  })
+
+  it('the slowdown can be turned off', () => {
+    store().setSlowOnMoments(false)
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.decisions.active).toBeDefined()
+    expect(store().state.time.speed).toBe(4)
+    store().setSlowOnMoments(true)
   })
 })

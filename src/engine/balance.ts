@@ -238,7 +238,11 @@ export const CASH_PERCENT_CAP = 0.25
 /** Absolute cap of a cashPercent effect: this × monthly-ish scale (base rent × 20). */
 export const CASH_PERCENT_ABS_CAP: readonly number[] = [10_000, 50_000, 250_000, 1_000_000, 5_000_000, 30_000_000, 30_000_000]
 export const USERS_PERCENT_CAP = 0.5
-export const DECISION_VISITOR_DAYS = 20
+/**
+ * A decision visitor waits for the answer (no timed card, docs/CORE_LOOP.md §3.2): its leaveDay is pushed this
+ * far out and answering sets it to "now". Finite so the state stays JSON-serializable.
+ */
+export const DECISION_VISITOR_WAIT_DAYS = 100_000
 
 // ---------------------------------------------------------------------------
 // Concepts & world flavour

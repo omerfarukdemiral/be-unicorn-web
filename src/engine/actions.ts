@@ -9,7 +9,7 @@ import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFre
 import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
 import { starsOfStage } from './loop'
-import { startRound } from './round'
+import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
   FOUNDER_SLOT_ID,
@@ -356,7 +356,9 @@ const minimizeConceptH: Handler<'minimizeConcept'> = ({ s, content }, a) => (min
 
 const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => answerDecision(s, content, a.cardId, a.optionIndex)
 
-const startRoundH: Handler<'startRound'> = ({ s, rng, content }) => startRound(s, rng, starsOfStage(s, content, s.stage))
+const startRoundH: Handler<'startRound'> = ({ s, rng, content }, a) => startRound(s, rng, starsOfStage(s, content, s.stage), a.size ?? 'target')
+
+const roundPitchH: Handler<'roundPitch'> = ({ s }, a) => roundPitch(s, a.pitch)
 
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
@@ -379,4 +381,5 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   minimizeConcept: minimizeConceptH,
   answerDecision: answerDecisionH,
   startRound: startRoundH,
+  roundPitch: roundPitchH,
 }

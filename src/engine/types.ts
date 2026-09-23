@@ -341,6 +341,100 @@ export interface RoundState {
   offer: RoundOffer
   /** Valuation when the round started; offer shrinks if metrics fall below. */
   baseValuation: number
+  // --- Live round (docs/CORE_LOOP.md §4.3, phase 2). Optional: rounds from older saves lack them. ---
+  /** Size picked at start: runway months ↔ equity. */
+  size?: RoundSize
+  /** Months of (new) burn the amount was sized for. */
+  months?: number
+  /** Amount at an offer factor of 1 (sized on the new burn); the live offer = baseAmount × factor. */
+  baseAmount?: number
+  /** Valuation the round is priced against (the next stage's target). */
+  targetValuation?: number
+  /** Product of the weekly pitch results (1 = neutral). */
+  pitchFactor?: number
+  /** Week (1-based, weeks done) whose pitch waits for the player's choice; undefined = none due. */
+  pitchDue?: number
+  /** Pitches made, oldest first. `delta`: offer factor change (fraction). */
+  pitches?: RoundPitchEntry[]
+  /** Due-diligence list brought by the investor; values refresh every week. */
+  diligence?: DiligenceItem[]
+  /** Last weekly move of the offer (the live offer line). */
+  lastMove?: { week: number; from: number; to: number }
+}
+
+/** Round size: Küçük (12 months of runway, less equity) / Hedef (18) / Büyük (24, more equity). */
+export const ROUND_SIZES = ['small', 'target', 'large'] as const
+export type RoundSize = (typeof ROUND_SIZES)[number]
+
+/** Weekly pitch: show metrics / tell the story / bring a second investor. */
+export const ROUND_PITCHES = ['metrics', 'story', 'coinvestor'] as const
+export type RoundPitch = (typeof ROUND_PITCHES)[number]
+
+export interface RoundPitchEntry {
+  week: number
+  pitch: RoundPitch
+  /** Offer factor change, fraction (+0.05 = +5%). */
+  delta: number
+}
+
+/** Due-diligence checks (docs/CORE_LOOP.md §4.3): runway ≥ months, MoM ≥ fraction, morale ≥ points. */
+export type DiligenceId = 'runway' | 'growth' | 'morale'
+
+export interface DiligenceItem {
+  id: DiligenceId
+  target: number
+  /** Current value (runway null = profitable → counts as met, stored as target). */
+  value: number
+  met: boolean
+}
+
+/** One size option of the round chooser (engine computed, UI shows it as is). */
+export interface RoundSizeOption {
+  size: RoundSize
+  months: number
+  /** Amount at an offer factor of 1. */
+  amount: number
+  /** What the offer would be at today's factor (amount × factor). */
+  offer: number
+  /** Equity sold (after ☆ discounts). */
+  equity: number
+}
+
+/** Live round numbers for the Büyüme > Tur section (recomputed every step). */
+export interface RoundView {
+  /** Valuation the next round is priced against. */
+  target: number
+  /** Valuation at which the early window opens (target × ROUND_EARLY_RATIO). */
+  windowAt: number
+  /** Valuation / target, clamped to the offer range (the price part of the offer factor). */
+  priceRatio: number
+  /** Whole offer factor if the round closed now: price × diligence × pitches, clamped. */
+  factor: number
+  /** Pre-round: the three size options. */
+  sizes?: RoundSizeOption[]
+  /** Due-diligence list: the running round's, or what the investor would ask now. */
+  diligence: DiligenceItem[]
+  /** Running round: the offer if it closed at today's numbers. */
+  projected?: number
+  /** Running round: what each pitch would do right now. */
+  pitchOptions?: PitchOption[]
+  /** MoM growth the investor asks for at this stage (diligence + "Metrik göster"). */
+  growthAsk: number
+}
+
+/** Preview of one weekly pitch (engine computed). */
+export interface PitchOption {
+  pitch: RoundPitch
+  /** Offer factor change, fraction. */
+  delta: number
+  /** Weeks taken off the round. */
+  weeks: number
+  /** Extra equity sold, fraction. */
+  equity: number
+  /** Founder energy it costs. */
+  energy: number
+  /** Can be picked now (energy). */
+  ok: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -460,12 +554,28 @@ export interface DerivedMetrics {
   /** Valuation / next stage target, 0–1+ (stage progress bar). */
   stageProgress: number
   canStartRound: boolean
+  /** Round window / live offer numbers (docs/CORE_LOOP.md §4.3); undefined past the last round. */
+  round?: RoundView
+  /** "Elle kullanıcı bul" return preview (monthly saturation). */
+  findUsers?: FindUsersPreview
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
   nextStep?: NextStep
   /** What is coming in the next weeks: paydays, delayed decision effects, releases, round (§5 "Ufuk şeridi"). */
   horizon?: HorizonItem[]
   /** Maturity gained per day by each unfinished project (for release ETAs). */
   maturityPerDay?: Record<ProjectId, number>
+}
+
+/** Preview of the next "Elle kullanıcı bul": users range and why it is reduced. */
+export interface FindUsersPreview {
+  min: number
+  max: number
+  /** Full-return finds left this month. */
+  fullLeft: number
+  /** Return multiplier (1 = full). */
+  factor: number
+  /** 'circle': the month's full finds are used up; 'big': over FIND_USERS_BIG_AT users. */
+  reasons: ('circle' | 'big')[]
 }
 
 /** Main chain: idea → first users → desk → hire → release → users → revenue → round. */
@@ -550,6 +660,7 @@ export type ActivityKind =
   | 'roundStarted' | 'roundProgress' | 'roundClosed' | 'roundShrunk'
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'
   | 'payday' | 'release' | 'goalDone'
+  | 'roundWindow' | 'roundOffer' | 'roundPitch'
 
 /** Bottom-left activity line. Text lives in content (ACTIVITY_TEXT[kind]) with {param} placeholders. */
 export interface ActivityEntry {
@@ -568,6 +679,12 @@ export type GameEventKind =
   | 'visitorArrived' | 'visitorLeft' | 'founderActionStarted' | 'founderActionDone'
   | 'bankruptWarning' | 'gameOver' | 'victory'
   | 'payday' | 'release' | 'goalDone' | 'delayedEffect'
+  /** The early round window opened (valuation ≥ 60% of target). */
+  | 'roundWindow'
+  /** A round week passed: the live offer moved (value = new amount) and a pitch is due. */
+  | 'roundWeek'
+  /** The player pitched (refId = RoundPitch, value = offer factor change). */
+  | 'roundPitched'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -700,7 +817,10 @@ export type Action =
   | { type: 'minimizeConcept'; conceptId: ConceptId }
   | { type: 'answerDecision'; cardId: DecisionCardId; optionIndex: number }
   // Fundraising
-  | { type: 'startRound' }
+  /** `size` omitted = 'target' (18 months). */
+  | { type: 'startRound'; size?: RoundSize }
+  /** This week's pitch of the running round (docs/CORE_LOOP.md §4.3). */
+  | { type: 'roundPitch'; pitch: RoundPitch }
 
 export type ActionType = Action['type']
 export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>

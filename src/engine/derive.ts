@@ -1,7 +1,9 @@
 // Recomputes stats/finance/derived from the raw state. Render/UI read these; they never compute formulas.
 import * as B from './balance'
 import * as E from './economy'
+import { findUsersPreview } from './founder'
 import { horizon, nextStep } from './loopSelectors'
+import { roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId } from './types'
 import { modifierMult, moraleModifierSum, type EngineContent } from './util'
@@ -171,9 +173,14 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     valuationMultiple: multiple,
     channels: { organic, paid, manual: Math.max(manualNow, manualLast), enterprise: s.finance.enterpriseCustomers.length },
     stageProgress: target ? valuation / target : 1,
-    canStartRound:
-      s.gameOver === undefined && s.stage < B.LAST_STAGE - 1 && !(s.round?.active ?? false) && target !== null && valuation >= target,
+    // Early window (docs/CORE_LOOP.md §4.3): the round can start at ROUND_EARLY_RATIO of the target.
+    canStartRound: s.gameOver === undefined && s.stage < B.LAST_STAGE - 1 && !(s.round?.active ?? false) && roundWindowOpen(valuation, target),
   }
+  const goalsDone = s.goalsDone ?? []
+  const stars = (content.goals ?? []).filter((g) => g.stage === s.stage && goalsDone.includes(g.id)).length
+  const rv = roundView(s, stars)
+  if (rv) s.derived.round = rv
+  s.derived.findUsers = findUsersPreview(s)
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)
   s.derived.horizon = horizon(s)

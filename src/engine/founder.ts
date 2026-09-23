@@ -3,8 +3,35 @@ import { ENTERPRISE_NAMES } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
 import type { Rng } from './rng'
-import type { ActionErrorCode, FounderActionKind, GameState } from './types'
+import type { ActionErrorCode, FindUsersPreview, FounderActionKind, GameState } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
+
+/** Flag: "Elle kullanıcı bul" uses this month (reset on month end). */
+export const FIND_USES_FLAG = 'findUsesThisMonth'
+
+/**
+ * Return of the next "Elle kullanıcı bul" (docs/CORE_LOOP.md §5): the month's first FIND_USERS_FULL_PER_MONTH
+ * finds are full, every further block halves; a company past FIND_USERS_BIG_AT users gets half.
+ * Pure: the button preview and the action use the same numbers.
+ */
+export function findUsersPreview(s: GameState): FindUsersPreview {
+  const used = Number(s.flags[FIND_USES_FLAG] ?? 0)
+  const blocks = Math.floor(used / B.FIND_USERS_FULL_PER_MONTH)
+  const reasons: FindUsersPreview['reasons'] = []
+  let factor = B.FIND_USERS_SATURATION ** blocks
+  if (blocks > 0) reasons.push('circle')
+  if (s.stats.users > B.FIND_USERS_BIG_AT) {
+    factor *= B.FIND_USERS_BIG_FACTOR
+    reasons.push('big')
+  }
+  return {
+    min: Math.max(1, Math.round(B.FIND_USERS_MIN * factor)),
+    max: Math.max(1, Math.round(B.FIND_USERS_MAX * factor)),
+    fullLeft: Math.max(0, B.FIND_USERS_FULL_PER_MONTH - used),
+    factor,
+    reasons,
+  }
+}
 
 export function founderActionError(s: GameState, kind: FounderActionKind): ActionErrorCode | null {
   const def = B.FOUNDER_ACTION_DEFS[kind]
@@ -45,7 +72,9 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
   const params: Record<string, string | number> = { action: run.kind }
   switch (run.kind) {
     case 'findUsers': {
-      const n = rng.int(B.FIND_USERS_MIN, B.FIND_USERS_MAX)
+      const pv = findUsersPreview(s)
+      const n = Math.max(1, Math.round(rng.int(B.FIND_USERS_MIN, B.FIND_USERS_MAX) * pv.factor))
+      s.flags[FIND_USES_FLAG] = Number(s.flags[FIND_USES_FLAG] ?? 0) + 1
       s.stats.users += n
       s.flags['manualThisMonth'] = Number(s.flags['manualThisMonth'] ?? 0) + n
       incCounter(s, 'manualFinds')

@@ -1,6 +1,7 @@
 // zustand store: the only bridge between the pure engine and render/ui.
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by the effective speed
-// (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card).
+// (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card,
+// round offer / pitch).
 // After each tick: an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS of game time, and at 4× an
 // important moment slows the run to 1× (docs/CORE_LOOP.md §3.2).
 import { create } from 'zustand'
@@ -30,6 +31,8 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
   'bankruptWarning',
   'roundClosed',
   'release',
+  // The early round window opening is the "tur teklifi" moment.
+  'roundWindow',
 ])
 
 /** A payday that leaves less than this many months of runway is an important moment too (docs/CORE_LOOP.md §3.2). */
@@ -69,19 +72,30 @@ const initialUi = (): UiState => ({
 /** UI fields that survive newGame()/load() (player preferences of this session). */
 const keptUi = (ui: UiState): Pick<UiState, 'zoom' | 'slowOnMoments' | 'generation'> => ({ zoom: ui.zoom, slowOnMoments: ui.slowOnMoments, generation: ui.generation + 1 })
 
-/** Focus pauses implied by what is open (one mechanism for modals, decision cards and Defter cards). */
-export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean }): PauseReason[] {
+/**
+ * A round choice waits for the player: the early window is open (size chooser) or this week's pitch is due
+ * (docs/CORE_LOOP.md §4.3). Read with the Tur section open, it is the `offer` focus pause.
+ */
+export function offerWaiting(s: GameState): boolean {
+  const r = s.round
+  if (r?.active) return r.pitchDue !== undefined
+  return s.derived.canStartRound && !s.gameOver
+}
+
+/** Focus pauses implied by what is open (one mechanism for modals, decision cards, Defter cards and round offers). */
+export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean }, state?: GameState): PauseReason[] {
   const r: PauseReason[] = []
   if (ui.overlay) r.push('modal')
   const p = ui.panel
   if ((p?.kind === 'decision' && p.answered === undefined) || ui.decisionExpanded) r.push('decision')
   if (p?.kind === 'journal' && p.conceptId) r.push('concept')
+  if (p?.kind === 'growth' && p.section === 'round' && state && offerWaiting(state)) r.push('offer')
   return r
 }
 
-/** Recomputes ui.pauseReasons after a panel/overlay change; keeps the old array when nothing changed. */
-function withPause(ui: UiState): UiState {
-  const next = pauseReasonsOf(ui)
+/** Recomputes ui.pauseReasons after a panel/overlay/state change; keeps the old UiState when nothing changed. */
+function withPause(ui: UiState, state: GameState): UiState {
+  const next = pauseReasonsOf(ui, state)
   const cur = ui.pauseReasons
   if (next.length === cur.length && next.every((x, i) => x === cur[i])) return ui
   return { ...ui, pauseReasons: next }
@@ -185,7 +199,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     }
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
     const starts = action.type === 'setSpeed' && action.speed > 0 && !get().ui.runStarted
-    set(starts ? (s) => ({ state: res.state, ui: { ...s.ui, runStarted: true } }) : { state: res.state })
+    // A round choice made (size picked, pitch sent) ends the `offer` pause: pause reasons follow the new state.
+    set((s) => ({ state: res.state, ui: withPause(starts ? { ...s.ui, runStarted: true } : s.ui, res.state) }))
     retargetEmptiedDetail(action, res.state)
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
@@ -204,7 +219,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // step() works in FIXED_STEP_DAYS chunks internally: one call == `chunks` separate calls.
     const next = step(state, chunks * FIXED_STEP_DAYS)
     if (next === state) return
-    set({ state: next })
+    // A pitch falling due with the Tur section open pauses right away (`offer`).
+    set((s) => ({ state: next, ui: withPause(s.ui, next) }))
     if (next.gameOver && !state.gameOver) {
       onGameOver(next)
       return
@@ -258,7 +274,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       const cur = s.ui.panel
       if (samePanel(cur, panel)) return s
       const panelBack = opts?.root ? null : opts?.replace ? s.ui.panelBack : cur
-      return { ui: withPause({ ...s.ui, panel, panelBack }) }
+      return { ui: withPause({ ...s.ui, panel, panelBack }, s.state) }
     })
   },
   togglePanel(tab) {
@@ -267,11 +283,11 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     if (ui.panel?.kind === tab) closePanel()
     else openPanel({ kind: tab }, { root: true })
   },
-  closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: withPause({ ...s.ui, panel: null, panelBack: null }) })),
-  panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: withPause({ ...s.ui, panel: s.ui.panelBack, panelBack: null }) } : s)),
+  closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: withPause({ ...s.ui, panel: null, panelBack: null }, s.state) })),
+  panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: withPause({ ...s.ui, panel: s.ui.panelBack, panelBack: null }, s.state) } : s)),
   setHoverSlot: (hoverSlotId) => set((s) => (s.ui.hoverSlotId === hoverSlotId ? s : { ui: { ...s.ui, hoverSlotId } })),
-  openOverlay: (overlay) => set((s) => ({ ui: withPause({ ...s.ui, overlay }) })),
-  closeOverlay: () => set((s) => ({ ui: withPause({ ...s.ui, overlay: null }) })),
+  openOverlay: (overlay) => set((s) => ({ ui: withPause({ ...s.ui, overlay }, s.state) })),
+  closeOverlay: () => set((s) => ({ ui: withPause({ ...s.ui, overlay: null }, s.state) })),
   setPlacing: (placing) => set((s) => ({ ui: { ...s.ui, placing } })),
   setZoom: (zoom) => set((s) => ({ ui: { ...s.ui, zoom } })),
   setSceneInset: (inset) =>
@@ -280,7 +296,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       return c.top === inset.top && c.right === inset.right && c.bottom === inset.bottom ? s : { ui: { ...s.ui, sceneInset: inset } }
     }),
   setDecisionExpanded: (decisionExpanded) =>
-    set((s) => (s.ui.decisionExpanded === decisionExpanded ? s : { ui: withPause({ ...s.ui, decisionExpanded }) })),
+    set((s) => (s.ui.decisionExpanded === decisionExpanded ? s : { ui: withPause({ ...s.ui, decisionExpanded }, s.state) })),
   setSlowOnMoments: (slowOnMoments) => set((s) => (s.ui.slowOnMoments === slowOnMoments ? s : { ui: { ...s.ui, slowOnMoments } })),
 }))
 

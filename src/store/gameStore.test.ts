@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FURNITURE } from '../content'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY } from '../engine/types'
 import type { GameEvent, GameState } from '../engine/types'
-import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, hasImportantMoment, panelSelection, PAYDAY_SLOW_RUNWAY_MONTHS, useGameStore } from './gameStore'
+import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, hasImportantMoment, offerWaiting, panelSelection, pauseReasonsOf, PAYDAY_SLOW_RUNWAY_MONTHS, useGameStore } from './gameStore'
 
 const store = () => useGameStore.getState()
 
@@ -443,5 +443,76 @@ describe('core loop phase 1 (store side)', () => {
     expect(d.nextStep?.id).toBe('idea')
     expect(d.horizon?.[0]?.kind).toBe('payday')
     expect(d.horizon?.[0]?.day).toBe(30)
+  })
+})
+
+describe('core loop phase 2: round offer / weekly pitch (store side)', () => {
+  /** A running round, `acc` days into its current week; `pitchDue` set = this week's pitch waits. */
+  const withRound = (s: GameState, pitchDue: number | undefined, acc = 0): GameState => ({
+    ...s,
+    flags: { ...s.flags, roundWeekAcc: acc },
+    round: {
+      active: true,
+      targetStage: 1,
+      startedDay: s.time.day,
+      weeksTotal: 6,
+      weeksLeft: 4,
+      offer: { amount: 150_000, equity: 0.1, preMoney: 1_350_000 },
+      baseValuation: 300_000,
+      baseAmount: 150_000,
+      targetValuation: 500_000,
+      pitchFactor: 1,
+      pitches: [],
+      ...(pitchDue !== undefined ? { pitchDue } : {}),
+    },
+  })
+
+  beforeEach(() => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+  })
+
+  it('a due pitch read in Büyüme › Tur is the `offer` pause; the plain Büyüme tab is not', () => {
+    useGameStore.setState((st) => ({ state: withRound(st.state, 2) }))
+    expect(offerWaiting(store().state)).toBe(true)
+    store().openPanel({ kind: 'growth' }, { root: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    store().openPanel({ kind: 'growth', section: 'round' }, { root: true })
+    expect(store().ui.pauseReasons).toEqual(['offer'])
+    expect(effectiveSpeed(store())).toBe(0)
+    // Picking the pitch ends the pause: back to the player's 2×.
+    const r = store().dispatch({ type: 'roundPitch', pitch: 'coinvestor' })
+    expect(r.ok).toBe(true)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(2)
+    expect(store().exportReplay().actions.some((a) => a.action.type === 'setSpeed' && a.action.speed === 0)).toBe(false)
+  })
+
+  it('a pitch falling due while the Tur section is open pauses at once', () => {
+    useGameStore.setState((st) => ({ state: withRound(st.state, undefined, 6.9) }))
+    store().openPanel({ kind: 'growth', section: 'round' }, { root: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    for (let i = 0; i < 20 && store().state.round?.pitchDue === undefined; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.round?.pitchDue).toBe(3)
+    expect(store().ui.pauseReasons).toEqual(['offer'])
+    const day = store().state.time.day
+    store().tick(1)
+    expect(store().state.time.day).toBe(day)
+  })
+
+  it('the open window (size choice) counts as an offer; pauseReasonsOf needs the state for it', () => {
+    const s = store().state
+    const open: GameState = { ...s, derived: { ...s.derived, canStartRound: true } }
+    const ui = { overlay: null, panel: { kind: 'growth' as const, section: 'round' as const } }
+    expect(pauseReasonsOf(ui, open)).toEqual(['offer'])
+    expect(pauseReasonsOf(ui, s)).toEqual([])
+    expect(pauseReasonsOf(ui)).toEqual([])
+  })
+
+  it('the round window opening is an important moment (4× → 1×); weekly beats are not', () => {
+    const s = store().state
+    const ev = (kind: GameEvent['kind']): GameState => ({ ...s, events: [...s.events, { id: s.nextId + 100, day: s.time.day, kind }] })
+    expect(hasImportantMoment(s, ev('roundWindow'))).toBe(true)
+    expect(hasImportantMoment(s, ev('roundWeek'))).toBe(false)
   })
 })

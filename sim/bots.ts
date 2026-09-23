@@ -12,8 +12,11 @@ import {
   type Archetype,
   type Dept,
   type EngineContent,
+  type GameEventKind,
   type GameState,
   type ProjectCategory,
+  type RoundPitch,
+  type RoundSize,
 } from '../src/engine/index'
 
 export type BotKind = Archetype | 'idle' | 'random'
@@ -34,8 +37,12 @@ export interface BotConfig {
   adAggression: number
   minLtvCac: number
   price: number
-  /** Start a round only when valuation ≥ target × this (or runway is short). */
+  /** Start a round only when valuation ≥ target × this (or runway is short). The window opens at 0.6. */
   roundEagerness: number
+  /** Round size (12 / 18 / 24 months of runway ↔ equity). */
+  roundSize: RoundSize
+  /** Weekly pitch when the numbers are weak ('metrics' is always picked when MoM meets the diligence ask). */
+  weakPitch: RoundPitch
   /** Spend on morale furniture / desk upgrades only above this many months of burn in the bank. */
   furnishReserveMonths: number
   useSalesCalls: boolean
@@ -50,7 +57,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'bootstrap', firstCategory: 'web', extraCategories: [],
     buildMix: { eng: 2, product: 1, marketing: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
     minRunwayToHire: 9, teamCap: [3, 7, 11, 18, 25, 32, 32], adAggression: 0.15, minLtvCac: 3, price: 1.25,
-    roundEagerness: 1.15, furnishReserveMonths: 4, useSalesCalls: true,
+    roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
   },
   // Aggressive hiring, ads, earliest rounds.
@@ -58,7 +65,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'vcRocket', firstCategory: 'mobile', extraCategories: ['ai'],
     buildMix: { eng: 3, product: 1, marketing: 2 }, growMix: { eng: 3, product: 1, marketing: 4, sales: 1, ops: 2 },
     minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5, price: 1,
-    roundEagerness: 1, furnishReserveMonths: 3, useSalesCalls: false,
+    roundEagerness: 1, roundSize: 'large', weakPitch: 'coinvestor', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
   },
   // One project, high price, small senior team, enterprise deals.
@@ -66,7 +73,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'niche', firstCategory: 'api', extraCategories: [],
     buildMix: { eng: 2, product: 1, sales: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
     minRunwayToHire: 6, teamCap: [4, 8, 11, 18, 24, 30, 30], adAggression: 0.2, minLtvCac: 3, price: 1.5,
-    roundEagerness: 1, furnishReserveMonths: 3, useSalesCalls: true,
+    roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
   },
   // Many projects, eng/ops heavy.
@@ -74,7 +81,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'platform', firstCategory: 'marketplace', extraCategories: ['api', 'web'],
     buildMix: { eng: 3, product: 1, marketing: 1 }, growMix: { eng: 3, product: 1, marketing: 3, sales: 1, ops: 2 },
     minRunwayToHire: 5, teamCap: ALL_CAP, adAggression: 0.35, minLtvCac: 2.5, price: 1.1,
-    roundEagerness: 1, furnishReserveMonths: 3, useSalesCalls: false,
+    roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
   },
 }
@@ -91,7 +98,19 @@ export interface BotRun {
   finalValuation: number
   equity: number
   peakTeam: number
+  /** Successful actions by type (founder actions as `founderAction:<kind>`). */
+  actionCounts: Record<string, number>
+  /** Longest stretch (game days) without a world beat while a round was running. */
+  roundGapMaxDays: number
+  /** Rounds closed: amount vs the old fixed table, and the size picked. */
+  rounds: { stage: number; amount: number; table: number; equity: number }[]
 }
+
+/** World beats the player sees (not their own clicks): the dead-time metric during rounds counts gaps between these. */
+const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
+  'roundStarted', 'roundWeek', 'roundClosed', 'payday', 'release', 'decisionShown', 'conceptQueued', 'milestone',
+  'goalDone', 'delayedEffect', 'projectLaunched', 'resigned', 'bankruptWarning', 'roundWindow',
+])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -262,7 +281,8 @@ function founder(c: Ctx, cfg: BotConfig): void {
   if (c.s.stats.morale < 50 && act({ type: 'founderAction', kind: 'motivateTeam' })) return
   if (cfg.useSalesCalls && act({ type: 'founderAction', kind: 'salesCall' })) return
   if (c.s.projects.some((p) => p.maturity < 1) && act({ type: 'founderAction', kind: 'talkToUsers' })) return
-  if (c.s.stage <= 1) act({ type: 'founderAction', kind: 'findUsers' })
+  // A sensible player stops once the circle is used up ("tanıdık çevren tükeniyor").
+  if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5) act({ type: 'founderAction', kind: 'findUsers' })
 }
 
 function growth(c: Ctx, cfg: BotConfig): void {
@@ -289,9 +309,17 @@ function growth(c: Ctx, cfg: BotConfig): void {
 
 function fundraise(c: Ctx, cfg: BotConfig): void {
   const { act } = c
+  const r = c.s.round
+  if (r?.active) {
+    if (r.pitchDue === undefined) return
+    const good = (c.s.derived.round?.pitchOptions?.find((o) => o.pitch === 'metrics')?.delta ?? 0) > 0
+    const pitch: RoundPitch = good ? 'metrics' : cfg.weakPitch
+    if (!act({ type: 'roundPitch', pitch }) && pitch === 'story') act({ type: 'roundPitch', pitch: 'metrics' })
+    return
+  }
   if (!c.s.derived.canStartRound) return
   const short = (c.s.finance.runway ?? 99) < 6
-  if (short || c.s.derived.stageProgress >= cfg.roundEagerness) act({ type: 'startRound' })
+  if (short || c.s.derived.stageProgress >= cfg.roundEagerness) act({ type: 'startRound', size: cfg.roundSize })
 }
 
 /** Careless player: a random valid-looking action on some days, random card answers, ignores bubbles half the time. */
@@ -308,7 +336,7 @@ function randomTurn(c: Ctx, rng: Rng): void {
     case 3: act({ type: 'founderAction', kind: rng.pick(FOUNDER_ACTIONS) }); break
     case 4: act({ type: 'setAdBudget', amount: rng.int(0, 5_000) }); break
     case 5: act({ type: 'setPrice', multiplier: rng.range(0.7, 1.6) }); break
-    case 6: act({ type: 'startRound' }); break
+    case 6: act({ type: 'startRound', size: rng.pick(['small', 'target', 'large'] as const) }) || act({ type: 'roundPitch', pitch: rng.pick(['metrics', 'story', 'coinvestor'] as const) }); break
     case 7: { const r = nextLockedRing(c.s.office); if (r !== null) act({ type: 'openRing', ring: r }); break }
   }
 }
@@ -321,11 +349,17 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
   const stageDays: (number | null)[] = [0, null, null, null, null, null, null]
   let c5 = 0
   let c10 = 0
+  const actionCounts: Record<string, number> = {}
+  const rounds: BotRun['rounds'] = []
   const ctx: Ctx = {
     get s() { return s },
     act: (a: Action): boolean => {
       const r = api.applyAction(s, a)
-      if (r.ok) s = r.state
+      if (r.ok) {
+        s = r.state
+        const key = a.type === 'founderAction' ? `founderAction:${a.kind}` : a.type
+        actionCounts[key] = (actionCounts[key] ?? 0) + 1
+      }
       return r.ok
     },
     content,
@@ -333,6 +367,10 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
   }
 
   if (cfg) ctx.act({ type: 'startProject', category: cfg.firstCategory })
+  let inRound = false
+  let lastBeat = 0
+  let roundGapMax = 0
+  let seenId = 0
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg) {
@@ -347,8 +385,23 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
       randomTurn(ctx, botRng)
     }
     const prev = s.stage
+    const before = s
     s = api.step(s, 1)
     for (let st = prev + 1; st <= s.stage; st++) stageDays[st] = Math.round(s.time.day)
+    // Dead time inside a round: gap between world beats while the round runs.
+    for (const e of s.events) {
+      if (e.id <= seenId || !BEAT_KINDS.has(e.kind)) continue
+      if (e.kind === 'roundClosed' && before.round) {
+        rounds.push({ stage: before.round.targetStage, amount: e.value ?? 0, table: balance.ROUND_AMOUNT[before.round.targetStage] ?? 0, equity: before.round.offer.equity })
+      }
+      if (inRound || e.kind === 'roundStarted') {
+        if (inRound) roundGapMax = Math.max(roundGapMax, e.day - lastBeat)
+        lastBeat = e.day
+      }
+      if (e.kind === 'roundStarted') inRound = true
+      if (e.kind === 'roundClosed') inRound = false
+    }
+    seenId = s.events[s.events.length - 1]?.id ?? seenId
     if (s.time.day <= DAYS_5_MIN) c5 = s.concepts.learned.length
     if (s.time.day <= DAYS_10_MIN) c10 = s.concepts.learned.length
     onDay?.(s)
@@ -364,6 +417,9 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
     finalValuation: s.finance.valuation,
     equity: s.stats.equity,
     peakTeam: s.counters.peakTeam ?? 0,
+    actionCounts,
+    roundGapMaxDays: roundGapMax,
+    rounds,
   }
 }
 

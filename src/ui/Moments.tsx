@@ -1,9 +1,10 @@
 // Short, non-blocking moment cards under the HUD (docs/CORE_LOOP.md §4.2, §7 "Popup bütçesi"):
-// month receipt (ay fişi) on payday, release moment (sürüm anı), "Kararın → sonucu" and ☆ goal reached.
+// month receipt (ay fişi) on payday, release moment (sürüm anı), "Kararın → sonucu", ☆ goal reached, and the round
+// beats: the early window opening and each round week (live offer move + "pick this week's pitch").
 // Each card is clickable (opens the related panel), never pauses time and closes by itself in ≤ 5 s.
 import { useEffect, useRef, useState } from 'react'
 import type { MonthReceipt } from '../engine/types'
-import { GOALS } from '../content'
+import { GOALS, STAGES } from '../content'
 import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
 import { Icon, type IconName } from './icons'
@@ -18,8 +19,10 @@ type Moment =
   | { key: number; kind: 'release'; project: string; level: number; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
   | { key: number; kind: 'goal'; text: string }
+  | { key: number; kind: 'roundWindow'; stage: string }
+  | { key: number; kind: 'roundWeek'; week: number; weeks: number; from: number; to: number; pitch: boolean }
 
-const LIFE_MS: Record<Moment['kind'], number> = { receipt: 4500, release: 4000, outcome: 5000, goal: 4000 }
+const LIFE_MS: Record<Moment['kind'], number> = { receipt: 4500, release: 4000, outcome: 5000, goal: 4000, roundWindow: 5000, roundWeek: 4000 }
 const MAX_SHOWN = 2
 
 function open(panel: Panel) {
@@ -40,6 +43,11 @@ export function MomentFeed({ className }: { className?: string }) {
       } else if (e.kind === 'delayedEffect') {
         const o = [...(s.decisions.outcomes ?? [])].reverse().find((x) => x.cardId === e.refId)
         if (o) add.push({ key: e.id, kind: 'outcome', option: optionLabel(o.cardId, o.optionIndex) ?? '', effects: effectSummary(o.effects) })
+      } else if (e.kind === 'roundWindow') {
+        add.push({ key: e.id, kind: 'roundWindow', stage: STAGES[e.value ?? s.stage + 1]?.name ?? '' })
+      } else if (e.kind === 'roundWeek' && s.round?.lastMove) {
+        const m = s.round.lastMove
+        add.push({ key: e.id, kind: 'roundWeek', week: m.week, weeks: s.round.weeksTotal, from: m.from, to: m.to, pitch: s.round.pitchDue !== undefined })
       } else if (e.kind === 'goalDone') {
         const g = GOALS.find((x) => x.id === e.refId)
         if (g) add.push({ key: e.id, kind: 'goal', text: g.text })
@@ -100,6 +108,10 @@ function look(m: Moment): { icon: IconName; color: string; panel: Panel } {
       return { icon: 'hourglass', color: 'var(--color-kind-decision)', panel: { kind: 'growth' } }
     case 'goal':
       return { icon: 'star', color: 'var(--color-g-equity)', panel: { kind: 'growth' } }
+    case 'roundWindow':
+      return { icon: 'rocket', color: 'var(--color-brand)', panel: { kind: 'growth', section: 'round' } }
+    case 'roundWeek':
+      return { icon: 'handshake', color: m.to >= m.from ? 'var(--color-positive)' : 'var(--color-negative)', panel: { kind: 'growth', section: 'round' } }
   }
 }
 
@@ -159,6 +171,20 @@ function body(m: Moment) {
       )
     case 'goal':
       return <span className="block text-[12.5px] font-semibold text-ink">☆ {t('goals.toast', { v: m.text })}</span>
+    case 'roundWindow':
+      return (
+        <span className="block">
+          <span className="block text-[13px] font-bold text-ink">{t('moment.roundWindow', { stage: m.stage })}</span>
+          <span className="font-text block text-[11.5px] text-ink-2">{t('moment.roundWindowSub')}</span>
+        </span>
+      )
+    case 'roundWeek':
+      return (
+        <span className="block">
+          <span className="tabular block text-[12.5px] font-semibold text-ink">{t('moment.roundWeek', { w: m.week, n: m.weeks, a: money(m.from), b: money(m.to) })}</span>
+          {m.pitch && <span className="font-text block text-[11.5px] text-brand-ink">{t('moment.roundWeekSub')}</span>}
+        </span>
+      )
   }
 }
 

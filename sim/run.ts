@@ -101,6 +101,28 @@ for (const [name, runs] of [['idle (hiçbir şey yapmaz)', idle], ['random (rast
 }
 line()
 
+line('## Tur penceresi ve aksiyonlar (docs/CORE_LOOP.md §10 Faz 2)')
+line()
+line('| Arketip | En sık aksiyon (koşu başına medyan) | Elle kullanıcı bul (medyan) | Turda en uzun boşluk (medyan / en kötü) | Tur tutarı / eski tablo (medyan) |')
+line('|---|---|---|---|---|')
+let findUsersTop = false
+let worstGapSec = 0
+for (const [kind, runs] of byArch) {
+  const keys = new Set(runs.flatMap((r) => Object.keys(r.actionCounts)))
+  const med = (k: string) => median(runs.map((r) => r.actionCounts[k] ?? 0)) ?? 0
+  const ranked = [...keys].map((k) => [k, med(k)] as const).sort((a, b) => b[1] - a[1])
+  const top = ranked[0]
+  if (top?.[0] === 'founderAction:findUsers') findUsersTop = true
+  const gaps = runs.map((r) => r.roundGapMaxDays * SECONDS_PER_DAY)
+  worstGapSec = Math.max(worstGapSec, ...gaps)
+  const ratios = runs.flatMap((r) => r.rounds.map((x) => (x.table > 0 ? x.amount / x.table : 1)))
+  line(`| ${kind} | ${top ? `${top[0]} ${top[1]}` : '—'} | ${med('founderAction:findUsers')} | ${(median(gaps) ?? 0).toFixed(0)} sn / ${Math.max(...gaps).toFixed(0)} sn | ${(median(ratios) ?? 0).toFixed(2)}× |`)
+}
+line()
+line(`- findUsers hiçbir arketipte en sık aksiyon değil: **${findUsersTop ? 'HAYIR' : 'EVET'}**`)
+line(`- Tur penceresinde en uzun boşluk ≤ 20 sn: **${worstGapSec <= 20 ? 'EVET' : `HAYIR (${worstGapSec.toFixed(0)} sn)`}**`)
+line()
+
 line('## §9 / §10 kriterleri')
 line()
 const preseedAll = [...byArch.values()].every((runs) => runs.every((r) => r.stageDays[1] !== null))

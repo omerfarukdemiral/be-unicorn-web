@@ -11,7 +11,7 @@ import { dailyEndgame } from './endgame'
 import { completeFounderAction, dailyFounder, regenEnergy } from './founder'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
-import { progressRound } from './round'
+import { checkRoundWindow, progressRound } from './round'
 import { DAYS_PER_MONTH, DAYS_PER_WEEK, FIXED_STEP_DAYS, type GameEventKind, type GameState } from './types'
 import { clone, modifierMult, pushActivity, pushEvent, type EngineContent } from './util'
 import { checkMilestones, dailyVisitors, detectArchetype, expireBubbles, idleLine, monthEnd, sayLine, updateRivalPressure } from './world'
@@ -109,6 +109,7 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   if (s.round?.active && s.stats.cash < 0 && !s.decisions.history.some((h) => h.cardId === B.BRIDGE_CARD_ID) && !s.decisions.queue.includes(B.BRIDGE_CARD_ID) && s.decisions.active?.cardId !== B.BRIDGE_CARD_ID && content.decisions.some((c) => c.id === B.BRIDGE_CARD_ID)) {
     s.decisions.queue.push(B.BRIDGE_CARD_ID)
   }
+  checkRoundWindow(s)
   maybeShowDecision(s, content, rng)
   dailyVisitors(s, rng)
   eventLines(s, content, rng)

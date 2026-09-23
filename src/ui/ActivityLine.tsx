@@ -24,9 +24,10 @@ function formatParam(key: string, v: string | number): string | number {
   if (key === 'milestone' && typeof v === 'string') return t(`milestone.${v}`)
   if (key === 'note' && typeof v === 'string') return UI_TEXT[`note.${v}`] ?? v
   if (key === 'level' && typeof v === 'number') return t(`release.level.${Math.max(1, Math.min(5, v))}`)
+  if (key === 'pitch' && typeof v === 'string') return t(`pitch.${v}`)
   if (key === 'goal' && typeof v === 'string') return GOALS.find((g) => g.id === v)?.text ?? v
   if (typeof v === 'number') {
-    if (key === 'amount' || key === 'cash' || key === 'mrr' || key === 'cost') return money(v)
+    if (key === 'amount' || key === 'from' || key === 'cash' || key === 'mrr' || key === 'cost') return money(v)
     return num(v)
   }
   return v

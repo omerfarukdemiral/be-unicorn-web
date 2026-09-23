@@ -127,7 +127,8 @@ interface GameStore {
   exportReplay(): ReplayLog     // seed + TimedAction[] (module-level, not reactive)
 }
 // effectiveSpeed({state, ui}) = 0 if gameOver or ui.pauseReasons non-empty, else state.time.speed.
-// ui.pauseReasons ('modal' | 'decision' | 'concept') is derived from overlay/panel; never dispatched as setSpeed.
+// ui.pauseReasons ('modal' | 'decision' | 'concept' | 'offer') is derived from overlay/panel (+ state for 'offer':
+// Büyüme › Tur open while the size choice or a weekly pitch waits); never dispatched as setSpeed.
 // newGame()/load() start paused (time.speed 0, ui.runStarted false) until the player's first setSpeed > 0.
 ```
 
@@ -146,7 +147,7 @@ interface GameStore {
 - **İşe alım:** `candidates[]` havuzu; `hire` aksiyonu `candidateId` alır.
 - **Efektler:** tek tip `EffectBundle` (kart, aksiyon, eşya); geçici etkiler `TimedModifier`, gecikmeli etkiler `DelayedEffect`.
 - **Metin yok engine'de:** activity/event/post-mortem kod + parametre; Türkçe metni content tabloları verir.
-- **Aksiyonlar:** `Action` discriminated union (`src/engine/types.ts`, `actions.ts` re-export): hire, fire, assignDesk, respondResignation, refreshCandidates, placeItem, sellItem, moveItem, upgradeItem, openRing, startProject, assign, founderAction, setSpeed, setAdBudget, setPrice, openConcept, minimizeConcept, answerDecision, startRound.
+- **Aksiyonlar:** `Action` discriminated union (`src/engine/types.ts`, `actions.ts` re-export): hire, fire, assignDesk, respondResignation, refreshCandidates, placeItem, sellItem, moveItem, upgradeItem, openRing, startProject, assign, founderAction, setSpeed, setAdBudget, setPrice, openConcept, minimizeConcept, answerDecision, startRound (`size?: 'small' | 'target' | 'large'`, varsayılan `target`), roundPitch (`pitch: 'metrics' | 'story' | 'coinvestor'`, yalnızca `round.pitchDue` varken).
 
 ## 9. Komutlar
 

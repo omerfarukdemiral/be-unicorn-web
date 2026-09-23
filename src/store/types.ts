@@ -46,10 +46,11 @@ export interface SceneInset {
 
 /**
  * Automatic focus pauses: a blocking modal, an unanswered decision card open in the panel or expanded in
- * the scene bubble (ui.decisionExpanded), or a Defter (concept) card open in the panel.
+ * the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, or the round offer / weekly
+ * pitch open in Büyüme > Tur (`offer`: panel `{kind:'growth', section:'round'}` while a size choice or pitch waits).
  * Shop / team / projects / growth panels never pause; a bubble merely appearing never pauses.
  */
-export type PauseReason = 'modal' | 'decision' | 'concept'
+export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer'
 
 /** 0 = far (whole office), 1 = default, 2 = close. */
 export type ZoomLevel = 0 | 1 | 2

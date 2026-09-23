@@ -39,6 +39,7 @@ export function monthEnd(s: GameState): void {
   }
   s.flags['manualLastMonth'] = Number(s.flags['manualThisMonth'] ?? 0)
   s.flags['manualThisMonth'] = 0
+  s.flags['findUsesThisMonth'] = 0
 }
 
 /** Rival pressure 0–1 used by rival card conditions (PLAN §6.3 "baskı ≥ 0.35"). */

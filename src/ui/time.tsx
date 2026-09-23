@@ -105,7 +105,7 @@ function useRecentSlowdown(): boolean {
 
 /** Focus pause (the game holds time while a card is read), as opposed to the player's own pause. */
 export function isFocusHold(hold: TimeHold): hold is PauseReason {
-  return hold === 'decision' || hold === 'concept' || hold === 'modal'
+  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer'
 }
 
 export function DayClock({ compact }: { compact?: boolean }) {

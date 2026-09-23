@@ -1,6 +1,6 @@
 // All tunable numbers. Every value is a [DENGE] starting point, tuned by sim/.
 // Values that differ from the PLAN §5 starting points are listed, with the sim result, in docs/DECISIONS.md (#12).
-import type { Dept, FounderActionKind, ProjectCategory, StageIndex, ToolId } from './types'
+import type { Dept, FounderActionKind, ProjectCategory, RoundSize, StageIndex, ToolId } from './types'
 
 // ---------------------------------------------------------------------------
 // Start (PLAN §5.10)
@@ -165,11 +165,44 @@ export const VALUATION_KEEP_PRE_REVENUE_FLOOR = true
 // ---------------------------------------------------------------------------
 export const ROUND_WEEKS_MIN = 4
 export const ROUND_WEEKS_MAX = 8
-/** Offer shrinks when valuation falls below base × this. */
-export const ROUND_SHRINK_THRESHOLD = 0.85
-export const ROUND_SHRINK_FACTOR = 0.9
-export const ROUND_MIN_OFFER = 0.5
 export const BRIDGE_CARD_ID = 'vc-bridge-loan'
+
+// Live round window (docs/CORE_LOOP.md §4.3, phase 2) ------------------------
+/** The round can start once valuation ≥ target × this ("şimdi mi, biraz daha mı?"). */
+export const ROUND_EARLY_RATIO = 0.6
+/** Months of runway each size buys (on the new burn). */
+export const ROUND_RUNWAY_MONTHS: Readonly<Record<RoundSize, number>> = { small: 12, target: 18, large: 24 }
+/** Equity sold per size, × the stage's ROUND_EQUITY. */
+export const ROUND_SIZE_EQUITY: Readonly<Record<RoundSize, number>> = { small: 0.75, target: 1, large: 1.3 }
+/**
+ * "Yeni burn": the burn the company will run after the round (bigger office, the hires the money is for),
+ * as a multiple of today's burn. Amount = clamp(table × MIN, table × MAX, burn × this × months).
+ */
+export const ROUND_NEW_BURN_MULT = 3
+export const ROUND_AMOUNT_TABLE_MIN = 0.75
+export const ROUND_AMOUNT_TABLE_MAX = 1.0
+/** Price part of the offer: valuation / target, clamped to this range. */
+export const ROUND_OFFER_CLAMP: readonly [number, number] = [0.6, 1.2]
+/** Whole offer factor (price × diligence × pitches) floor and ceiling. */
+export const ROUND_OFFER_FLOOR = 0.5
+export const ROUND_OFFER_CEIL = 1.3
+/** Due diligence: each met item +5%, each unmet −10% of the offer. */
+export const DILIGENCE_MET = 0.05
+export const DILIGENCE_UNMET = -0.1
+export const DILIGENCE_RUNWAY_MONTHS = 3
+/** MoM growth asked for, by the round's current stage (index = stage). */
+export const DILIGENCE_MOM: readonly number[] = [0.04, 0.06, 0.06, 0.05, 0.04, 0.03, 0.03]
+export const DILIGENCE_MORALE = 50
+/** Pitch "Metrik göster": + when MoM meets the diligence ask, − when it does not (the numbers speak). */
+export const PITCH_METRICS_GOOD = 0.06
+export const PITCH_METRICS_BAD = -0.03
+/** Pitch "Hikâye anlat": base + reputation/100 × per-rep, costs founder energy. */
+export const PITCH_STORY_BASE = 0.02
+export const PITCH_STORY_PER_REP = 0.04
+export const PITCH_STORY_ENERGY = 10
+/** Pitch "İkinci yatırımcı getir": one week shorter, but the co-investor takes this much extra equity. */
+export const PITCH_COINVESTOR_WEEKS = 1
+export const PITCH_COINVESTOR_EQUITY = 0.01
 
 // ---------------------------------------------------------------------------
 // Bankruptcy (PLAN §5.10)
@@ -205,6 +238,14 @@ export const FOUNDER_ACTION_DEFS: Readonly<Record<FounderActionKind, FounderActi
 }
 export const FIND_USERS_MIN = 3
 export const FIND_USERS_MAX = 6
+/**
+ * "Elle kullanıcı bul" saturation (docs/CORE_LOOP.md §5, dont-scale): the first N finds of a month return in full,
+ * each further block of N halves again ("tanıdık çevren tükeniyor"); above FIND_USERS_BIG_AT users the return halves.
+ */
+export const FIND_USERS_FULL_PER_MONTH = 3
+export const FIND_USERS_SATURATION = 0.5
+export const FIND_USERS_BIG_AT = 100
+export const FIND_USERS_BIG_FACTOR = 0.5
 export const TALK_MATURITY = 0.03
 export const MOTIVATE_MORALE = 10
 export const MOTIVATE_DAYS = 10

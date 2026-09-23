@@ -1,8 +1,8 @@
 // Renders store.ui.overlay (max one blocking: move scene, post-mortem, victory), drains the UI queue,
-// turns engine events (stageUp / gameOver / victory) into overlays, and pauses the game while one is open.
+// turns engine events (stageUp / gameOver / victory) into overlays. An open overlay holds time still through
+// the store's pause reasons ('modal'), never by rewriting the player's speed.
 // Everything else (Defter cards, decisions, round, settings) opens in the single right panel.
 import { useCallback, useEffect, useRef } from 'react'
-import type { GameSpeed } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import type { Overlay } from '../store/types'
 import { requestOverlay, useModalQueue } from './modalQueue'
@@ -33,7 +33,6 @@ export function ModalHost() {
   }, [overlay, queueLen, openOverlay])
 
   useEngineEventOverlays()
-  usePauseWhileModal(overlay)
 
   if (!overlay) return null
   switch (overlay.kind) {
@@ -81,23 +80,4 @@ function useEngineEventOverlays() {
     shown.current = key
     requestOverlay(gameOverOverlay(gameOver.kind))
   }, [gameOver])
-}
-
-/** Blocking modal = paused world; restore the previous speed when all modals are gone.
- *  The pre-modal speed lives in ui.pausedFrom so saves made meanwhile keep the real speed. */
-function usePauseWhileModal(overlay: Overlay | null) {
-  const open = overlay !== null
-  useEffect(() => {
-    const { state, ui, dispatch, setPausedFrom } = useGameStore.getState()
-    if (open) {
-      if (ui.pausedFrom === null && state.time.speed !== 0 && !state.gameOver) {
-        setPausedFrom(state.time.speed)
-        dispatch({ type: 'setSpeed', speed: 0 })
-      }
-      return
-    }
-    const prev: GameSpeed | null = ui.pausedFrom
-    setPausedFrom(null)
-    if (prev !== null && state.time.speed === 0 && !state.gameOver) dispatch({ type: 'setSpeed', speed: prev })
-  }, [open])
 }

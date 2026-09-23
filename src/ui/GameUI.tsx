@@ -17,6 +17,7 @@ import { cx } from './primitives'
 import { useIsMobile, usePrefs } from './hooks'
 import { useGameStore } from '../store/gameStore'
 import { installMock, mockRequested } from './mock'
+import { PauseVeil, StartCall } from './time'
 
 export interface GameUIProps {
   /** Close-up 3D for the detail panel, e.g. `(t) => <ObjectPreview target={t} />` from render. */
@@ -44,8 +45,12 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none overflow-hidden safe-top safe-x text-ink">
+      {/* Still world (paused, decision / Defter card open): the scene fades a little, under every UI surface. */}
+      <PauseVeil />
       <div className="relative h-full w-full">
         <Hud />
+        {/* Paused start: one clear Başlat call in the middle of the scene area. */}
+        <StartCall right={sceneRight} />
         {!worldBubbles && <BubbleTray ambient={screenAmbient} />}
 
         {/* Transient feedback (placing banner, errors). z-40 = above the panel/sheet (z-20/30), below blocking modals (z-50).

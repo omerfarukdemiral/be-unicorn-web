@@ -40,7 +40,8 @@ function StartScreen({ onStart }: { onStart: () => void }) {
 
   const start = (resume: boolean) => {
     const store = useGameStore.getState()
-    if (!(resume && store.load({ resume: true }))) store.newGame()
+    // Both start paused: the scene shows a Başlat call and time waits for the player.
+    if (!(resume && store.load())) store.newGame()
     onStart()
   }
 

@@ -1,10 +1,11 @@
 // zustand store: the only bridge between the pure engine and render/ui.
-// dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by time.speed.
+// dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by the effective speed
+// (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card).
 import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type Action, type GameState, type NewGameOptions } from '../engine/types'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type Action, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readProfile, readSave, writeProfile, writeSave } from './save'
-import type { GameStore, Panel, ReplayLog, Selection, UiState } from './types'
+import type { GameStore, Panel, PauseReason, ReplayLog, Selection, UiState } from './types'
 
 export { SAVE_KEY } from './save'
 
@@ -21,10 +22,40 @@ const initialUi = (): UiState => ({
   placing: null,
   zoom: 1,
   lastError: null,
-  pausedFrom: null,
+  pauseReasons: [],
+  runStarted: false,
   generation: 0,
   sceneInset: NO_INSET,
 })
+
+/** Focus pauses implied by what is open (one mechanism for modals, decision cards and Defter cards). */
+export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'>): PauseReason[] {
+  const r: PauseReason[] = []
+  if (ui.overlay) r.push('modal')
+  const p = ui.panel
+  if (p?.kind === 'decision' && p.answered === undefined) r.push('decision')
+  if (p?.kind === 'journal' && p.conceptId) r.push('concept')
+  return r
+}
+
+/** Recomputes ui.pauseReasons after a panel/overlay change; keeps the old array when nothing changed. */
+function withPause(ui: UiState): UiState {
+  const next = pauseReasonsOf(ui)
+  const cur = ui.pauseReasons
+  if (next.length === cur.length && next.every((x, i) => x === cur[i])) return ui
+  return { ...ui, pauseReasons: next }
+}
+
+/** Speed the world actually runs at: the player's speed unless a focus pause holds it (or the run is over). */
+export function effectiveSpeed(st: { state: GameState; ui: UiState }): GameSpeed {
+  if (st.state.gameOver || st.ui.pauseReasons.length > 0) return 0
+  return st.state.time.speed
+}
+
+/** New game / continue: the world waits for the player's first "Başlat". */
+function pausedStart(s: GameState): GameState {
+  return s.time.speed === 0 ? s : { ...s, time: { ...s.time, speed: 0 } }
+}
 
 /** Scene selection shown by the panel (detail, or the slot a targeted shop buys for). Render highlights it. */
 export function panelSelection(panel: Panel | null): Selection | null {
@@ -107,7 +138,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       return res
     }
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
-    set({ state: res.state })
+    const starts = action.type === 'setSpeed' && action.speed > 0 && !get().ui.runStarted
+    set(starts ? (s) => ({ state: res.state, ui: { ...s.ui, runStarted: true } }) : { state: res.state })
     retargetEmptiedDetail(action, res.state)
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     return res
@@ -115,8 +147,9 @@ export const useGameStore = create<GameStore>()((set, get) => ({
 
   tick(realDtSeconds) {
     const { state } = get()
-    if (state.gameOver || state.time.speed === 0 || !(realDtSeconds > 0)) return
-    pendingDays = Math.min(MAX_DAYS_PER_TICK, pendingDays + (realDtSeconds / SECONDS_PER_DAY) * state.time.speed)
+    const speed = effectiveSpeed(get())
+    if (speed === 0 || !(realDtSeconds > 0)) return
+    pendingDays = Math.min(MAX_DAYS_PER_TICK, pendingDays + (realDtSeconds / SECONDS_PER_DAY) * speed)
     const chunks = Math.floor(pendingDays / FIXED_STEP_DAYS + 1e-9)
     if (chunks <= 0) return
     pendingDays -= chunks * FIXED_STEP_DAYS
@@ -129,7 +162,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
 
   newGame(opts) {
     pendingDays = 0
-    const state = freshState(opts)
+    const state = pausedStart(freshState(opts))
     writeProfile({ founderXp: state.meta.founderXp, runIndex: state.meta.runIndex })
     resetReplay(state, false)
     set({ state, ui: { ...initialUi(), zoom: get().ui.zoom, generation: get().ui.generation + 1 } })
@@ -137,17 +170,16 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   },
 
   save() {
-    const { state, ui } = get()
+    const { state } = get()
     if (state.gameOver) return
-    // A modal pause is UI state: save the speed the player actually chose.
-    const speed = state.time.speed === 0 && ui.pausedFrom !== null ? ui.pausedFrom : state.time.speed
-    writeSave(speed === state.time.speed ? state : { ...state, time: { ...state.time, speed } })
+    // Focus pauses are UI state and never touch time.speed: the save keeps the player's speed.
+    writeSave(state)
   },
 
-  load(opts) {
-    let state = readSave()
-    if (!state || state.gameOver) return false
-    if (opts?.resume && state.time.speed === 0) state = { ...state, time: { ...state.time, speed: 1 } }
+  load() {
+    const saved = readSave()
+    if (!saved || saved.gameOver) return false
+    const state = pausedStart(saved)
     pendingDays = 0
     resetReplay(state, true)
     set({ state, ui: { ...initialUi(), zoom: get().ui.zoom, generation: get().ui.generation + 1 } })
@@ -174,7 +206,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       const cur = s.ui.panel
       if (samePanel(cur, panel)) return s
       const panelBack = opts?.root ? null : opts?.replace ? s.ui.panelBack : cur
-      return { ui: { ...s.ui, panel, panelBack } }
+      return { ui: withPause({ ...s.ui, panel, panelBack }) }
     })
   },
   togglePanel(tab) {
@@ -183,14 +215,13 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     if (ui.panel?.kind === tab) closePanel()
     else openPanel({ kind: tab }, { root: true })
   },
-  closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: { ...s.ui, panel: null, panelBack: null } })),
-  panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: { ...s.ui, panel: s.ui.panelBack, panelBack: null } } : s)),
+  closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: withPause({ ...s.ui, panel: null, panelBack: null }) })),
+  panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: withPause({ ...s.ui, panel: s.ui.panelBack, panelBack: null }) } : s)),
   setHoverSlot: (hoverSlotId) => set((s) => (s.ui.hoverSlotId === hoverSlotId ? s : { ui: { ...s.ui, hoverSlotId } })),
-  openOverlay: (overlay) => set((s) => ({ ui: { ...s.ui, overlay } })),
-  closeOverlay: () => set((s) => ({ ui: { ...s.ui, overlay: null } })),
+  openOverlay: (overlay) => set((s) => ({ ui: withPause({ ...s.ui, overlay }) })),
+  closeOverlay: () => set((s) => ({ ui: withPause({ ...s.ui, overlay: null }) })),
   setPlacing: (placing) => set((s) => ({ ui: { ...s.ui, placing } })),
   setZoom: (zoom) => set((s) => ({ ui: { ...s.ui, zoom } })),
-  setPausedFrom: (pausedFrom) => set((s) => (s.ui.pausedFrom === pausedFrom ? s : { ui: { ...s.ui, pausedFrom } })),
   setSceneInset: (inset) =>
     set((s) => {
       const c = s.ui.sceneInset

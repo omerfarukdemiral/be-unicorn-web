@@ -1,4 +1,5 @@
 // Top HUD: left = indicators (grow with learned concepts), center = stage/time/speed, right = view controls.
+import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { GameSpeed, HudWidget } from '../engine/types'
 import { STAGES } from '../content'
@@ -10,6 +11,8 @@ import { money } from './format'
 import { cx, IconButton } from './primitives'
 import { WIDGETS } from './widgets'
 import { useExclusiveExpander, useIsMobile } from './hooks'
+import { DayClock, SPEED_COLOR, timeColor, useTimeStatus, type TimeStatus } from './time'
+import { soft } from './theme'
 
 /** Round button → Büyüme panel, scrolled to the round block (again closes it, like the dock tabs). */
 function openRound() {
@@ -86,7 +89,7 @@ function MobileHud() {
         <ViewControls compact />
       </div>
       <div className="pointer-events-auto ui-card flex items-stretch gap-1 p-1">
-        {/* Cash gets the widest column: value + monthly net (PLAN §7.4). */}
+        {/* Cash gets the widest column: value + daily net (the monthly net is in the desktop chip / Büyüme). */}
         <div className="grid min-w-0 flex-1 grid-cols-[1.4fr_1fr_1fr] gap-1">
           {primary.map((id) => {
             const W = WIDGETS[id].Component
@@ -125,9 +128,6 @@ function StageBar({ compact }: { compact?: boolean }) {
   const s = useGameStore(
     useShallow((st) => ({
       stage: st.state.stage,
-      day: st.state.time.day,
-      month: st.state.time.month,
-      speed: st.state.time.speed,
       progress: st.state.derived.stageProgress,
       valuation: st.state.finance.valuation,
       canStart: st.state.derived.canStartRound,
@@ -136,8 +136,8 @@ function StageBar({ compact }: { compact?: boolean }) {
     })),
   )
   const dispatch = useGameStore((st) => st.dispatch)
+  const time = useTimeStatus()
   const next = STAGES[s.stage + 1]
-  const dayOfMonth = Math.floor(s.day % 30) + 1
   const pctW = Math.max(0, Math.min(1, s.progress)) * 100
 
   // Phones: the round buttons shrink to square icon buttons so stage name and date keep their width.
@@ -173,14 +173,18 @@ function StageBar({ compact }: { compact?: boolean }) {
   ) : null
 
   return (
-    <div className={cx('pointer-events-auto ui-card flex min-w-0 items-center gap-2 p-1.5', compact ? 'flex-1' : 'w-[min(520px,46vw)] px-3')}>
+    // The card's 2px frame carries the time state: red = still, yellow 1×, orange 2×, green 4×.
+    <div
+      className={cx('pointer-events-auto ui-card flex min-w-0 items-center gap-2 p-1.5 transition-[border-color,box-shadow] duration-300', compact ? 'flex-1' : 'w-[min(560px,48vw)] px-3')}
+      style={{ borderWidth: 2, borderColor: timeColor(time), boxShadow: `0 0 0 3px ${soft(timeColor(time), 14)}, var(--shadow-card)` }}
+    >
       <div className="min-w-0 flex-1">
-        <div className={cx('flex gap-2', compact ? 'flex-wrap items-baseline gap-y-0' : 'items-baseline')}>
+        <div className={cx('flex items-center gap-x-2', compact && 'flex-wrap gap-y-0.5')}>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-wide text-ink">
             <span aria-hidden="true" className="size-2 rounded-full bg-brand" />
             {STAGES[s.stage]?.name ?? '—'}
           </span>
-          <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">{t('hud.date', { m: s.month + 1, d: dayOfMonth })}</span>
+          <DayClock compact={compact} />
         </div>
         {next ? (
           <div className="mt-1 flex items-center gap-2" title={t('hud.stageProgressTitle', { stage: next.name })}>
@@ -196,49 +200,70 @@ function StageBar({ compact }: { compact?: boolean }) {
         ) : null}
       </div>
       {!compact && roundBtn}
-      <SpeedControl speed={s.speed} onChange={(speed) => dispatch({ type: 'setSpeed', speed })} compact={compact} />
+      <SpeedControl time={time} onChange={(speed) => dispatch({ type: 'setSpeed', speed })} compact={compact} />
       {compact && roundBtn}
     </div>
   )
 }
 
-function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange: (s: GameSpeed) => void; compact?: boolean }) {
+/**
+ * Speed segments coloured by state (pause red, 1× yellow, 2× orange, 4× green). The active segment shows the
+ * speed time actually runs at, so a focus pause lights the pause segment; the player's chosen speed keeps a
+ * dashed frame meanwhile ("kapatınca 2× devam").
+ */
+function SpeedControl({ time, onChange, compact }: { time: TimeStatus; onChange: (s: GameSpeed) => void; compact?: boolean }) {
+  const { effective, chosen } = time
+  const held = effective === 0 && chosen > 0
+  // Player-paused: the pause segment turns into play and resumes the last running speed.
+  const lastSpeed = useRef<GameSpeed>(1)
+  if (chosen > 0) lastSpeed.current = chosen
+  const playerPaused = chosen === 0
   if (compact) {
-    // One button cycles pause → 1× → 2× → 4×.
-    const idx = SPEEDS.indexOf(speed)
+    // One button cycles pause → 1× → 2× → 4× (from the player's speed; a focus pause does not change it).
+    const idx = SPEEDS.indexOf(chosen)
     const nextSpeed = SPEEDS[(idx + 1) % SPEEDS.length] ?? 1
+    const c = SPEED_COLOR[effective]
     return (
       <button
         type="button"
         onClick={() => onChange(nextSpeed)}
-        aria-label={t('speed.label')}
-        // Status, not a CTA: hairline frame while running; paused gets a brand frame + tint + brand-ink
-        // text so "the game is stopped" reads louder than "running" (one text-* per branch: no CSS-order race).
-        className={cx('tabular flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border text-xs font-semibold transition-colors', speed === 0 ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border-strong text-ink hover:bg-surface-2')}
+        aria-label={`${t('speed.label')}: ${effective === 0 ? t('time.paused') : `${effective}×`}`}
+        className="tabular flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border-2 text-xs font-bold text-ink transition-[border-color,background-color] duration-300"
+        style={{ borderColor: c, background: soft(c, 16) }}
       >
-        <Icon name={speed === 0 ? 'pause' : 'play'} size={14} />
-        {speed > 0 && `${speed}×`}
+        <Icon name={effective === 0 ? 'pause' : 'play'} size={14} />
+        {effective > 0 && `${effective}×`}
       </button>
     )
   }
   return (
-    <div className="flex shrink-0 items-center rounded-control bg-surface-2 p-0.5" role="group" aria-label={t('speed.label')}>
-      {SPEEDS.map((v) => (
-        <button
-          key={v}
-          type="button"
-          onClick={() => onChange(v)}
-          aria-pressed={speed === v}
-          title={v === 0 ? t('speed.pauseHint') : t('speed.hint', { v })}
-          className={cx(
-            'tabular flex h-8 min-w-9 items-center justify-center rounded-[8px] px-2 text-xs font-semibold transition-colors',
-            // Segmented control: active = raised surface + hairline (ink fill stays reserved for the primary CTA).
-            speed === v ? 'bg-surface text-brand-ink shadow-[0_0_0_1px_var(--color-border-strong),var(--shadow-card)]' : 'text-ink-2 hover:bg-surface hover:text-ink',
-          )}
-        >
-          {v === 0 ? <Icon name="pause" size={14} /> : `${v}×`}
-        </button>
-      ))}
+    <div className="flex shrink-0 items-center gap-0.5 rounded-control bg-surface-2 p-0.5" role="group" aria-label={t('speed.label')} title={held ? t('time.resumesAt', { v: chosen }) : undefined}>
+      {SPEEDS.map((v) => {
+        const active = effective === v
+        const c = SPEED_COLOR[v]
+        return (
+          <button
+            key={v}
+            type="button"
+            onClick={() => onChange(v === 0 && playerPaused ? lastSpeed.current : v)}
+            aria-pressed={chosen === v}
+            title={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pauseHint')) : t('speed.hint', { v })}
+            className={cx(
+              'tabular flex h-8 min-w-9 items-center justify-center rounded-[8px] px-2 text-xs font-semibold transition-[background-color,box-shadow,color] duration-300',
+              active ? 'text-ink' : 'text-ink-2 hover:bg-surface hover:text-ink',
+            )}
+            style={
+              active
+                ? { background: soft(c, 22), boxShadow: `inset 0 0 0 2px ${c}` }
+                : held && chosen === v
+                  ? { outline: `1.5px dashed ${c}`, outlineOffset: -3 }
+                  : undefined
+            }
+          >
+            {v === 0 ? <Icon name={playerPaused ? 'play' : 'pause'} size={14} /> : `${v}×`}
+          </button>
+        )
+      })}
     </div>
   )
 }

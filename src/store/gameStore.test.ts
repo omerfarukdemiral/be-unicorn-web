@@ -1,8 +1,8 @@
 // Integration: store ⇄ engine ⇄ content. M2/M3 chain: hire → desk → sit & work → project → users; 10 min in the garage.
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FURNITURE } from '../content'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY } from '../engine/types'
-import { panelSelection, useGameStore } from './gameStore'
+import { effectiveSpeed, panelSelection, useGameStore } from './gameStore'
 
 const store = () => useGameStore.getState()
 
@@ -25,7 +25,10 @@ function play(seconds: number, onDay?: (day: number) => void) {
 }
 
 describe('gameStore (engine wired)', () => {
-  beforeEach(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 }))
+  beforeEach(() => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().dispatch({ type: 'setSpeed', speed: 1 }) // runs start paused: press Başlat
+  })
 
   it('starts a real engine game in the garage', () => {
     const s = store().state
@@ -187,5 +190,110 @@ describe('single panel (ui)', () => {
     store().setPlacing({ kind: 'move', fromSlotId: from.id })
     expect(store().dispatch({ type: 'moveItem', fromSlotId: from.id, toSlotId: to.id }).ok).toBe(true)
     expect(store().ui.panel).toEqual({ kind: 'detail', selection: { kind: 'slot', id: to.id } })
+  })
+})
+
+describe('time: paused start and focus pauses', () => {
+  beforeEach(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 }))
+
+  const speedSets = () => store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed')
+  /** Puts a real decision card on screen (engine picks one; forcing it keeps the test independent of timing). */
+  function withDecision(): string {
+    const st = store().state
+    const cardId = st.decisions.active?.cardId ?? 'remote-vs-office'
+    if (!st.decisions.active) useGameStore.setState({ state: { ...st, decisions: { ...st.decisions, active: { cardId, shownDay: st.time.day } } } })
+    return cardId
+  }
+
+  it('a new game starts paused, not started; time does not flow until Başlat', () => {
+    expect(store().state.time.speed).toBe(0)
+    expect(store().ui.runStarted).toBe(false)
+    store().tick(SECONDS_PER_DAY * 3)
+    expect(store().state.time.day).toBe(0)
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    expect(store().ui.runStarted).toBe(true)
+    store().tick(SECONDS_PER_DAY)
+    expect(store().state.time.day).toBeCloseTo(1, 6)
+  })
+
+  it('continue (load) starts paused too', () => {
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    store().tick(SECONDS_PER_DAY)
+    store().save()
+    expect(store().load()).toBe(true)
+    expect(store().state.time.speed).toBe(0)
+    expect(store().ui.runStarted).toBe(false)
+    vi.unstubAllGlobals()
+  })
+
+  it('opening a decision card pauses; answering / closing resumes the previous speed', () => {
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    const cardId = withDecision()
+    store().openPanel({ kind: 'decision', cardId })
+    expect(store().ui.pauseReasons).toEqual(['decision'])
+    expect(effectiveSpeed(store())).toBe(0)
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY * 2)
+    expect(store().state.time.day).toBe(day)
+    // The player's speed is untouched (saves keep it).
+    expect(store().state.time.speed).toBe(2)
+    // Answered → the reflection shows and time flows again at 2×.
+    store().openPanel({ kind: 'decision', cardId, answered: 0 }, { replace: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(2)
+    store().tick(SECONDS_PER_DAY / 2)
+    expect(store().state.time.day).toBeCloseTo(day + 1, 6)
+    // Plain close also resumes.
+    store().openPanel({ kind: 'decision', cardId })
+    expect(effectiveSpeed(store())).toBe(0)
+    store().closePanel()
+    expect(effectiveSpeed(store())).toBe(2)
+  })
+
+  it('a Defter (concept) card pauses; plain panels (shop, team, growth) do not', () => {
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    store().openPanel({ kind: 'journal', conceptId: 'runway' })
+    expect(store().ui.pauseReasons).toEqual(['concept'])
+    store().togglePanel('shop')
+    expect(store().ui.pauseReasons).toEqual([])
+    for (const tab of ['team', 'projects', 'growth', 'journal'] as const) {
+      store().togglePanel(tab)
+      expect(effectiveSpeed(store())).toBe(1)
+    }
+  })
+
+  it('a blocking modal pauses through the same mechanism', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    store().openOverlay({ kind: 'moveScene' })
+    expect(store().ui.pauseReasons).toEqual(['modal'])
+    expect(effectiveSpeed(store())).toBe(0)
+    store().closeOverlay()
+    expect(effectiveSpeed(store())).toBe(4)
+  })
+
+  it('a manual pause survives the focus pause: closing the card keeps it paused', () => {
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    const cardId = withDecision()
+    store().openPanel({ kind: 'decision', cardId })
+    store().dispatch({ type: 'setSpeed', speed: 0 }) // player pauses while reading
+    store().closePanel()
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(0)
+  })
+
+  it('focus pauses are never written to the replay log as setSpeed', () => {
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    expect(speedSets()).toHaveLength(1)
+    const cardId = withDecision()
+    store().openPanel({ kind: 'decision', cardId })
+    store().closePanel()
+    store().openPanel({ kind: 'journal', conceptId: 'runway' })
+    store().closePanel()
+    store().openOverlay({ kind: 'moveScene' })
+    store().closeOverlay()
+    expect(speedSets()).toHaveLength(1)
+    expect(store().state.time.speed).toBe(1)
   })
 })

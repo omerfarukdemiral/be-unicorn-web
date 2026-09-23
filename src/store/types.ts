@@ -1,6 +1,6 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
-import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameSpeed, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
+import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -44,6 +44,12 @@ export interface SceneInset {
   bottom: number
 }
 
+/**
+ * Automatic focus pauses: a blocking modal, an unanswered decision card or a Defter (concept) card open
+ * in the panel. Shop / team / projects / growth panels never pause.
+ */
+export type PauseReason = 'modal' | 'decision' | 'concept'
+
 /** 0 = far (whole office), 1 = default, 2 = close. */
 export type ZoomLevel = 0 | 1 | 2
 
@@ -58,8 +64,14 @@ export interface UiState {
   zoom: ZoomLevel
   /** Last rejected action, for a short inline error. `at` = performance.now(). */
   lastError: { code: ActionErrorCode; at: number } | null
-  /** Speed before a blocking modal paused the game (saves write this, not the modal's 0). */
-  pausedFrom: GameSpeed | null
+  /**
+   * Why the world is held still right now, besides the player's own speed (state.time.speed).
+   * Derived from panel/overlay by the store: empty = time flows at state.time.speed.
+   * Never written as setSpeed (replay/save keep the player's speed).
+   */
+  pauseReasons: readonly PauseReason[]
+  /** False until the player first sets a speed > 0 in this session (new game / continue start paused). */
+  runStarted: boolean
   /** Bumped by newGame()/load(): event consumers skip the loaded history. */
   generation: number
   /** Area hidden by the panel (set by ui RightPanel, read by render CameraRig). */
@@ -85,8 +97,8 @@ export interface GameStore {
   tick(realDtSeconds: number): void
   newGame(opts?: Partial<NewGameOptions>): void
   save(): void
-  /** Returns false if no compatible save exists. `resume`: a paused save continues at 1× (start screen). */
-  load(opts?: { resume?: boolean }): boolean
+  /** Returns false if no compatible save exists. The loaded run starts paused (the player presses Başlat). */
+  load(): boolean
   /** Replay log of this run (kept outside reactive state). Dev builds expose it as window.__replay(). */
   exportReplay(): ReplayLog
 
@@ -105,6 +117,5 @@ export interface GameStore {
   closeOverlay(): void
   setPlacing(mode: PlacingMode | null): void
   setZoom(zoom: ZoomLevel): void
-  setPausedFrom(speed: GameSpeed | null): void
   setSceneInset(inset: SceneInset): void
 }

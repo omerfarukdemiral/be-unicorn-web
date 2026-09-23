@@ -111,7 +111,7 @@ export const useGameStore: UseBoundStore<StoreApi<GameStore>>   // zustand v5 `c
 
 interface GameStore {
   state: GameState
-  ui: UiState                   // selection, hoverSlotId, dockTab, overlay, placing, zoom, lastError, pausedFrom, generation
+  ui: UiState                   // selection, hoverSlotId, dockTab, overlay, placing, zoom, lastError, pauseReasons, runStarted, generation
   dispatch(action: Action): ActionResult
   tick(realDtSeconds: number): void
   newGame(opts?: Partial<NewGameOptions>): void
@@ -124,9 +124,11 @@ interface GameStore {
   closeOverlay(): void
   setPlacing(m: PlacingMode | null): void
   setZoom(z: ZoomLevel): void
-  setPausedFrom(speed: GameSpeed | null): void
   exportReplay(): ReplayLog     // seed + TimedAction[] (module-level, not reactive)
 }
+// effectiveSpeed({state, ui}) = 0 if gameOver or ui.pauseReasons non-empty, else state.time.speed.
+// ui.pauseReasons ('modal' | 'decision' | 'concept') is derived from overlay/panel; never dispatched as setSpeed.
+// newGame()/load() start paused (time.speed 0, ui.runStarted false) until the player's first setSpeed > 0.
 ```
 
 - **Şu anki durum:** scaffold store'u çalışır ama engine'e bağlı değil: `state` = `createBootstrapState()` (garaj, 4 masa slotu), `dispatch` yalnızca `setSpeed`'i uygular, gerisi `engineNotConnected` döner; `tick` yalnızca saati ilerletir. Render/ui şeritleri buna karşı geliştirip `npm run dev` ile görebilir.

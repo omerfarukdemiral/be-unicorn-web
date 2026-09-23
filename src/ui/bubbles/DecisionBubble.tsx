@@ -115,7 +115,7 @@ export function DecisionBubble() {
 
   if (card && active && !inPanel) {
     return (
-      <div className="ui-card w-[min(560px,calc(100vw-1rem))] animate-pop-in p-3">
+      <div key={card.id} className="ui-card w-[min(560px,calc(100vw-1rem))] animate-attention p-3">
         {expanded ? (
           <>
             <div className="-mt-1 mb-1 flex justify-end">

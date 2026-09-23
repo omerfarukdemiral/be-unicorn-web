@@ -98,6 +98,25 @@ sparklines keep the bright hue.
 Icons through `iconTone()` are >= 3.5:1 on their 12% tile (compact HUD shows the icon without its label,
 so this is the identifier there). `energy` is a fill only.
 
+### Time state — `--color-speed-*`
+
+Frames and fills only (text on them stays ink, AA). The HUD stage/time card gets a **2px** border in the
+state colour (+ a soft 3px halo), the active speed segment a ~22% fill with a 2px inset ring, the month ring
+around the date the same hue. Colour follows the speed time *actually* runs at: any pause (player or focus
+pause for a decision / Defter card / modal) is red; the player's chosen speed keeps a dashed frame meanwhile.
+
+| Token | Value | State |
+|---|---|---|
+| `speed-pause` | `#E0483E` | Duraklatıldı (also "DURAKLATILDI" pill tint, text `negative-ink`) |
+| `speed-1` | `#D6A100` | 1× (yellow) |
+| `speed-2` | `#EE7A14` | 2× (orange) |
+| `speed-4` | `#1F9D63` | 4× (green) |
+
+This is the one place a 2px border is allowed (see Shape). Motion: `animate-day-tick` (date pops each day),
+`animate-heartbeat` (running dot, faster at higher speeds), `animate-cash-rise` (daily Kasa delta),
+`animate-danger-pulse` (runway < 3 ay), `animate-attention` (new decision bubble), `animate-cta-glow` (Başlat).
+A still world fades the scene slightly (desaturate + vignette, `PauseVeil`).
+
 ### Status, kinds, departments
 
 | Token | Value | Use |
@@ -122,7 +141,7 @@ Opacity modifiers work (`bg-brand/15`, `bg-g-morale/45`). Inline / dynamic hue: 
 | `--shadow-card` | very light 2-layer | `shadow-card` — floating HUD cards, bubbles |
 | `--shadow-pop` | light drop | `shadow-pop` — modals, bottom sheet, toasts |
 
-Borders are always **1px**. Brand CTAs may carry a soft brand glow (`shadow-[0_4px_12px_-4px_var(--color-brand)]`).
+Borders are always **1px** (exception: the time-state frame, 2px, see Time state). Brand CTAs may carry a soft brand glow (`shadow-[0_4px_12px_-4px_var(--color-brand)]`).
 
 ### Helper classes (index.css)
 

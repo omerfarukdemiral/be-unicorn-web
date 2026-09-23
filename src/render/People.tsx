@@ -11,9 +11,12 @@ const selectPeople = (s: GameState) => [s.employees, s.visitors, s.founder.curre
 
 // Characters are memoised on the fields they draw, so this list re-rendering per tick stays cheap.
 export function People() {
-  const [employees, visitors, action, speed, overload] = useGS(selectPeople)
+  const [employees, visitors, action, chosenSpeed, overload] = useGS(selectPeople)
+  // A focus pause (decision / Defter card / modal) holds the world still without touching time.speed.
+  const held = useUi((u) => u.pauseReasons.length > 0)
   const slots = useOffice().slots
   const mock = useMockState()
+  const speed = held && !mock ? 0 : chosenSpeed
   const getDay = useCallback(() => getGS(mock).time.day, [mock])
   const layout = useLayout()
   const selection = useUi((u) => panelSelection(u.panel))

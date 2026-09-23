@@ -7,7 +7,11 @@ import { FURNITURE } from './furniture'
 import { OFFICE_LINES } from './officeLines'
 import { EMPLOYEE_NAMES, ENTERPRISE_NAMES, NPC_NAMES, PROJECT_NAMES } from './names'
 import { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT } from './text'
-import { UI_TEXT } from './strings'
+import { UI_TEXT as BASE_UI_TEXT } from './strings'
+import { TIME_TEXT } from './timeText'
+
+/** strings.ts + feature tables (time flow). One flat key → text dictionary. */
+const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT }
 
 export * from './types'
 export { STAGES, CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }

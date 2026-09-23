@@ -3,7 +3,7 @@
 // Look (docs/DESIGN.md): neutral chip on a warm card; each gauge owns a hue (WIDGET_COLOR) used on its
 // icon (on a ~12% tile) and on its thin bar / sparkline / stacked ramp. Values stay ink (AA); only
 // warnings turn a number red.
-import type { ComponentType, ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { HudWidget } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
@@ -12,6 +12,8 @@ import { t } from './i18n'
 import { compact, fixed, money, num, pct, signedMoney } from './format'
 import { Bar, cx, Dot } from './primitives'
 import { iconTone, soft, WIDGET_COLOR } from './theme'
+import { useTween } from './time'
+import { effectiveSpeed } from '../store/gameStore'
 
 export type WidgetTier = 'primary' | 'secondary' | 'hidden'
 
@@ -40,6 +42,7 @@ export function WidgetChip({
   children,
   title,
   compact: isCompact,
+  className,
 }: {
   icon: IconName
   /** Gauge hue (WIDGET_COLOR[id]). */
@@ -54,10 +57,11 @@ export function WidgetChip({
   children?: ReactNode
   title?: string
   compact?: boolean
+  className?: string
 }) {
   return (
     <div
-      className={cx('flex min-w-0 items-start rounded-control', isCompact ? 'gap-1.5 px-1.5 py-1' : 'gap-2 px-2 py-1.5')}
+      className={cx('flex min-w-0 items-start rounded-control', isCompact ? 'gap-1.5 px-1.5 py-1' : 'gap-2 px-2 py-1.5', className)}
       title={title ?? label}
     >
       <span
@@ -153,18 +157,95 @@ function Pie({ fraction, color }: { fraction: number; color: string }) {
 // Widgets
 // ---------------------------------------------------------------------------
 
+/**
+ * Kasa value with enough digits that a single day's burn moves it ("$29.98K" → "$29.97K"): the compact
+ * convention (K/M/B, '.' decimal), one or two more decimals than money().
+ */
+function ledgerMoney(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  const a = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  const body = a < 1e3 ? `${Math.round(a)}` : a < 1e5 ? `${(a / 1e3).toFixed(2)}K` : a < 1e6 ? `${(a / 1e3).toFixed(1)}K` : a < 1e9 ? `${(a / 1e6).toFixed(a < 1e8 ? 2 : 1)}M` : `${(a / 1e9).toFixed(2)}B`
+  return `${sign}$${body}`
+}
+
+/** Months of runway under which the Kasa chip pulses red. */
+const RUNWAY_CRITICAL = 3
+
+/**
+ * Kasa: the value counts smoothly (engine cash moves every quarter day), the daily net shows as a
+ * coloured "−$X/gün" and each new day floats its delta out of the value, so money visibly drains or grows.
+ */
 function CashWidget({ compact: c }: { compact?: boolean }) {
-  const { cash, net, debt } = useGameStore(useShallow((s) => ({ cash: s.state.stats.cash, net: s.state.finance.net, debt: s.state.finance.debt })))
+  const { cash, net, debt, runway, day, flowing } = useGameStore(
+    useShallow((s) => ({
+      cash: s.state.stats.cash,
+      net: s.state.finance.net,
+      debt: s.state.finance.debt,
+      runway: s.state.finance.runway,
+      day: Math.floor(s.state.time.day),
+      flowing: effectiveSpeed(s) > 0,
+    })),
+  )
+  const shown = useTween(cash)
+  const perDay = net / 30
+  const critical = cash < 0 || (runway !== null && runway < RUNWAY_CRITICAL)
+  const tone = perDay >= 0 ? 'text-positive-ink' : 'text-negative-ink'
+
+  // One floating delta per new day while time flows (keeps the last few, each fades on its own).
+  const [drops, setDrops] = useState<{ id: number; text: string; up: boolean }[]>([])
+  const lastDay = useRef(day)
+  useEffect(() => {
+    if (day === lastDay.current) return
+    const fresh = day > lastDay.current && flowing
+    lastDay.current = day
+    if (!fresh || Math.abs(perDay) < 0.5) return
+    setDrops((d) => [...d.slice(-2), { id: day, text: signedMoney(perDay), up: perDay >= 0 }])
+    // No cleanup: at 4× the next day lands before this one has faded (a late setState after unmount is a no-op).
+    window.setTimeout(() => setDrops((d) => d.filter((x) => x.id !== day)), 1200)
+  }, [day]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <WidgetChip
       compact={c}
       color={WIDGET_COLOR.cash}
       icon="cash"
       label={t('hud.cash')}
-      value={<span className={cash < 0 ? 'text-negative-ink' : undefined}>{money(cash)}</span>}
-      sub={<span className={net >= 0 ? 'text-positive-ink' : 'text-negative-ink'}>{t('hud.perMonth', { v: signedMoney(net) })}</span>}
+      alert={critical}
+      className={cx('relative', critical && 'animate-danger-pulse')}
+      value={
+        <span className="relative inline-block">
+          <span className={shown < 0 ? 'text-negative-ink' : undefined}>{ledgerMoney(shown)}</span>
+          {drops.map((d) => (
+            <span
+              key={d.id}
+              aria-hidden="true"
+              className={cx('pointer-events-none absolute left-full top-0 ml-1 animate-cash-rise whitespace-nowrap text-[11px] font-bold', d.up ? 'text-positive-ink' : 'text-negative-ink')}
+            >
+              {d.text}
+            </span>
+          ))}
+        </span>
+      }
+      sub={
+        c ? (
+          <span className={tone}>{t('time.perDay', { v: signedMoney(perDay) })}</span>
+        ) : (
+          <span className={tone}>{t('hud.perMonth', { v: signedMoney(net) })}</span>
+        )
+      }
       title={debt > 0 ? t('hud.debtTitle', { v: money(debt) }) : t('hud.cashTitle')}
-    />
+    >
+      {!c && (
+        <span
+          className={cx('tabular mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold', tone)}
+          style={{ background: soft(perDay >= 0 ? 'var(--color-positive)' : 'var(--color-negative)', 12) }}
+        >
+          <Icon name="arrowUp" size={11} className={perDay >= 0 ? undefined : 'rotate-180'} />
+          {t('time.perDay', { v: signedMoney(perDay) })}
+        </span>
+      )}
+    </WidgetChip>
   )
 }
 

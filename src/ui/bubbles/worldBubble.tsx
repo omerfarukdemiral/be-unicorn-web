@@ -43,7 +43,9 @@ export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
         <button
           type="button"
           onClick={() => useGameStore.getState().openPanel({ kind: 'decision', cardId: b.cardId })}
-          className={cx(BUBBLE_SHELL, BUBBLE_HOVER, 'group flex w-max max-w-[min(300px,60vw)] animate-pop-in items-center gap-2 py-2 pl-3 pr-2 text-left')}
+          // Appears with a short nudge + orange glow (3×) so a new decision is noticed; time keeps flowing
+          // until the player opens it (the panel then holds time still).
+          className={cx(BUBBLE_SHELL, BUBBLE_HOVER, 'group flex w-max max-w-[min(300px,60vw)] animate-attention items-center gap-2 py-2 pl-3 pr-2 text-left')}
         >
           <span className="flex min-w-0 flex-col gap-1">
             <SpeakerLine icon="chat" color="var(--color-kind-decision)" speaker={`${t('decision.title')} · ${NPC_TEXT[b.role].name}`} />

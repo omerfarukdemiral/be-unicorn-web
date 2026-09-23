@@ -85,10 +85,10 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
 // Users (PLAN §5.4)
 // ---------------------------------------------------------------------------
 export const CAPACITY_MIN = 50
-export const CAPACITY_PER_ENG = 1500
-export const ORGANIC_PER_MARKETING = 25
-export const CAC_BASE = 8
-export const CAC_STAGE_GROWTH = 1.3
+export const CAPACITY_PER_ENG = 6000
+export const ORGANIC_PER_MARKETING = 45
+export const CAC_BASE = 40
+export const CAC_STAGE_GROWTH = 1.5
 export const CHURN_BASE = 0.06
 export const CHURN_OPS_PER = 0.02
 export const CHURN_OPS_MAX = 0.6
@@ -98,8 +98,8 @@ export const AD_BUDGET_MAX = 50_000_000
 // Revenue (PLAN §5.5)
 // ---------------------------------------------------------------------------
 export const ARPU_BASE = 4
-export const ARPU_STAGE_GROWTH = 1.15
-export const ARPU_SALES_PER = 0.04
+export const ARPU_STAGE_GROWTH = 1.45
+export const ARPU_SALES_PER = 0.06
 export const ARPU_SALES_MAX = 0.8
 export const PRICE_MIN = 0.7
 export const PRICE_MAX = 1.6
@@ -145,9 +145,9 @@ export const VAL_PER_TEAM = 60_000
 export const VAL_PER_USER = 150
 export const VAL_PER_LAUNCHED = 200_000
 export const MULTIPLE_MIN = 4
-export const MULTIPLE_MAX = 30
-export const MULTIPLE_BASE = 6
-export const MULTIPLE_GROWTH = 150
+export const MULTIPLE_MAX = 15
+export const MULTIPLE_BASE = 8
+export const MULTIPLE_GROWTH = 40
 /** Continuity fix: once revenue starts, valuation never drops below the pre-revenue formula. */
 export const VALUATION_KEEP_PRE_REVENUE_FLOOR = true
 
@@ -202,8 +202,8 @@ export const MOTIVATE_DAYS = 10
 export const COFFEE_ROUND_WEEKS = 1
 export const COFFEE_REPUTATION = 2
 /** Enterprise deal MRR = arpu × users-equivalent. */
-export const SALES_CALL_SEATS_MIN = 40
-export const SALES_CALL_SEATS_MAX = 120
+export const SALES_CALL_SEATS_MIN = 20
+export const SALES_CALL_SEATS_MAX = 60
 
 // ---------------------------------------------------------------------------
 // Hiring

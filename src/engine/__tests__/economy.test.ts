@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import * as B from '../balance'
 import * as E from '../economy'
 
 describe('§5.2 production', () => {
@@ -34,20 +35,20 @@ describe('§5.3 product', () => {
 })
 
 describe('§5.4 users', () => {
-  it('capacity = max(50, eng × 1500)', () => {
+  it('capacity = max(50, eng × CAPACITY_PER_ENG)', () => {
     expect(E.capacity(0)).toBe(50)
-    expect(E.capacity(2)).toBe(3000)
+    expect(E.capacity(2)).toBe(2 * B.CAPACITY_PER_ENG)
   })
   it('overload', () => {
     expect(E.overload(100, 50)).toBe(1)
     expect(E.overload(10, 50)).toBe(0)
   })
-  it('organic = marketing × 25 × (0.5 + rep/100) × maturity', () => {
-    expect(E.organicPerMonth(2, 50, 0.5)).toBeCloseTo(2 * 25 * 1 * 0.5)
+  it('organic = marketing × ORGANIC_PER_MARKETING × (0.5 + rep/100) × maturity', () => {
+    expect(E.organicPerMonth(2, 50, 0.5)).toBeCloseTo(2 * B.ORGANIC_PER_MARKETING * 1 * 0.5)
   })
-  it('CAC = 8 × 1.3^stage / (0.5 + maturity)', () => {
-    expect(E.cac(0, 0.5)).toBeCloseTo(8)
-    expect(E.cac(2, 0)).toBeCloseTo((8 * 1.69) / 0.5)
+  it('CAC = CAC_BASE × CAC_STAGE_GROWTH^stage / (0.5 + maturity)', () => {
+    expect(E.cac(0, 0.5)).toBeCloseTo(B.CAC_BASE)
+    expect(E.cac(2, 0)).toBeCloseTo((B.CAC_BASE * B.CAC_STAGE_GROWTH ** 2) / 0.5)
     expect(E.paidPerMonth(800, 8)).toBe(100)
   })
   it('churn = 0.06 × (1 − min(0.6, ops×0.02)) × (1 + overload) × (1.5 − maturity)', () => {
@@ -58,9 +59,9 @@ describe('§5.4 users', () => {
 
 describe('§5.5 revenue', () => {
   it('arpu formula', () => {
-    expect(E.arpu(0, 1, 0, 1)).toBeCloseTo(4)
-    expect(E.arpu(1, 1.5, 5, 0)).toBeCloseTo(4 * 1.15 * 1.5 * 1.2 * 0.3)
-    expect(E.arpu(0, 1, 100, 1)).toBeCloseTo(4 * 1.8)
+    expect(E.arpu(0, 1, 0, 1)).toBeCloseTo(B.ARPU_BASE)
+    expect(E.arpu(1, 1.5, 5, 0)).toBeCloseTo(B.ARPU_BASE * B.ARPU_STAGE_GROWTH * 1.5 * (1 + 5 * B.ARPU_SALES_PER) * 0.3)
+    expect(E.arpu(0, 1, 100, 1)).toBeCloseTo(B.ARPU_BASE * (1 + B.ARPU_SALES_MAX))
   })
   it('MRR = users × arpu + enterprise', () => {
     expect(E.mrr(100, 3, 50)).toBe(350)
@@ -103,10 +104,11 @@ describe('§5.8 valuation', () => {
   it('pre-revenue', () => {
     expect(E.valuationPreRevenue(3, 100, 1)).toBe(180_000 + 15_000 + 200_000)
   })
-  it('multiple clamps 4–30', () => {
-    expect(E.valuationMultiple(0)).toBe(6)
-    expect(E.valuationMultiple(1)).toBe(30)
-    expect(E.valuationMultiple(-0.5)).toBe(4)
+  it('multiple = clamp(MIN, MAX, BASE + GROWTH × mom)', () => {
+    expect(E.valuationMultiple(0)).toBe(B.MULTIPLE_BASE)
+    expect(E.valuationMultiple(0.05)).toBeCloseTo(B.MULTIPLE_BASE + B.MULTIPLE_GROWTH * 0.05)
+    expect(E.valuationMultiple(1)).toBe(B.MULTIPLE_MAX)
+    expect(E.valuationMultiple(-0.5)).toBe(B.MULTIPLE_MIN)
   })
   it('post-revenue = MRR × 12 × multiple; growth is priced', () => {
     expect(E.valuationPostRevenue(10_000, 10)).toBe(1_200_000)

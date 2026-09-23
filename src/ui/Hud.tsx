@@ -1,5 +1,4 @@
 // Top HUD: left = indicators (grow with learned concepts), center = stage/time/speed, right = view controls.
-import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { GameSpeed, HudWidget } from '../engine/types'
 import { STAGES } from '../content'
@@ -10,11 +9,13 @@ import { t } from './i18n'
 import { money } from './format'
 import { cx, IconButton } from './primitives'
 import { WIDGETS } from './widgets'
-import { useIsMobile } from './hooks'
+import { useExclusiveExpander, useIsMobile } from './hooks'
 
-/** Round button → Büyüme panel, scrolled to the round block. */
+/** Round button → Büyüme panel, scrolled to the round block (again closes it, like the dock tabs). */
 function openRound() {
-  useGameStore.getState().openPanel({ kind: 'growth', section: 'round' }, { root: true })
+  const { ui, openPanel, closePanel } = useGameStore.getState()
+  if (ui.panel?.kind === 'growth') closePanel()
+  else openPanel({ kind: 'growth', section: 'round' }, { root: true })
 }
 
 /** Gear → settings in the single panel (again closes it). */
@@ -76,9 +77,10 @@ function DesktopHud() {
 
 function MobileHud() {
   const { primary, secondary } = useWidgetLists()
-  const [open, setOpen] = useState(false)
+  // Local expander, but still "one thing open": it closes when the panel opens and closes the panel.
+  const [open, setOpen] = useExclusiveExpander()
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-1.5 px-2 pt-2">
+    <div data-scene-top className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-1.5 px-2 pt-2">
       <div className="pointer-events-auto flex items-center gap-1.5">
         <StageBar compact />
         <ViewControls compact />

@@ -1,5 +1,4 @@
 // Bottom-left activity line: newest ActivityEntry rendered from ACTIVITY_TEXT; tap to expand history.
-import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { FOUNDER_ACTIONS, type ActivityEntry } from '../engine/types'
 import { ACTIVITY_TEXT, FURNITURE, STAGES, UI_TEXT } from '../content'
@@ -8,6 +7,7 @@ import { Icon } from './icons'
 import { fill, t } from './i18n'
 import { money, num } from './format'
 import { cx } from './primitives'
+import { useExclusiveExpander } from './hooks'
 
 /** Turns raw engine params (ids, numbers) into display strings. */
 export function activityText(entry: ActivityEntry): string {
@@ -32,7 +32,8 @@ function formatParam(key: string, v: string | number): string | number {
 
 export function ActivityLine() {
   const activity = useGameStore(useShallow((s) => s.state.activity))
-  const [open, setOpen] = useState(false)
+  // History list is part of the one-thing-open rule: opening a panel closes it and vice versa.
+  const [open, setOpen] = useExclusiveExpander()
   const last = activity[activity.length - 1]
   if (!last) return null
   const history = activity.slice(-8).reverse()

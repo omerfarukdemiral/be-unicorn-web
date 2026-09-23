@@ -2,7 +2,7 @@
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by time.speed.
 import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type GameState, type NewGameOptions } from '../engine/types'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type Action, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readProfile, readSave, writeProfile, writeSave } from './save'
 import type { GameStore, Panel, ReplayLog, Selection, UiState } from './types'
 
@@ -10,6 +10,8 @@ export { SAVE_KEY } from './save'
 
 /** Upper bound of engine days advanced by one tick (keeps a hitch from fast-forwarding). */
 const MAX_DAYS_PER_TICK = 4
+
+const NO_INSET = { top: 0, right: 0, bottom: 0 }
 
 const initialUi = (): UiState => ({
   panel: null,
@@ -21,6 +23,7 @@ const initialUi = (): UiState => ({
   lastError: null,
   pausedFrom: null,
   generation: 0,
+  sceneInset: NO_INSET,
 })
 
 /** Scene selection shown by the panel (detail, or the slot a targeted shop buys for). Render highlights it. */
@@ -46,6 +49,18 @@ function isEmptyOpenSlot(s: GameState, id: string): boolean {
   const slot = s.office.slots.find((x) => x.id === id)
   if (!slot || slot.id === FOUNDER_SLOT_ID || slot.itemId !== undefined || slot.spanOf !== undefined) return false
   return slot.ring === 0 || s.office.rings.some((r) => r.index === slot.ring && r.unlocked)
+}
+
+/**
+ * A slot detail whose item just left (sold, moved away) would show a dead-end "Boş slot" page.
+ * Move → follow the item to its new slot; otherwise → the shop targeted at the now empty slot.
+ */
+function retargetEmptiedDetail(action: Action, s: GameState): void {
+  const { ui, openPanel } = useGameStore.getState()
+  const p = ui.panel
+  if (p?.kind !== 'detail' || p.selection.kind !== 'slot' || !isEmptyOpenSlot(s, p.selection.id)) return
+  if (action.type === 'moveItem') openPanel({ kind: 'detail', selection: { kind: 'slot', id: action.toSlotId } }, { replace: true })
+  else openPanel({ kind: 'shop', slotTarget: p.selection.id }, { replace: true })
 }
 
 function randomSeed(): number {
@@ -93,6 +108,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     }
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
     set({ state: res.state })
+    retargetEmptiedDetail(action, res.state)
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     return res
   },
@@ -141,9 +157,13 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   exportReplay: () => ({ ...replay, actions: [...replay.actions] }),
 
   select(selection) {
-    const { ui, state, openPanel, closePanel } = get()
+    const { ui, state, openPanel, closePanel, panelGoBack } = get()
     if (!selection) {
-      if (ui.panel?.kind === 'detail' || (ui.panel?.kind === 'shop' && ui.panel.slotTarget)) closePanel()
+      // Empty floor: leave a detail / targeted shop the way the back button does (a dock tab stays open).
+      if (ui.panel?.kind === 'detail' || (ui.panel?.kind === 'shop' && ui.panel.slotTarget)) {
+        if (ui.panelBack) panelGoBack()
+        else closePanel()
+      }
       return
     }
     if (selection.kind === 'slot' && isEmptyOpenSlot(state, selection.id)) openPanel({ kind: 'shop', slotTarget: selection.id })
@@ -171,4 +191,9 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   setPlacing: (placing) => set((s) => ({ ui: { ...s.ui, placing } })),
   setZoom: (zoom) => set((s) => ({ ui: { ...s.ui, zoom } })),
   setPausedFrom: (pausedFrom) => set((s) => (s.ui.pausedFrom === pausedFrom ? s : { ui: { ...s.ui, pausedFrom } })),
+  setSceneInset: (inset) =>
+    set((s) => {
+      const c = s.ui.sceneInset
+      return c.top === inset.top && c.right === inset.right && c.bottom === inset.bottom ? s : { ui: { ...s.ui, sceneInset: inset } }
+    }),
 }))

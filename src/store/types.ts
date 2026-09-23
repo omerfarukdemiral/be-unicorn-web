@@ -37,6 +37,13 @@ export type Overlay = { kind: 'moveScene' } | { kind: 'postMortem' } | { kind: '
 /** Pointer mode on the 3D floor. Buying places automatically (no place mode). */
 export type PlacingMode = { kind: 'move'; fromSlotId: SlotId } | { kind: 'seat'; employeeId: EmployeeId }
 
+/** Screen px covered by UI along each edge (open panel / sheet, phone HUD). The camera frames the office in the rest. */
+export interface SceneInset {
+  top: number
+  right: number
+  bottom: number
+}
+
 /** 0 = far (whole office), 1 = default, 2 = close. */
 export type ZoomLevel = 0 | 1 | 2
 
@@ -55,6 +62,8 @@ export interface UiState {
   pausedFrom: GameSpeed | null
   /** Bumped by newGame()/load(): event consumers skip the loaded history. */
   generation: number
+  /** Area hidden by the panel (set by ui RightPanel, read by render CameraRig). */
+  sceneInset: SceneInset
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
@@ -82,7 +91,7 @@ export interface GameStore {
   exportReplay(): ReplayLog
 
   // UI slice (never touches GameState)
-  /** Scene / list selection → detail panel. An empty open slot opens the shop targeted at it. null closes a detail panel. */
+  /** Scene / list selection → detail panel. An empty open slot opens the shop targeted at it. null leaves a detail panel (back, or close). */
   select(selection: Selection | null): void
   /** Opens `panel` in the single panel. `root` (dock tabs) clears history; `replace` keeps the current back entry. */
   openPanel(panel: Panel, opts?: { root?: boolean; replace?: boolean }): void
@@ -97,4 +106,5 @@ export interface GameStore {
   setPlacing(mode: PlacingMode | null): void
   setZoom(zoom: ZoomLevel): void
   setPausedFrom(speed: GameSpeed | null): void
+  setSceneInset(inset: SceneInset): void
 }

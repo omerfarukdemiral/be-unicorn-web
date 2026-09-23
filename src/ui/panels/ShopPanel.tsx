@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 // Pure placement rules shared with the engine (same precedent as FounderActions → founderActionError).
-import { canPlaceAt, findAutoSlotFor } from '../../engine/office'
+import { canPlaceAt } from '../../engine/office'
+import { shopPlacement, type ShopPlacement } from './shopPlacement'
 import { SLOT_TYPES, type OfficeState, type Slot, type SlotId, type SlotType } from '../../engine/types'
 import { DEPT_TEXT, FURNITURE, type FurnitureEffects, type FurnitureItem } from '../../content'
 import { useGameStore } from '../../store/gameStore'
@@ -32,18 +33,9 @@ export function effectTags(e: FurnitureEffects): string[] {
   return out
 }
 
-interface Placement {
-  /** Slot the item would land on (null: no room). */
-  slot: Slot | null
-  /** True when it goes to the tapped slot (slotTarget) rather than the auto slot. */
-  targeted: boolean
-}
-
-/** Where "Satın al" puts `item`: the targeted slot when it fits, else the free slot nearest the center. */
-function placementFor(office: OfficeState, item: FurnitureItem, target: Slot | undefined): Placement {
-  const spec = { slotType: item.slotType, size: item.size }
-  if (target && target.type === item.slotType && canPlaceAt(office, target, spec)) return { slot: target, targeted: true }
-  return { slot: findAutoSlotFor(office, spec), targeted: false }
+/** Where "Satın al" puts `item` (targeted slot when it fits, else the auto slot) and what to offer when full. */
+function placementFor(office: OfficeState, item: FurnitureItem, target: Slot | undefined): ShopPlacement {
+  return shopPlacement(office, { slotType: item.slotType, size: item.size === 2 ? 2 : 1 }, target)
 }
 
 const BOUGHT_MS = 2400
@@ -79,7 +71,7 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
     .slice()
     .sort((a, b) => a.stageUnlock - b.stageUnlock || a.price - b.price)
 
-  const buy = (item: FurnitureItem, place: Placement) => {
+  const buy = (item: FurnitureItem, place: ShopPlacement) => {
     // Untargeted buys use the engine's own auto placement (placeItem without slotId).
     const r = dispatch(place.targeted && place.slot ? { type: 'placeItem', itemId: item.id, slotId: place.slot.id } : { type: 'placeItem', itemId: item.id })
     if (!r.ok) return
@@ -142,7 +134,7 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
         ) : (
           <ul className="flex flex-col gap-2">
             {items.map((item) => (
-              <ShopItem key={item.id} item={item} stage={stage} cash={cash} office={office} place={placementFor(office, item, target)} onBuy={buy} />
+              <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={placementFor(office, item, target)} onBuy={buy} />
             ))}
           </ul>
         )}
@@ -156,24 +148,21 @@ function ShopItem({
   item,
   stage,
   cash,
-  office,
   place,
   onBuy,
 }: {
   item: FurnitureItem
   stage: number
   cash: number
-  office: OfficeState
-  place: Placement
-  onBuy: (item: FurnitureItem, place: Placement) => void
+  place: ShopPlacement
+  onBuy: (item: FurnitureItem, place: ShopPlacement) => void
 }) {
   const dispatch = useGameStore((s) => s.dispatch)
   const locked = item.stageUnlock > stage || slotTypeStage(item.slotType) > stage
   const afford = cash >= item.price
   const noRoom = !locked && !place.slot
-  // No room: offer the next ring when it has slots of this type.
-  const next = noRoom ? office.rings.filter((r) => !r.unlocked).sort((a, b) => a.index - b.index)[0] : undefined
-  const nextHasType = !!next && office.slots.some((x) => x.ring === next.index && x.type === item.slotType)
+  // No room: offer the next ring when this office has room for the item in a locked ring (rings open in order).
+  const next = noRoom && place.roomRing !== null ? place.nextRing : undefined
   return (
     <li className={cx('flex flex-col gap-2 rounded-2xl border border-cream-200 bg-cream-100/70 p-2.5', locked && 'opacity-60')}>
       <div className="flex items-start gap-3">
@@ -185,6 +174,12 @@ function ShopItem({
             {item.tier > 1 && <Pill className="bg-lemon-100 text-lemon-600">T{item.tier}</Pill>}
           </div>
           <p className="line-clamp-2 text-[11px] leading-snug text-ink-600">{item.description}</p>
+          {!locked && place.targetMisfit && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-peach-600">
+              <Icon name="warning" size={12} />
+              {place.slot ? t('shop.targetMisfit', { ring: place.slot.ring }) : t('shop.targetMisfitNoRoom')}
+            </p>
+          )}
           <div className="mt-1 flex flex-wrap gap-1">
             {effectTags(item.effects).map((tag) => (
               <Pill key={tag} className="bg-mint-100 text-mint-600">
@@ -208,10 +203,15 @@ function ShopItem({
         )}
         {!locked &&
           (noRoom ? (
-            next && nextHasType ? (
-              <Button size="sm" tone="mint" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
-                {t('shop.noRoomOpenRing', { n: next.index, cost: money(next.openCost) })}
-              </Button>
+            next ? (
+              <span className="flex min-w-0 flex-col items-end gap-1">
+                <Button size="sm" tone="mint" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
+                  {t('shop.noRoomOpenRing', { n: next.index, cost: money(next.openCost) })}
+                </Button>
+                {place.roomRing !== null && place.roomRing !== next.index && (
+                  <span className="text-right text-[10px] leading-tight text-ink-600">{t('shop.roomInRing', { ring: place.roomRing })}</span>
+                )}
+              </span>
             ) : (
               <span className="text-right text-[11px] font-semibold text-ink-600">{t('shop.noRoomNextStage')}</span>
             )

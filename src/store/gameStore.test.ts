@@ -147,7 +147,45 @@ describe('single panel (ui)', () => {
     const filled = store().state.office.slots.find((x) => x.itemId === desk.id)!
     store().select({ kind: 'slot', id: filled.id })
     expect(store().ui.panel).toEqual({ kind: 'detail', selection: { kind: 'slot', id: filled.id } })
+    // Empty floor acts like back: the Ekip tab it came from stays open; from a root detail it closes.
+    store().select(null)
+    expect(store().ui.panel).toEqual({ kind: 'team' })
+    store().closePanel()
+    store().select({ kind: 'slot', id: filled.id })
     store().select(null)
     expect(store().ui.panel).toBeNull()
+  })
+
+  const basic = (type: string) => FURNITURE.find((f) => f.slotType === type && f.stageUnlock === 0 && f.size === 1)!
+
+  it('a targeted buy (slotId) fills exactly the tapped slot', () => {
+    const office = store().state.office
+    // Pick the ring-1 desk slot farthest from the auto choice so the two differ.
+    const target = office.slots.filter((x) => x.ring === 1 && x.type === 'desk' && !x.itemId).at(-1)!
+    store().select({ kind: 'slot', id: target.id })
+    expect(store().ui.panel).toEqual({ kind: 'shop', slotTarget: target.id })
+    expect(store().dispatch({ type: 'placeItem', itemId: basic('desk').id, slotId: target.id }).ok).toBe(true)
+    expect(store().state.office.slots.find((x) => x.id === target.id)?.itemId).toBe(basic('desk').id)
+  })
+
+  it('selling the item of an open slot detail switches to the shop targeted at that slot', () => {
+    expect(store().dispatch({ type: 'placeItem', itemId: basic('desk').id }).ok).toBe(true)
+    const slot = store().state.office.slots.find((x) => x.itemId === basic('desk').id)!
+    store().togglePanel('shop')
+    store().select({ kind: 'slot', id: slot.id })
+    expect(store().dispatch({ type: 'sellItem', slotId: slot.id }).ok).toBe(true)
+    expect(store().ui.panel).toEqual({ kind: 'shop', slotTarget: slot.id })
+    // History is kept: back still returns to the plain shop.
+    expect(store().ui.panelBack).toEqual({ kind: 'shop' })
+  })
+
+  it('moving the item of an open slot detail follows it to the new slot', () => {
+    expect(store().dispatch({ type: 'placeItem', itemId: basic('desk').id }).ok).toBe(true)
+    const from = store().state.office.slots.find((x) => x.itemId === basic('desk').id)!
+    const to = store().state.office.slots.find((x) => x.ring === 1 && x.type === 'desk' && !x.itemId)!
+    store().select({ kind: 'slot', id: from.id })
+    store().setPlacing({ kind: 'move', fromSlotId: from.id })
+    expect(store().dispatch({ type: 'moveItem', fromSlotId: from.id, toSlotId: to.id }).ok).toBe(true)
+    expect(store().ui.panel).toEqual({ kind: 'detail', selection: { kind: 'slot', id: to.id } })
   })
 })

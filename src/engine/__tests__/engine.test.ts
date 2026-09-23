@@ -224,6 +224,23 @@ describe('auto placement (findAutoSlot / placeItem without slotId)', () => {
     expect(findAutoSlotFor(office, spec)).toBeNull()
     expect(findAutoSlotFor(office, { slotType: 'room', size: 1 })?.id).toBe(rooms[0]!.id)
   })
+  it('two rooms placed one after another both fit on a 4-slot side (ring 5 / 6)', () => {
+    let s = api.createGame({ seed: 1 })
+    const office = buildOffice(5, 6)
+    // Fill rings below 5 so auto placement goes to the 4-slot sides.
+    for (const x of office.slots) if (x.type === 'room' && x.ring < 5) x.itemId = 'x'
+    s = { ...s, stage: 5, office, stats: { ...s.stats, cash: 1e7 } }
+    const free = () => s.office.slots.filter((x) => x.type === 'room' && x.itemId === undefined && office.rings.some((r) => r.index === x.ring && r.unlocked)).length
+    const total = free()
+    expect(total % 2).toBe(0)
+    // Every free room slot must end up used: no orphan single slots.
+    for (let i = 0; i < total / 2; i++) {
+      const r = api.applyAction(s, { type: 'placeItem', itemId: 'meeting' })
+      expect(r.ok, `room ${i + 1} of ${total / 2}`).toBe(true)
+      s = r.state
+    }
+    expect(free()).toBe(0)
+  })
   it('auto placement of a size-2 item spans two slots', () => {
     let s = api.createGame({ seed: 1 })
     s = { ...s, stage: 2, office: buildOffice(2, 3), stats: { ...s.stats, cash: 1e6 } }

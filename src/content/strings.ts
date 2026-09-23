@@ -277,6 +277,9 @@ const BASE_TEXT: Record<string, string> = {
   'shop.noRoom': 'Boş yer yok',
   'shop.noRoomOpenRing': 'Boş yer yok — {n}. halkayı aç ({cost})',
   'shop.noRoomNextStage': 'Boş yer yok. Sonraki ofiste daha çok yer var.',
+  'shop.roomInRing': 'Bu eşyaya {ring}. halkada yer var (halkalar sırayla açılır).',
+  'shop.targetMisfit': 'Bu slota sığmaz → {ring}. halkaya konur',
+  'shop.targetMisfitNoRoom': 'Bu slota sığmaz',
   'panel.label': 'Panel',
   'shop.price': 'Fiyat',
 

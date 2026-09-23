@@ -1,6 +1,7 @@
 // Small UI hooks: responsive breakpoint, real-time ticker, persisted UI prefs.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
+import { useGameStore } from '../store/gameStore'
 
 /** Narrow screens, plus phones in landscape (short + touch), get the compact layout. */
 const MOBILE_QUERY = '(max-width: 767px), (pointer: coarse) and (max-height: 500px)'
@@ -82,4 +83,24 @@ export function isTypingTarget(e: KeyboardEvent): boolean {
   const tag = el.tagName
   if (tag === 'INPUT') return !NON_TEXT_INPUTS.has((el as HTMLInputElement).type)
   return tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+/**
+ * Open/closed state of a small local expander (HUD "+N" widgets, activity history) that obeys the single
+ * panel rule on phones: opening the panel closes it, opening it closes the panel. Desktop: plain state
+ * (the expanders sit left of the panel there and never overlap it).
+ */
+export function useExclusiveExpander(): [boolean, (next: boolean | ((open: boolean) => boolean)) => void] {
+  const mobile = useIsMobile()
+  const [open, setOpenRaw] = useState(false)
+  const panelOpen = useGameStore((s) => s.ui.panel !== null)
+  useEffect(() => {
+    if (mobile && panelOpen) setOpenRaw(false)
+  }, [mobile, panelOpen])
+  const setOpen = (next: boolean | ((open: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next
+    if (value && mobile) useGameStore.getState().closePanel()
+    setOpenRaw(value)
+  }
+  return [open, setOpen]
 }

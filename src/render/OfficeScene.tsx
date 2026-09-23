@@ -39,20 +39,35 @@ function focusOf(sel: Selection | null, layout: OfficeLayout): [number, number] 
   return p ? [p.x, p.z] : null
 }
 
+const camRight = new THREE.Vector3()
+const camUp = new THREE.Vector3()
+
 function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const cam = useRef<THREE.OrthographicCamera>(null)
   const layout = useLayout()
   const selection = useUi((u) => panelSelection(u.panel))
+  const insetWant = useUi((u) => u.sceneInset)
   const size = useThree((s) => s.size)
   const target = useRef(new THREE.Vector3(layout.center[0], 0, layout.center[1]))
   const first = useRef(true)
+  // Damped screen inset (px) hidden by the ui panel / sheet: the office is framed in the visible rest.
+  const inset = useRef({ top: 0, right: 0, bottom: 0 })
 
   useFrame((_, rawDt) => {
     const c = cam.current
     if (!c) return
     const dt = Math.min(rawDt, 0.1)
+    const ins = inset.current
+    if (first.current) Object.assign(ins, insetWant)
+    else {
+      ins.top = damp(ins.top, insetWant.top, 7, dt)
+      ins.right = damp(ins.right, insetWant.right, 7, dt)
+      ins.bottom = damp(ins.bottom, insetWant.bottom, 7, dt)
+    }
+    const availW = Math.max(size.width - ins.right, size.width * 0.3)
+    const availH = Math.max(size.height - ins.top - ins.bottom, Math.min(size.height, 140))
     const r = Math.max(layout.radius, 3)
-    const fit = Math.min(size.width / (r * 2.35), size.height / (r * 1.75 + 2.6))
+    const fit = Math.min(availW / (r * 2.35), availH / (r * 1.75 + 2.6))
     const want = clamp(fit * ZOOM_FACTORS[zoomLevel], 12, 400)
 
     // Close zoom follows the selection (clamped to the office); otherwise frame the whole office.
@@ -77,6 +92,16 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     c.position.copy(target.current).addScaledVector(dir, CAM_DIST)
     c.position.y += 0.6
     c.lookAt(target.current.x, 0.6, target.current.z)
+    // Slide the camera in its own plane so the target sits at the center of the visible area
+    // (1 px = 1 / zoom world units for the orthographic camera).
+    const shiftX = (size.width - availW) / 2
+    const shiftY = (ins.top - (size.height - availH - ins.top)) / 2
+    if (shiftX || shiftY) {
+      c.updateMatrixWorld()
+      camRight.setFromMatrixColumn(c.matrixWorld, 0)
+      camUp.setFromMatrixColumn(c.matrixWorld, 1)
+      c.position.addScaledVector(camRight, shiftX / c.zoom).addScaledVector(camUp, shiftY / c.zoom)
+    }
     c.updateProjectionMatrix()
   })
 

@@ -1,7 +1,7 @@
 // The single panel: Mağaza, Ekip, Projeler, Büyüme, Defter, scene details, decisions and settings all open
 // here and replace each other (store.ui.panel). Desktop = fixed right column, the office stays visible in
 // the middle; phones = one bottom sheet above the dock bar.
-import type { ReactNode } from 'react'
+import { useCallback, useRef, type ReactNode } from 'react'
 import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
 import { Icon, type IconName } from './icons'
@@ -43,6 +43,46 @@ function panelKey(p: Panel): string {
   return p.kind
 }
 
+/**
+ * Callback ref for the panel element: reports the screen area it covers (store.ui.sceneInset) so the camera
+ * frames the office in the visible rest — left of the desktop panel, above the phone sheet and below the HUD.
+ */
+function useSceneInsetReporter(mobile: boolean): (el: HTMLElement | null) => void {
+  const cleanup = useRef<(() => void) | null>(null)
+  return useCallback(
+    (el: HTMLElement | null) => {
+      cleanup.current?.()
+      cleanup.current = null
+      const setInset = useGameStore.getState().setSceneInset
+      if (!el) {
+        setInset({ top: 0, right: 0, bottom: 0 })
+        return
+      }
+      const measure = () => {
+        const r = el.getBoundingClientRect()
+        if (mobile) {
+          const hud = document.querySelector('[data-scene-top]')?.getBoundingClientRect()
+          setInset({ top: Math.round(hud?.bottom ?? 0), right: 0, bottom: Math.round(window.innerHeight - r.top) })
+        } else {
+          setInset({ top: 0, right: Math.round(window.innerWidth - r.left), bottom: 0 })
+        }
+      }
+      measure()
+      const ro = new ResizeObserver(measure)
+      ro.observe(el)
+      window.addEventListener('resize', measure)
+      // The sheet slides in: measure again once the enter animation has settled.
+      const late = window.setTimeout(measure, 350)
+      cleanup.current = () => {
+        ro.disconnect()
+        window.removeEventListener('resize', measure)
+        window.clearTimeout(late)
+      }
+    },
+    [mobile],
+  )
+}
+
 function PanelBody({ panel }: { panel: Panel }) {
   switch (panel.kind) {
     case 'shop':
@@ -70,6 +110,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   const closePanel = useGameStore((s) => s.closePanel)
   const goBack = useGameStore((s) => s.panelGoBack)
   const mobile = useIsMobile()
+  const insetRef = useSceneInsetReporter(mobile)
   if (!panel) return null
 
   const meta = panelMeta(panel)
@@ -110,8 +151,9 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   if (mobile) {
     return (
       <section
+        ref={insetRef}
         aria-label={meta.title || t('panel.label')}
-        className="pointer-events-auto fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex max-h-[62vh] animate-slide-up flex-col rounded-t-[var(--radius-card)] border-t border-cream-300 bg-cream-50 shadow-[var(--shadow-pop)] landscape:max-h-[72vh]"
+        className="pointer-events-auto fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex max-h-[52vh] animate-slide-up flex-col rounded-t-[var(--radius-card)] border-t border-cream-300 bg-cream-50 shadow-[var(--shadow-pop)] landscape:max-h-[72vh]"
       >
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-cream-300" />
         {head}
@@ -121,6 +163,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   }
   return (
     <aside
+      ref={insetRef}
       aria-label={meta.title || t('panel.label')}
       className="pointer-events-auto ui-card absolute bottom-3 right-3 top-[76px] z-20 flex max-w-[calc(100vw-1.5rem)] animate-slide-left flex-col overflow-hidden"
       style={{ width: PANEL_W }}

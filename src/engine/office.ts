@@ -126,17 +126,43 @@ export function anchorOf(office: OfficeState, slot: Slot): Slot {
   return findSlot(office, slot.spanOf) ?? slot
 }
 
-/** Free adjacent slot to pair with for a size-2 item. */
+function adjacent(a: Slot, b: Slot): boolean {
+  return a.id !== b.id && a.ring === b.ring && a.type === b.type && Math.abs(a.pos.x - b.pos.x) + Math.abs(a.pos.z - b.pos.z) === 1
+}
+
+/** Slot free for a new item (ignoring `ignoreIds`, e.g. the moving item's own slots). */
+function isFreeFor(s: Slot, ignoreIds: readonly string[]): boolean {
+  return s.id !== FOUNDER_SLOT_ID && (s.itemId === undefined || ignoreIds.includes(s.id)) && s.occupantId === undefined
+}
+
+/**
+ * Free neighbours that a size-2 item on (a, b) would leave without any free partner of their own.
+ * Pairs with 0 orphans keep runs like -2..1 usable for a second 2-slot item.
+ */
+function orphansOf(office: OfficeState, a: Slot, b: Slot, ignoreIds: readonly string[]): number {
+  let n = 0
+  for (const x of office.slots) {
+    if (x.id === a.id || x.id === b.id || !isFreeFor(x, ignoreIds)) continue
+    if (!adjacent(x, a) && !adjacent(x, b)) continue
+    const hasPartner = office.slots.some((y) => y.id !== a.id && y.id !== b.id && adjacent(x, y) && isFreeFor(y, ignoreIds))
+    if (!hasPartner) n++
+  }
+  return n
+}
+
+/** Free adjacent partner for a size-2 item on `slot`; the one leaving the fewest orphan slots (then slot order). */
 export function findPartnerSlot(office: OfficeState, slot: Slot, ignoreIds: readonly string[] = []): Slot | undefined {
-  return office.slots.find(
-    (s) =>
-      s.id !== slot.id &&
-      s.ring === slot.ring &&
-      s.type === slot.type &&
-      Math.abs(s.pos.x - slot.pos.x) + Math.abs(s.pos.z - slot.pos.z) === 1 &&
-      (s.itemId === undefined || ignoreIds.includes(s.id)) &&
-      s.occupantId === undefined,
-  )
+  let best: Slot | undefined
+  let bestOrphans = Infinity
+  for (const s of office.slots) {
+    if (!adjacent(s, slot) || !isFreeFor(s, ignoreIds)) continue
+    const o = orphansOf(office, slot, s, ignoreIds)
+    if (o < bestOrphans) {
+      best = s
+      bestOrphans = o
+    }
+  }
+  return best
 }
 
 /** What auto placement needs to know about an item. */
@@ -155,15 +181,18 @@ export function canPlaceAt(office: OfficeState, slot: Slot, spec: PlacementSpec)
 
 /**
  * Auto placement (buy → place): the free slot nearest the center that fits `spec`.
- * Order: ring (inside out), then squared distance from the founder desk, then slot order. Deterministic.
+ * Order: ring (inside out), then (size 2) pairs that leave no orphan slot, then squared distance from the
+ * founder desk, then slot order. Deterministic; placeItem pairs the anchor with the same findPartnerSlot.
  */
 export function findAutoSlotFor(office: OfficeState, spec: PlacementSpec): Slot | null {
   let best: Slot | null = null
-  let bestKey: [number, number] = [Infinity, Infinity]
+  let bestKey: [number, number, number] = [Infinity, Infinity, Infinity]
   for (const s of office.slots) {
     if (!canPlaceAt(office, s, spec)) continue
-    const key: [number, number] = [s.ring, s.pos.x * s.pos.x + s.pos.z * s.pos.z]
-    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+    const partner = spec.size === 2 ? findPartnerSlot(office, s) : undefined
+    const orphans = partner ? orphansOf(office, s, partner, []) : 0
+    const key: [number, number, number] = [s.ring, orphans, s.pos.x * s.pos.x + s.pos.z * s.pos.z]
+    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && (key[1] < bestKey[1] || (key[1] === bestKey[1] && key[2] < bestKey[2])))) {
       best = s
       bestKey = key
     }

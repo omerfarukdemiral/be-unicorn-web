@@ -32,6 +32,8 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
   const panelOpen = useGameStore((s) => s.ui.panel !== null)
   // Desktop: bottom-center UI (dock, toasts) stays in the scene area left of the open panel.
   const sceneRight = !mobile && panelOpen ? PANEL_RESERVE : 0
+  // Phone: distance of the sheet's top edge from the bottom of the screen (measured by RightPanel).
+  const sheetTop = useGameStore((s) => s.ui.sceneInset.bottom)
   const screenAmbient = usePrefs((p) => p.screenBubbles)
   const tabKeys = useMemo(() => Object.fromEntries(DOCK_TABS.map((d) => [d.key, d.id])) as Record<string, DockTab>, [])
   useKeyboardShortcuts(tabKeys)
@@ -46,18 +48,28 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
         <Hud />
         {!worldBubbles && <BubbleTray ambient={screenAmbient} />}
 
-        {/* Bottom of the scene area: transient feedback. z-40 = above the panel/sheet (z-20/30), below blocking modals (z-50). */}
-        <div
-          className={mobile ? 'pointer-events-none absolute inset-x-0 bottom-[calc(200px+env(safe-area-inset-bottom,0px))] z-40 flex flex-col items-center gap-2 px-2' : 'pointer-events-none absolute bottom-[84px] left-0 z-40 flex flex-col items-center gap-2 px-3'}
-          style={mobile ? undefined : { right: sceneRight }}
-        >
-          <PlacingBanner />
-          <ErrorToast />
-        </div>
+        {/* Transient feedback (placing banner, errors). z-40 = above the panel/sheet (z-20/30), below blocking modals (z-50).
+            Desktop: bottom of the scene area left of the panel. Phone: just above the sheet when it is open,
+            otherwise stacked above the activity line so it never covers it. */}
+        {(!mobile || panelOpen) && (
+          <div
+            className={mobile ? 'pointer-events-none absolute inset-x-0 z-40 flex flex-col items-center gap-2 px-2' : 'pointer-events-none absolute bottom-[84px] left-0 z-40 flex flex-col items-center gap-2 px-3'}
+            style={mobile ? { bottom: sheetTop + 8 } : { right: sceneRight }}
+          >
+            <PlacingBanner />
+            <ErrorToast />
+          </div>
+        )}
 
         {/* Bottom-left: founder actions + activity line */}
         {mobile ? (
           <div className="absolute inset-x-2 bottom-[calc(72px+env(safe-area-inset-bottom,0px))] flex flex-col items-start gap-1.5">
+            {!panelOpen && (
+              <div className="pointer-events-none relative z-40 flex flex-col items-center gap-2 self-stretch">
+                <PlacingBanner />
+                <ErrorToast />
+              </div>
+            )}
             <ActivityLine />
             <FounderActions />
           </div>

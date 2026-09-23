@@ -1,45 +1,24 @@
 // Positions HTML content above a character's head (drei <Html>). Content is supplied by the caller.
 // With a `layout` registry (WorldBubbles), the bubble joins screen-space overlap resolution
-// (bubbleLayout.ts): the driver measures every visible bubble ~10×/s, then writes offsets, a stem
-// back to the speaker and visibility straight to the DOM (no React state per frame).
+// (bubbleLayout.ts): the driver (bubbleDriver.ts) measures every visible bubble ~10×/s, then writes
+// offsets, a stem back to the speaker and visibility straight to the DOM (no React state per frame).
+// drei's wrapper divs never take pointer events; only clickable bubble content does, so a moved or
+// hidden bubble leaves no invisible click blocker behind.
 import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, type ReactNode } from 'react'
+import { Vector3, type Camera } from 'three'
 import type * as THREE from 'three'
-import { BUBBLE_PRIORITY, layoutBubbles, type BubbleBox, type BubbleKind, type Placement, type Viewport } from './bubbleLayout'
+import { applyFrame, BubbleLayoutRegistry, createEntry, shiftBubble, runLayout, type Entry } from './bubbleDriver'
+import { BUBBLE_PRIORITY, type BubbleKind, type Viewport } from './bubbleLayout'
 import { speakerPositions } from './sceneRegistry'
 import { storeApi } from './source'
 
 // ---------------------------------------------------------------------------
-// Layout registry + driver
+// Layout driver
 // ---------------------------------------------------------------------------
 
-interface Entry {
-  key: string
-  kind: BubbleKind
-  speakerId: string
-  el: HTMLDivElement
-  stem: HTMLDivElement
-  /** Speaker is in the office (not walked out). */
-  speakerVisible: boolean
-  /** Frames since mount: drei positions the element on its first frame, so skip measuring until then. */
-  frames: number
-  /** Offset currently written to the DOM (eased toward the target). */
-  cur: { dx: number; dy: number }
-  shown: boolean
-  written: string
-}
-
-export class BubbleLayoutRegistry {
-  entries = new Map<string, Entry>()
-  placements = new Map<string, Placement>()
-  dirty = true
-  lastLayout = 0
-}
-
-const LAYOUT_INTERVAL_MS = 100
-const HIDDEN_T = 'opacity 160ms ease-out, visibility 0s linear 160ms'
-const SHOWN_T = 'opacity 160ms ease-out, visibility 0s'
+export { BubbleLayoutRegistry }
 
 function sceneViewport(canvas: HTMLCanvasElement): Viewport {
   const c = canvas.getBoundingClientRect()
@@ -55,77 +34,29 @@ function sceneViewport(canvas: HTMLCanvasElement): Viewport {
   }
 }
 
-function measure(reg: BubbleLayoutRegistry): BubbleBox[] {
-  const out: BubbleBox[] = []
-  for (const e of reg.entries.values()) {
-    if (!e.speakerVisible || e.frames < 2) continue
-    const r = e.el.getBoundingClientRect()
-    const w = e.el.offsetWidth
-    const h = e.el.offsetHeight
-    if (w === 0 || h === 0) continue
-    // Natural box = measured box minus the offset we applied ourselves (transforms keep the center).
-    const cx = r.left + r.width / 2 - e.cur.dx
-    const cy = r.top + r.height / 2 - e.cur.dy
-    out.push({ key: e.key, speakerId: e.speakerId, kind: e.kind, left: cx - w / 2, top: cy - h / 2, w, h })
-  }
-  return out
-}
-
 /** Runs the layout (throttled) and eases every bubble to its slot. Call once, after the anchors mount. */
 export function useBubbleLayoutDriver(reg: BubbleLayoutRegistry): void {
   const canvas = useThree((s) => s.gl.domElement)
   useFrame((_, dt) => {
     const now = performance.now()
-    if (reg.dirty || now - reg.lastLayout >= LAYOUT_INTERVAL_MS) {
-      reg.dirty = false
-      reg.lastLayout = now
-      reg.placements = layoutBubbles(measure(reg), sceneViewport(canvas), reg.placements)
-    }
-    const k = 1 - Math.exp(-Math.min(dt, 0.1) * 14)
-    for (const e of reg.entries.values()) {
-      if (++e.frames === 2) reg.dirty = true
-      const p = reg.placements.get(e.key)
-      const show = e.speakerVisible && !!p && !p.hidden
-      if (show && p) {
-        if (!e.shown) {
-          e.cur.dx = p.dx
-          e.cur.dy = p.dy
-        } else {
-          e.cur.dx += (p.dx - e.cur.dx) * k
-          e.cur.dy += (p.dy - e.cur.dy) * k
-          if (Math.abs(p.dx - e.cur.dx) < 0.3) e.cur.dx = p.dx
-          if (Math.abs(p.dy - e.cur.dy) < 0.3) e.cur.dy = p.dy
-        }
-      }
-      if (show !== e.shown) {
-        e.shown = show
-        e.el.style.transition = show ? SHOWN_T : HIDDEN_T
-        e.el.style.opacity = show ? '1' : '0'
-        e.el.style.visibility = show ? 'visible' : 'hidden'
-      }
-      if (!show) continue
-      const dx = Math.round(e.cur.dx * 10) / 10
-      const dy = Math.round(e.cur.dy * 10) / 10
-      const sig = `${dx},${dy}`
-      if (sig === e.written) continue
-      e.written = sig
-      e.el.style.transform = `translate(${dx}px, calc(-50% + ${dy}px))`
-      // Stem from the lifted bubble back down to the speaker's head.
-      const lift = -dy
-      const s = e.stem.style
-      if (lift > 8) {
-        const w = e.el.offsetWidth
-        s.display = 'block'
-        s.height = `${lift}px`
-        s.left = `${Math.min(w - 10, Math.max(10, w / 2 - dx))}px`
-      } else if (s.display !== 'none') s.display = 'none'
-    }
+    runLayout(reg, () => sceneViewport(canvas), now)
+    applyFrame(reg, dt, now)
   })
 }
 
 // ---------------------------------------------------------------------------
 // Anchor
 // ---------------------------------------------------------------------------
+
+const tmp = new Vector3()
+const prevPos = new Vector3()
+/** An anchor moving more than this (world units, squared) in one frame teleported; walking is far slower. */
+const TELEPORT_SQ = 0.6 * 0.6
+/** World point → CSS px inside the canvas (same math as drei <Html>'s default calculatePosition). */
+function toScreen(v: Vector3, camera: Camera, size: { width: number; height: number }): [number, number] {
+  tmp.copy(v).project(camera)
+  return [(tmp.x + 1) * (size.width / 2), (1 - tmp.y) * (size.height / 2)]
+}
 
 export interface BubbleAnchorProps {
   /** Employee id, visitor id or 'founder'. Falls back to the founder, then `fallback`. */
@@ -149,6 +80,9 @@ const zRange = (kind: BubbleKind | undefined): [number, number] => {
   return [base + 9, base]
 }
 
+/** drei's wrapper divs are click-through (the inner bubble opts back in when interactive). */
+const NO_POINTER = { pointerEvents: 'none' } as const
+
 export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], interactive = false, layout, kind, layoutKey, children }: BubbleAnchorProps) {
   const group = useRef<THREE.Group>(null)
   const inner = useRef<HTMLDivElement>(null)
@@ -165,17 +99,36 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
       if (layout) layout.dirty = true
       entry.current = null
     }
-  }, [layout, kind, layoutKey, speakerId])
+  }, [layout, layoutKey])
 
-  useFrame(() => {
+  useFrame((state) => {
     const p = speakerPositions.get(speakerId) ?? speakerPositions.get('founder')
     const g = group.current
     if (g) {
+      const e0 = entry.current
+      const was = e0 && layout ? prevPos.copy(g.position) : null
       if (p) g.position.set(p.x, p.y + 0.35 + offsetY, p.z)
       else g.position.set(fallback[0], 1.4 + offsetY, fallback[1])
+      if (e0 && layout) {
+        const jumped = was !== null && was.distanceToSquared(g.position) > TELEPORT_SQ
+        if (jumped) {
+          // The anchor teleported (new speaker, or the speaker's position just appeared): keep
+          // the bubble where it is on screen and let it glide to its new slot instead of snapping.
+          const before = toScreen(was, state.camera, state.size)
+          const after = toScreen(g.position, state.camera, state.size)
+          shiftBubble(e0, after[0] - before[0], after[1] - before[1])
+          layout.dirty = true
+        }
+        if (e0.speakerId !== speakerId) {
+          e0.speakerId = speakerId
+          layout.dirty = true
+        }
+      }
     }
     if (layout && kind && layoutKey && !entry.current && inner.current && stem.current) {
-      const e: Entry = { key: layoutKey, kind, speakerId, el: inner.current, stem: stem.current, speakerVisible: true, frames: 0, cur: { dx: 0, dy: 0 }, shown: false, written: '' }
+      const wraps: HTMLElement[] = []
+      for (let w = inner.current.parentElement; w && wraps.length < 2; w = w.parentElement) wraps.push(w)
+      const e = createEntry({ key: layoutKey, kind, speakerId, el: inner.current, stem: stem.current, wraps, interactive }, performance.now())
       layout.entries.set(layoutKey, e)
       layout.dirty = true
       entry.current = e
@@ -183,6 +136,7 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
     const show = !p || p.visible
     const e = entry.current
     if (e) {
+      // The speaker (who says it) can change while the bubble stays: update in place, no re-register.
       if (e.speakerVisible !== show) layout!.dirty = true
       e.speakerVisible = show
       return
@@ -195,11 +149,13 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
   })
   return (
     <group ref={group}>
-      <Html center zIndexRange={zRange(kind)} pointerEvents={interactive ? 'auto' : 'none'}>
+      <Html center zIndexRange={zRange(kind)} style={NO_POINTER} wrapperClass="pointer-events-none">
         <div
           ref={inner}
+          data-bubble={layoutKey}
           // Managed bubbles start hidden until their first layout pass (no one-frame overlap flash).
-          style={{ position: 'relative', transform: 'translateY(-50%)', ...(managed ? { visibility: 'hidden', opacity: 0 } : null) }}
+          // Only the bubble itself takes clicks, never drei's wrappers.
+          style={{ position: 'relative', transform: 'translateY(-50%)', pointerEvents: interactive ? 'auto' : 'none', ...(managed ? { visibility: 'hidden', opacity: 0 } : null) }}
         >
           {children}
           <div

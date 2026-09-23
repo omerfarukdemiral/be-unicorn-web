@@ -3,21 +3,36 @@ import type { Dept, EmployeeStatus, FounderActionKind, SlotType, StageIndex } fr
 import { STAGES } from '../content'
 import type { IconName } from './icons'
 
+/**
+ * Department identity. Minimal palette: departments are shown ONLY as a small dot (6-8px, see <Dot />).
+ * `bg`/`fg` are kept neutral for legacy callers (dept pills); `dot` is a CSS colour for inline styles.
+ */
 export const DEPT_COLOR: Record<Dept, { bg: string; fg: string; dot: string }> = {
-  eng: { bg: 'bg-sky-100', fg: 'text-sky-600', dot: '#7fb6ee' },
-  product: { bg: 'bg-lilac-100', fg: 'text-lilac-500', dot: '#b894f0' },
-  marketing: { bg: 'bg-peach-100', fg: 'text-peach-600', dot: '#ffae86' },
-  sales: { bg: 'bg-mint-100', fg: 'text-mint-600', dot: '#7fd3ad' },
-  ops: { bg: 'bg-lemon-100', fg: 'text-lemon-600', dot: '#f0d05f' },
+  eng: { bg: 'bg-surface-2', fg: 'text-ink-2', dot: 'var(--color-dept-eng)' },
+  product: { bg: 'bg-surface-2', fg: 'text-ink-2', dot: 'var(--color-dept-product)' },
+  marketing: { bg: 'bg-surface-2', fg: 'text-ink-2', dot: 'var(--color-dept-marketing)' },
+  sales: { bg: 'bg-surface-2', fg: 'text-ink-2', dot: 'var(--color-dept-sales)' },
+  ops: { bg: 'bg-surface-2', fg: 'text-ink-2', dot: 'var(--color-dept-ops)' },
 }
 
+/** Status pill text colour (Pill supplies the neutral hairline frame). Red only for bad states. */
 export const STATUS_TONE: Record<EmployeeStatus, string> = {
-  working: 'bg-mint-100 text-mint-600',
-  tired: 'bg-lemon-100 text-lemon-600',
-  burnout: 'bg-rose-100 text-rose-600',
-  break: 'bg-sky-100 text-sky-600',
-  onboarding: 'bg-lilac-100 text-lilac-500',
-  leaving: 'bg-rose-100 text-rose-600',
+  working: 'text-ink-2',
+  tired: 'text-ink',
+  burnout: 'text-negative',
+  break: 'text-ink-2',
+  onboarding: 'text-ink-2',
+  leaving: 'text-negative',
+}
+
+/** Small status mark colour (dot next to a status label). */
+export const STATUS_DOT: Record<EmployeeStatus, string> = {
+  working: 'var(--color-positive)',
+  tired: 'var(--color-ink-3)',
+  burnout: 'var(--color-negative)',
+  break: 'var(--color-ink-3)',
+  onboarding: 'var(--color-ink-3)',
+  leaving: 'var(--color-negative)',
 }
 
 export const SLOT_ICON: Record<SlotType, IconName> = {
@@ -62,9 +77,16 @@ export function slotTypeStage(type: SlotType): StageIndex {
   return s ? s.index : 0
 }
 
+/** Morale bar fill: ink normally, red only when critical. */
 export function moraleTone(m: number): string {
-  if (m < 28) return 'bg-rose-300'
-  if (m < 40) return 'bg-peach-300'
-  if (m < 60) return 'bg-lemon-300'
-  return 'bg-mint-300'
+  if (m < 28) return 'bg-negative'
+  if (m < 40) return 'bg-ink-3'
+  return 'bg-ink'
+}
+
+/** Text colour for a signed number (positive/negative only on numbers). */
+export function deltaTone(n: number): string {
+  if (n > 0) return 'text-positive'
+  if (n < 0) return 'text-negative'
+  return 'text-ink-2'
 }

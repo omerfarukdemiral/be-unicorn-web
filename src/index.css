@@ -1,37 +1,68 @@
+@import "@fontsource-variable/oxanium";
+@import "@fontsource-variable/inter";
 @import "tailwindcss";
 
-/* Design tokens (cream + pastel, PLAN §7.4). UI lane owns this file. */
+/* Design tokens: minimal "neutral + one accent" (docs/DESIGN.md). Owned by the foundation lane. */
 @theme {
-  --color-cream-50: #fbf8f2;
-  --color-cream-100: #f6efe4;
-  --color-cream-200: #ece0cc;
-  --color-cream-300: #dccbb0;
-  --color-ink-900: #2b2a33;
-  --color-ink-700: #454350;
-  --color-ink-600: #5b5866;
-  --color-ink-400: #8d8a96;
-  --color-lilac-100: #f1e8fd;
-  --color-lilac-300: #c9a7f5;
-  --color-lilac-500: #9a6fe0;
-  --color-mint-100: #e3f7ee;
-  --color-mint-300: #9fe0c3;
-  --color-mint-600: #2f9e6f;
-  --color-peach-100: #fff0e7;
-  --color-peach-300: #ffc1a1;
-  --color-peach-600: #d9703d;
-  --color-sky-100: #e6f1fd;
-  --color-sky-300: #9cc9f5;
-  --color-sky-600: #3f86cf;
-  --color-lemon-100: #fdf7dc;
-  --color-lemon-300: #f7e08a;
-  --color-lemon-600: #b68f12;
-  --color-rose-100: #fde8ed;
-  --color-rose-300: #f5a3b5;
-  --color-rose-600: #d24667;
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --radius-card: 1.25rem;
-  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 6px 20px -8px rgb(43 42 51 / 0.25), 0 2px 6px -2px rgb(43 42 51 / 0.12);
-  --shadow-pop: 0 18px 50px -12px rgb(43 42 51 / 0.4);
+  /* --- Semantic palette (use these in new code) --- */
+  --color-surface: #f6f5f2;       /* panels, cards, bubbles */
+  --color-surface-2: #eeede9;     /* inset fills: stat tiles, hover, tracks */
+  --color-canvas-bg: #e9e8e4;     /* page + 3D scene backdrop */
+  --color-border: #e4e2dd;        /* 1px hairlines */
+  --color-border-strong: #d3d1cb; /* dividers that must read on surface-2 */
+  --color-ink: #1c1b1f;           /* primary text, primary buttons, active tab, progress fill */
+  --color-ink-2: #6b6a70;         /* secondary text, icons */
+  --color-ink-3: #9c9ba1;         /* tertiary text, disabled, placeholders */
+  --color-on-ink: #f6f5f2;        /* text/icons on ink fills */
+  --color-accent: #3e63dd;        /* focus ring + selection only */
+  --color-positive: #2f9e6b;      /* numbers / tiny status marks only */
+  --color-negative: #d2463c;      /* numbers / tiny status marks only */
+  /* Department dots (6-8px only, never fills). */
+  --color-dept-eng: #4c7bd9;
+  --color-dept-product: #8a63d2;
+  --color-dept-marketing: #e07a45;
+  --color-dept-sales: #c9a227;
+  --color-dept-ops: #2f9e8b;
+
+  /* --- Legacy aliases (DEPRECATED, mapped to neutrals so old classes keep working).
+         Migrate with the map in docs/DESIGN.md; do not use in new code. --- */
+  --color-cream-50: #f6f5f2;
+  --color-cream-100: #eeede9;
+  --color-cream-200: #eceae5;
+  --color-cream-300: #e4e2dd;
+  --color-ink-900: #1c1b1f;
+  --color-ink-700: #3a393e;
+  --color-ink-600: #6b6a70;
+  --color-ink-400: #9c9ba1;
+  --color-lilac-100: #eeede9;
+  --color-lilac-300: #d3d1cb;
+  --color-lilac-500: #1c1b1f;
+  --color-mint-100: #eeede9;
+  --color-mint-300: #d3d1cb;
+  --color-mint-600: #2f9e6b;
+  --color-peach-100: #eeede9;
+  --color-peach-300: #d3d1cb;
+  --color-peach-600: #6b6a70;
+  --color-sky-100: #eeede9;
+  --color-sky-300: #d3d1cb;
+  --color-sky-600: #6b6a70;
+  --color-lemon-100: #eeede9;
+  --color-lemon-300: #d3d1cb;
+  --color-lemon-600: #6b6a70;
+  --color-rose-100: #eeede9;
+  --color-rose-300: #d3d1cb;
+  --color-rose-600: #d2463c;
+
+  /* --- Type --- */
+  --font-ui: "Oxanium Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-text: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Oxanium Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* --- Shape --- */
+  --radius-card: 14px;
+  --radius-control: 10px;
+  --shadow-card: 0 1px 2px rgb(28 27 31 / 0.05), 0 4px 12px -6px rgb(28 27 31 / 0.10);
+  --shadow-pop: 0 12px 32px -12px rgb(28 27 31 / 0.22), 0 2px 6px -2px rgb(28 27 31 / 0.08);
 
   --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   --animate-fade-in: fade-in 200ms ease-out both;
@@ -79,9 +110,10 @@ body,
 }
 
 body {
-  background: var(--color-cream-100);
-  color: var(--color-ink-900);
-  font-family: var(--font-sans);
+  background: var(--color-canvas-bg);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -101,14 +133,32 @@ canvas {
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .safe-x { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
 
-/* Shared card surface. */
+/* Reading text (bubbles, notebook cards, decision copy, long descriptions): Inter.
+   `font-text` / `font-ui` utilities also come from @theme; this adds the numeric reset. */
+.font-text {
+  font-family: var(--font-text);
+  font-variant-numeric: normal;
+  letter-spacing: 0;
+}
+
+/* Small uppercase label (KASA, KULLANICI...). */
+.ui-label {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-2);
+}
+
+/* Shared card surface: flat, 1px hairline, soft shadow. */
 .ui-card {
-  background: color-mix(in oklab, var(--color-cream-50) 94%, transparent);
-  border: 1px solid color-mix(in oklab, var(--color-cream-300) 70%, transparent);
+  background: color-mix(in oklab, var(--color-surface) 96%, transparent);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .ui-scroll {
@@ -117,7 +167,7 @@ canvas {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: var(--color-cream-300) transparent;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
 .tabular { font-variant-numeric: tabular-nums; }
@@ -132,35 +182,35 @@ input[type="range"].ui-range {
   touch-action: pan-y;
 }
 input[type="range"].ui-range::-webkit-slider-runnable-track {
-  height: 8px;
+  height: 4px;
   border-radius: 999px;
-  background: var(--color-cream-200);
+  background: var(--color-border-strong);
 }
 input[type="range"].ui-range::-moz-range-track {
-  height: 8px;
+  height: 4px;
   border-radius: 999px;
-  background: var(--color-cream-200);
+  background: var(--color-border-strong);
 }
 input[type="range"].ui-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 24px;
-  height: 24px;
-  margin-top: -8px;
-  border-radius: 999px;
-  background: var(--color-lilac-500);
-  border: 3px solid var(--color-cream-50);
-  box-shadow: 0 2px 6px rgb(43 42 51 / 0.3);
-}
-input[type="range"].ui-range::-moz-range-thumb {
   width: 20px;
   height: 20px;
+  margin-top: -8px;
   border-radius: 999px;
-  background: var(--color-lilac-500);
-  border: 3px solid var(--color-cream-50);
+  background: var(--color-ink);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgb(28 27 31 / 0.25);
+}
+input[type="range"].ui-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  border: 3px solid var(--color-surface);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-lilac-500);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 

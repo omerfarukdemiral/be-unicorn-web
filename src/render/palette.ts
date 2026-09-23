@@ -19,8 +19,26 @@ export const PASTEL = {
   sand: '#e8d3b0',
 } as const
 
+/**
+ * UI-facing neutrals mirrored from src/index.css @theme (minimal palette, docs/DESIGN.md).
+ * Use these for anything DOM/UI-like drawn from the render layer (world bubbles, canvas backdrop).
+ * 3D furniture/character colours stay in PASTEL / STAGE_PALETTES below.
+ */
+export const UI_TONES = {
+  surface: '#f6f5f2',
+  surface2: '#eeede9',
+  canvasBg: '#e9e8e4',
+  border: '#e4e2dd',
+  ink: '#1c1b1f',
+  ink2: '#6b6a70',
+  ink3: '#9c9ba1',
+  accent: '#3e63dd',
+  positive: '#2f9e6b',
+  negative: '#d2463c',
+} as const
+
 export interface StagePalette {
-  /** Canvas clear colour. */
+  /** Canvas clear colour (UI backdrop: neutral canvas-bg on every stage). */
   background: string
   floor: string
   /** Checker / plank accent on the floor. */
@@ -38,19 +56,19 @@ export interface StagePalette {
 /** Index = StageIndex. Garage concrete grey → campus warm wood. */
 export const STAGE_PALETTES: readonly StagePalette[] = [
   // 0 Garaj — concrete
-  { background: '#efe9df', floor: '#bdbab4', floorAlt: '#b2afa9', wall: '#d6d2cb', wallTrim: '#a9a59e', accent: '#8fa3b8', locked: '#3a3942', ground: '#d9d3c8' },
+  { background: UI_TONES.canvasBg, floor: '#bdbab4', floorAlt: '#b2afa9', wall: '#d6d2cb', wallTrim: '#a9a59e', accent: '#8fa3b8', locked: '#3a3942', ground: '#d9d3c8' },
   // 1 Pre-seed — coworking, light birch
-  { background: '#f3ece1', floor: '#e2d2b8', floorAlt: '#d8c6a9', wall: '#f2ebe0', wallTrim: '#c9b79a', accent: '#9fe0c3', locked: '#3b3845', ground: '#dcd5c8' },
+  { background: UI_TONES.canvasBg, floor: '#e2d2b8', floorAlt: '#d8c6a9', wall: '#f2ebe0', wallTrim: '#c9b79a', accent: '#9fe0c3', locked: '#3b3845', ground: '#dcd5c8' },
   // 2 Seed — small office, pale oak
-  { background: '#f4ede2', floor: '#dcc6a2', floorAlt: '#d1b993', wall: '#efe6f5', wallTrim: '#b9a6cf', accent: '#c9a7f5', locked: '#393647', ground: '#d8d2c6' },
+  { background: UI_TONES.canvasBg, floor: '#dcc6a2', floorAlt: '#d1b993', wall: '#efe6f5', wallTrim: '#b9a6cf', accent: '#c9a7f5', locked: '#393647', ground: '#d8d2c6' },
   // 3 Series A — open floor, sky tint
-  { background: '#eef1f2', floor: '#d6c2a0', floorAlt: '#cbb591', wall: '#e4eef7', wallTrim: '#9cb7d3', accent: '#9cc9f5', locked: '#363849', ground: '#d3d6d4' },
+  { background: UI_TONES.canvasBg, floor: '#d6c2a0', floorAlt: '#cbb591', wall: '#e4eef7', wallTrim: '#9cb7d3', accent: '#9cc9f5', locked: '#363849', ground: '#d3d6d4' },
   // 4 Series B — two floors, peach accents
-  { background: '#f5ece6', floor: '#d3b58e', floorAlt: '#c7a780', wall: '#f7e7dd', wallTrim: '#d9a98d', accent: '#ffc1a1', locked: '#3a3644', ground: '#d6cfc6' },
+  { background: UI_TONES.canvasBg, floor: '#d3b58e', floorAlt: '#c7a780', wall: '#f7e7dd', wallTrim: '#d9a98d', accent: '#ffc1a1', locked: '#3a3644', ground: '#d6cfc6' },
   // 5 Series C — building, warm walnut + glass
-  { background: '#f2ebe4', floor: '#c9a27a', floorAlt: '#bc956d', wall: '#eef3f1', wallTrim: '#9fc7b6', accent: '#9fe0c3', locked: '#383442', ground: '#cfd4cc' },
+  { background: UI_TONES.canvasBg, floor: '#c9a27a', floorAlt: '#bc956d', wall: '#eef3f1', wallTrim: '#9fc7b6', accent: '#9fe0c3', locked: '#383442', ground: '#cfd4cc' },
   // 6 Unicorn — campus, warm wood + lawn
-  { background: '#f7efe2', floor: '#c49366', floorAlt: '#b8875b', wall: '#fbf1e2', wallTrim: '#e0b88a', accent: '#f5a3b5', locked: '#3b3643', ground: '#a9d59a' },
+  { background: UI_TONES.canvasBg, floor: '#c49366', floorAlt: '#b8875b', wall: '#fbf1e2', wallTrim: '#e0b88a', accent: '#f5a3b5', locked: '#3b3643', ground: '#a9d59a' },
 ]
 
 export function stagePalette(stage: StageIndex | number): StagePalette {

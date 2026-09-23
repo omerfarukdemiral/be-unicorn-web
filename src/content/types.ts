@@ -6,6 +6,7 @@ import type {
   DecisionCardId,
   Dept,
   EffectBundle,
+  FounderActionKind,
   FurnitureId,
   GameState,
   HudWidget,
@@ -203,7 +204,16 @@ export interface StageDef {
   unlockTools?: ToolId[]
   /** Turkish summary of what opens ("Açılan yeni şey"). */
   unlocksText: string
+  /** Palette key for render/palette.ts (floor & wall tones per office, PLAN §7.1). */
+  paletteKey?: StagePaletteKey
+  /** Founder actions first available at this stage (PLAN §4.4). */
+  unlockActions?: FounderActionKind[]
+  /** Short Turkish tagline for the move / stage-up scene. */
+  tagline?: string
 }
+
+/** Office look per stage: garage concrete grey → campus warm wood. */
+export type StagePaletteKey = 'concrete' | 'cowork' | 'smallOffice' | 'openPlan' | 'twoFloor' | 'tower' | 'campus'
 
 // ---------------------------------------------------------------------------
 // Text tables (keyed so EN can be added later)

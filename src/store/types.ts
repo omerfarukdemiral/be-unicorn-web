@@ -1,6 +1,6 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
-import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, FurnitureId, GameState, NewGameOptions, ProjectId, SlotId, VisitorId } from '../engine/types'
+import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, FurnitureId, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -47,6 +47,8 @@ export interface UiState {
 export interface GameStore {
   state: GameState
   ui: UiState
+  /** Replay log for this run: seed + these actions reproduce it (PLAN §8.3). */
+  replay: TimedAction[]
 
   // Engine bridge
   dispatch(action: Action): ActionResult

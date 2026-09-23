@@ -66,7 +66,3 @@ export const NPC_TEXT: NpcTextTable = {
   customer: { name: 'Aylin', title: 'Müşteri' },
   journalist: { name: 'Tuna', title: 'Gazeteci' },
 }
-
-export const UI_TEXT: Record<string, string> = {
-  'app.title': 'Be Unicorn',
-}

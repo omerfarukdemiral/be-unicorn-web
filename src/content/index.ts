@@ -5,12 +5,29 @@ import { CONCEPTS } from './concepts'
 import { DECISIONS } from './decisions'
 import { FURNITURE } from './furniture'
 import { OFFICE_LINES } from './officeLines'
-import { EMPLOYEE_NAMES } from './names'
-import { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT, UI_TEXT } from './text'
+import { EMPLOYEE_NAMES, ENTERPRISE_NAMES, NPC_NAMES, PROJECT_NAMES } from './names'
+import { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT } from './text'
+import { UI_TEXT } from './strings'
 
 export * from './types'
 export { STAGES, CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }
 export { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT, UI_TEXT }
+// Additions (content lane): extra name pools, typed text tables, formatting helpers.
+export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }
+export {
+  ACTION_ERROR_TEXT,
+  ARCHETYPE_TEXT,
+  CONCEPT_TITLE,
+  DECISION_CATEGORY_TEXT,
+  EMPLOYEE_STATUS_TEXT,
+  FOUNDER_ACTION_TEXT,
+  HUD_WIDGET_TEXT,
+  MILESTONE_TEXT,
+  POST_MORTEM_TITLE,
+  SLOT_TYPE_TEXT,
+  TOOL_TEXT,
+} from './strings'
+export * from './format'
 
 export const CONTENT: ContentBundle = {
   stages: STAGES,

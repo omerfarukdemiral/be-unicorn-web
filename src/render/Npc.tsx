@@ -7,7 +7,7 @@ import type { NpcRole, Slot, Visitor } from '../engine/types'
 import { CELL, hash01, pick, rotateXZ } from './constants'
 import { CharacterModel, createRig, type Accessory, type CharacterLook } from './CharacterModel'
 import type { OfficeLayout, XZ } from './layout'
-import { HAIR_COLORS, HIGHLIGHT, NPC_COLORS, SKIN_TONES } from './palette'
+import { HAIR_COLORS, HIGHLIGHT, MENTOR_HAIR, NPC_COLORS, NPC_LEGS, SKIN_TONES } from './palette'
 import { GEO, HIT_MAT, flatMat } from './resources'
 import { clearSpeaker, setSpeakerPos } from './sceneRegistry'
 import { Mover, poseStand, poseWalk } from './walker'
@@ -27,10 +27,10 @@ export function npcLook(id: string, role: NpcRole): CharacterLook {
   return {
     body: c.body,
     skin: pick(SKIN_TONES, id, 1),
-    hair: role === 'mentor' ? '#c9c6cf' : pick(HAIR_COLORS, id, 2),
+    hair: role === 'mentor' ? MENTOR_HAIR : pick(HAIR_COLORS, id, 2),
     hairStyle: role === 'mentor' ? 3 : Math.floor(hash01(id, 4) * 3),
     accessories: ROLE_ACCESSORIES[role],
-    legs: role === 'investor' ? '#2f3344' : '#5b5866',
+    legs: role === 'investor' ? NPC_LEGS.investor : NPC_LEGS.default,
   }
 }
 
@@ -101,7 +101,7 @@ export const Npc = memo(function Npc(props: NpcProps) {
     } else if (present) {
       const tgt = visitorTarget(v, p.slots, L)
       const key = `t:${tgt.pos[0].toFixed(2)},${tgt.pos[1].toFixed(2)}`
-      if (mover.goalKey !== key) mover.goTo(tgt.pos, L, key, tgt.yaw, false)
+      if (mover.goalKey !== key) mover.goTo(tgt.pos, L, key, tgt.yaw)
     }
     const moving = mover.update(dt, speedMul, now)
     if (moving) poseWalk(rig, mover.phase)

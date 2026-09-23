@@ -20,7 +20,7 @@ export const DOCK_TABS: DockTabDef[] = [
   { id: 'team', icon: 'users', key: 'e' },
   { id: 'projects', icon: 'rocket', key: 'p' },
   { id: 'growth', icon: 'growth', key: 'b' },
-  { id: 'journal', icon: 'book', key: 'd' },
+  { id: 'journal', icon: 'book', key: 'k' },
 ]
 
 function useBadges(): Partial<Record<DockTab, number>> {

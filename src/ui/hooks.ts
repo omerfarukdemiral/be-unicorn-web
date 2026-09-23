@@ -40,7 +40,7 @@ export function useNow(ms: number, active = true): number {
 const PREFS_KEY = 'be-unicorn:prefs'
 
 export interface UiPrefs {
-  /** Kept for when audio exists; no control is shown yet. */
+  /** UI and game sound cues (src/audio). */
   sound: boolean
   /** Show screen-space bubbles (fallback when render does not draw world bubbles). */
   screenBubbles: boolean

@@ -1,8 +1,9 @@
-// Local visual movement for characters: straight/L paths on the floor, plus pose helpers.
+// Local visual movement for characters: furniture-avoiding paths on the floor, plus pose helpers.
 // Purely cosmetic — never written back to GameState.
 import { WALK_SPEED } from './constants'
 import type { Rig } from './CharacterModel'
-import { lPath, pathFromDoor, pathToDoor, type OfficeLayout, type XZ } from './layout'
+import { pathFromDoor, pathToDoor, type OfficeLayout, type XZ } from './layout'
+import { findPath } from './nav'
 
 function angleLerp(a: number, b: number, t: number): number {
   let d = b - a
@@ -46,7 +47,7 @@ export class Mover {
   }
 
   /** Walk to a point inside the office (entering through the door if outside). */
-  goTo(target: XZ, layout: OfficeLayout, key: string, faceYaw: number | null = null, xFirst = true): void {
+  goTo(target: XZ, layout: OfficeLayout, key: string, faceYaw: number | null = null): void {
     this.goalKey = key
     this.faceYaw = faceYaw
     this.exitAfter = false
@@ -56,7 +57,7 @@ export class Mover {
       this.outside = false
       this.path = pathFromDoor(target, layout)
     } else {
-      this.path = lPath([this.x, this.z], target, xFirst)
+      this.path = findPath([this.x, this.z], target, layout)
     }
   }
 

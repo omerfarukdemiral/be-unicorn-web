@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { initAudio } from './audio'
 import { useGameStore } from './store/gameStore'
 
 const root = document.getElementById('root')
@@ -19,6 +20,8 @@ if (import.meta.env.DEV) {
   // Seed + actions of this run, for reproducible bug reports (PLAN §8.3).
   w.__replay = () => useGameStore.getState().exportReplay()
 }
+
+initAudio()
 
 createRoot(root).render(
   <StrictMode>

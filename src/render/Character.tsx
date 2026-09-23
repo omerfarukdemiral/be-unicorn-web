@@ -7,7 +7,7 @@ import type { Dept, Employee, FounderActionRun, Slot } from '../engine/types'
 import { CELL, hash01, hashString, pick, rotateXZ, yawOf } from './constants'
 import { CharacterModel, StatusIcon, createRig, type Accessory, type CharacterLook } from './CharacterModel'
 import type { OfficeLayout, XZ } from './layout'
-import { DEPT_COLORS, FOUNDER_COLORS, HAIR_COLORS, HIGHLIGHT, SKIN_TONES } from './palette'
+import { DEPT_COLORS, FOUNDER_COLORS, FOUNDER_LEGS, HAIR_COLORS, HIGHLIGHT, LEG_COLORS, SKIN_TONES } from './palette'
 import { GEO, HIT_MAT, flatMat } from './resources'
 import { clearSpeaker, isCelebrating, setSpeakerPos } from './sceneRegistry'
 import { Mover, overlayYawn, poseCheer, poseSip, poseSit, poseStand, poseWalk } from './walker'
@@ -28,7 +28,7 @@ export function employeeLook(id: string, dept: Dept): CharacterLook {
     hair: pick(HAIR_COLORS, id, 2),
     hairStyle: hashString(`${id}#4`) % 4,
     accessories: acc,
-    legs: pick(['#5b5866', '#4a5a78', '#6b5b4b', '#3e3c48'], id, 5),
+    legs: pick(LEG_COLORS, id, 5),
   }
 }
 
@@ -38,7 +38,7 @@ export const FOUNDER_LOOK: CharacterLook = {
   hair: HAIR_COLORS[1],
   hairStyle: 0,
   accessories: ['horn'],
-  legs: '#3e3c48',
+  legs: FOUNDER_LEGS,
   scale: 1.06,
 }
 
@@ -184,7 +184,7 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
     } else if (mode === 'wander') {
       if (!mover.moving && (mover.goalKey !== 'wander' || now - mover.arrivedAt > 1800 + seed * 1500)) {
         wanderN.current++
-        mover.goTo(randomIn(L, e.id, wanderN.current), L, 'wander', null, wanderN.current % 2 === 0)
+        mover.goTo(randomIn(L, e.id, wanderN.current), L, 'wander', null)
       }
     } else {
       const spot = idleSpot(L, e.id)

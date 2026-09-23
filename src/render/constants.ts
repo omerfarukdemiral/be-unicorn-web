@@ -14,8 +14,18 @@ export const ZOOM_FACTORS = [0.72, 1, 1.65] as const
 /** Isometric camera direction (from target). */
 export const CAMERA_DIR: [number, number, number] = [1, 1.05, 1]
 
+/**
+ * Extra world gap around the founder row/column. Ring 1 sits right next to the founder desk
+ * in grid space (no walkway row), so every non-centre coordinate is pushed outward by this much.
+ */
+export const CENTER_GAP = CELL * 0.6
+
+function axisToWorld(v: number): number {
+  return v * CELL + Math.sign(v) * CENTER_GAP
+}
+
 export function gridToWorld(p: GridPos): [number, number] {
-  return [p.x * CELL, p.z * CELL]
+  return [axisToWorld(p.x), axisToWorld(p.z)]
 }
 
 export function yawOf(rotation: number): number {

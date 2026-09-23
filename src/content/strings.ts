@@ -259,7 +259,7 @@ const BASE_TEXT: Record<string, string> = {
   'dock.team': 'Ekip',
   'dock.projects': 'Projeler',
   'dock.growth': 'Büyüme',
-  'dock.journal': 'Defter',
+  'dock.journal': 'Kazanımlar',
 
   // Shop
   'shop.all': 'Tümü',
@@ -365,27 +365,27 @@ const BASE_TEXT: Record<string, string> = {
   'burn.ads': 'Reklam',
 
   // Journal (Defter)
-  'journal.title': 'Kurucu Defteri',
+  'journal.title': 'Kazanımlar',
   'journal.what': 'Ne?',
   'journal.where': 'Sen nerede gördün?',
   'journal.rule': 'Kural',
-  'journal.count': '{n}/{total} ders',
-  'journal.empty': 'Defterin henüz boş. Ofiste konuşulanlara kulak ver.',
-  'journal.shelf': 'Kitaplık',
-  'journal.cardLabel': 'Defter kartı',
+  'journal.count': '{n}/{total}',
+  'journal.empty': 'Henüz kazanım yok. Ofiste konuşulanlara kulak ver.',
+  'journal.shelf': 'Kavramlar',
+  'journal.cardLabel': 'Kavram kartı',
   'journal.gotIt': 'Anladım',
   'journal.unlocked': 'Açıldı: {v}',
   'journal.waiting': 'Henüz keşfedilmedi',
   'journal.missing': 'Kart bulunamadı ({id})',
 
   // Bubbles & decisions
-  'bubble.openNotebook': 'Deftere bak',
+  'bubble.openNotebook': 'Kazanımlara bak',
   'bubble.collapse': 'Küçült',
   'decision.title': 'Karar',
   'decision.gain': 'Kazanç',
   'decision.cost': 'Bedel',
   'decision.youChose': 'Seçimin: {v}',
-  'decision.notebookLink': 'Defter: {v}',
+  'decision.notebookLink': 'Kavram: {v}',
   'decision.reflection': 'Yansıma',
 
   // Founder
@@ -522,7 +522,7 @@ const BASE_TEXT: Record<string, string> = {
   'visitor.ambient': 'Ofise uğradı.',
   'shortcut.pause': 'Duraklat / devam',
   'shortcut.speed': 'Hız 1× / 2× / 4×',
-  'shortcut.tabs': 'Mağaza · Ekip · Projeler · Büyüme · Defter',
+  'shortcut.tabs': 'Mağaza · Ekip · Projeler · Büyüme · Kazanımlar',
   'shortcut.escape': 'İptal / kapat',
   'shortcut.zoom': 'Yakınlaştır / uzaklaştır',
   'zoom.0': 'Uzak',

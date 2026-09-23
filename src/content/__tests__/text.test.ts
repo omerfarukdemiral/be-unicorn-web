@@ -88,7 +88,7 @@ describe('UI text', () => {
   it('has dock tabs, stages and id-keyed tables', () => {
     for (const k of ['dock.shop', 'dock.team', 'dock.projects', 'dock.growth', 'dock.journal']) expect(UI_TEXT[k]).toBeTruthy()
     expect([UI_TEXT['dock.shop'], UI_TEXT['dock.team'], UI_TEXT['dock.projects'], UI_TEXT['dock.growth'], UI_TEXT['dock.journal']]).toEqual([
-      'Mağaza', 'Ekip', 'Projeler', 'Büyüme', 'Defter',
+      'Mağaza', 'Ekip', 'Projeler', 'Büyüme', 'Kazanımlar',
     ])
     const groups: [string, readonly string[]][] = [
       ['founder', FOUNDER_ACTIONS],

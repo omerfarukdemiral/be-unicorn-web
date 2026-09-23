@@ -2,7 +2,8 @@
 // No game formulas here — only geometry for drawing and walking.
 import { FOUNDER_SLOT_ID, type RingState, type Slot, type SlotId, type StageIndex } from '../engine/types'
 import { CELL, gridToWorld, hashString } from './constants'
-import { resolveFurniture } from './furnitureCatalog'
+import { findPath } from './nav'
+import { resolveFurniture, type ShapeKey } from './furnitureCatalog'
 
 export interface Box {
   minX: number
@@ -40,6 +41,10 @@ export interface OfficeLayout {
   meeting?: XZ
   /** Unlocked walkable area (for onboarding wander). */
   walkBox: Box
+  /** World-space footprints of placed furniture; characters path around these. */
+  obstacles: Box[]
+  /** Structural columns (stages 3–5), kept off slot cells and the door lane. */
+  columns: XZ[]
 }
 
 function boxOfCells(cells: Slot[], pad: number): Box | null {
@@ -56,6 +61,41 @@ function boxOfCells(cells: Slot[], pad: number): Box | null {
     maxZ = Math.max(maxZ, z)
   }
   return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad }
+}
+
+/** Local blocked rect of a model (CELL units, front/chair side = +z), leaving seats reachable. */
+function footprint(shape: ShapeKey, span: boolean): { hx: number; z0: number; z1: number } {
+  const wide = span ? 0.5 : 0
+  switch (shape) {
+    case 'desk':
+    case 'deskErgo':
+    case 'deskDual':
+      return { hx: 0.43, z0: -0.3, z1: 0.2 }
+    case 'meeting':
+      return { hx: (span ? 0.8 : 0.4) + 0.15, z0: -0.65, z1: 0.26 }
+    case 'plant':
+      return { hx: 0.25, z0: -0.25, z1: 0.25 }
+    default:
+      return { hx: 0.44 + wide, z0: -0.44, z1: 0.3 }
+  }
+}
+
+/** World AABB of a local rect rotated by yaw (three.js Y rotation) around `c`. */
+function rotatedBox(c: XZ, yaw: number, hx: number, z0: number, z1: number): Box {
+  const cos = Math.cos(yaw)
+  const sin = Math.sin(yaw)
+  const out: Box = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity }
+  for (const lx of [-hx, hx]) {
+    for (const lz of [z0, z1]) {
+      const x = c[0] + (lx * cos + lz * sin) * CELL
+      const z = c[1] + (-lx * sin + lz * cos) * CELL
+      out.minX = Math.min(out.minX, x)
+      out.maxX = Math.max(out.maxX, x)
+      out.minZ = Math.min(out.minZ, z)
+      out.maxZ = Math.max(out.maxZ, z)
+    }
+  }
+  return out
 }
 
 function union(a: Box, b: Box): Box {
@@ -110,7 +150,8 @@ export function computeLayout(slots: readonly Slot[], rings: readonly RingState[
   const door = {
     pos: [doorX, bounds.minZ] as XZ,
     inside: [doorX, bounds.minZ + CELL * 0.6] as XZ,
-    outside: [doorX, bounds.minZ - CELL * 1.4] as XZ,
+    // Just past the threshold: further out, heads show above the back wall.
+    outside: [doorX, bounds.minZ - CELL * 0.35] as XZ,
     width: CELL * 0.9,
   }
 
@@ -131,6 +172,35 @@ export function computeLayout(slots: readonly Slot[], rings: readonly RingState[
     }
   }
 
+  const obstacles: Box[] = []
+  for (const s of slots) {
+    const c = itemCenter.get(s.id)
+    if (!c) continue
+    const shape = resolveFurniture(s.itemId ?? 'desk-basic', s.type).shape
+    const f = footprint(shape, c.span)
+    obstacles.push(rotatedBox(c.pos, c.yaw, f.hx, f.z0, f.z1))
+  }
+
+  // Columns on a coarse grid, skipping any spot that would land on a slot cell or in the doorway.
+  const columns: XZ[] = []
+  if (stage >= 3 && stage <= 5) {
+    const step = CELL * 3
+    const slotPts = [...slotWorld.values()]
+    for (let x = bounds.minX + step; x < bounds.maxX - CELL; x += step) {
+      for (let z = bounds.minZ + step; z < bounds.maxZ - CELL; z += step) {
+        const c: XZ = [x + CELL * 0.5, z + CELL * 0.5]
+        if (Math.hypot(c[0], c[1]) <= CELL * 1.5) continue
+        if (slotPts.some((p) => Math.max(Math.abs(p[0] - c[0]), Math.abs(p[1] - c[1])) < CELL * 0.75)) continue
+        if (Math.abs(c[0] - door.pos[0]) < CELL * 0.7 && c[1] < door.inside[1] + CELL) continue
+        columns.push(c)
+        obstacles.push({ minX: c[0] - 0.11, maxX: c[0] + 0.11, minZ: c[1] - 0.11, maxZ: c[1] + 0.11 })
+      }
+    }
+  }
+
+  // Series B stairs along the back-left corner (drawn in Office.tsx).
+  if (stage === 4) obstacles.push({ minX: bounds.minX, maxX: bounds.minX + 0.95, minZ: bounds.minZ, maxZ: bounds.minZ + 4.6 })
+
   const lounge: XZ[] = []
   let meeting: XZ | undefined
   for (const s of slots) {
@@ -148,7 +218,7 @@ export function computeLayout(slots: readonly Slot[], rings: readonly RingState[
   }
   if (lounge.length === 0) lounge.push([door.inside[0] - CELL * 0.6, door.inside[1] + CELL * 0.3])
 
-  return { stage, bounds, center, radius, bands, door, slotWorld, itemCenter, lounge, meeting, walkBox }
+  return { stage, bounds, center, radius, bands, door, slotWorld, itemCenter, lounge, meeting, walkBox, obstacles, columns }
 }
 
 /** L-shaped path (x first, then z) from a to b; returns waypoints excluding a. */
@@ -162,12 +232,12 @@ export function lPath(a: XZ, b: XZ, xFirst = true): XZ[] {
 
 /** Path from inside the office to the door and out. */
 export function pathToDoor(from: XZ, layout: OfficeLayout, exit: boolean): XZ[] {
-  const pts = lPath(from, layout.door.inside, false)
+  const pts = findPath(from, layout.door.inside, layout)
   if (exit) pts.push(layout.door.outside)
   return pts
 }
 
 /** Path from outside the door to a target inside. */
 export function pathFromDoor(target: XZ, layout: OfficeLayout): XZ[] {
-  return [layout.door.inside, ...lPath(layout.door.inside, target, false)]
+  return [layout.door.inside, ...findPath(layout.door.inside, target, layout)]
 }

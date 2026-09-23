@@ -122,6 +122,51 @@ export const NPC_COLORS: Record<NpcRole, { body: string; accent: string }> = {
 /** The founder wears the brand violet (lighter tint so the shirt still reads shaded) + golden horn. */
 export const FOUNDER_COLORS = { body: '#9f82ff', accent: '#fff5fb', horn: '#ffd24d' } as const
 
+/** Trousers: employees pick one per id; founder and investor wear the darkest. */
+export const LEG_COLORS = ['#4a4760', '#3d5378', '#6b5641', '#34323f'] as const
+export const FOUNDER_LEGS = '#34323f'
+export const NPC_LEGS = { default: '#4a4760', investor: '#2f3344' } as const
+export const MENTOR_HAIR = '#c9c6cf'
+
+/**
+ * Stage decor and locked-ring props (Office.tsx). Warm and lively like the rest of the scene; metal
+ * and glass stay cool so they read as material, not as a stage hue.
+ */
+export const PROP_COLORS = {
+  oilStain: '#a8a092',
+  glass: '#d8eef8',
+  glassWall: '#cfe8f5',
+  brass: '#e8c46a',
+  doormat: '#b0825c',
+  garageSlat: '#a9bdd2',
+  garageFrame: '#7d8a99',
+  metal: '#8c8c96',
+  shelfBoard: '#a9a59e',
+  cardboard: '#d2a878',
+  cardboardLight: '#e0bd8e',
+  redBox: '#ec7f76',
+  cord: '#2b2a33',
+  bulb: '#fff2c4',
+  tire: '#3e3c48',
+  pot: '#e7b48a',
+  leaf: '#7fd07a',
+  elevator: '#c8ccd4',
+  trunk: '#9a6b44',
+  tree: '#74c46e',
+  treeLight: '#9cdc86',
+  statueBase: '#fbf8f2',
+  statue: '#fbf1f8',
+  statueHorn: '#f7e08a',
+  statueMane: '#c9a7f5',
+  /** Locked-ring clutter: boxes, dust sheets, dust motes. */
+  clutter: '#c6a47c',
+  dustSheet: '#e2dbd0',
+  dust: '#e6dfd2',
+} as const
+
+/** Opacity of the stage `locked` tint over locked rings: dim, not a dark slab. */
+export const LOCKED_OPACITY = 0.32
+
 export const SKIN_TONES = ['#f6d7bf', '#eec4a1', '#d9a47d', '#b97e56', '#8d5a3b', '#f3cfb3'] as const
 export const HAIR_COLORS = ['#2b2a33', '#4a3428', '#7a5230', '#c8924d', '#e8c77e', '#b3542f', '#8c8c96'] as const
 

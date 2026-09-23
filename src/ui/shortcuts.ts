@@ -1,4 +1,4 @@
-// Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/D panel tabs (again = close), Esc closes, +/- zoom.
+// Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/K panel tabs (again = close), Esc closes, +/- zoom.
 import { useEffect, useRef } from 'react'
 import type { GameSpeed } from '../engine/types'
 import { useGameStore } from '../store/gameStore'

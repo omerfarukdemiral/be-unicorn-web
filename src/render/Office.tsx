@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import type { StageIndex } from '../engine/types'
 import { CELL, WALL_HEIGHT, WALL_THICKNESS, hash01 } from './constants'
 import type { Box, OfficeLayout, RingBand } from './layout'
-import { PASTEL, stagePalette, type StagePalette } from './palette'
+import { LOCKED_OPACITY, PASTEL, PROP_COLORS, stagePalette, type StagePalette } from './palette'
 import { GEO, glassMat, glowMat, mat } from './resources'
 import { mood, useLayout } from './sceneRegistry'
 
@@ -60,7 +60,7 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
           <Stripes bounds={b} color={pal.floorAlt} along="x" width={0.03} pitch={CELL} />
           <Stripes bounds={b} color={pal.floorAlt} along="z" width={0.03} pitch={CELL} />
           {/* oil stain */}
-          <mesh geometry={GEO.disc} material={mat('#a09d97')} scale={[0.9, 1, 0.6]} position={[b.minX + w * 0.28, 0.003, b.maxZ - d * 0.22]} />
+          <mesh geometry={GEO.disc} material={mat(PROP_COLORS.oilStain)} scale={[0.9, 1, 0.6]} position={[b.minX + w * 0.28, 0.003, b.maxZ - d * 0.22]} />
         </>
       ) : (
         <Stripes bounds={b} color={pal.floorAlt} along={stage % 2 === 0 ? 'x' : 'z'} width={0.2} pitch={0.4} />
@@ -91,7 +91,7 @@ function Windows({ from, to, fixed, axis, pal, tall }: { from: number; to: numbe
     items.push(
       <group key={i}>
         <B s={frame} p={pos} c={pal.wallTrim} shadow={false} />
-        <mesh geometry={GEO.box} material={glassMat('#d8eef8', 0.85)} scale={size} position={pos} />
+        <mesh geometry={GEO.box} material={glassMat(PROP_COLORS.glass, 0.85)} scale={size} position={pos} />
       </group>,
     )
   }
@@ -114,8 +114,8 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
       {/* back wall (−z) with door gap */}
       {glassy ? (
         <>
-          <mesh geometry={GEO.box} material={glassMat('#cfe8f5', 0.45)} scale={[dl - b.minX + t, H, t]} position={[(b.minX - t + dl) / 2, H / 2, backZ]} />
-          <mesh geometry={GEO.box} material={glassMat('#cfe8f5', 0.45)} scale={[b.maxX - dr, H, t]} position={[(dr + b.maxX) / 2, H / 2, backZ]} />
+          <mesh geometry={GEO.box} material={glassMat(PROP_COLORS.glassWall, 0.45)} scale={[dl - b.minX + t, H, t]} position={[(b.minX - t + dl) / 2, H / 2, backZ]} />
+          <mesh geometry={GEO.box} material={glassMat(PROP_COLORS.glassWall, 0.45)} scale={[b.maxX - dr, H, t]} position={[(dr + b.maxX) / 2, H / 2, backZ]} />
         </>
       ) : (
         <>
@@ -127,7 +127,7 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
       <B s={[b.maxX - b.minX + t, 0.08, t + 0.04]} p={[(b.minX + b.maxX - t) / 2, H, backZ]} c={pal.wallTrim} shadow={false} />
       {/* left wall (−x) */}
       {glassy ? (
-        <mesh geometry={GEO.box} material={glassMat('#cfe8f5', 0.45)} scale={[t, H, b.maxZ - b.minZ]} position={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} />
+        <mesh geometry={GEO.box} material={glassMat(PROP_COLORS.glassWall, 0.45)} scale={[t, H, b.maxZ - b.minZ]} position={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} />
       ) : (
         <B s={[t, H, b.maxZ - b.minZ]} p={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} c={wallC} />
       )}
@@ -139,12 +139,12 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
       <B s={[0.07, 1.4, t + 0.06]} p={[dl - 0.035, 0.7, backZ]} c={pal.wallTrim} />
       <B s={[0.07, 1.4, t + 0.06]} p={[dr + 0.035, 0.7, backZ]} c={pal.wallTrim} />
       <B s={[door.width + 0.14, 0.07, t + 0.06]} p={[door.pos[0], 1.38, backZ]} c={pal.wallTrim} />
-      <group position={[dl, 0, backZ + t / 2]} rotation={[0, -1.1, 0]}>
+      <group position={[dl, 0, backZ + t / 2]} rotation={[0, -1.45, 0]}>
         <B s={[door.width * 0.95, 1.32, 0.05]} p={[door.width * 0.475, 0.66, 0]} c={pal.accent} />
-        <B s={[0.04, 0.04, 0.08]} p={[door.width * 0.85, 0.65, 0.04]} c="#e8c46a" shadow={false} />
+        <B s={[0.04, 0.04, 0.08]} p={[door.width * 0.85, 0.65, 0.04]} c={PROP_COLORS.brass} shadow={false} />
       </group>
       {/* doormat outside-in */}
-      <mesh geometry={GEO.plane} material={mat('#a07a5a')} scale={[door.width * 0.9, 1, 0.45]} position={[door.pos[0], 0.005, b.minZ + 0.3]} />
+      <mesh geometry={GEO.plane} material={mat(PROP_COLORS.doormat)} scale={[door.width * 0.9, 1, 0.45]} position={[door.pos[0], 0.005, b.minZ + 0.3]} />
       {layout.stage >= 1 && layout.stage <= 4 && <Windows from={b.minZ + CELL * 0.4} to={b.maxZ - CELL * 0.4} fixed={leftX} axis="z" pal={pal} />}
       {layout.stage >= 2 && layout.stage <= 4 && <Windows from={b.minX + CELL * 0.4} to={dl - CELL * 0.4} fixed={backZ} axis="x" pal={pal} />}
     </group>
@@ -162,33 +162,33 @@ function GarageDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette 
   const cz = (b.minZ + b.maxZ) / 2 + d * 0.08
   const x = b.minX + 0.02
   const slats = []
-  for (let i = 0; i < 9; i++) slats.push(<B key={i} s={[0.05, 0.16, doorW]} p={[x + 0.02, 0.15 + i * 0.19, cz]} c={i % 2 ? pal.accent : '#a6b8ca'} shadow={false} />)
+  for (let i = 0; i < 9; i++) slats.push(<B key={i} s={[0.05, 0.16, doorW]} p={[x + 0.02, 0.15 + i * 0.19, cz]} c={i % 2 ? pal.accent : PROP_COLORS.garageSlat} shadow={false} />)
   return (
     <group>
       {/* roll-up garage door on the left wall */}
-      <B s={[0.08, 1.85, doorW + 0.16]} p={[x - 0.01, 0.92, cz]} c="#7d8a99" shadow={false} />
+      <B s={[0.08, 1.85, doorW + 0.16]} p={[x - 0.01, 0.92, cz]} c={PROP_COLORS.garageFrame} shadow={false} />
       {slats}
       {/* metal shelf with boxes along the back wall */}
       <group position={[b.minX + CELL * 0.8, 0, b.minZ + 0.28]}>
-        <B s={[0.05, 1.3, 0.05]} p={[-0.55, 0.65, -0.12]} c="#8c8c96" />
-        <B s={[0.05, 1.3, 0.05]} p={[0.55, 0.65, -0.12]} c="#8c8c96" />
-        <B s={[0.05, 1.3, 0.05]} p={[-0.55, 0.65, 0.12]} c="#8c8c96" />
-        <B s={[0.05, 1.3, 0.05]} p={[0.55, 0.65, 0.12]} c="#8c8c96" />
+        <B s={[0.05, 1.3, 0.05]} p={[-0.55, 0.65, -0.12]} c={PROP_COLORS.metal} />
+        <B s={[0.05, 1.3, 0.05]} p={[0.55, 0.65, -0.12]} c={PROP_COLORS.metal} />
+        <B s={[0.05, 1.3, 0.05]} p={[-0.55, 0.65, 0.12]} c={PROP_COLORS.metal} />
+        <B s={[0.05, 1.3, 0.05]} p={[0.55, 0.65, 0.12]} c={PROP_COLORS.metal} />
         {[0.3, 0.75, 1.2].map((y) => (
-          <B key={y} s={[1.15, 0.03, 0.3]} p={[0, y, 0]} c="#a9a59e" />
+          <B key={y} s={[1.15, 0.03, 0.3]} p={[0, y, 0]} c={PROP_COLORS.shelfBoard} />
         ))}
-        <B s={[0.3, 0.22, 0.24]} p={[-0.3, 0.43, 0]} c="#c9a27a" />
-        <B s={[0.24, 0.18, 0.2]} p={[0.05, 0.41, 0]} c="#d8b58a" />
-        <B s={[0.36, 0.26, 0.24]} p={[0.2, 0.9, 0]} c="#c9a27a" />
-        <B s={[0.2, 0.3, 0.12]} p={[-0.3, 1.36, 0]} c="#e57f7f" />
+        <B s={[0.3, 0.22, 0.24]} p={[-0.3, 0.43, 0]} c={PROP_COLORS.cardboard} />
+        <B s={[0.24, 0.18, 0.2]} p={[0.05, 0.41, 0]} c={PROP_COLORS.cardboardLight} />
+        <B s={[0.36, 0.26, 0.24]} p={[0.2, 0.9, 0]} c={PROP_COLORS.cardboard} />
+        <B s={[0.2, 0.3, 0.12]} p={[-0.3, 1.36, 0]} c={PROP_COLORS.redBox} />
       </group>
       {/* hanging bulb */}
       <group position={[0, 2.05, 0]}>
-        <B s={[0.01, 0.35, 0.01]} p={[0, 0.17, 0]} c="#2b2a33" shadow={false} />
-        <mesh geometry={GEO.sphere} material={glowMat('#fff2c4', 1.2)} scale={[0.14, 0.16, 0.14]} />
+        <B s={[0.01, 0.35, 0.01]} p={[0, 0.17, 0]} c={PROP_COLORS.cord} shadow={false} />
+        <mesh geometry={GEO.sphere} material={glowMat(PROP_COLORS.bulb, 1.2)} scale={[0.14, 0.16, 0.14]} />
       </group>
       {/* bicycle-ish tyres leaning on the wall */}
-      <mesh geometry={GEO.cyl} material={mat('#3e3c48')} scale={[0.5, 0.06, 0.5]} rotation={[Math.PI / 2, 0, 0.1]} position={[b.maxX - CELL * 0.35, 0.26, b.minZ + 0.1]} castShadow />
+      <mesh geometry={GEO.cyl} material={mat(PROP_COLORS.tire)} scale={[0.5, 0.06, 0.5]} rotation={[Math.PI / 2, 0, 0.1]} position={[b.maxX - CELL * 0.35, 0.26, b.minZ + 0.1]} castShadow />
     </group>
   )
 }
@@ -204,8 +204,8 @@ function CoworkingDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalet
     <group>
       {plants.map((p, i) => (
         <group key={i} position={p}>
-          <mesh geometry={GEO.cyl} material={mat('#e7b48a')} scale={[0.26, 0.26, 0.26]} position={[0, 0.13, 0]} castShadow />
-          <mesh geometry={GEO.sphere} material={mat('#8fcf8a')} scale={[0.4, 0.5, 0.4]} position={[0, 0.5, 0]} castShadow />
+          <mesh geometry={GEO.cyl} material={mat(PROP_COLORS.pot)} scale={[0.26, 0.26, 0.26]} position={[0, 0.13, 0]} castShadow />
+          <mesh geometry={GEO.sphere} material={mat(PROP_COLORS.leaf)} scale={[0.4, 0.5, 0.4]} position={[0, 0.5, 0]} castShadow />
         </group>
       ))}
       {/* striped banner on the back wall */}
@@ -218,15 +218,13 @@ function CoworkingDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalet
 }
 
 function Columns({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
-  const b = layout.bounds
-  const cols: [number, number][] = []
-  const step = CELL * 3
-  for (let x = b.minX + step; x < b.maxX - CELL; x += step)
-    for (let z = b.minZ + step; z < b.maxZ - CELL; z += step) if (Math.hypot(x, z) > CELL * 1.5) cols.push([x + CELL * 0.5, z + CELL * 0.5])
+  // Columns standing in a locked ring take the locked tone so they recede with it.
+  const open = layout.bands.filter((b) => b.unlocked).at(-1)?.box
+  const inOpen = (x: number, z: number) => !!open && x >= open.minX && x <= open.maxX && z >= open.minZ && z <= open.maxZ
   return (
     <group>
-      {cols.map(([x, z], i) => (
-        <B key={i} s={[0.22, WALL_HEIGHT, 0.22]} p={[x, WALL_HEIGHT / 2, z]} c={pal.wallTrim} />
+      {layout.columns.map(([x, z], i) => (
+        <B key={i} s={[0.22, WALL_HEIGHT, 0.22]} p={[x, WALL_HEIGHT / 2, z]} c={inOpen(x, z) ? pal.wallTrim : pal.locked} />
       ))}
     </group>
   )
@@ -249,8 +247,8 @@ function ElevatorDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalett
   const b = layout.bounds
   return (
     <group position={[b.minX + CELL * 1.2, 0, b.minZ + 0.05]}>
-      <B s={[1.1, 1.6, 0.06]} p={[0, 0.8, 0]} c="#c8ccd4" />
-      <B s={[0.02, 1.5, 0.08]} p={[0, 0.75, 0.01]} c="#8c8c96" shadow={false} />
+      <B s={[1.1, 1.6, 0.06]} p={[0, 0.8, 0]} c={PROP_COLORS.elevator} />
+      <B s={[0.02, 1.5, 0.08]} p={[0, 0.75, 0.01]} c={PROP_COLORS.metal} shadow={false} />
       <mesh geometry={GEO.sphere} material={glowMat(pal.accent, 0.8)} scale={[0.07, 0.07, 0.07]} position={[0.7, 1.0, 0.04]} />
     </group>
   )
@@ -269,17 +267,17 @@ function CampusDecor({ layout }: { layout: OfficeLayout }) {
     <group>
       {trees.map((p, i) => (
         <group key={i} position={p} scale={0.8 + hash01('tree', i + 40) * 0.6}>
-          <mesh geometry={GEO.cyl} material={mat('#9a6b44')} scale={[0.16, 0.6, 0.16]} position={[0, 0.3, 0]} castShadow />
-          <mesh geometry={GEO.cone} material={mat(i % 3 ? '#7cc47a' : '#9fd98b')} scale={[0.8, 1.1, 0.8]} position={[0, 1.1, 0]} castShadow />
+          <mesh geometry={GEO.cyl} material={mat(PROP_COLORS.trunk)} scale={[0.16, 0.6, 0.16]} position={[0, 0.3, 0]} castShadow />
+          <mesh geometry={GEO.cone} material={mat(i % 3 ? PROP_COLORS.tree : PROP_COLORS.treeLight)} scale={[0.8, 1.1, 0.8]} position={[0, 1.1, 0]} castShadow />
         </group>
       ))}
       {/* unicorn statue */}
       <group position={[b.maxX + CELL * 0.8, 0, b.maxZ + CELL * 0.8]}>
-        <B s={[0.8, 0.3, 0.8]} p={[0, 0.15, 0]} c="#fbf8f2" />
-        <mesh geometry={GEO.sphere} material={mat('#fbf1f8')} scale={[0.5, 0.4, 0.8]} position={[0, 0.6, 0]} castShadow />
-        <mesh geometry={GEO.sphere} material={mat('#fbf1f8')} scale={[0.3, 0.32, 0.36]} position={[0, 0.9, 0.35]} castShadow />
-        <mesh geometry={GEO.cone} material={glowMat('#f7e08a', 0.5)} scale={[0.08, 0.3, 0.08]} position={[0, 1.15, 0.45]} rotation={[0.5, 0, 0]} />
-        <mesh geometry={GEO.sphere} material={mat('#c9a7f5')} scale={[0.14, 0.3, 0.3]} position={[0, 0.95, 0.12]} />
+        <B s={[0.8, 0.3, 0.8]} p={[0, 0.15, 0]} c={PROP_COLORS.statueBase} />
+        <mesh geometry={GEO.sphere} material={mat(PROP_COLORS.statue)} scale={[0.5, 0.4, 0.8]} position={[0, 0.6, 0]} castShadow />
+        <mesh geometry={GEO.sphere} material={mat(PROP_COLORS.statue)} scale={[0.3, 0.32, 0.36]} position={[0, 0.9, 0.35]} castShadow />
+        <mesh geometry={GEO.cone} material={glowMat(PROP_COLORS.statueHorn, 0.5)} scale={[0.08, 0.3, 0.08]} position={[0, 1.15, 0.45]} rotation={[0.5, 0, 0]} />
+        <mesh geometry={GEO.sphere} material={mat(PROP_COLORS.statueMane)} scale={[0.14, 0.3, 0.3]} position={[0, 0.95, 0.12]} />
       </group>
     </group>
   )
@@ -377,7 +375,7 @@ function Clutter({ rects, color }: { rects: Box[]; color: string }) {
           <group key={i} position={[x, 0, z]} rotation={[0, hash01('c', i + 3) * 1.5, 0]}>
             <B s={[0.4, 0.3, 0.34]} p={[0, 0.15, 0]} c={color} />
             <B s={[0.3, 0.22, 0.26]} p={[0.1, 0.41, 0.02]} c={color} />
-            <mesh geometry={GEO.sphere} material={mat('#d8d2c8')} scale={[0.6, 0.35, 0.5]} position={[-0.5, 0.15, 0.1]} castShadow />
+            <mesh geometry={GEO.sphere} material={mat(PROP_COLORS.dustSheet)} scale={[0.6, 0.35, 0.5]} position={[-0.5, 0.15, 0.1]} castShadow />
           </group>
         )
       })}
@@ -385,7 +383,7 @@ function Clutter({ rects, color }: { rects: Box[]; color: string }) {
   )
 }
 
-function RingBandView({ band }: { band: RingBand }) {
+function RingBandView({ band, pal }: { band: RingBand; pal: StagePalette }) {
   const wasLocked = useRef(!band.unlocked)
   const [renovating, setRenovating] = useState<{ start: number } | null>(null)
 
@@ -398,7 +396,7 @@ function RingBandView({ band }: { band: RingBand }) {
     }
     wasLocked.current = !band.unlocked
   }, [band.unlocked])
-  const overlayMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#2d2b36', transparent: true, opacity: 0.55, depthWrite: false }), [])
+  const overlayMat = useMemo(() => new THREE.MeshBasicMaterial({ color: pal.locked, transparent: true, opacity: LOCKED_OPACITY, depthWrite: false }), [pal.locked])
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({ color: PASTEL.lemon, transparent: true, opacity: 0, depthWrite: false }), [])
   useEffect(
     () => () => {
@@ -411,11 +409,11 @@ function RingBandView({ band }: { band: RingBand }) {
 
   useFrame(() => {
     if (!renovating) {
-      overlayMat.opacity = band.unlocked ? 0 : 0.55
+      overlayMat.opacity = band.unlocked ? 0 : LOCKED_OPACITY
       return
     }
     const k = Math.min(1, (performance.now() - renovating.start) / RENOVATE_MS)
-    overlayMat.opacity = 0.55 * (1 - k)
+    overlayMat.opacity = LOCKED_OPACITY * (1 - k)
     flashMat.opacity = Math.sin(k * Math.PI) * 0.45
     if (k >= 1) setRenovating(null)
   })
@@ -432,8 +430,8 @@ function RingBandView({ band }: { band: RingBand }) {
           )}
         </group>
       ))}
-      {!band.unlocked && <Clutter rects={band.rects} color="#b89b78" />}
-      {!band.unlocked && <Dust rects={band.rects} count={Math.min(260, band.rects.length * 50)} color="#d9d2c4" />}
+      {!band.unlocked && <Clutter rects={band.rects} color={PROP_COLORS.clutter} />}
+      {!band.unlocked && <Dust rects={band.rects} count={Math.min(260, band.rects.length * 50)} color={PROP_COLORS.dust} />}
       {renovating && <Dust rects={band.rects} count={160} color={PASTEL.lemon} rising={renovating} />}
     </group>
   )
@@ -469,7 +467,7 @@ export function Office() {
       {layout.stage !== 6 && <Walls layout={layout} pal={pal} />}
       <StageDecor layout={layout} pal={pal} />
       {layout.bands.map((band) => (
-        <RingBandView key={`${layout.stage}:${band.ring}`} band={band} />
+        <RingBandView key={`${layout.stage}:${band.ring}`} band={band} pal={pal} />
       ))}
       {tapeBox && <LockTape box={tapeBox} />}
     </group>

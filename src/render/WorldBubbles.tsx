@@ -1,10 +1,10 @@
 // Decides which world-anchored bubbles exist (ambient lines, concept, minimized concepts, decision)
 // and anchors them above their speakers. Content is drawn by the BubbleRenderer (ui) or DefaultBubble.
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CONCEPTS, DECISIONS, OFFICE_LINES } from '../content'
 import type { ConceptId, Dept, Employee, GameState, NpcRole, Visitor } from '../engine/types'
 import { CONCEPT_MINIMIZE_MS } from './constants'
-import { BubbleAnchor } from './BubbleAnchor'
+import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, WorldBubble } from './bubbles'
 import { PASTEL } from './palette'
 import { useLayout } from './sceneRegistry'
@@ -101,20 +101,17 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
     return () => window.clearTimeout(t)
   }, [activeId, mock])
 
-  // Stack bubbles that share a speaker.
-  const stackIndex = new Map<string, number>()
+  // Overlaps (same or different speakers) are resolved in screen space by the layout driver.
+  const [registry] = useState(() => new BubbleLayoutRegistry())
+  useBubbleLayoutDriver(registry)
   const render = renderBubble ?? ((b: WorldBubble) => <DefaultBubble bubble={b} />)
   return (
     <group>
-      {list.map((b) => {
-        const i = stackIndex.get(b.speakerId) ?? 0
-        stackIndex.set(b.speakerId, i + 1)
-        return (
-          <BubbleAnchor key={b.key} speakerId={b.speakerId} offsetY={i * 0.55} fallback={layout.center} interactive={b.kind !== 'ambient'}>
-            {render(b)}
-          </BubbleAnchor>
-        )
-      })}
+      {list.map((b) => (
+        <BubbleAnchor key={b.key} layoutKey={b.key} kind={b.kind} layout={registry} speakerId={b.speakerId} fallback={layout.center} interactive={b.kind !== 'ambient'}>
+          {render(b)}
+        </BubbleAnchor>
+      ))}
     </group>
   )
 }

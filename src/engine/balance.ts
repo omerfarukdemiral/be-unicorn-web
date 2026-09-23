@@ -1,4 +1,5 @@
 // All tunable numbers. Every value is a [DENGE] starting point, tuned by sim/.
+// Values that differ from the PLAN §5 starting points are listed, with the sim result, in docs/DECISIONS.md (#12).
 import type { Dept, FounderActionKind, ProjectCategory, StageIndex, ToolId } from './types'
 
 // ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ export const ROUND_AMOUNT: readonly (number | null)[] = [null, 150_000, 800_000,
 /** Tools unlocked on arriving at a stage (mirrors content STAGES.unlockTools). */
 export const STAGE_UNLOCK_TOOLS: Readonly<Partial<Record<number, readonly ToolId[]>>> = {
   1: ['capTableView'],
-  2: ['priceControl'],
+  // Seed's price control is unlocked by the `pricing` concept (Hisset → Adlandır → Kullan).
   3: ['adBudget'],
   4: ['enterpriseSales'],
 }
@@ -57,7 +58,8 @@ export const BOOKSHELF_CONCEPT_CAP = 5
 // ---------------------------------------------------------------------------
 // Production (PLAN §5.2–5.3)
 // ---------------------------------------------------------------------------
-export const BASE_OUTPUT: Readonly<Record<Dept, number>> = { eng: 1, product: 1, marketing: 4, sales: 1, ops: 1 }
+/** [DENGE ≠ PLAN] marketing 3: organic reach per marketer (PLAN: every dept 1). See DECISIONS #12. */
+export const BASE_OUTPUT: Readonly<Record<Dept, number>> = { eng: 1, product: 1, marketing: 3, sales: 1, ops: 1 }
 export const ONBOARDING_DAYS = 3
 export const ONBOARDING_OUTPUT = 0.5
 export const COORDINATION_TEAM_FREE = 6
@@ -85,10 +87,13 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
 // Users (PLAN §5.4)
 // ---------------------------------------------------------------------------
 export const CAPACITY_MIN = 50
-export const CAPACITY_PER_ENG = 6000
+/** [DENGE ≠ PLAN 1500] */
+export const CAPACITY_PER_ENG = 4000
+/** [DENGE ≠ PLAN 25] */
 export const ORGANIC_PER_MARKETING = 45
-export const CAC_BASE = 40
-export const CAC_STAGE_GROWTH = 1.5
+/** [DENGE ≠ PLAN 8 × 1.3^aşama] */
+export const CAC_BASE = 20
+export const CAC_STAGE_GROWTH = 1.4
 export const CHURN_BASE = 0.06
 export const CHURN_OPS_PER = 0.02
 export const CHURN_OPS_MAX = 0.6
@@ -98,7 +103,8 @@ export const AD_BUDGET_MAX = 50_000_000
 // Revenue (PLAN §5.5)
 // ---------------------------------------------------------------------------
 export const ARPU_BASE = 4
-export const ARPU_STAGE_GROWTH = 1.45
+/** [DENGE ≠ PLAN 1.15 / 0.04] */
+export const ARPU_STAGE_GROWTH = 1.3
 export const ARPU_SALES_PER = 0.06
 export const ARPU_SALES_MAX = 0.8
 export const PRICE_MIN = 0.7
@@ -109,7 +115,7 @@ export const PRICE_CHURN_DAYS = 30
 // ---------------------------------------------------------------------------
 // Costs (PLAN §5.6)
 // ---------------------------------------------------------------------------
-/** Garage-level monthly salary; × SALARY_STAGE_GROWTH^stage at hire. */
+/** Garage-level monthly salary; × SALARY_STAGE_GROWTH^stage at hire, then fixed (DECISIONS #5). */
 export const BASE_SALARY: Readonly<Record<Dept, number>> = { eng: 1_200, product: 1_000, marketing: 900, sales: 900, ops: 800 }
 export const SALARY_STAGE_GROWTH = 1.5
 export const INFRA_PER_1000_USERS = 10
@@ -129,6 +135,8 @@ export const RESIGN_MORALE = 28
 export const RESIGN_WARNING_DAYS = 3
 /** After a retain, no new warning for this many days. */
 export const RETAIN_GRACE_DAYS = 20
+/** Mola (PLAN §7.2): a content employee near a common-area item takes a coffee break every N days. */
+export const BREAK_EVERY_DAYS = 5
 export const RAISE_FACTOR = 1.15
 export const RAISE_MORALE = 25
 export const TALK_MORALE = 15
@@ -144,10 +152,11 @@ export const PRE_REVENUE_MRR = 1_000
 export const VAL_PER_TEAM = 60_000
 export const VAL_PER_USER = 150
 export const VAL_PER_LAUNCHED = 200_000
+/** PLAN §5.8 exactly: clamp(4, 30, 6 + 150 × MoM) — growth is what investors price. */
 export const MULTIPLE_MIN = 4
-export const MULTIPLE_MAX = 15
-export const MULTIPLE_BASE = 8
-export const MULTIPLE_GROWTH = 40
+export const MULTIPLE_MAX = 30
+export const MULTIPLE_BASE = 6
+export const MULTIPLE_GROWTH = 150
 /** Continuity fix: once revenue starts, valuation never drops below the pre-revenue formula. */
 export const VALUATION_KEEP_PRE_REVENUE_FLOOR = true
 
@@ -167,7 +176,7 @@ export const BRIDGE_CARD_ID = 'vc-bridge-loan'
 // ---------------------------------------------------------------------------
 export const BANKRUPT_DAYS = 60
 export const BANKRUPT_WARNING_DAYS: readonly number[] = [1, 30, 45, 55]
-/** Team at 0 (after first hire) ends the run after this many days. */
+/** Team at 0 (after first hire) ends the run after this many days (DECISIONS #6). */
 export const TEAM_ZERO_GRACE_DAYS = 14
 
 // ---------------------------------------------------------------------------

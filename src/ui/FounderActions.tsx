@@ -1,7 +1,8 @@
 // Active founder actions (PLAN §4.4): energy bar, cooldown rings, stage locks.
 import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { FOUNDER_ACTIONS, type FounderActionKind } from '../engine/types'
+import { founderActionError } from '../engine/founder'
+import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind } from '../engine/types'
 import { STAGES } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
@@ -21,6 +22,10 @@ export function FounderActions() {
       day: s.state.time.day,
       over: !!s.state.gameOver,
     })),
+  )
+  // Same checks the engine runs (energy, missing project…), so buttons never promise an action that fails.
+  const errors = useGameStore(
+    useShallow((s) => Object.fromEntries(FOUNDER_ACTIONS.map((k) => [k, founderActionError(s.state, k)])) as Record<FounderActionKind, ActionErrorCode | null>),
   )
   const dispatch = useGameStore((s) => s.dispatch)
   const selection = useGameStore((s) => s.ui.selection)
@@ -62,14 +67,20 @@ export function FounderActions() {
           }
           const running = f.current?.kind === kind && busy
           const runFrac = running && f.current ? (f.day - f.current.startDay) / Math.max(0.01, f.current.endDay - f.current.startDay) : 0
-          const disabled = locked || f.over || cdFrac > 0 || (busy && !running)
+          const err = errors[kind]
+          const disabled = locked || f.over || cdFrac > 0 || (busy && !running) || (!running && err !== null)
+          const action = t(`founder.${kind}`)
           const label = locked
-            ? t('founder.lockedAt', { action: t(`founder.${kind}`), stage: STAGES[unlockStage]?.name ?? '' })
+            ? t('founder.lockedAt', { action, stage: STAGES[unlockStage]?.name ?? '' })
             : cdFrac > 0 && cdEnd !== undefined
-              ? t('founder.cooldown', { action: t(`founder.${kind}`), d: Math.max(1, Math.ceil(cdEnd - f.day)) })
-              : t(`founder.${kind}.desc`)
+              ? t('founder.cooldown', { action, d: Math.max(1, Math.ceil(cdEnd - f.day)) })
+              : err === 'noEnergy'
+                ? t('founder.noEnergy', { action })
+                : err === 'notFound'
+                  ? t('founder.noProject', { action })
+                  : `${action}: ${t(`founder.${kind}.desc`)}`
           const size = mobile ? 44 : 48
-          return (
+          const button = (
             <button
               key={kind}
               type="button"
@@ -90,10 +101,19 @@ export function FounderActions() {
               <Icon name={locked ? 'lock' : FOUNDER_ICON[kind]} size={mobile ? 18 : 20} />
               {!mobile && (
                 <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-ink-900 px-2 py-1 text-[10px] font-bold text-cream-50 group-hover:block">
-                  {t(`founder.${kind}`)}
+                  {action}
                 </span>
               )}
             </button>
+          )
+          // Touch has no hover/title: a short visible label under each icon.
+          return mobile ? (
+            <div key={kind} className="flex w-[46px] flex-col items-center gap-0.5">
+              {button}
+              <span className={cx('w-full truncate text-center text-[9px] font-bold leading-none', disabled ? 'text-ink-400' : 'text-ink-700')}>{t(`founder.short.${kind}`)}</span>
+            </div>
+          ) : (
+            button
           )
         })}
       </div>

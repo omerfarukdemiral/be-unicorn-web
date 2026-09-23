@@ -24,6 +24,7 @@ export interface OfficeSceneProps {
   zoom?: ZoomLevel
   lowPower?: boolean
   renderBubble?: BubbleRenderer
+  ambientBubbles?: boolean
 }
 
 const CAM_DIST = 60
@@ -85,6 +86,8 @@ function Lights({ lowPower }: { lowPower: boolean }) {
   const layout = useLayout()
   const light = useRef<THREE.DirectionalLight>(null)
   const r = Math.max(layout.radius, 4) + 2
+  const [cx, cz] = layout.center
+  // Primitive deps: only a real office change reconfigures the shadow camera.
   useEffect(() => {
     const l = light.current
     if (!l) return
@@ -96,10 +99,10 @@ function Lights({ lowPower }: { lowPower: boolean }) {
     cam.near = 1
     cam.far = 60
     cam.updateProjectionMatrix()
-    l.target.position.set(layout.center[0], 0, layout.center[1])
+    l.target.position.set(cx, 0, cz)
     l.target.updateMatrixWorld()
     l.shadow.needsUpdate = true
-  }, [r, layout.center])
+  }, [r, cx, cz])
   const mapSize = lowPower ? 1024 : 2048
   return (
     <>
@@ -149,7 +152,7 @@ function Background() {
   return <color attach="background" args={[stagePalette(stage).background]} />
 }
 
-export function OfficeScene({ zoom, lowPower = false, renderBubble }: OfficeSceneProps) {
+export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbles = true }: OfficeSceneProps) {
   const uiZoom = useUi((u) => u.zoom)
   return (
     <>
@@ -163,7 +166,7 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble }: OfficeScen
         <People />
       </StageTransition>
       <EffectsLayer />
-      <WorldBubbles renderBubble={renderBubble} />
+      <WorldBubbles renderBubble={renderBubble} ambient={ambientBubbles} />
     </>
   )
 }

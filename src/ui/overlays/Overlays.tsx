@@ -234,7 +234,13 @@ function restart() {
 
 export function PostMortemOverlay() {
   const s = useGameStore(useShallow((st) => ({ go: st.state.gameOver, day: st.state.time.day, xp: st.state.meta.founderXp, stage: st.state.stage })))
-  const [open, setOpen] = useState<ConceptId | null>(null)
+  const [open, setOpenRaw] = useState<ConceptId | null>(null)
+  // Opening a card from the post-mortem also learns it (openConcept is allowed after game over).
+  const setOpen = (c: ConceptId | null) => {
+    setOpenRaw(c)
+    const { state, dispatch } = useGameStore.getState()
+    if (c && state.concepts.triggered.includes(c) && !state.concepts.learned.includes(c)) dispatch({ type: 'openConcept', conceptId: c })
+  }
   if (!s.go) return null
   const reasons = s.go.reasons.slice(0, 3)
   return (
@@ -263,7 +269,17 @@ export function PostMortemOverlay() {
             <div className="text-xs text-ink-600">{t('pm.xpHint', { total: fixed(s.xp + s.go.xpEarned, 1) })}</div>
           </div>
         </div>
-        <p className="text-center text-xs italic text-ink-600">{t('pm.failureIsData')}</p>
+        <div className="flex flex-col items-center gap-0.5 text-center">
+          <p className="text-xs italic text-ink-600">{t('pm.failureIsData')}</p>
+          <button
+            type="button"
+            onClick={() => setOpen(open === 'failure-is-data' ? null : 'failure-is-data')}
+            className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-lilac-500 hover:underline max-md:min-h-11"
+          >
+            <Icon name="book" size={13} />
+            {t('decision.notebookLink', { v: conceptTitle('failure-is-data') })}
+          </button>
+        </div>
         <Button tone="primary" icon="refresh" onClick={restart} autoFocus>
           {t('gameOver.retry')}
         </Button>
@@ -361,9 +377,6 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
             </span>
           </div>
         </SettingRow>
-        <SettingRow icon={prefs.sound ? 'sound' : 'mute'} label={t('settings.sound')}>
-          <Toggle on={prefs.sound} onChange={(v) => prefs.setPref('sound', v)} label={t('settings.sound')} />
-        </SettingRow>
         <SettingRow icon="chat" label={t('settings.screenBubbles')}>
           <Toggle on={prefs.screenBubbles} onChange={(v) => prefs.setPref('screenBubbles', v)} label={t('settings.screenBubbles')} />
         </SettingRow>
@@ -375,7 +388,7 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
                 type="button"
                 onClick={() => setZoom(z)}
                 aria-pressed={zoom === z}
-                className={cx('min-h-9 min-w-11 rounded-full px-2 text-xs font-bold', zoom === z ? 'bg-ink-900 text-cream-50' : 'text-ink-700')}
+                className={cx('min-h-9 min-w-11 rounded-full px-2 text-xs font-bold max-md:min-h-11', zoom === z ? 'bg-ink-900 text-cream-50' : 'text-ink-700')}
               >
                 {t(`zoom.${z}`)}
               </button>
@@ -454,7 +467,8 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className={cx('relative h-7 w-12 shrink-0 rounded-full transition-colors', on ? 'bg-mint-600' : 'bg-cream-300')}
+      // Invisible 44px hit area around the 28px track.
+      className={cx("relative h-7 w-12 shrink-0 rounded-full transition-colors before:absolute before:-inset-2 before:content-['']", on ? 'bg-mint-600' : 'bg-cream-300')}
     >
       <span className={cx('absolute top-0.5 size-6 rounded-full bg-cream-50 shadow transition-transform', on ? 'translate-x-5.5' : 'translate-x-0.5')} />
     </button>

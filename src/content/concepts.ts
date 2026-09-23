@@ -4,6 +4,7 @@
 //   flags.rushedProject (set by cards), flags.starHire (set by cards), flags.rivalPressure (number 0–1)
 import type { GameState } from '../engine/types'
 import type { Concept } from './types'
+import { parallelProjectSpeed } from '../engine/economy'
 import { formatMoney, formatMonths, formatNumber, formatPercent, formatRatio } from './format'
 
 const count = (s: GameState, k: keyof GameState['counters']): number => s.counters[k] ?? 0
@@ -104,7 +105,11 @@ export const CONCEPTS: readonly Concept[] = [
     bubble: 'İki işi yarım yapmak, bir işi bitirmekten yavaş.',
     card: {
       what: 'Paralel projeler, her projenin hızını düşürür.',
-      where: (s) => `Aynı anda ${s.projects.length} proje yürütüyorsun, her biri %20 daha yavaş ilerliyor.`,
+      where: (s) => {
+        const active = s.projects.filter((p) => p.maturity < 1).length
+        const slow = Math.round((1 - parallelProjectSpeed(active, s.stage)) * 100)
+        return `Aynı anda ${active} proje yürütüyorsun, her biri %${slow} daha yavaş ilerliyor.`
+      },
       rule: 'Erken aşamada tek şeyi mükemmel yap.',
     },
     shelfColor: '#6D597A',
@@ -127,7 +132,8 @@ export const CONCEPTS: readonly Concept[] = [
   // ---------------------------------------------------------------- Pre-seed
   {
     id: 'dilution',
-    stage: 1,
+    // Stage 0: the first offer (Garaj → Pre-seed) happens in the garage (PLAN §6.2 "İlk yatırım teklifi").
+    stage: 0,
     trigger: (s) => s.derived.canStartRound || s.round !== undefined,
     speaker: 'investor',
     bubble: 'Para güzel ama o yüzde bir daha geri gelmez.',
@@ -154,7 +160,7 @@ export const CONCEPTS: readonly Concept[] = [
   },
   {
     id: 'fundraise-time',
-    stage: 1,
+    stage: 0,
     trigger: (s) => s.round !== undefined,
     speaker: 'mentor',
     bubble: 'Tur haftalar sürer, kasa beklemez.',
@@ -215,7 +221,8 @@ export const CONCEPTS: readonly Concept[] = [
   {
     id: 'pricing',
     stage: 2,
-    trigger: (s) => s.stats.users > 500 && s.finance.priceMultiplier <= 1 && s.stats.arpu < 3 * 1.15 ** s.stage,
+    // Valuable product (mature, users stay) still sold at the default price.
+    trigger: (s) => s.stats.users > 500 && s.finance.priceMultiplier <= 1 && s.derived.avgMaturity >= 0.5 && s.stats.churn < 0.08,
     speaker: 'customer',
     bubble: 'Ürün değerli ama fiyatı korkarak koymuşuz.',
     card: {
@@ -223,7 +230,7 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `Kullanıcı başı aylık gelirin ${formatMoney(s.stats.arpu)}, fiyat çarpanın ${formatRatio(s.finance.priceMultiplier)}.`,
       rule: 'Fiyat, yarattığın değeri yakalamaktır.',
     },
-    unlocks: 'priceControl',
+    unlocks: ['priceControl', 'arpu'],
     shelfColor: '#FCBF49',
   },
   {
@@ -292,7 +299,10 @@ export const CONCEPTS: readonly Concept[] = [
     bubble: 'Hızlı yazdık, şimdi her şey yavaşlıyor.',
     card: {
       what: 'Teknik borç: aceleyle alınan kısayolların sonradan ödenen bedeli.',
-      where: (s) => `${count(s, 'crunches')} kez crunch yaptınız, borç sayacı ${Math.round(s.techDebt)}.`,
+      where: (s) =>
+        count(s, 'crunches') > 0
+          ? `${count(s, 'crunches')} kez crunch yaptınız, borç sayacı ${Math.round(s.techDebt)}.`
+          : `Aceleci bir kararla borç sayacı ${Math.round(s.techDebt)} oldu.`,
       rule: 'Teknik borç faizle birikir.',
     },
     unlocks: 'debtCounter',
@@ -381,6 +391,7 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `Kurucu hissen ${formatPercent(s.stats.equity)}, geri kalanı yatırımcılarda.`,
       rule: 'Bugünkü %1 yarının pazarlık gücüdür.',
     },
+    unlocks: 'equity',
     shelfColor: '#4361EE',
   },
   {

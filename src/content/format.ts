@@ -69,10 +69,10 @@ export function formatDays(days: number): string {
   return `${Math.max(0, Math.round(days))} gün`
 }
 
-/** Multiplier / ratio: 3.24 → "3.2x". */
+/** Multiplier / ratio: 3.24 → "3.2×" (same sign as the HUD). */
 export function formatRatio(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '—'
-  return `${trimDecimal(value, 1)}x`
+  return `${trimDecimal(value, 1)}×`
 }
 
 /** Fills "{name} ekibe katıldı." style templates. Unknown keys stay visible as {key}. */

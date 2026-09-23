@@ -7,19 +7,19 @@ Botlar yalnızca engine’in `createGame / applyAction / step` API’siyle oynar
 
 | Arketip | Pre-seed | Seed | Series A | Series B | Series C | Unicorn |
 |---|---|---|---|---|---|---|
-| bootstrap | 6.8 dk · g206 (8/8) | 13.4 dk · g404 (8/8) | 17.4 dk · g521 (8/8) | 22.2 dk · g665 (8/8) | 34.3 dk · g1029 (8/8) | 71.5 dk · g2146 (8/8) |
-| vcRocket | 4.2 dk · g126 (8/8) | 8.9 dk · g268 (8/8) | 15.7 dk · g470 (8/8) | 19.4 dk · g581 (8/8) | 23.9 dk · g716 (8/8) | 26.7 dk · g801 (8/8) |
-| niche | 8.1 dk · g242 (8/8) | 14.5 dk · g434 (8/8) | 16.9 dk · g509 (8/8) | 19.4 dk · g581 (8/8) | 24.6 dk · g740 (8/8) | 27.1 dk · g812 (8/8) |
-| platform | 4.4 dk · g133 (8/8) | 10.0 dk · g300 (8/8) | 16.4 dk · g491 (8/8) | 20.6 dk · g620 (8/8) | 27.0 dk · g810 (8/8) | 30.4 dk · g914 (8/8) |
+| bootstrap | 4.9 dk · g147 (8/8) | 9.0 dk · g270 (8/8) | 12.4 dk · g372 (8/8) | 16.2 dk · g486 (8/8) | 21.2 dk · g637 (8/8) | 23.5 dk · g706 (8/8) |
+| vcRocket | 4.3 dk · g128 (8/8) | 7.3 dk · g218 (8/8) | 13.5 dk · g404 (7/8) | 15.9 dk · g476 (7/8) | 18.5 dk · g555 (7/8) | 19.0 dk · g570 (6/8) |
+| niche | 6.7 dk · g200 (8/8) | 10.8 dk · g324 (7/8) | 13.8 dk · g414 (7/8) | 15.9 dk · g476 (7/8) | 19.5 dk · g584 (7/8) | 20.7 dk · g620 (7/8) |
+| platform | 4.6 dk · g138 (8/8) | 8.2 dk · g247 (8/8) | 13.6 dk · g408 (5/8) | 16.8 dk · g503 (5/8) | 19.8 dk · g594 (5/8) | 21.8 dk · g654 (5/8) |
 
 ## Sonuç, iflas, kavramlar
 
 | Arketip | İflas oranı | Bitiş dağılımı | Kavram @5 dk (medyan/min) | Kavram @10 dk (medyan/min) | Kurucu hissesi (medyan) | Tepe ekip (medyan) |
 |---|---|---|---|---|---|---|
-| bootstrap | 0% | unicorn 8 | 5 / 5 | 7 / 7 | %42 | 32 |
-| vcRocket | 0% | unicorn 8 | 6 / 6 | 10.5 / 7 | %41 | 36 |
-| niche | 0% | unicorn 8 | 5 / 5 | 7 / 6 | %42 | 30 |
-| platform | 0% | unicorn 8 | 6 / 5 | 10 / 7 | %42 | 36 |
+| bootstrap | 0% | unicorn 8 | 8 / 7 | 10 / 9 | %41 | 32 |
+| vcRocket | 0% | unicorn 6, timeout 2 | 8 / 8 | 11.5 / 11 | %41 | 36 |
+| niche | 0% | unicorn 7, timeout 1 | 5 / 5 | 9 / 9 | %45 | 30 |
+| platform | 0% | timeout 3, unicorn 5 | 8 / 5 | 11 / 9 | %42 | 36 |
 
 Toplam iflas oranı: **0%** (0/32).
 
@@ -28,13 +28,13 @@ Toplam iflas oranı: **0%** (0/32).
 | Bot | Batan | En erken batış | 4 dk’dan önce batan | Kavram @5 dk (medyan) |
 |---|---|---|---|---|
 | idle (hiçbir şey yapmaz) | 8/8 | 102.0 dk · g3060 | 0 | 0 |
-| random (rastgele aksiyon) | 0/8 | — | 0 | 5 |
+| random (rastgele aksiyon) | 3/8 | 23.5 dk · g704 | 0 | 4 |
 
 ## §9 / §10 kriterleri
 
 - M1: 4 bot da Pre-seed’e ulaşıyor (tüm seed’ler): **EVET**
 - İlk 5 dakikada ≥3 kavram (her arketipte medyan): **EVET**
 - Dikkatsiz oyuncu 4 dk’dan önce batmıyor: **EVET**
-- Unicorn’a varış 60–90 dk: medyanlar 71.5 / 26.7 / 27.1 / 30.4 dk → **hedefin 33 dk altında (en hızlı)**; arketip farkı 2.68× (hedef ≤ 1.3×) — yalnızca çoğunluğu Unicorn’a ulaşan 4/4 arketip sayıldı
+- Unicorn’a varış 60–90 dk: medyanlar 23.5 / 19.0 / 20.7 / 21.8 dk → **hedefin 41 dk altında (en hızlı)**; arketip farkı 1.24× (hedef ≤ 1.3×) — yalnızca çoğunluğu Unicorn’a ulaşan 4/4 arketip sayıldı
 
-_Süre: 115.6 sn · `npm run sim -- --seeds 8 --days 4500`_
+_Süre: 72.2 sn · `npm run sim -- --seeds 8 --days 4500`_

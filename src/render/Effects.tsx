@@ -1,5 +1,5 @@
 // One-shot celebration effects: confetti burst + team cheering (PLAN §6.4).
-// Watches state.events with its own cursor (does not consume ui.lastSeenEventId, which the UI owns).
+// Watches state.events with its own cursor (ModalHost keeps a separate one).
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'

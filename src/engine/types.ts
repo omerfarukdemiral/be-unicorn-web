@@ -139,8 +139,8 @@ export interface EffectBundle {
   queueConcept?: ConceptId
   /** Queues a follow-up decision card. */
   queueCard?: DecisionCardId
-  /** Sets a named flag (for card conditions / archetype detection). */
-  setFlag?: string
+  /** Sets named flag(s) (for card conditions / archetype detection). */
+  setFlag?: string | readonly string[]
 }
 
 export interface DelayedEffect {
@@ -203,7 +203,7 @@ export interface Employee {
   dept: Dept
   /** Hidden-ish quality 0.5–1.5; shown only once 'candidateQuality' widget is unlocked. */
   quality: number
-  /** Monthly salary in $, fixed at hire (stage multiplier applied then). */
+  /** Monthly salary in $, fixed at hire (stage multiplier applied then; see DECISIONS.md). */
   salary: number
   status: EmployeeStatus
   statusSinceDay: number
@@ -286,6 +286,8 @@ export interface ConceptsState {
   active?: { id: ConceptId; shownDay: number }
   /** Bubbles shrunk to an icon above the speaker (after 20s real time, UI dispatches minimizeConcept). */
   minimized: ConceptId[]
+  /** "Sen nerede gördün?" text captured when the concept triggered (the player's numbers at that moment). */
+  where?: Partial<Record<ConceptId, string>>
 }
 
 export interface DecisionHistoryEntry {
@@ -582,7 +584,6 @@ export type Action =
   | { type: 'openConcept'; conceptId: ConceptId }
   | { type: 'minimizeConcept'; conceptId: ConceptId }
   | { type: 'answerDecision'; cardId: DecisionCardId; optionIndex: number }
-  | { type: 'dismissBubble'; bubbleId: string }
   // Fundraising
   | { type: 'startRound' }
 
@@ -607,7 +608,7 @@ export interface NewGameOptions {
 
 export type ActionErrorCode =
   | 'insufficientCash' | 'noFreeSlot' | 'slotOccupied' | 'slotLocked' | 'wrongSlotType'
-  | 'ringOrder' | 'notUnlocked' | 'cooldown' | 'noEnergy' | 'founderBusy' | 'notFound'
+  | 'ringOrder' | 'noDesk' | 'notUnlocked' | 'cooldown' | 'noEnergy' | 'founderBusy' | 'notFound'
   | 'roundActive' | 'roundNotReady' | 'gameOver' | 'invalid' | 'engineNotConnected'
 
 export interface ActionResult {

@@ -53,9 +53,9 @@ export function averageLaunchedMaturity(s: GameState): number {
   return launched.reduce((a, p) => a + p.maturity, 0) / launched.length
 }
 
-/** Global morale target (without per-desk auras). */
+/** Global morale target without per-desk auras. Unclamped: clamp only after adding the aura. */
 export function globalMoraleTarget(s: GameState, o: Outputs, overload: number): number {
-  return E.moraleTarget({
+  return E.moraleTargetRaw({
     auras: 0,
     decisionBonus: moraleModifierSum(s),
     bookshelf: bookshelfMorale(s, o.fx),
@@ -114,7 +114,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   const gTarget = globalMoraleTarget(s, o, over)
   const targets = s.employees.map((e) => employeeMoraleTarget(s, content, e, gTarget))
-  const moraleTarget = targets.length ? targets.reduce((a, b) => a + b, 0) / targets.length : gTarget
+  const moraleTarget = targets.length ? targets.reduce((a, b) => a + b, 0) / targets.length : E.clamp(0, 100, gTarget)
 
   const next = (s.stage + 1) as number
   const target = next <= B.LAST_STAGE ? B.STAGE_TARGET_VALUATION[next] ?? null : null

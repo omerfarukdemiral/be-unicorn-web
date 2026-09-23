@@ -321,6 +321,8 @@ function StageDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }
 const RENOVATE_MS = 1800
 
 function Dust({ rects, count, color, rising }: { rects: Box[]; count: number; color: string; rising?: { start: number } }) {
+  // Key on the rect coordinates, not the array identity, so a re-render never rebuilds the geometry.
+  const rectKey = rects.map((r) => `${r.minX},${r.minZ},${r.maxX},${r.maxZ}`).join(';')
   const base = useMemo(() => {
     const arr = new Float32Array(count * 3)
     const area = rects.reduce((a, r) => a + (r.maxX - r.minX) * (r.maxZ - r.minZ), 0) || 1
@@ -334,13 +336,17 @@ function Dust({ rects, count, color, rising }: { rects: Box[]; count: number; co
       }
     }
     return arr.subarray(0, i * 3)
-  }, [rects, count])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rectKey, count])
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(base), 3))
     return g
   }, [base])
   const material = useMemo(() => new THREE.PointsMaterial({ color, size: rising ? 5 : 3, sizeAttenuation: false, transparent: true, opacity: 0.7, depthWrite: false }), [color, rising])
+  // Objects passed as props are not disposed by R3F: free the GPU buffers when they are replaced/unmounted.
+  useEffect(() => () => geo.dispose(), [geo])
+  useEffect(() => () => material.dispose(), [material])
   useFrame(({ clock }) => {
     const pos = geo.getAttribute('position') as THREE.BufferAttribute
     const a = pos.array as Float32Array
@@ -394,6 +400,13 @@ function RingBandView({ band }: { band: RingBand }) {
   }, [band.unlocked])
   const overlayMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#2d2b36', transparent: true, opacity: 0.55, depthWrite: false }), [])
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({ color: PASTEL.lemon, transparent: true, opacity: 0, depthWrite: false }), [])
+  useEffect(
+    () => () => {
+      overlayMat.dispose()
+      flashMat.dispose()
+    },
+    [overlayMat, flashMat],
+  )
 
 
   useFrame(() => {

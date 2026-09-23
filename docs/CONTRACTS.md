@@ -111,7 +111,7 @@ export const useGameStore: UseBoundStore<StoreApi<GameStore>>   // zustand v5 `c
 
 interface GameStore {
   state: GameState
-  ui: UiState                   // selection, hoverSlotId, dockTab, overlay, placing, zoom, lastError, lastSeenEventId
+  ui: UiState                   // selection, hoverSlotId, dockTab, overlay, placing, zoom, lastError, pausedFrom, generation
   dispatch(action: Action): ActionResult
   tick(realDtSeconds: number): void
   newGame(opts?: Partial<NewGameOptions>): void
@@ -124,12 +124,13 @@ interface GameStore {
   closeOverlay(): void
   setPlacing(m: PlacingMode | null): void
   setZoom(z: ZoomLevel): void
-  markEventsSeen(eventId: number): void
+  setPausedFrom(speed: GameSpeed | null): void
+  exportReplay(): ReplayLog     // seed + TimedAction[] (module-level, not reactive)
 }
 ```
 
 - **Şu anki durum:** scaffold store'u çalışır ama engine'e bağlı değil: `state` = `createBootstrapState()` (garaj, 4 masa slotu), `dispatch` yalnızca `setSpeed`'i uygular, gerisi `engineNotConnected` döner; `tick` yalnızca saati ilerletir. Render/ui şeritleri buna karşı geliştirip `npm run dev` ile görebilir.
-- **Integrate yapacak:** `dispatch` → `engine.applyAction`; `tick` → gerçek saniyeyi `SECONDS_PER_DAY` ve `time.speed` ile güne çevirip biriktirir, `FIXED_STEP_DAYS` parçalar halinde `engine.step` çağırır (sabit tick, render'dan bağımsız); `loop.ts` (rAF, sekme gizliyken durur); `save.ts` (localStorage, `SAVE_VERSION` + migrasyon, periyodik autosave); replay için `TimedAction[]` kaydı; `App.tsx` → `<GameCanvas/>` + `<GameUI/>`.
+- **Integrate yapacak:** `dispatch` → `engine.applyAction`; `tick` → gerçek saniyeyi `SECONDS_PER_DAY` ve `time.speed` ile güne çevirip biriktirir, `FIXED_STEP_DAYS` parçalar halinde `engine.step` çağırır (sabit tick, render'dan bağımsız); `loop.ts` (rAF, sekme gizliyken durur); `save.ts` (localStorage, `SAVE_VERSION` + migrasyon, periyodik autosave); replay için `TimedAction[]` kaydı (reaktif olmayan, `exportReplay()` / dev'de `window.__replay()`); `App.tsx` → `<GameCanvas/>` + `<GameUI/>`.
 - Selector kullanımı: skalerler için `useGameStore(s => s.state.stats.cash)`, nesne/dizi seçerken `useShallow` (`zustand/react/shallow`). Tüm `state`'e abone olmayın.
 
 ## 8. Kritik tip kararları (özet)
@@ -143,7 +144,7 @@ interface GameStore {
 - **İşe alım:** `candidates[]` havuzu; `hire` aksiyonu `candidateId` alır.
 - **Efektler:** tek tip `EffectBundle` (kart, aksiyon, eşya); geçici etkiler `TimedModifier`, gecikmeli etkiler `DelayedEffect`.
 - **Metin yok engine'de:** activity/event/post-mortem kod + parametre; Türkçe metni content tabloları verir.
-- **Aksiyonlar:** `Action` discriminated union (`src/engine/types.ts`, `actions.ts` re-export): hire, fire, assignDesk, respondResignation, refreshCandidates, placeItem, sellItem, moveItem, upgradeItem, openRing, startProject, assign, founderAction, setSpeed, setAdBudget, setPrice, openConcept, minimizeConcept, answerDecision, dismissBubble, startRound.
+- **Aksiyonlar:** `Action` discriminated union (`src/engine/types.ts`, `actions.ts` re-export): hire, fire, assignDesk, respondResignation, refreshCandidates, placeItem, sellItem, moveItem, upgradeItem, openRing, startProject, assign, founderAction, setSpeed, setAdBudget, setPrice, openConcept, minimizeConcept, answerDecision, startRound.
 
 ## 9. Komutlar
 

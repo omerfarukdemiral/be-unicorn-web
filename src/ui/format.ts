@@ -1,4 +1,6 @@
 // Number formatting for the HUD (display only, no game formulas).
+// One convention everywhere (PLAN §2 example "4.2K yaktın, 2.6 ay"): compact K/M/B with a '.' decimal,
+// never a locale thousands separator, so '.' always means a decimal point. Same as content/format.ts.
 
 const SUFFIXES: [number, string][] = [
   [1e9, 'B'],
@@ -41,9 +43,10 @@ export function pct(fraction: number, digits = 0): string {
   return `%${trimZero((fraction * 100).toFixed(digits))}`
 }
 
+/** Counts: 950 → "950", 1234 → "1.2K", 10500 → "10.5K". */
 export function num(n: number): string {
   if (!Number.isFinite(n)) return '—'
-  return Math.abs(n) >= 10_000 ? compact(n) : Math.round(n).toLocaleString('tr-TR')
+  return compact(n)
 }
 
 export function fixed(n: number, digits = 1): string {

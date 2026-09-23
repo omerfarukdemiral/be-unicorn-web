@@ -93,6 +93,11 @@ describe('§5.7 morale', () => {
     expect(E.moraleTarget({ auras: 5, decisionBonus: 0, bookshelf: 2, cashNegative: false, overload: 0, coordinationPenalty: 0 })).toBe(67)
     expect(E.moraleTarget({ auras: 0, decisionBonus: 0, bookshelf: 0, cashNegative: true, overload: 1, coordinationPenalty: 5 })).toBe(0)
   })
+  it('clamps once, after every term (auras cannot cancel a floored penalty)', () => {
+    // 60 + 20 − 40 − 15×2 = 10 (not clamp(−10) = 0, then + 20).
+    expect(E.moraleTarget({ auras: 20, decisionBonus: 0, bookshelf: 0, cashNegative: true, overload: 2, coordinationPenalty: 0 })).toBe(10)
+    expect(E.moraleTargetRaw({ auras: 0, decisionBonus: 0, bookshelf: 0, cashNegative: true, overload: 2, coordinationPenalty: 0 })).toBe(-10)
+  })
   it('approaches target by 5% of the gap per day', () => {
     expect(E.approachMorale(40, 60, 1)).toBeCloseTo(41)
     const quarterSteps = [0, 1, 2, 3].reduce((m) => E.approachMorale(m, 60, 0.25), 40)
@@ -109,6 +114,13 @@ describe('§5.8 valuation', () => {
     expect(E.valuationMultiple(0.05)).toBeCloseTo(B.MULTIPLE_BASE + B.MULTIPLE_GROWTH * 0.05)
     expect(E.valuationMultiple(1)).toBe(B.MULTIPLE_MAX)
     expect(E.valuationMultiple(-0.5)).toBe(B.MULTIPLE_MIN)
+  })
+  it('pins the PLAN §5.8 multiple: clamp(4, 30, 6 + 150 × MoM)', () => {
+    expect(E.valuationMultiple(0)).toBe(6)
+    expect(E.valuationMultiple(0.05)).toBeCloseTo(13.5)
+    expect(E.valuationMultiple(0.1)).toBeCloseTo(21)
+    expect(E.valuationMultiple(0.2)).toBe(30)
+    expect(E.valuationMultiple(-0.1)).toBe(4)
   })
   it('post-revenue = MRR × 12 × multiple; growth is priced', () => {
     expect(E.valuationPostRevenue(10_000, 10)).toBe(1_200_000)

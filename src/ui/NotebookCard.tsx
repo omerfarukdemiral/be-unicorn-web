@@ -1,5 +1,5 @@
 // Defter card: Ne? / Sen nerede gördün? / Kural (PLAN §2, ≤ 50 words, filled with the player's numbers).
-import { useMemo, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { ConceptId, GameState } from '../engine/types'
 import { HUD_WIDGETS, TOOL_IDS } from '../engine/types'
 import { NPC_TEXT, type Concept } from '../content'
@@ -18,17 +18,29 @@ function safeWhere(c: Concept, s: GameState): string {
   }
 }
 
-export function unlockLabel(u: Concept['unlocks']): string | null {
-  if (!u) return null
+/** "Sen nerede gördün?": the text captured when the concept fired. Null if it never fired. */
+function whereOf(c: Concept, s: GameState): string | null {
+  const saved = s.concepts.where?.[c.id]
+  if (saved !== undefined) return saved
+  // Saves from before snapshots existed: fall back to the live numbers.
+  return s.concepts.triggered.includes(c.id) ? safeWhere(c, s) : null
+}
+
+function oneLabel(u: string): string {
   if ((HUD_WIDGETS as readonly string[]).includes(u)) return t(`widget.${u}`)
   if ((TOOL_IDS as readonly string[]).includes(u)) return t(`tool.${u}`)
   return u
 }
 
+export function unlockLabel(u: Concept['unlocks']): string | null {
+  if (!u) return null
+  if (typeof u === 'string') return oneLabel(u)
+  return u.length ? u.map(oneLabel).join(', ') : null
+}
+
 export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onClose?: () => void }) {
   const concept = conceptById(conceptId)
-  // Snapshot "where" when opened: the numbers describe the moment the player saw it.
-  const where = useMemo(() => (concept ? safeWhere(concept, useGameStore.getState().state) : ''), [concept])
+  const where = useGameStore((st) => (concept ? whereOf(concept, st.state) : null))
   if (!concept) {
     return (
       <div className="p-6 text-center text-sm text-ink-600">
@@ -62,9 +74,11 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
         <Row label={t('journal.what')} tone="bg-sky-100 text-sky-600" icon="sparkle">
           {concept.card.what}
         </Row>
-        <Row label={t('journal.where')} tone="bg-lemon-100 text-lemon-600" icon="search">
-          {where}
-        </Row>
+        {where !== null && (
+          <Row label={t('journal.where')} tone="bg-lemon-100 text-lemon-600" icon="search">
+            {where}
+          </Row>
+        )}
         <Row label={t('journal.rule')} tone="bg-mint-100 text-mint-600" icon="check">
           <strong>{concept.card.rule}</strong>
         </Row>

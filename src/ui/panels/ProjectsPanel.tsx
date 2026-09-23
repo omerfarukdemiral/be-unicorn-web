@@ -95,7 +95,7 @@ function ProjectCard({ project: p }: { project: Project }) {
     <li className="rounded-2xl bg-cream-100/80 p-3">
       <div className="flex items-center gap-2">
         <Icon name={CATEGORY_ICON[p.category]} size={18} className="text-lilac-500" />
-        <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-bold hover:underline" onClick={() => select({ kind: 'project', id: p.id })}>
+        <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-bold hover:underline max-md:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
           {p.name}
         </button>
         {p.launched ? <Pill className="bg-mint-100 text-mint-600">{t('projects.live')}</Pill> : <Pill className="bg-cream-200 text-ink-600">{t('projects.building')}</Pill>}

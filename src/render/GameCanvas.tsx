@@ -1,9 +1,9 @@
 // Render lane entry point: full-size <Canvas> with the isometric office.
-// Desktop: click = select/place, wheel = zoom step, Esc/right-click = cancel.
+// Desktop: click = select/place, wheel = zoom step, right-click = cancel. Keyboard lives in ui/shortcuts.ts.
 // Touch: tap = select, pinch = zoom step. DPR capped at 2, cheaper shadows in low-power mode.
 import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
-import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
+import { useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
 import type { GameState } from '../engine/types'
 import type { ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
@@ -17,6 +17,8 @@ export interface GameCanvasProps {
   /** Render this state instead of the store's (previews, tests, before the engine is wired). */
   mockState?: GameState | null
   className?: string
+  /** Show ambient office lines above characters (ui pref "Ofis sohbetlerini göster"). */
+  ambientBubbles?: boolean
 }
 
 function stepZoom(delta: 1 | -1): void {
@@ -68,24 +70,9 @@ function useZoomGestures() {
   }
 }
 
-export function GameCanvas({ renderBubble, mockState, className }: GameCanvasProps = {}) {
+export function GameCanvas({ renderBubble, mockState, className, ambientBubbles = true }: GameCanvasProps = {}) {
   const [lowPower, setLowPower] = useState(detectLowPower)
   const gestures = useZoomGestures()
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      const api = storeApi()
-      if (e.key === 'Escape') {
-        if (api.ui.placing) api.setPlacing(null)
-        else if (api.ui.selection) api.select(null)
-      } else if (e.key === '+' || e.key === '=') stepZoom(1)
-      else if (e.key === '-' || e.key === '_') stepZoom(-1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
 
   return (
     <div
@@ -118,7 +105,7 @@ export function GameCanvas({ renderBubble, mockState, className }: GameCanvasPro
       >
         <RenderStateProvider state={mockState}>
           <PerformanceMonitor onDecline={() => setLowPower(true)} />
-          <OfficeScene lowPower={lowPower} renderBubble={renderBubble} />
+          <OfficeScene lowPower={lowPower} renderBubble={renderBubble} ambientBubbles={ambientBubbles} />
         </RenderStateProvider>
       </Canvas>
     </div>

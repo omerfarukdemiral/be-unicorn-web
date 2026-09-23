@@ -42,8 +42,8 @@ export interface Concept {
     /** "Kural" */
     rule: string
   }
-  /** Widget or tool opened when learned. */
-  unlocks?: HudWidget | ToolId
+  /** Widget(s) or tool(s) opened when learned. */
+  unlocks?: HudWidget | ToolId | readonly (HudWidget | ToolId)[]
   /** Book color on the bookshelf (CSS hex). */
   shelfColor: string
 }

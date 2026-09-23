@@ -2,7 +2,7 @@
 // origin at the footprint centre on the floor, front (chair side) = +z.
 // Size-2 items span local x ∈ [−1, 1].
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef, type ReactNode } from 'react'
+import { memo, useMemo, useRef, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { CONCEPTS } from '../content'
 import type { PrimitiveHint } from '../content'
@@ -12,7 +12,7 @@ import { resolveFurniture, type ResolvedFurniture } from './furnitureCatalog'
 import { BOOK_COLORS } from './palette'
 import { GEO, capsuleGeo, glassMat, glowMat, mat, torusGeo } from './resources'
 import { useGS } from './source'
-import { useLayout } from './sceneRegistry'
+import { useLayout, useOffice } from './sceneRegistry'
 
 type V3 = [number, number, number]
 
@@ -403,7 +403,9 @@ export interface FurnitureModelProps {
 }
 
 /** A furniture model in world units (already scaled by CELL). */
-export function FurnitureModel({ resolved, span = false, books = [], overload = false }: FurnitureModelProps) {
+const NO_BOOKS: string[] = []
+
+export const FurnitureModel = memo(function FurnitureModel({ resolved, span = false, books = NO_BOOKS, overload = false }: FurnitureModelProps) {
   const { shape, colors, item } = resolved
   const hints = item?.visual.primitives
   let body: ReactNode
@@ -473,28 +475,27 @@ export function FurnitureModel({ resolved, span = false, books = [], overload = 
     }
   }
   return <group scale={[CELL, CELL, CELL]}>{body}</group>
-}
+})
 
-const selectBooks = (s: GameState) => s.concepts.learned
+const selectBooks = (s: GameState) => s.concepts.learned.join(',')
 const selectOverload = (s: GameState) => s.derived.overload > 0
 
 /** Book colours for learned concepts (PLAN §3.4 kitaplık). */
 export function useBookColors(): string[] {
-  const learned = useGS(selectBooks)
+  const learnedKey = useGS(selectBooks)
   return useMemo(
     () =>
-      learned.map((id, i) => CONCEPTS.find((c) => c.id === id)?.shelfColor ?? BOOK_COLORS[i % BOOK_COLORS.length]!),
-    [learned],
+      (learnedKey ? learnedKey.split(',') : []).map((id, i) => CONCEPTS.find((c) => c.id === id)?.shelfColor ?? BOOK_COLORS[i % BOOK_COLORS.length]!),
+    [learnedKey],
   )
 }
 
-const selectSlots = (s: GameState) => s.office.slots
 /** Look of the founder desk while its slot holds no item. */
 const FOUNDER_DESK_ITEM = 'desk-basic'
 
 /** All placed furniture in the office. */
 export function FurnitureLayer() {
-  const slots = useGS(selectSlots)
+  const slots = useOffice().slots
   const layout = useLayout()
   const books = useBookColors()
   const overload = useGS(selectOverload)

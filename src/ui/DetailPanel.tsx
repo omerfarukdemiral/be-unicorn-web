@@ -24,7 +24,7 @@ export function DetailPanel({ renderPreview }: { renderPreview?: RenderPreview }
   const setDockTab = useGameStore((s) => s.setDockTab)
   const mobile = useIsMobile()
 
-  // Mobile: one sheet at a time.
+  // Mobile: one sheet at a time (the dock clears the selection when it opens, see Dock/openShop).
   useEffect(() => {
     if (mobile && selection) setDockTab(null)
   }, [mobile, selection, setDockTab])
@@ -160,6 +160,7 @@ function SlotDetail({ id }: { id: string }) {
   const setPlacing = useGameStore((s) => s.setPlacing)
   const setDockTab = useGameStore((s) => s.setDockTab)
   const select = useGameStore((s) => s.select)
+  const mobile = useIsMobile()
   const slot = resolveSlot(slots, id)
   if (!slot) return <p className="text-xs text-ink-600">{t('detail.gone')}</p>
 
@@ -172,13 +173,16 @@ function SlotDetail({ id }: { id: string }) {
   const unseated = employees.filter((e) => !e.deskSlotId)
 
   if (locked && ring) {
+    // Rings open strictly inside-out (engine: ringOrder).
+    const nextLocked = rings.filter((r) => !r.unlocked).reduce((m, r) => Math.min(m, r.index), Infinity)
+    const inOrder = nextLocked === ring.index
     return (
       <div className="flex flex-col gap-3">
         <p className="flex items-center gap-2 text-sm text-ink-600">
           <Icon name="lock" size={16} />
-          {t('detail.ringLocked', { n: ring.index })}
+          {inOrder ? t('detail.ringLocked', { n: ring.index }) : t('detail.ringFirst', { n: nextLocked })}
         </p>
-        <Button tone="primary" icon="plus" disabled={cash < ring.openCost} onClick={() => dispatch({ type: 'openRing', ring: ring.index })}>
+        <Button tone="primary" icon="plus" disabled={!inOrder || cash < ring.openCost} onClick={() => dispatch({ type: 'openRing', ring: ring.index })}>
           {`${t('shop.ringCost', { cost: money(ring.openCost) })} · ${t('shop.ringRent', { v: money(ring.rentPerMonth) })}`}
         </Button>
       </div>
@@ -205,7 +209,14 @@ function SlotDetail({ id }: { id: string }) {
               <Icon name={SLOT_ICON[slot.type]} size={16} />
               {t('detail.emptyHint')}
             </p>
-            <Button tone="primary" icon="bag" onClick={() => setDockTab('shop')}>
+            <Button
+              tone="primary"
+              icon="bag"
+              onClick={() => {
+                if (mobile) select(null)
+                setDockTab('shop')
+              }}
+            >
               {t('detail.openShop')}
             </Button>
           </section>
@@ -248,7 +259,14 @@ function SlotDetail({ id }: { id: string }) {
               {t('detail.upgrade', { item: upgrade.name, v: money(upgrade.price) })}
             </Button>
           )}
-          <Button icon="move" onClick={() => setPlacing({ kind: 'move', fromSlotId: slot.id })}>
+          <Button
+            icon="move"
+            onClick={() => {
+              setPlacing({ kind: 'move', fromSlotId: slot.id })
+              // Phones: close the sheet so the office and the placing banner are visible.
+              if (mobile) select(null)
+            }}
+          >
             {t('detail.move')}
           </Button>
           <ConfirmButton icon="tag" label={t('detail.sell')} confirmLabel={t('detail.sellConfirm')} onConfirm={() => dispatch({ type: 'sellItem', slotId: slot.id })} />
@@ -269,6 +287,7 @@ function EmployeeDetail({ id }: { id: string }) {
   const dispatch = useGameStore((s) => s.dispatch)
   const setPlacing = useGameStore((s) => s.setPlacing)
   const select = useGameStore((s) => s.select)
+  const mobile = useIsMobile()
   if (!e) return <p className="text-xs text-ink-600">{t('detail.gone')}</p>
   return (
     <div className="flex flex-col gap-4">
@@ -308,6 +327,7 @@ function EmployeeDetail({ id }: { id: string }) {
           icon="move"
           onClick={() => {
             setPlacing({ kind: 'seat', employeeId: e.id })
+            if (mobile) select(null)
           }}
         >
           {e.deskSlotId ? t('detail.changeDesk') : t('detail.pickDesk')}

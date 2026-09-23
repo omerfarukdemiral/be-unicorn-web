@@ -2,6 +2,7 @@
 import * as B from './balance'
 import * as E from './economy'
 import { employeeMoraleTarget, globalMoraleTarget, type Outputs } from './derive'
+import { auraAt, findSlot } from './office'
 import type { Rng } from './rng'
 import { DEPTS, type Candidate, type Dept, type Employee, type GameState } from './types'
 import { incCounter, newId, pushActivity, pushEvent, type EngineContent } from './util'
@@ -54,7 +55,7 @@ function setStatus(e: Employee, status: Employee['status'], day: number): void {
 export function driftMorale(s: GameState, content: EngineContent, o: Outputs, dtDays: number): void {
   const gTarget = globalMoraleTarget(s, o, s.derived.overload)
   if (s.employees.length === 0) {
-    s.stats.morale = E.approachMorale(s.stats.morale, gTarget, dtDays)
+    s.stats.morale = E.approachMorale(s.stats.morale, E.clamp(0, 100, gTarget), dtDays)
     return
   }
   let sum = 0
@@ -65,8 +66,15 @@ export function driftMorale(s: GameState, content: EngineContent, o: Outputs, dt
   s.stats.morale = sum / s.employees.length
 }
 
+/** Deterministic break day: every BREAK_EVERY_DAYS days, offset per employee. */
+function isBreakDay(id: string, day: number): boolean {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return (h + day) % B.BREAK_EVERY_DAYS === 0
+}
+
 /** Daily: statuses, resignation warnings and walk-outs. No random punishment: warning first, then a window. */
-export function dailyPeople(s: GameState): void {
+export function dailyPeople(s: GameState, content: EngineContent): void {
   const day = s.time.day
   for (const e of [...s.employees]) {
     if (e.status === 'leaving') {
@@ -88,8 +96,15 @@ export function dailyPeople(s: GameState): void {
     if (day - e.hiredDay < B.ONBOARDING_DAYS) setStatus(e, 'onboarding', day)
     else if (e.morale < B.RESIGN_MORALE) setStatus(e, 'burnout', day)
     else if (e.morale < B.TIRED_MORALE) setStatus(e, 'tired', day)
+    else if (isBreakDay(e.id, Math.floor(day)) && nearCommonArea(s, content, e)) setStatus(e, 'break', day)
     else setStatus(e, 'working', day)
   }
+}
+
+/** Mola (PLAN §7.2) needs a common-area item (coffee corner, kitchen…) in aura range of the desk. */
+function nearCommonArea(s: GameState, content: EngineContent, e: Employee): boolean {
+  const slot = e.deskSlotId !== undefined ? findSlot(s.office, e.deskSlotId) : undefined
+  return slot !== undefined && auraAt(s, content, slot) > 0
 }
 
 export function hireCandidate(s: GameState, c: Candidate, deskSlotId: string | undefined): Employee {

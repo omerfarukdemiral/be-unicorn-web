@@ -1,7 +1,7 @@
 // Employees and the founder as walking low-poly characters (PLAN §4.3, §7.2).
 // Movement/animation is local visual state; the engine only provides status & actions.
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import type * as THREE from 'three'
 import type { Dept, Employee, FounderActionRun, Slot } from '../engine/types'
 import { CELL, hash01, hashString, pick, rotateXZ, yawOf } from './constants'
@@ -105,7 +105,22 @@ export interface EmployeeCharacterProps {
   onSelect: (id: string) => void
 }
 
-export function EmployeeCharacter(props: EmployeeCharacterProps) {
+/** Re-render only when something the JSX or the frame loop reads changes (not on every engine tick). */
+function sameEmployeeProps(a: EmployeeCharacterProps, b: EmployeeCharacterProps): boolean {
+  return (
+    a.employee.id === b.employee.id &&
+    a.employee.dept === b.employee.dept &&
+    a.employee.status === b.employee.status &&
+    a.deskSlot === b.deskSlot &&
+    a.layout === b.layout &&
+    a.speed === b.speed &&
+    a.overload === b.overload &&
+    a.selected === b.selected &&
+    a.onSelect === b.onSelect
+  )
+}
+
+export const EmployeeCharacter = memo(function EmployeeCharacter(props: EmployeeCharacterProps) {
   const { employee, layout } = props
   const look = useMemo(() => employeeLook(employee.id, employee.dept), [employee.id, employee.dept])
   const rig = useMemo(createRig, [])
@@ -223,7 +238,7 @@ export function EmployeeCharacter(props: EmployeeCharacterProps) {
       )}
     </>
   )
-}
+}, sameEmployeeProps)
 
 export interface FounderCharacterProps {
   action: FounderActionRun | undefined
@@ -235,8 +250,25 @@ export interface FounderCharacterProps {
   onSelect: () => void
 }
 
+function sameAction(a: FounderActionRun | undefined, b: FounderActionRun | undefined): boolean {
+  if (!a || !b) return a === b
+  return a.kind === b.kind && a.startDay === b.startDay && a.endDay === b.endDay && a.targetId === b.targetId
+}
+
+function sameFounderProps(a: FounderCharacterProps, b: FounderCharacterProps): boolean {
+  return (
+    sameAction(a.action, b.action) &&
+    a.founderSlot === b.founderSlot &&
+    a.deskSlots === b.deskSlots &&
+    a.layout === b.layout &&
+    a.speed === b.speed &&
+    a.selected === b.selected &&
+    a.onSelect === b.onSelect
+  )
+}
+
 /** The founder: sits at the centre desk, walks out/in according to the current action (§4.3). */
-export function FounderCharacter(props: FounderCharacterProps) {
+export const FounderCharacter = memo(function FounderCharacter(props: FounderCharacterProps) {
   const rig = useMemo(createRig, [])
   const root = useRef<THREE.Group>(null)
   const icon = useRef<THREE.Group>(null)
@@ -337,5 +369,4 @@ export function FounderCharacter(props: FounderCharacterProps) {
       </group>
     </>
   )
-}
-
+}, sameFounderProps)

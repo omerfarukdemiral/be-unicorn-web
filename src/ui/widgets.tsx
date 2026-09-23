@@ -44,18 +44,26 @@ export function WidgetChip({
 }) {
   return (
     <div
-      className={cx('flex min-w-0 items-center gap-2 rounded-2xl bg-cream-50/70 px-2.5', isCompact ? 'py-1' : 'py-1.5')}
+      className={cx('flex min-w-0 items-center rounded-2xl bg-cream-50/70', isCompact ? 'gap-1 px-1.5 py-1' : 'gap-2 px-2.5 py-1.5')}
       title={title ?? label}
     >
-      <span className={cx('grid size-7 shrink-0 place-items-center rounded-full', tone ?? 'bg-cream-200 text-ink-700')}>
-        <Icon name={icon} size={15} />
+      <span className={cx('grid shrink-0 place-items-center rounded-full', isCompact ? 'size-5' : 'size-7', tone ?? 'bg-cream-200 text-ink-700')}>
+        <Icon name={icon} size={isCompact ? 12 : 15} />
       </span>
       <div className="min-w-0 flex-1">
         {!isCompact && <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-ink-600">{label}</div>}
-        <div className="tabular flex items-baseline gap-1.5 truncate text-sm font-bold leading-tight text-ink-900">
-          {value}
-          {sub && <span className="truncate text-[11px] font-semibold">{sub}</span>}
-        </div>
+        {isCompact ? (
+          // Phones: value on its own line, sub (e.g. monthly net) below it.
+          <>
+            <div className="tabular truncate text-sm font-bold leading-tight text-ink-900">{value}</div>
+            {sub && <div className="tabular truncate text-[10px] font-semibold leading-tight">{sub}</div>}
+          </>
+        ) : (
+          <div className="tabular flex min-w-0 items-baseline gap-1.5 text-sm font-bold leading-tight text-ink-900">
+            <span className="min-w-0 truncate">{value}</span>
+            {sub && <span className="min-w-0 truncate text-[11px] font-semibold">{sub}</span>}
+          </div>
+        )}
         {children}
       </div>
     </div>
@@ -207,7 +215,7 @@ function CapTableWidget({ compact: c }: { compact?: boolean }) {
 
 function RoundTimerWidget({ compact: c }: { compact?: boolean }) {
   const round = useGameStore(useShallow((s) => (s.state.round?.active ? { left: s.state.round.weeksLeft, total: s.state.round.weeksTotal } : null)))
-  if (!round) return null
+  if (!round) return <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} tone="bg-cream-200 text-ink-700" value={t('hud.noRound')} />
   return (
     <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} tone="bg-lilac-100 text-lilac-500" value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })}>
       {!c && (
@@ -234,9 +242,50 @@ function ReputationWidget({ compact: c }: { compact?: boolean }) {
   return <WidgetChip compact={c} icon="megaphone" label={t('hud.reputation')} tone="bg-sky-100 text-sky-600" value={Math.round(rep)} sub="/100" />
 }
 
+/** Founder control (cap-table-health): exact stake and whether the founder still holds a majority. */
 function EquityWidget({ compact: c }: { compact?: boolean }) {
   const equity = useGameStore((s) => s.state.stats.equity)
-  return <WidgetChip compact={c} icon="key" label={t('hud.equity')} tone="bg-lilac-100 text-lilac-500" value={pct(equity, 1)} />
+  const majority = equity >= 0.5
+  return (
+    <WidgetChip
+      compact={c}
+      icon="key"
+      label={t('widget.equity')}
+      tone={majority ? 'bg-lilac-100 text-lilac-500' : 'bg-peach-100 text-peach-600'}
+      value={pct(equity, 1)}
+      sub={<span className={majority ? 'text-lilac-500' : 'text-peach-600'}>{majority ? t('hud.control') : t('hud.controlShared')}</span>}
+    />
+  )
+}
+
+/** Moral haritası (morale-compounds): how many people sit in each morale band; the office floor tints to match. */
+function MoraleMapWidget({ compact: c }: { compact?: boolean }) {
+  const bands = useGameStore(
+    useShallow((s) => {
+      let low = 0
+      let mid = 0
+      let high = 0
+      for (const e of s.state.employees) {
+        if (e.morale < 28) low++
+        else if (e.morale < 50) mid++
+        else high++
+      }
+      return { low, mid, high }
+    }),
+  )
+  return (
+    <WidgetChip compact={c} icon="grid" label={t('hud.moraleMap')} tone={bands.low > 0 ? 'bg-rose-100 text-rose-600' : 'bg-mint-100 text-mint-600'} value={t('hud.moraleMapValue', bands)}>
+      {!c && (
+        <StackBar
+          parts={[
+            { value: bands.low, color: '#f4a3a8', label: t('status.burnout') },
+            { value: bands.mid, color: '#f7dc8b', label: t('status.tired') },
+            { value: bands.high, color: '#9fe0c3', label: t('status.working') },
+          ]}
+        />
+      )}
+    </WidgetChip>
+  )
 }
 
 function LtvCacWidget({ compact: c }: { compact?: boolean }) {
@@ -278,7 +327,7 @@ function DebtWidget({ compact: c }: { compact?: boolean }) {
 
 function CoordinationWidget({ compact: c }: { compact?: boolean }) {
   const coord = useGameStore((s) => s.state.derived.coordination)
-  if (coord >= 0.999) return null
+  if (coord >= 0.999) return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} tone="bg-mint-100 text-mint-600" value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
   return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} tone="bg-rose-100 text-rose-600" value={`−${pct(1 - coord)}`} sub={t('hud.output')} />
 }
 
@@ -313,7 +362,7 @@ function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
 
 function ArchetypeWidget({ compact: c }: { compact?: boolean }) {
   const a = useGameStore((s) => s.state.archetype)
-  if (!a) return null
+  if (!a) return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} tone="bg-cream-200 text-ink-700" value={t('hud.archetypeUnknown')} />
   return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} tone="bg-lemon-100 text-lemon-600" value={t(`archetype.${a}`)} />
 }
 
@@ -329,9 +378,9 @@ export const WIDGETS: Record<HudWidget, WidgetDef> = {
   profitProjection: { id: 'profitProjection', icon: 'trend', tier: 'secondary', Component: ProfitWidget },
   capTable: { id: 'capTable', icon: 'pie', tier: 'secondary', Component: CapTableWidget },
   roundTimer: { id: 'roundTimer', icon: 'timer', tier: 'secondary', Component: RoundTimerWidget },
-  // Shown in the Team panel / 3D office instead of the HUD.
+  // Shown in the Team panel instead of the HUD.
   candidateQuality: { id: 'candidateQuality', icon: 'star', tier: 'hidden', Component: Nothing },
-  moraleHeatmap: { id: 'moraleHeatmap', icon: 'grid', tier: 'hidden', Component: Nothing },
+  moraleHeatmap: { id: 'moraleHeatmap', icon: 'grid', tier: 'secondary', Component: MoraleMapWidget },
   churn: { id: 'churn', icon: 'leak', tier: 'secondary', Component: ChurnWidget },
   arpu: { id: 'arpu', icon: 'coin', tier: 'secondary', Component: ArpuWidget },
   reputation: { id: 'reputation', icon: 'megaphone', tier: 'secondary', Component: ReputationWidget },

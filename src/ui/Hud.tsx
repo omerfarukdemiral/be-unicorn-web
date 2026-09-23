@@ -10,7 +10,7 @@ import { t } from './i18n'
 import { money } from './format'
 import { cx, IconButton } from './primitives'
 import { WIDGETS } from './widgets'
-import { useIsMobile, usePrefs } from './hooks'
+import { useIsMobile } from './hooks'
 import { requestOverlay } from './modalQueue'
 
 const SPEEDS: GameSpeed[] = [0, 1, 2, 4]
@@ -45,7 +45,7 @@ function DesktopHud() {
           })}
         </div>
         {secondary.length > 0 && (
-          <div className="ui-card ui-scroll grid max-h-[calc(100vh-420px)] min-h-0 grid-cols-2 gap-1 p-1.5">
+          <div className="ui-card ui-scroll grid max-h-[max(9rem,calc(100dvh-420px))] min-h-0 grid-cols-2 gap-1 p-1.5">
             {secondary.map((id) => {
               const W = WIDGETS[id].Component
               return (
@@ -73,7 +73,8 @@ function MobileHud() {
         <ViewControls compact />
       </div>
       <div className="pointer-events-auto ui-card flex items-stretch gap-1 p-1">
-        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
+        {/* Cash gets the widest column: value + monthly net (PLAN §7.4). */}
+        <div className="grid min-w-0 flex-1 grid-cols-[1.4fr_1fr_1fr] gap-1">
           {primary.map((id) => {
             const W = WIDGETS[id].Component
             return <W key={id} compact />
@@ -218,25 +219,24 @@ function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange
 function ViewControls({ compact }: { compact?: boolean }) {
   const zoom = useGameStore((s) => s.ui.zoom)
   const setZoom = useGameStore((s) => s.setZoom)
-  const sound = usePrefs((p) => p.sound)
-  const setPref = usePrefs((p) => p.setPref)
   const z = (d: number) => setZoom(Math.max(0, Math.min(2, zoom + d)) as ZoomLevel)
 
   if (compact) {
     return (
       <div className="ui-card flex shrink-0 items-center p-0.5">
+        <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} />
+        <IconButton icon="zoomIn" label={t('view.zoomIn')} onClick={() => z(1)} disabled={zoom === 2} />
         <IconButton icon="gear" label={t('settings.title')} onClick={() => requestOverlay({ kind: 'settings' })} />
       </div>
     )
   }
   return (
     <div className="pointer-events-auto ui-card flex items-center gap-0.5 p-1">
-      <div className="hidden items-center gap-0.5 lg:flex">
+      <div className="flex items-center gap-0.5">
         <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} size={40} />
         <IconButton icon="zoomIn" label={t('view.zoomIn')} onClick={() => z(1)} disabled={zoom === 2} size={40} />
         <span className="mx-0.5 h-6 w-px bg-cream-300" />
       </div>
-      <IconButton icon={sound ? 'sound' : 'mute'} label={sound ? t('view.soundOff') : t('view.soundOn')} onClick={() => setPref('sound', !sound)} size={40} />
       <button
         type="button"
         title={t('view.languageSoon')}

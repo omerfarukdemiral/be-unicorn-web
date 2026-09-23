@@ -134,9 +134,9 @@ export interface MoraleTargetInput {
   coordinationPenalty: number
 }
 
-/** hedef = 60 + auralar + kararlar + kitaplık − 40 (kasa<0) − 15 × aşırıYük − koordinasyonCezası. */
-export function moraleTarget(i: MoraleTargetInput): number {
-  const t =
+/** Unclamped target: sum every term first, clamp once at the end (PLAN §5.7). */
+export function moraleTargetRaw(i: MoraleTargetInput): number {
+  return (
     B.MORALE_BASE_TARGET +
     i.auras +
     i.decisionBonus +
@@ -144,7 +144,12 @@ export function moraleTarget(i: MoraleTargetInput): number {
     (i.cashNegative ? B.MORALE_NEGATIVE_CASH : 0) -
     B.MORALE_OVERLOAD * i.overload -
     i.coordinationPenalty
-  return clamp(0, 100, t)
+  )
+}
+
+/** hedef = 60 + auralar + kararlar + kitaplık − 40 (kasa<0) − 15 × aşırıYük − koordinasyonCezası, clamped to 0–100. */
+export function moraleTarget(i: MoraleTargetInput): number {
+  return clamp(0, 100, moraleTargetRaw(i))
 }
 
 /** Morale approaches target by 5%/day of the gap (continuous for fractional days). */

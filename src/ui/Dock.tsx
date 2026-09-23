@@ -38,10 +38,16 @@ function useBadges(): Partial<Record<DockTab, number>> {
 export function Dock() {
   const tab = useGameStore((s) => s.ui.dockTab)
   const setDockTab = useGameStore((s) => s.setDockTab)
+  const select = useGameStore((s) => s.select)
+  const hasDetail = useGameStore((s) => s.ui.selection !== null)
   const mobile = useIsMobile()
   const badges = useBadges()
   const active = DOCK_TABS.find((d) => d.id === tab)
-  const toggle = (id: DockTab) => setDockTab(tab === id ? null : id)
+  const toggle = (id: DockTab) => {
+    // Phones: one sheet at a time, the dock sheet replaces the detail sheet.
+    if (mobile && tab !== id) select(null)
+    setDockTab(tab === id ? null : id)
+  }
 
   if (mobile) {
     return (
@@ -83,7 +89,13 @@ export function Dock() {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-3">
       {active && (
-        <div className="pointer-events-auto ui-card flex max-h-[min(58vh,560px)] w-[min(720px,calc(100vw-2rem))] animate-slide-up flex-col overflow-hidden">
+        <div
+          className={cx(
+            'pointer-events-auto ui-card flex max-h-[min(58vh,560px)] animate-slide-up flex-col overflow-hidden',
+            // With the right detail panel open (380px + gutter), shift left so the two never overlap.
+            hasDetail ? 'w-[min(720px,calc(100vw-380px-3rem))] self-start' : 'w-[min(720px,calc(100vw-2rem))]',
+          )}
+        >
           <PanelHeader tab={active} onClose={() => setDockTab(null)} />
           <div className="ui-scroll min-h-0 flex-1 px-4 pb-4">
             <active.Panel />

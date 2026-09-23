@@ -86,7 +86,8 @@ body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: manipulation;
+  /* Pans only: no page pinch-zoom (iOS ignores user-scalable=no) and no double-tap zoom. */
+  touch-action: pan-x pan-y;
 }
 
 /* The 3D canvas handles its own gestures (tap, pinch). */
@@ -112,6 +113,7 @@ canvas {
 
 .ui-scroll {
   overflow-y: auto;
+  touch-action: pan-y;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;

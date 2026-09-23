@@ -13,6 +13,7 @@ import { renderWorldBubble } from './ui/bubbles'
 import { Icon } from './ui/icons'
 import { t } from './ui/i18n'
 import { Button } from './ui/primitives'
+import { usePrefs } from './ui/hooks'
 
 function wantsMock(): boolean {
   try {
@@ -31,7 +32,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
 
   const start = (resume: boolean) => {
     const store = useGameStore.getState()
-    if (!(resume && store.load())) store.newGame()
+    if (!(resume && store.load({ resume: true }))) store.newGame()
     onStart()
   }
 
@@ -82,6 +83,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
 export default function App() {
   const mock = useMemo(wantsMock, [])
   const [started, setStarted] = useState(mock)
+  const ambient = usePrefs((p) => p.screenBubbles)
 
   useEffect(() => {
     if (!started || mock) return
@@ -90,7 +92,7 @@ export default function App() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-cream-100">
-      <GameCanvas renderBubble={started ? renderWorldBubble : () => null} />
+      <GameCanvas renderBubble={started ? renderWorldBubble : () => null} ambientBubbles={ambient} />
       {started ? (
         <GameUI worldBubbles mock={mock} renderPreview={(target) => <ObjectPreview target={target} />} />
       ) : (

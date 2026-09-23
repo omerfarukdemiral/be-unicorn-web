@@ -82,7 +82,7 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
           </button>
         )}
       </div>
-      {onClose && <IconButton icon="close" label={t('common.close')} onClick={onClose} size={36} />}
+      {onClose && <IconButton icon="close" label={t('common.close')} onClick={onClose} size={44} />}
     </div>
   )
 }
@@ -119,7 +119,7 @@ export function DecisionBubble() {
         {expanded ? (
           <>
             <div className="-mt-1 mb-1 flex justify-end">
-              <IconButton icon="chevronUp" label={t('bubble.collapse')} onClick={() => setExpanded(false)} size={32} />
+              <IconButton icon="chevronUp" label={t('bubble.collapse')} onClick={() => setExpanded(false)} size={mobile ? 44 : 32} />
             </div>
             <DecisionCardView card={card} dense onChoose={(optionIndex) => dispatch({ type: 'answerDecision', cardId: card.id, optionIndex })} />
           </>

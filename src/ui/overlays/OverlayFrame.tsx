@@ -38,7 +38,7 @@ export function OverlayFrame({
         aria-labelledby={labelledBy}
         onClick={(e) => e.stopPropagation()}
         className={cx(
-          'relative max-h-[92dvh] w-full animate-slide-up overflow-hidden safe-bottom sm:animate-pop-in',
+          'relative flex max-h-[92dvh] w-full animate-slide-up flex-col overflow-hidden sm:animate-pop-in',
           wide ? 'sm:max-w-2xl' : 'sm:max-w-md',
           bare ? 'rounded-t-[var(--radius-card)] bg-cream-50 shadow-[var(--shadow-pop)] sm:rounded-[var(--radius-card)]' : 'ui-card rounded-b-none sm:rounded-[var(--radius-card)]',
         )}
@@ -48,7 +48,8 @@ export function OverlayFrame({
             <IconButton icon="close" label={t('common.close')} onClick={onClose} />
           </div>
         )}
-        <div className="ui-scroll max-h-[92dvh]">{children}</div>
+        {/* Safe-area padding inside the scroller, so the last button is reachable above the home indicator. */}
+        <div className="ui-scroll min-h-0 flex-1 safe-bottom">{children}</div>
       </div>
     </div>
   )

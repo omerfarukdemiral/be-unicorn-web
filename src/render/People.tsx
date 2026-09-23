@@ -1,16 +1,17 @@
 // All characters in the scene: employees, the founder and visiting NPCs.
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { FOUNDER_SLOT_ID, type GameState } from '../engine/types'
 import { EmployeeCharacter, FounderCharacter } from './Character'
 import { Npc } from './Npc'
-import { useLayout } from './sceneRegistry'
+import { useLayout, useOffice } from './sceneRegistry'
 import { getGS, storeApi, useGS, useMockState, useUi } from './source'
 
-const selectPeople = (s: GameState) =>
-  [s.employees, s.visitors, s.office.slots, s.founder.currentAction, s.time.speed, s.derived.overload > 0] as const
+const selectPeople = (s: GameState) => [s.employees, s.visitors, s.founder.currentAction, s.time.speed, s.derived.overload > 0] as const
 
+// Characters are memoised on the fields they draw, so this list re-rendering per tick stays cheap.
 export function People() {
-  const [employees, visitors, slots, action, speed, overload] = useGS(selectPeople)
+  const [employees, visitors, action, speed, overload] = useGS(selectPeople)
+  const slots = useOffice().slots
   const mock = useMockState()
   const getDay = useCallback(() => getGS(mock).time.day, [mock])
   const layout = useLayout()
@@ -20,8 +21,8 @@ export function People() {
   const selectVisitor = useCallback((id: string) => storeApi().select({ kind: 'visitor', id }), [])
   const selectFounder = useCallback(() => storeApi().select({ kind: 'founder' }), [])
 
-  const founderSlot = slots.find((s) => s.id === FOUNDER_SLOT_ID)
-  const occupiedDesks = slots.filter((s) => s.occupantId && s.id !== FOUNDER_SLOT_ID)
+  const founderSlot = useMemo(() => slots.find((s) => s.id === FOUNDER_SLOT_ID), [slots])
+  const occupiedDesks = useMemo(() => slots.filter((s) => s.occupantId && s.id !== FOUNDER_SLOT_ID), [slots])
 
   return (
     <group>

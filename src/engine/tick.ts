@@ -99,7 +99,7 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   recomputeDerived(s, content)
   dailyEndgame(s, content)
   if (s.gameOver) return
-  dailyPeople(s)
+  dailyPeople(s, content)
   dailyFounder(s)
   s.modifiers = s.modifiers.filter((m) => m.untilDay > s.time.day)
   s.candidates = s.candidates.filter((c) => c.expiresDay > s.time.day)

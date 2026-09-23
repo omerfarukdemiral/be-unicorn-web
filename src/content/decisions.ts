@@ -779,7 +779,7 @@ export const DECISIONS: readonly DecisionCard[] = [
       {
         label: 'Crunch yap',
         tradeoff: { gain: 'Lansman zamanında', cost: 'Moral ve teknik borç' },
-        effects: { morale: -8, techDebt: 8, maturity: 0.05, setFlag: 'rushedProject' },
+        effects: { morale: -8, techDebt: 8, maturity: 0.05, setFlag: ['crunch', 'rushedProject'] },
         reflection: 'Crunch bir kez işe yarar, alışkanlık olursa yorar.',
         conceptId: 'tech-debt',
       },

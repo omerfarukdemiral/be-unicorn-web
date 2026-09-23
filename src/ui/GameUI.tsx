@@ -40,7 +40,8 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
         {!worldBubbles && <BubbleTray ambient={screenAmbient} />}
 
         {/* Center-bottom transient feedback */}
-        <div className={mobile ? 'absolute inset-x-0 bottom-[calc(200px+env(safe-area-inset-bottom,0px))] flex flex-col items-center gap-2 px-2' : 'absolute inset-x-0 bottom-[84px] flex flex-col items-center gap-2'}>
+        {/* z-40: above dock panels and sheets (z-20/30), below blocking modals (z-50). Rendered after them. */}
+        <div className={mobile ? 'pointer-events-none absolute inset-x-0 bottom-[calc(200px+env(safe-area-inset-bottom,0px))] z-40 flex flex-col items-center gap-2 px-2' : 'pointer-events-none absolute inset-x-0 bottom-[84px] z-40 flex flex-col items-center gap-2'}>
           <PlacingBanner />
           <ErrorToast />
         </div>

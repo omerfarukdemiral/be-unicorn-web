@@ -128,7 +128,7 @@ describe('format', () => {
     expect(formatPercent(0.045)).toBe('%4.5')
     expect(formatMonths(2.63)).toBe('2.6 ay')
     expect(formatMonths(null)).toBe('sonsuz')
-    expect(formatRatio(3.24)).toBe('3.2x')
+    expect(formatRatio(3.24)).toBe('3.2×')
     expect(formatRatio(null)).toBe('—')
   })
 

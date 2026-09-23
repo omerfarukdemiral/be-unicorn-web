@@ -42,7 +42,11 @@ export function runDevPlay(opts: DevPlayOptions = {}): DevPlayResult {
 
   const hireDept = (dept: string): boolean => {
     const c = s.candidates.filter((x) => x.dept === dept).sort((a, b) => b.quality - a.quality)[0]
-    return c ? act({ type: 'hire', candidateId: c.id }) : false
+    if (!c) return false
+    // PLAN §4.2: a hire needs a desk on a free slot.
+    const free = s.office.slots.find((x) => x.type === 'desk' && x.id !== 'founder' && x.ring === 1 && !x.occupantId)
+    if (free && !free.itemId) act({ type: 'placeItem', itemId: 'desk-basic', slotId: free.id })
+    return act({ type: 'hire', candidateId: c.id })
   }
 
   act({ type: 'startProject', category: 'web' })

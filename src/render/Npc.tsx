@@ -1,7 +1,7 @@
 // Visiting NPCs (PLAN §7.3): investor, mentor, customer, journalist… enter through the door,
 // walk to their target, and walk out when their visit ends.
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { NpcRole, Slot, Visitor } from '../engine/types'
 import { CELL, hash01, pick, rotateXZ } from './constants'
@@ -64,7 +64,16 @@ export interface NpcProps {
   onSelect: (id: string) => void
 }
 
-export function Npc(props: NpcProps) {
+function sameVisitor(a: Visitor, b: Visitor): boolean {
+  return a.id === b.id && a.role === b.role && a.purpose === b.purpose && a.targetSlotId === b.targetSlotId && a.arriveDay === b.arriveDay && a.leaveDay === b.leaveDay
+}
+
+/** Skip the per-tick re-render: the frame loop reads the day through getDay(). */
+function sameNpcProps(a: NpcProps, b: NpcProps): boolean {
+  return sameVisitor(a.visitor, b.visitor) && a.slots === b.slots && a.layout === b.layout && a.getDay === b.getDay && a.speed === b.speed && a.selected === b.selected && a.onSelect === b.onSelect
+}
+
+export const Npc = memo(function Npc(props: NpcProps) {
   const { visitor } = props
   const look = useMemo(() => npcLook(visitor.id, visitor.role), [visitor.id, visitor.role])
   const rig = useMemo(createRig, [])
@@ -123,4 +132,4 @@ export function Npc(props: NpcProps) {
       <mesh geometry={GEO.ring} material={flatMat(props.selected ? HIGHLIGHT.selected : NPC_COLORS[visitor.role].accent, 0.85)} scale={[0.7, 1, 0.7]} position={[0, 0.02, 0]} />
     </group>
   )
-}
+}, sameNpcProps)

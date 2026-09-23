@@ -101,4 +101,9 @@ describe('decision cards', () => {
     const broke = makeState((s) => (s.stats.cash = -100))
     expect(DECISIONS.find((d) => d.id === 'emergency-bridge')!.condition!(broke)).toBe(true)
   })
+
+  it('the crunch option counts as a crunch (tech-debt trigger) and a rushed project', () => {
+    const crunch = DECISIONS.find((d) => d.id === 'crunch-vs-launch')!.options[0]!.effects.setFlag
+    expect(crunch).toEqual(['crunch', 'rushedProject'])
+  })
 })

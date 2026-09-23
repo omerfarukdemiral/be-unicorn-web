@@ -5,7 +5,7 @@ import { answerDecision } from './decisions'
 import { recomputeDerived } from './derive'
 import { applyMorale, unlockTool } from './effects'
 import { startFounderAction } from './founder'
-import { anchorOf, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing } from './office'
+import { anchorOf, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
 import { startRound } from './round'
@@ -25,7 +25,7 @@ import { clone, furnitureById, incCounter, newId, pushActivity, pushEvent, type 
 export type { Action, ActionType, ActionOf, TimedAction, ActionResult, ActionErrorCode } from './types'
 
 /** Actions still allowed after game over (UI housekeeping). */
-const AFTER_GAME_OVER = new Set<Action['type']>(['setSpeed', 'openConcept', 'minimizeConcept', 'dismissBubble'])
+const AFTER_GAME_OVER = new Set<Action['type']>(['setSpeed', 'openConcept', 'minimizeConcept'])
 
 type Ctx = { s: GameState; content: EngineContent; rng: Rng }
 /** Handler: mutate ctx.s and return null, or return an error code (the clone is discarded). */
@@ -58,7 +58,7 @@ const hire: Handler<'hire'> = ({ s }, a) => {
     if (err) return err
   } else {
     slot = firstFreeDesk(s.office)
-    if (!slot) return 'noFreeSlot'
+    if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
   }
   hireCandidate(s, c, slot?.id)
   return null
@@ -69,6 +69,7 @@ function deskError(s: GameState, slot: Slot | undefined): ActionErrorCode | null
   if (slot.type !== 'desk') return 'wrongSlotType'
   if (!isRingUnlocked(s.office, slot.ring)) return 'slotLocked'
   if (!isFreeDesk(s.office, slot)) return 'slotOccupied'
+  if (slot.itemId === undefined) return 'noDesk'
   return null
 }
 
@@ -186,6 +187,12 @@ const sellItem: Handler<'sellItem'> = ({ s, content }, a) => {
   const item = furnitureById(content, anchor.itemId)
   if (!item) return 'notFound'
   s.stats.cash += item.price * B.SELL_REFUND
+  // Selling a desk leaves its occupant without a seat until they get a new desk.
+  if (anchor.occupantId !== undefined && item.slotType === 'desk') {
+    const e = s.employees.find((x) => x.id === anchor.occupantId)
+    if (e) delete e.deskSlotId
+    delete anchor.occupantId
+  }
   clearItem(s, anchor)
   pushActivity(s, 'itemSold', { item: item.id, slot: anchor.id })
   pushEvent(s, { kind: 'itemSold', refId: anchor.id })
@@ -346,12 +353,6 @@ const minimizeConceptH: Handler<'minimizeConcept'> = ({ s, content }, a) => (min
 
 const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => answerDecision(s, content, a.cardId, a.optionIndex)
 
-const dismissBubble: Handler<'dismissBubble'> = ({ s }, a) => {
-  const before = s.bubbles.length
-  s.bubbles = s.bubbles.filter((b) => b.id !== a.bubbleId)
-  return s.bubbles.length === before ? 'notFound' : null
-}
-
 const startRoundH: Handler<'startRound'> = ({ s, rng }) => startRound(s, rng)
 
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
@@ -374,6 +375,5 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   openConcept,
   minimizeConcept: minimizeConceptH,
   answerDecision: answerDecisionH,
-  dismissBubble,
   startRound: startRoundH,
 }

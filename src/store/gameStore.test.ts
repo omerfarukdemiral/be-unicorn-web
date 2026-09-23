@@ -115,6 +115,6 @@ describe('gameStore (engine wired)', () => {
     expect(learnedAt5).toBeGreaterThanOrEqual(3)
     expect(s.concepts.learned).toContain('runway')
     expect(s.unlockedWidgets.length).toBeGreaterThan(startWidgets)
-    expect(store().replay.length).toBeGreaterThan(5)
+    expect(store().exportReplay().actions.length).toBeGreaterThan(5)
   })
 })

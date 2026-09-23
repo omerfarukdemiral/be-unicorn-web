@@ -1,6 +1,6 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
-import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, FurnitureId, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
+import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, FurnitureId, GameSpeed, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -40,15 +40,24 @@ export interface UiState {
   zoom: ZoomLevel
   /** Last rejected action, for a short inline error. `at` = performance.now(). */
   lastError: { code: ActionErrorCode; at: number } | null
-  /** Highest GameEvent.id already consumed by effects (confetti, sounds). */
-  lastSeenEventId: number
+  /** Speed before a blocking modal paused the game (saves write this, not the modal's 0). */
+  pausedFrom: GameSpeed | null
+  /** Bumped by newGame()/load(): event consumers skip the loaded history. */
+  generation: number
+}
+
+/** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
+export interface ReplayLog {
+  seed: number
+  runIndex: number
+  /** True when the log starts from a loaded save instead of day 0. */
+  fromSave: boolean
+  actions: TimedAction[]
 }
 
 export interface GameStore {
   state: GameState
   ui: UiState
-  /** Replay log for this run: seed + these actions reproduce it (PLAN §8.3). */
-  replay: TimedAction[]
 
   // Engine bridge
   dispatch(action: Action): ActionResult
@@ -56,8 +65,10 @@ export interface GameStore {
   tick(realDtSeconds: number): void
   newGame(opts?: Partial<NewGameOptions>): void
   save(): void
-  /** Returns false if no compatible save exists. */
-  load(): boolean
+  /** Returns false if no compatible save exists. `resume`: a paused save continues at 1× (start screen). */
+  load(opts?: { resume?: boolean }): boolean
+  /** Replay log of this run (kept outside reactive state). Dev builds expose it as window.__replay(). */
+  exportReplay(): ReplayLog
 
   // UI slice (never touches GameState)
   select(selection: Selection | null): void
@@ -67,5 +78,5 @@ export interface GameStore {
   closeOverlay(): void
   setPlacing(mode: PlacingMode | null): void
   setZoom(zoom: ZoomLevel): void
-  markEventsSeen(eventId: number): void
+  setPausedFrom(speed: GameSpeed | null): void
 }

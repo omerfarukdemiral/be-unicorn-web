@@ -144,10 +144,14 @@ export function isFreeDesk(office: OfficeState, slot: Slot): boolean {
   return slot.type === 'desk' && slot.id !== FOUNDER_SLOT_ID && slot.occupantId === undefined && isRingUnlocked(office, slot.ring)
 }
 
+/** First free desk slot that holds a desk item (PLAN §4.2: işe al → masa gerekir), inner rings first. */
 export function firstFreeDesk(office: OfficeState): Slot | undefined {
-  // Prefer desks with an item, then inner rings.
-  const free = office.slots.filter((s) => isFreeDesk(office, s))
-  return free.find((s) => s.itemId !== undefined) ?? free[0]
+  return office.slots.find((s) => isFreeDesk(office, s) && s.itemId !== undefined)
+}
+
+/** True when the office has free desk slots but none with a desk item on it. */
+export function onlyEmptyDeskSlots(office: OfficeState): boolean {
+  return !firstFreeDesk(office) && office.slots.some((s) => isFreeDesk(office, s))
 }
 
 /** Placed items (anchor slots only) in open rings. */

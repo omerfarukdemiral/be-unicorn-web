@@ -64,23 +64,21 @@ export function ModalHost() {
   }
 }
 
-/** Own event cursor (render keeps using ui.lastSeenEventId for its effects). */
+/** Own event cursor over state.events (render/Effects keeps its own). */
 function useEngineEventOverlays() {
   const cursor = useRef<number | null>(null)
   const events = useGameStore((s) => s.state.events)
   const gameOver = useGameStore((s) => s.state.gameOver)
-  const runIndex = useGameStore((s) => s.state.meta.runIndex)
+  const generation = useGameStore((s) => s.ui.generation)
 
-  // New game / load: skip event history.
+  // New game / load (same run too): skip the loaded event history, never replay it.
   useEffect(() => {
     cursor.current = useGameStore.getState().state.events.reduce((m, e) => Math.max(m, e.id), 0)
-  }, [runIndex])
+  }, [generation])
 
   useEffect(() => {
     if (cursor.current === null) return
-    // Ring buffer: a new game restarts ids; resync if we are ahead.
     const maxId = events.reduce((m, e) => Math.max(m, e.id), 0)
-    if (maxId < cursor.current) cursor.current = 0
     for (const e of events) {
       if (e.id <= cursor.current) continue
       if (e.kind === 'stageUp') requestOverlay({ kind: 'moveScene' })
@@ -103,21 +101,21 @@ function useEngineEventOverlays() {
   }, [gameOver])
 }
 
-/** Blocking modal = paused world; restore the previous speed when all modals are gone. */
+/** Blocking modal = paused world; restore the previous speed when all modals are gone.
+ *  The pre-modal speed lives in ui.pausedFrom so saves made meanwhile keep the real speed. */
 function usePauseWhileModal(overlay: Overlay | null) {
-  const pausedFrom = useRef<GameSpeed | null>(null)
   const open = overlay !== null
   useEffect(() => {
-    const { state, dispatch } = useGameStore.getState()
+    const { state, ui, dispatch, setPausedFrom } = useGameStore.getState()
     if (open) {
-      if (pausedFrom.current === null && state.time.speed !== 0 && !state.gameOver) {
-        pausedFrom.current = state.time.speed
+      if (ui.pausedFrom === null && state.time.speed !== 0 && !state.gameOver) {
+        setPausedFrom(state.time.speed)
         dispatch({ type: 'setSpeed', speed: 0 })
       }
       return
     }
-    const prev = pausedFrom.current
-    pausedFrom.current = null
+    const prev: GameSpeed | null = ui.pausedFrom
+    setPausedFrom(null)
     if (prev !== null && state.time.speed === 0 && !state.gameOver) dispatch({ type: 'setSpeed', speed: prev })
   }, [open])
 }

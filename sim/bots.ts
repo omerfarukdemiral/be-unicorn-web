@@ -216,6 +216,14 @@ function hiring(c: Ctx, cfg: BotConfig): void {
     if (ring !== null && c.s.stats.cash > cost * 2 + reserve) act({ type: 'openRing', ring })
     if (freeDesks(c.s) === 0) return
   }
+  // A hire needs a desk item on a free slot (PLAN §4.2).
+  const deskFree = (s: GameState) => s.office.slots.some((x) => x.type === 'desk' && x.id !== 'founder' && x.itemId !== undefined && x.occupantId === undefined && s.office.rings.some((r) => r.index === x.ring && r.unlocked))
+  if (!deskFree(c.s)) {
+    const slot = c.s.office.slots.find((x) => x.type === 'desk' && x.id !== 'founder' && x.itemId === undefined && x.occupantId === undefined && c.s.office.rings.some((r) => r.index === x.ring && r.unlocked))
+    const basic = c.content.furniture.filter((f) => f.slotType === 'desk' && f.size === 1 && f.stageUnlock <= c.s.stage && !f.effects.deptBonus).sort((a, b) => a.price - b.price)[0]
+    if (slot && basic) act({ type: 'placeItem', itemId: basic.id, slotId: slot.id })
+    if (!deskFree(c.s)) return
+  }
   const order = neededDept(c.s, cfg)
   const want = order[0]!
   const pickFor = (d: Dept) => c.s.candidates.filter((c) => c.dept === d).sort((a, b) => b.quality - a.quality)[0]

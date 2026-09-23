@@ -52,14 +52,17 @@ export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; si
 
 function HireView() {
   const [dept, setDept] = useState<Dept | 'all'>('all')
-  const { candidates, day, showQuality, freeDesks } = useGameStore(
+  const { candidates, day, showQuality, freeDesks, emptySlots } = useGameStore(
     useShallow((s) => {
       const open = new Set(s.state.office.rings.filter((r) => r.unlocked).map((r) => r.index))
+      const free = s.state.office.slots.filter((sl) => sl.type === 'desk' && !sl.occupantId && !sl.spanOf && sl.id !== 'founder' && (sl.ring === 0 || open.has(sl.ring)))
       return {
         candidates: s.state.candidates,
         day: Math.floor(s.state.time.day),
         showQuality: s.state.unlockedWidgets.includes('candidateQuality'),
-        freeDesks: s.state.office.slots.filter((sl) => sl.type === 'desk' && !sl.occupantId && !sl.spanOf && sl.id !== 'founder' && (sl.ring === 0 || open.has(sl.ring))).length,
+        // Same rule as the engine: a hire needs a desk item on a free desk slot.
+        freeDesks: free.filter((sl) => sl.itemId !== undefined).length,
+        emptySlots: free.filter((sl) => sl.itemId === undefined).length,
       }
     }),
   )
@@ -82,7 +85,7 @@ function HireView() {
       <div className="flex items-center justify-between gap-2 text-[11px] text-ink-600">
         <span className={cx('inline-flex items-center gap-1', freeDesks === 0 && 'font-semibold text-rose-600')}>
           <Icon name="desk" size={14} />
-          {freeDesks === 0 ? t('team.noDesk') : t('team.freeDesks', { n: freeDesks })}
+          {freeDesks > 0 ? t('team.freeDesks', { n: freeDesks }) : emptySlots > 0 ? t('team.needDeskItem') : t('team.noSlot')}
         </span>
         <Button size="sm" tone="ghost" icon="refresh" onClick={() => dispatch({ type: 'refreshCandidates' })}>
           {t('team.refresh')}

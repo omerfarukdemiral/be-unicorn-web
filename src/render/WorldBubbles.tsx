@@ -27,21 +27,78 @@ export function resolveSpeaker(role: NpcRole, refId: string | undefined, visitor
   return 'founder'
 }
 
-const selectBubbleInputs = (s: GameState) =>
-  [s.bubbles, s.concepts.active, s.concepts.minimized, s.decisions.active, s.visitors, s.employees, Math.floor(s.time.day * 4) / 4] as const
+const conceptRole = (id: string): NpcRole => CONCEPTS.find((x) => x.id === id)?.speaker ?? 'mentor'
+const decisionRole = (id: string): NpcRole => DECISIONS.find((d) => d.id === id)?.speaker ?? 'mentor'
 
-function openConcept(conceptId: ConceptId): void {
-  storeApi().openOverlay({ kind: 'conceptCard', conceptId })
-  dispatchAction({ type: 'openConcept', conceptId })
+/**
+ * One primitive key for every bubble on screen (kind|id|speaker per line). The store clones state
+ * every tick, so selecting arrays would rebuild all drei <Html> nodes 2–8×/s; a string only changes
+ * when a bubble or its speaker does. Expired ambient lines are removed by the engine (expireBubbles).
+ */
+function selectBubbleKey(s: GameState): string {
+  const out: string[] = []
+  for (const b of s.bubbles) out.push(`a|${b.id}|${b.speakerId}|${b.lineId}`)
+  const ac = s.concepts.active
+  if (ac) out.push(`c|${ac.id}|${resolveSpeaker(conceptRole(ac.id), ac.id, s.visitors, s.employees)}`)
+  for (const id of s.concepts.minimized) out.push(`i|${id}|${resolveSpeaker(conceptRole(id), id, s.visitors, s.employees)}`)
+  const ad = s.decisions.active
+  if (ad) {
+    const visitorOk = ad.visitorId !== undefined && s.visitors.some((v) => v.id === ad.visitorId)
+    out.push(`d|${ad.cardId}|${visitorOk ? ad.visitorId! : resolveSpeaker(decisionRole(ad.cardId), ad.cardId, s.visitors, s.employees)}`)
+  }
+  return out.join('\n')
 }
 
-export function WorldBubbles({ renderBubble }: { renderBubble?: BubbleRenderer }) {
-  const [bubbles, activeConcept, minimized, activeDecision, visitors, employees, day] = useGS(selectBubbleInputs)
+/** Fallback path (no UI renderer): never replaces an open blocking overlay. */
+function openIfFree(open: () => void): void {
+  if (storeApi().ui.overlay === null) open()
+}
+
+function openConcept(conceptId: ConceptId): void {
+  openIfFree(() => {
+    storeApi().openOverlay({ kind: 'conceptCard', conceptId })
+    dispatchAction({ type: 'openConcept', conceptId })
+  })
+}
+
+function buildList(key: string, ambient: boolean): WorldBubble[] {
+  const out: WorldBubble[] = []
+  if (!key) return out
+  for (const line of key.split('\n')) {
+    const [kind, id, speakerId, extra] = line.split('|') as [string, string, string, string | undefined]
+    if (kind === 'a') {
+      if (!ambient) continue
+      const text = OFFICE_LINES.find((l) => l.id === extra)?.text ?? '…'
+      out.push({ kind: 'ambient', key: `amb:${id}`, bubbleId: id, lineId: extra ?? '', speakerId, text })
+    } else if (kind === 'c') {
+      const cid = id as ConceptId
+      out.push({ kind: 'concept', key: `concept:${cid}`, conceptId: cid, role: conceptRole(cid), speakerId, text: CONCEPTS.find((x) => x.id === cid)?.bubble ?? '…', onOpen: () => openConcept(cid) })
+    } else if (kind === 'i') {
+      const cid = id as ConceptId
+      out.push({ kind: 'conceptIcon', key: `icon:${cid}`, conceptId: cid, role: conceptRole(cid), speakerId, onOpen: () => openConcept(cid) })
+    } else if (kind === 'd') {
+      out.push({
+        kind: 'decision',
+        key: `decision:${id}`,
+        cardId: id,
+        role: decisionRole(id),
+        speakerId,
+        text: DECISIONS.find((d) => d.id === id)?.question ?? '…',
+        onOpen: () => openIfFree(() => storeApi().openOverlay({ kind: 'decision', cardId: id })),
+      })
+    }
+  }
+  return out
+}
+
+export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: BubbleRenderer; ambient?: boolean }) {
+  const key = useGS(selectBubbleKey)
   const layout = useLayout()
   const mock = useMockState()
+  const list = useMemo(() => buildList(key, ambient), [key, ambient])
 
   // Shrink an unclicked concept bubble to an icon after 20 s real time (PLAN §6.1).
-  const activeId = activeConcept?.id
+  const activeId = list.find((b) => b.kind === 'concept')?.conceptId
   useEffect(() => {
     if (!activeId || mock) return
     const t = window.setTimeout(() => {
@@ -49,48 +106,6 @@ export function WorldBubbles({ renderBubble }: { renderBubble?: BubbleRenderer }
     }, CONCEPT_MINIMIZE_MS)
     return () => window.clearTimeout(t)
   }, [activeId, mock])
-
-  const list = useMemo<WorldBubble[]>(() => {
-    const out: WorldBubble[] = []
-    for (const b of bubbles) {
-      if (day > b.untilDay) continue
-      const text = OFFICE_LINES.find((l) => l.id === b.lineId)?.text ?? '…'
-      out.push({ kind: 'ambient', key: `amb:${b.id}`, bubbleId: b.id, lineId: b.lineId, speakerId: b.speakerId, text })
-    }
-    if (activeConcept) {
-      const c = CONCEPTS.find((x) => x.id === activeConcept.id)
-      const role: NpcRole = c?.speaker ?? 'mentor'
-      out.push({
-        kind: 'concept',
-        key: `concept:${activeConcept.id}`,
-        conceptId: activeConcept.id,
-        role,
-        speakerId: resolveSpeaker(role, activeConcept.id, visitors, employees),
-        text: c?.bubble ?? '…',
-        onOpen: () => openConcept(activeConcept.id),
-      })
-    }
-    for (const id of minimized) {
-      const c = CONCEPTS.find((x) => x.id === id)
-      const role: NpcRole = c?.speaker ?? 'mentor'
-      out.push({ kind: 'conceptIcon', key: `icon:${id}`, conceptId: id, role, speakerId: resolveSpeaker(role, id, visitors, employees), onOpen: () => openConcept(id) })
-    }
-    if (activeDecision) {
-      const card = DECISIONS.find((d) => d.id === activeDecision.cardId)
-      const role: NpcRole = card?.speaker ?? 'mentor'
-      const visitorOk = activeDecision.visitorId && visitors.some((v) => v.id === activeDecision.visitorId)
-      out.push({
-        kind: 'decision',
-        key: `decision:${activeDecision.cardId}`,
-        cardId: activeDecision.cardId,
-        role,
-        speakerId: visitorOk ? activeDecision.visitorId! : resolveSpeaker(role, activeDecision.cardId, visitors, employees),
-        text: card?.question ?? '…',
-        onOpen: () => storeApi().openOverlay({ kind: 'decision', cardId: activeDecision.cardId }),
-      })
-    }
-    return out
-  }, [bubbles, activeConcept, minimized, activeDecision, visitors, employees, day])
 
   // Stack bubbles that share a speaker.
   const stackIndex = new Map<string, number>()

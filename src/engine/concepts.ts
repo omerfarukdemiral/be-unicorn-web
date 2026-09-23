@@ -2,7 +2,7 @@
 // Rules: each concept fires once per run, max 1 active bubble, the rest wait in a FIFO queue.
 import type { Concept } from '../content/index'
 import { CONCEPT_VISITOR_DAYS } from './balance'
-import { unlockAny } from './effects'
+import { snapshotWhere, unlockAny } from './effects'
 import type { ConceptId, GameState } from './types'
 import { newId, pushEvent } from './util'
 
@@ -21,6 +21,7 @@ export function evaluateConcepts(s: GameState, concepts: readonly Concept[]): Co
     if (c.stage > s.stage) continue
     if (s.concepts.triggered.includes(c.id)) continue
     if (!safeTrigger(c, s)) continue
+    snapshotWhere(s, c)
     s.concepts.triggered.push(c.id)
     s.concepts.queue.push(c.id)
     queued.push(c.id)

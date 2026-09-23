@@ -88,7 +88,7 @@ describe('concepts', () => {
   it('unlocks only valid widgets or tools, and shelf colors are hex', () => {
     const valid = new Set<string>([...HUD_WIDGETS, ...TOOL_IDS])
     for (const c of CONCEPTS) {
-      if (c.unlocks) expect(valid.has(c.unlocks)).toBe(true)
+      for (const u of c.unlocks === undefined ? [] : typeof c.unlocks === 'string' ? [c.unlocks] : c.unlocks) expect(valid.has(u)).toBe(true)
       expect(c.shelfColor).toMatch(/^#[0-9a-fA-F]{6}$/)
     }
   })

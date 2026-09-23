@@ -1,9 +1,9 @@
 // Render-local mutable registry: where each character currently is (for bubbles that follow
 // heads) and short-lived visual moods (celebration). Never written to GameState.
 import { useMemo } from 'react'
-import type { GameState } from '../engine/types'
+import type { GameState, OfficeState } from '../engine/types'
 import { computeLayout, type OfficeLayout } from './layout'
-import { useGS } from './source'
+import { getGS, useGS, useMockState } from './source'
 
 export interface SpeakerPos {
   x: number
@@ -41,10 +41,29 @@ export function isCelebrating(now = performance.now()): boolean {
   return now < mood.celebrateUntil
 }
 
-const selectOffice = (s: GameState) => [s.office.slots, s.office.rings, s.office.stage] as const
+/**
+ * Structural signature of the office. The engine clones the whole state every step, so
+ * `office.slots` is a new array each tick even when nothing changed; render keys on this
+ * string instead so the scene only re-renders when the office really changes.
+ */
+export function officeSignature(s: GameState): string {
+  const o = s.office
+  let k = `${o.stage}|`
+  for (const r of o.rings) k += r.unlocked ? '1' : '0'
+  for (const x of o.slots) k += `|${x.id},${x.ring},${x.type},${x.pos.x},${x.pos.z},${x.rotation},${x.itemId ?? ''},${x.spanOf ?? ''},${x.occupantId ?? ''}`
+  return k
+}
 
-/** Memoised scene layout for the current office. */
+/** Office snapshot with a stable reference while its signature is unchanged. */
+export function useOffice(): OfficeState {
+  const sig = useGS(officeSignature)
+  const mock = useMockState()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => getGS(mock).office, [sig, mock])
+}
+
+/** Memoised scene layout for the current office (stable across engine ticks). */
 export function useLayout(): OfficeLayout {
-  const [slots, rings, stage] = useGS(selectOffice)
-  return useMemo(() => computeLayout(slots, rings, stage), [slots, rings, stage])
+  const office = useOffice()
+  return useMemo(() => computeLayout(office.slots, office.rings, office.stage), [office])
 }

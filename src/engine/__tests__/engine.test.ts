@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { STAGES } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
+import { applyEffects } from '../effects'
 import { buildOffice, relocateOffice } from '../office'
 import { deserialize, serialize } from '../save'
 import type { Action, GameState, TimedAction } from '../types'
@@ -79,8 +80,22 @@ describe('actions', () => {
       expect(r.state).toBe(s)
     }
   })
+  it('hire needs a desk item (noDesk), sell unseats', () => {
+    let s = api.createGame({ seed: 1 })
+    expect(api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id }).error).toBe('noDesk')
+    expect(api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id, deskSlotId: 'r1-s0' }).error).toBe('noDesk')
+    s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: 'r1-s1' }).state
+    const r = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id })
+    expect(r.ok).toBe(true)
+    s = r.state
+    expect(s.employees[0]!.deskSlotId).toBe('r1-s1')
+    s = api.applyAction(s, { type: 'sellItem', slotId: 'r1-s1' }).state
+    expect(s.employees[0]!.deskSlotId).toBeUndefined()
+    expect(s.office.slots.find((x) => x.id === 'r1-s1')?.occupantId).toBeUndefined()
+  })
   it('hire seats on a free desk, fills slots, then noFreeSlot', () => {
     let s = api.createGame({ seed: 1 })
+    for (const id of ['r1-s0', 'r1-s1', 'r1-s2', 'r1-s3']) s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: id }).state
     for (let i = 0; i < 4; i++) {
       const r = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id })
       expect(r.ok).toBe(true)
@@ -205,6 +220,19 @@ describe('concept queue', () => {
     expect(s.unlockedWidgets).toContain('burnBreakdown')
     expect(capi.applyAction(s, { type: 'openConcept', conceptId: 'pmf' }).ok).toBe(false)
   })
+  it('stores the "where" text at trigger time and unlocks every listed item', () => {
+    const wapi = createEngine(
+      fakeContent({ concepts: [fakeConcept('pricing', (s) => s.time.day >= 2, { card: { what: 'w', where: (s) => `gün ${Math.floor(s.time.day)}`, rule: 'r' }, unlocks: ['priceControl', 'arpu'] })] }),
+    )
+    let s = wapi.step(wapi.createGame({ seed: 1 }), 3)
+    const saved = s.concepts.where?.pricing
+    expect(saved).toBe('gün 2')
+    s = wapi.step(s, 10)
+    expect(s.concepts.where?.pricing).toBe(saved)
+    s = wapi.applyAction(s, { type: 'openConcept', conceptId: 'pricing' }).state
+    expect(s.unlockedTools).toContain('priceControl')
+    expect(s.unlockedWidgets).toContain('arpu')
+  })
   it('tool unlocks go to unlockedTools', () => {
     let s = capi.createGame({ seed: 1 })
     s = capi.step({ ...s, stage: 2 }, 1)
@@ -261,5 +289,17 @@ describe('save', () => {
     expect(deserialize(JSON.stringify(s))).toEqual(s)
     expect(deserialize(JSON.stringify({ version: 999, state: s }))).toBeNull()
     expect(deserialize('garbage')).toBeNull()
+  })
+})
+
+describe('effects', () => {
+  it('setFlag accepts a list; crunch bumps the crunches counter; reputation change shows the widget', () => {
+    const content = fakeContent()
+    const s = createEngine(content).createGame({ seed: 1 })
+    applyEffects(s, content, { setFlag: ['crunch', 'rushedProject'], reputation: 3 }, 'test')
+    expect(s.flags['crunch']).toBe(true)
+    expect(s.flags['rushedProject']).toBe(true)
+    expect(s.counters.crunches).toBe(1)
+    expect(s.unlockedWidgets).toContain('reputation')
   })
 })

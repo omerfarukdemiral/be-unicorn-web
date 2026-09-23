@@ -1,7 +1,7 @@
 // Fundraising rounds (PLAN §5.9): 4–8 weeks, shrink on falling metrics, close → cash, dilution, move.
 import * as B from './balance'
 import { clamp } from './economy'
-import { applyMorale, unlockTool } from './effects'
+import { applyMorale, unlockTool, unlockWidget } from './effects'
 import { relocateOffice } from './office'
 import type { Rng } from './rng'
 import type { ActionErrorCode, GameState, StageIndex } from './types'
@@ -79,6 +79,7 @@ export function closeRound(s: GameState, _content: EngineContent): void {
   s.stats.equity = clamp(0.01, 1, s.stats.equity * (1 - r.offer.equity))
   applyMorale(s, B.ROUND_CLOSE_MORALE)
   s.stats.reputation = clamp(0, 100, s.stats.reputation + B.ROUND_CLOSE_REPUTATION)
+  unlockWidget(s, 'reputation')
   incCounter(s, 'roundsClosed')
   for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay = Math.min(v.leaveDay, s.time.day)
   pushActivity(s, 'roundClosed', { amount: Math.round(r.offer.amount), equity: r.offer.equity })

@@ -2,7 +2,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 
-const MOBILE_QUERY = '(max-width: 767px)'
+/** Narrow screens, plus phones in landscape (short + touch), get the compact layout. */
+const MOBILE_QUERY = '(max-width: 767px), (pointer: coarse) and (max-height: 500px)'
 
 function subscribeMq(cb: () => void): () => void {
   if (typeof window === 'undefined' || !window.matchMedia) return () => {}
@@ -11,7 +12,7 @@ function subscribeMq(cb: () => void): () => void {
   return () => mq.removeEventListener('change', cb)
 }
 
-/** True below 768px (DECISIONS #3 mobile layout). */
+/** True below 768px or on a landscape phone (DECISIONS #3 mobile layout). */
 export function useIsMobile(): boolean {
   return useSyncExternalStore(
     subscribeMq,
@@ -38,6 +39,7 @@ export function useNow(ms: number, active = true): number {
 const PREFS_KEY = 'be-unicorn:prefs'
 
 export interface UiPrefs {
+  /** Kept for when audio exists; no control is shown yet. */
   sound: boolean
   /** Show screen-space bubbles (fallback when render does not draw world bubbles). */
   screenBubbles: boolean
@@ -71,10 +73,13 @@ export const usePrefs = create<PrefsStore>()((set, get) => ({
   },
 }))
 
-/** True when the event target is a text field (keyboard shortcuts skip it). */
+const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image'])
+
+/** True when the event target takes typed text (keyboard shortcuts skip it). Sliders and toggles do not. */
 export function isTypingTarget(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null
   if (!el) return false
   const tag = el.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+  if (tag === 'INPUT') return !NON_TEXT_INPUTS.has((el as HTMLInputElement).type)
+  return tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
 }

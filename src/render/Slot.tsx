@@ -1,7 +1,7 @@
 // Floor slots: type markers, hover/tap highlight, influence area glow (PLAN §3.4),
 // and pointer → action routing (select / placeItem / moveItem / assignDesk).
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useMemo, type ReactNode } from 'react'
+import { memo, useMemo, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { ActionResult, GameState, RingState, Slot, SlotId } from '../engine/types'
 import type { PlacingMode } from '../store/types'
@@ -11,7 +11,7 @@ import { resolveFurniture } from './furnitureCatalog'
 import type { OfficeLayout } from './layout'
 import { HIGHLIGHT, SLOT_COLORS } from './palette'
 import { GEO, HIT_MAT, flatMat } from './resources'
-import { useLayout } from './sceneRegistry'
+import { useLayout, useOffice } from './sceneRegistry'
 import { dispatchAction, storeApi, useGS, useUi } from './source'
 
 type Cls = 'none' | 'valid' | 'invalid'
@@ -24,19 +24,39 @@ function anchorOf(slot: Slot): SlotId {
   return slot.spanOf ?? slot.id
 }
 
-/** Visual-only validity hint for the placing mode; the engine has the final say. */
+/** Mirrors engine findPartnerSlot: a free neighbour (same ring/type, Manhattan 1) for size-2 items. */
+function hasPartner(slot: Slot, slots: readonly Slot[], ownIds: readonly string[] = []): boolean {
+  return slots.some(
+    (s) =>
+      s.id !== slot.id &&
+      s.ring === slot.ring &&
+      s.type === slot.type &&
+      Math.abs(s.pos.x - slot.pos.x) + Math.abs(s.pos.z - slot.pos.z) === 1 &&
+      (s.itemId === undefined || ownIds.includes(s.id)) &&
+      s.occupantId === undefined,
+  )
+}
+
+/** Visual validity hint for the placing mode, using the same rules as placeItem/moveItem/assignDesk. */
 function classify(slot: Slot, placing: PlacingMode | null, slots: readonly Slot[], rings: readonly RingState[]): Cls {
   if (!placing) return 'none'
-  if (!isUnlocked(rings, slot.ring)) return 'invalid'
+  if (!isUnlocked(rings, slot.ring) || slot.id === 'founder') return 'invalid'
   if (placing.kind === 'place') {
     const f = resolveFurniture(placing.itemId)
-    return slot.type === f.slotType && !slot.itemId && !slot.spanOf ? 'valid' : 'invalid'
+    const fits = slot.type === f.slotType && !slot.itemId && !slot.spanOf
+    return fits && (f.size !== 2 || hasPartner(slot, slots)) ? 'valid' : 'invalid'
   }
   if (placing.kind === 'move') {
     const from = slots.find((s) => s.id === placing.fromSlotId)
-    return from && slot.type === from.type && !slot.itemId && slot.id !== from.id ? 'valid' : 'invalid'
+    if (!from || !from.itemId || slot.id === from.id || slot.type !== from.type) return 'invalid'
+    const ownIds = slots.filter((s) => s.id === from.id || s.spanOf === from.id).map((s) => s.id)
+    if (slot.itemId !== undefined && !ownIds.includes(slot.id)) return 'invalid'
+    if (slot.occupantId !== undefined && slot.occupantId !== from.occupantId) return 'invalid'
+    const size = resolveFurniture(from.itemId, from.type).size
+    return size !== 2 || hasPartner(slot, slots, ownIds) ? 'valid' : 'invalid'
   }
-  return slot.type === 'desk' && !slot.occupantId && slot.id !== 'founder' ? 'valid' : 'invalid'
+  // Seat: a free desk slot that holds a desk item (engine: noDesk otherwise).
+  return slot.type === 'desk' && !slot.occupantId && !!slot.itemId && !slot.spanOf ? 'valid' : 'invalid'
 }
 
 /** Cells lit when hovering a slot: neighbours for local items, every desk for room/special items. */
@@ -61,7 +81,15 @@ function auraCells(hover: Slot | undefined, slots: readonly Slot[]): Set<SlotId>
   return out
 }
 
-const selectOffice = (s: GameState) => [s.office.slots, s.office.rings] as const
+/** Moral haritası (unlocked by morale-compounds): desk slot → morale band (0 low, 1 tired, 2 fine). */
+function selectHeat(s: GameState): string {
+  if (!s.unlockedWidgets.includes('moraleHeatmap')) return ''
+  return s.employees
+    .filter((e) => e.deskSlotId !== undefined)
+    .map((e) => `${e.deskSlotId}:${e.morale < 28 ? 0 : e.morale < 50 ? 1 : 2}`)
+    .join(',')
+}
+const HEAT_COLORS = ['#f19a9a', '#ffd66e', '#7fdca6'] as const
 
 function onSlotClick(slot: Slot, e: ThreeEvent<MouseEvent>): void {
   if (e.delta > 10) return
@@ -89,9 +117,11 @@ interface SlotViewProps {
   selected: boolean
   aura: boolean
   mats: PulseMats
+  /** Morale band of the occupant when the heat map is unlocked. */
+  heat?: 0 | 1 | 2
 }
 
-function SlotView({ slot, layout, locked, cls, hovered, selected, aura, mats }: SlotViewProps) {
+const SlotView = memo(function SlotView({ slot, layout, locked, cls, hovered, selected, aura, mats, heat }: SlotViewProps) {
   const p = layout.slotWorld.get(slot.id)
   if (!p) return null
   const tint = SLOT_COLORS[slot.type]
@@ -116,6 +146,9 @@ function SlotView({ slot, layout, locked, cls, hovered, selected, aura, mats }: 
       )}
       {fill && <mesh geometry={GEO.plane} material={fill} scale={[s, 1, s]} position={[0, 0.016, 0]} renderOrder={2} />}
       {cls === 'invalid' && <mesh geometry={GEO.plane} material={flatMat(HIGHLIGHT.invalid, 0.12)} scale={[s, 1, s]} position={[0, 0.016, 0]} />}
+      {heat !== undefined && !fill && cls === 'none' && (
+        <mesh geometry={GEO.plane} material={flatMat(HEAT_COLORS[heat], 0.35)} scale={[s * 1.1, 1, s * 1.1]} position={[0, 0.014, 0]} renderOrder={2} />
+      )}
       <mesh
         geometry={GEO.plane}
         material={HIT_MAT}
@@ -135,7 +168,7 @@ function SlotView({ slot, layout, locked, cls, hovered, selected, aura, mats }: 
       />
     </group>
   )
-}
+})
 
 interface PulseMats {
   valid: THREE.MeshBasicMaterial
@@ -149,8 +182,17 @@ function makeMat(color: string): THREE.MeshBasicMaterial {
 }
 
 export function SlotsLayer() {
-  const [slots, rings] = useGS(selectOffice)
+  const { slots, rings } = useOffice()
   const layout = useLayout()
+  const heatKey = useGS(selectHeat)
+  const heat = useMemo(() => {
+    const m = new Map<string, 0 | 1 | 2>()
+    if (heatKey) for (const part of heatKey.split(',')) {
+      const i = part.lastIndexOf(':')
+      m.set(part.slice(0, i), Number(part.slice(i + 1)) as 0 | 1 | 2)
+    }
+    return m
+  }, [heatKey])
   const [hoverId, selection, placing] = useUi((u) => [u.hoverSlotId, u.selection, u.placing] as const)
   const books = useBookColors()
   const mats = useMemo<PulseMats>(
@@ -196,6 +238,7 @@ export function SlotsLayer() {
           selected={selectedId === anchorOf(s)}
           aura={aura.has(s.id)}
           mats={mats}
+          heat={heat.get(s.id)}
         />
       ))}
       {ghost}

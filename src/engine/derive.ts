@@ -1,11 +1,11 @@
 // Recomputes stats/finance/derived from the raw state. Render/UI read these; they never compute formulas.
 import * as B from './balance'
 import * as E from './economy'
-import { findUsersPreview } from './founder'
+import { findUsersPreview, salesCallPreview } from './founder'
 import { horizon, nextStep } from './loopSelectors'
 import { roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
-import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId } from './types'
+import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId, type ValuationBreakdown } from './types'
 import { modifierMult, moraleModifierSum, type EngineContent } from './util'
 
 export interface Outputs {
@@ -51,19 +51,20 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
 }
 
 /**
- * §5.3 maturity gained per DAY by each unfinished project: assigned builders (+ the idle founder on the oldest one),
- * slowed by parallel projects and tech debt. progressProjects applies it; the horizon uses it for release ETAs.
+ * §5.3 maturity gained per DAY by each project: assigned builders (+ the idle founder on the oldest unfinished one,
+ * or on the first project once all are done), slowed by parallel projects and tech debt. progressProjects applies it
+ * (to maturity, or after 1.0 to the next update); the horizon uses it for release ETAs.
  */
 export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, number> {
   const rates: Record<ProjectId, number> = {}
+  if (!s.projects.length) return rates
   const active = s.projects.filter((p) => p.maturity < 1)
-  if (!active.length) return rates
   const speed =
     E.parallelProjectSpeed(active.length, s.stage) *
     Math.max(B.TECH_DEBT_MIN_SPEED, 1 - B.TECH_DEBT_PER_POINT * s.techDebt) *
     (1 + o.fx.maturityBonus)
-  const founderProject = s.founder.currentAction ? undefined : active[0]
-  for (const p of active) {
+  const founderProject = s.founder.currentAction ? undefined : (active[0] ?? s.projects[0])
+  for (const p of s.projects) {
     let eng = p === founderProject ? B.FOUNDER_PROJECT_OUTPUT : 0
     let prod = 0
     for (const id of p.assignedIds) {
@@ -125,7 +126,9 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     E.churnPerMonth(o.deptOutput.ops, over, avgMat) * E.priceChurnFactor(s.finance.priceMultiplier, daysSincePrice) * modifierMult(s, 'churn')
   const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat) * modifierMult(s, 'arpu')
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
-  const mrr = E.mrr(s.stats.users, arpu, enterpriseMrr)
+  // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
+  const anyLaunched = s.projects.some((p) => p.launched)
+  const mrr = anyLaunched ? E.mrr(s.stats.users, arpu, enterpriseMrr) : enterpriseMrr
 
   const salaries = s.employees.reduce((a, e) => a + e.salary, 0)
   const rent = E.rent(s.stage, openExtraRingCount(s.office))
@@ -142,6 +145,22 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const multiple = E.valuationMultiple(momAvg, multCap)
   const launched = s.projects.filter((p) => p.launched).length
   const valuation = E.valuation(mrr, momAvg, s.employees.length, s.stats.users, launched, multCap)
+  const blend = E.revenueBlend(mrr)
+  const valuationParts: ValuationBreakdown = {
+    mode: blend > 0 && E.valuationPostRevenue(mrr, multiple) * blend > E.valuationPreRevenue(s.employees.length, s.stats.users, launched) ? 'post' : 'pre',
+    team: s.employees.length,
+    users: s.stats.users,
+    launched,
+    teamValue: B.VAL_PER_TEAM * s.employees.length,
+    usersValue: B.VAL_PER_USER * s.stats.users,
+    launchedValue: B.VAL_PER_LAUNCHED * launched,
+    mrr,
+    multiple,
+    momAvg,
+    cap: multCap,
+    blend,
+    total: valuation,
+  }
 
   s.stats.arpu = arpu
   s.stats.churn = churn
@@ -187,6 +206,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const rv = roundView(s, stars)
   if (rv) s.derived.round = rv
   s.derived.findUsers = findUsersPreview(s)
+  s.derived.salesCall = salesCallPreview(s)
+  s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)
   s.derived.horizon = horizon(s)

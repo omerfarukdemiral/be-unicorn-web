@@ -14,6 +14,8 @@ export function activityText(entry: ActivityEntry): string {
   const raw = entry.params ?? {}
   const params: Record<string, string | number> = {}
   for (const [k, v] of Object.entries(raw)) params[k] = formatParam(k, v)
+  // An update after 1.0 names itself ("güncelleme 2"), not the version level.
+  if (entry.kind === 'release' && typeof raw.update === 'number' && raw.update > 0) params.level = t('release.update', { n: raw.update })
   return fill(ACTIVITY_TEXT[entry.kind] ?? entry.kind, params)
 }
 

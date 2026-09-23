@@ -19,7 +19,12 @@ import {
   type RoundSize,
 } from '../src/engine/index'
 
-export type BotKind = Archetype | 'idle' | 'random'
+/**
+ * 'careless': a bootstrap-style player who ignores runway when hiring, answers cards at random, picks a random round
+ * size and never takes the round window early on a stall (docs/CORE_LOOP.md §10 Faz 3 "dikkatsiz bot iflas %10–25").
+ * 'random': chaos (random valid-looking actions), only checked for "no bankruptcy before 4 min".
+ */
+export type BotKind = Archetype | 'idle' | 'random' | 'careless'
 
 export interface BotConfig {
   kind: BotKind
@@ -47,6 +52,8 @@ export interface BotConfig {
   furnishReserveMonths: number
   useSalesCalls: boolean
   weights: { cash: number; users: number; morale: number; equity: number; reputation: number }
+  /** Careless: buys furniture on impulse without looking at the cash (probability per day). */
+  impulseBuy?: number
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -112,6 +119,14 @@ export interface BotRun {
   gapsAll: number[]
   /** Paydays that could not be paid (bankruptcy clock started). */
   payrollMissed: number
+  /** Runway (months, capped at 99 for profitable) on each payday, with the stage it was paid in. */
+  paydayRunway: { stage: number; runway: number }[]
+  /** Releases (versions + updates) shipped per stage (index = stage). */
+  releasesByStage: number[]
+  /** Per closed round: metrics part at its ceiling, pitch bonus at its cap, and what decided the amount. */
+  roundCloses: { metricsAtCeil: boolean; pitchAtCap: boolean; by: string }[]
+  /** Share of all successful actions taken by the most frequent one. */
+  topActionShare: number
   /** Cards that ran out their 60 days and applied the default. */
   decisionsDefaulted: number
 }
@@ -320,7 +335,8 @@ function founder(c: Ctx, cfg: BotConfig): void {
   if (c.s.founder.energy < 25) { act({ type: 'founderAction', kind: 'rest' }); return }
   if (c.s.round?.active && act({ type: 'founderAction', kind: 'investorCoffee' })) return
   if (c.s.stats.morale < 50 && act({ type: 'founderAction', kind: 'motivateTeam' })) return
-  if (cfg.useSalesCalls && act({ type: 'founderAction', kind: 'salesCall' })) return
+  // Deals saturate within a month (half, then a quarter): a sensible player stops at half.
+  if (cfg.useSalesCalls && (c.s.derived.salesCall?.factor ?? 1) >= 0.5 && act({ type: 'founderAction', kind: 'salesCall' })) return
   if (c.s.projects.some((p) => p.maturity < 1) && act({ type: 'founderAction', kind: 'talkToUsers' })) return
   // A sensible player stops once the circle is used up ("tanıdık çevren tükeniyor").
   if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5) act({ type: 'founderAction', kind: 'findUsers' })
@@ -354,7 +370,7 @@ function growth(c: Ctx, cfg: BotConfig): void {
 /** Days without new progress after which a bot takes the open round window. */
 const STALL_DAYS = 60
 
-function fundraise(c: Ctx, cfg: BotConfig): void {
+function fundraise(c: Ctx, cfg: BotConfig, careless = false): void {
   const { act } = c
   const r = c.s.round
   if (r?.active) {
@@ -373,8 +389,8 @@ function fundraise(c: Ctx, cfg: BotConfig): void {
     c.mem.bestDay = c.s.time.day
   }
   if (!c.s.derived.canStartRound) return
-  const short = (c.s.finance.runway ?? 99) < 6
-  const stalled = c.s.time.day - (c.mem.bestDay ?? c.s.time.day) >= STALL_DAYS
+  const short = (c.s.finance.runway ?? 99) < (careless ? 2 : 6)
+  const stalled = !careless && c.s.time.day - (c.mem.bestDay ?? c.s.time.day) >= STALL_DAYS
   if (short || stalled || p >= cfg.roundEagerness) act({ type: 'startRound', size: cfg.roundSize })
 }
 
@@ -397,8 +413,21 @@ function randomTurn(c: Ctx, rng: Rng): void {
   }
 }
 
-export function playBot(kind: BotKind, seed: number, content: EngineContent, maxDays = 2700, onDay?: (s: GameState) => void, policy: DecisionPolicy = 'best'): BotRun {
-  const cfg = kind === 'idle' || kind === 'random' ? null : BOTS[kind]
+/** Careless player: bootstrap's plan without the care (see BotKind). */
+const CARELESS: BotConfig = { ...BOTS.bootstrap, kind: 'careless', minRunwayToHire: 0, teamCap: ALL_CAP, furnishReserveMonths: 0, impulseBuy: 0.15 }
+
+export function playBot(
+  kind: BotKind,
+  seed: number,
+  content: EngineContent,
+  maxDays = 2700,
+  onDay?: (s: GameState) => void,
+  policy: DecisionPolicy = 'best',
+  overrides: Partial<BotConfig> = {},
+): BotRun {
+  const base = kind === 'idle' || kind === 'random' ? null : kind === 'careless' ? CARELESS : BOTS[kind]
+  const cfg = base ? { ...base, ...overrides } : null
+  const careless = kind === 'careless'
   const api = createEngine(content)
   let s = api.createGame({ seed })
   const botRng = new Rng(createRngState(seed * 7919 + 17))
@@ -442,8 +471,29 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
   let payrollMissed = 0
   let defaulted = 0
 
+  const paydayRunway: BotRun['paydayRunway'] = []
+  const releasesByStage = [0, 0, 0, 0, 0, 0, 0]
+  const roundCloses: BotRun['roundCloses'] = []
+
   while (!s.gameOver && s.time.day < maxDays) {
-    if (cfg) {
+    if (cfg && careless) {
+      // Random card answers (no weighing), otherwise the bootstrap routine without runway care.
+      housekeeping(ctx, null, botRng)
+      if (!c10Skip(botRng)) {
+        // Impulse buy: a random item it can pay for right now, on a random open slot, reserve or not.
+        if (botRng.next() < (cfg.impulseBuy ?? 0)) {
+          const item = botRng.pick(content.furniture.filter((f) => f.stageUnlock <= s.stage && f.price <= s.stats.cash))
+          const open = new Set(s.office.rings.filter((r) => r.unlocked).map((r) => r.index))
+          const slots = s.office.slots.filter((x) => x.type === item?.slotType && !x.itemId && x.spanOf === undefined && x.id !== 'founder' && open.has(x.ring))
+          if (item && slots.length) ctx.act({ type: 'placeItem', itemId: item.id, slotId: botRng.pick(slots).id })
+        }
+        furnish(ctx, cfg)
+        hiring(ctx, cfg)
+        growth(ctx, cfg)
+        founder(ctx, cfg)
+        fundraise(ctx, { ...cfg, roundSize: botRng.pick(['small', 'target', 'large'] as const) }, true)
+      }
+    } else if (cfg) {
       housekeeping(ctx, cfg, undefined, policy)
       furnish(ctx, cfg)
       rebalance(ctx, cfg)
@@ -464,6 +514,16 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
       if (MOMENT_KINDS.has(e.kind)) moment(e.day)
       if (e.kind === 'payrollMissed') payrollMissed++
       if (e.kind === 'decisionDefaulted') defaulted++
+      if (e.kind === 'payday') paydayRunway.push({ stage: s.stage, runway: Math.min(99, s.finance.lastReceipt?.runwayAfter ?? 99) })
+      if (e.kind === 'release') releasesByStage[s.stage] = (releasesByStage[s.stage] ?? 0) + 1
+      if (e.kind === 'roundClosed' && before.round) {
+        const rv = before.derived.round
+        roundCloses.push({
+          metricsAtCeil: rv ? rv.factor - rv.pitchBonus >= balance.ROUND_OFFER_CEIL - 1e-6 : false,
+          pitchAtCap: (before.round.pitchBonus ?? 0) >= balance.PITCH_BONUS_CAP - 1e-6,
+          by: before.round.amountBy ?? 'floor',
+        })
+      }
       if (!BEAT_KINDS.has(e.kind)) continue
       if (e.kind === 'roundClosed' && before.round) {
         rounds.push({ stage: before.round.targetStage, amount: e.value ?? 0, table: balance.ROUND_AMOUNT[before.round.targetStage] ?? 0, equity: before.round.offer.equity })
@@ -498,6 +558,21 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
     gapsAll,
     payrollMissed,
     decisionsDefaulted: defaulted,
+    paydayRunway,
+    releasesByStage,
+    roundCloses,
+    topActionShare: topShare(actionCounts),
   }
+}
+
+function topShare(counts: Record<string, number>): number {
+  const vals = Object.values(counts)
+  const total = vals.reduce((a, b) => a + b, 0)
+  return total > 0 ? Math.max(...vals) / total : 0
+}
+
+/** The careless player skips 30% of days entirely. */
+function c10Skip(rng: Rng): boolean {
+  return rng.next() < 0.3
 }
 

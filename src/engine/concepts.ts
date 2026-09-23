@@ -1,7 +1,7 @@
 // Generic concept trigger engine (PLAN §6.1). Content supplies Concept[]; this only schedules them.
 // Rules: each concept fires once per run, max 1 active bubble, the rest wait in a FIFO queue.
 import type { Concept } from '../content/index'
-import { CONCEPT_VISITOR_DAYS } from './balance'
+import { CONCEPT_GAP_DAYS, CONCEPT_VISITOR_DAYS } from './balance'
 import { snapshotWhere, unlockAny } from './effects'
 import type { ConceptId, GameState } from './types'
 import { newId, pushEvent } from './util'
@@ -31,11 +31,19 @@ export function evaluateConcepts(s: GameState, concepts: readonly Concept[]): Co
   return queued
 }
 
-/** If no bubble is on screen, show the head of the queue (with its speaker as a visitor). */
-export function promoteConcept(s: GameState, concepts: readonly Concept[]): void {
-  if (s.concepts.active) return
+const SHOWN_FLAG = 'conceptShownDay'
+
+/**
+ * If no bubble is on screen, show the head of the queue (with its speaker as a visitor). At most one new concept per
+ * CONCEPT_GAP_DAYS: three concepts that became true together arrive one beat apart, not three cards in a row.
+ */
+export function promoteConcept(s: GameState, concepts: readonly Concept[], force = false): void {
+  if (s.concepts.active || !s.concepts.queue.length) return
+  const last = s.flags[SHOWN_FLAG]
+  if (!force && typeof last === 'number' && s.time.day - last < CONCEPT_GAP_DAYS) return
   const id = s.concepts.queue.shift()
   if (id === undefined) return
+  s.flags[SHOWN_FLAG] = s.time.day
   s.concepts.active = { id, shownDay: s.time.day }
   const c = concepts.find((x) => x.id === id)
   if (c) {

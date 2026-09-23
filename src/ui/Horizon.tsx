@@ -10,7 +10,7 @@ import { t } from './i18n'
 import { money } from './format'
 import { cx } from './primitives'
 import { soft } from './theme'
-import { optionLabel, releaseLevelName } from './loopUi'
+import { optionLabel, releaseName } from './loopUi'
 
 const SPAN_DAYS = 42
 
@@ -31,7 +31,7 @@ export function horizonLabel(h: HorizonItem, projectName: (id: string | undefine
       return label ? t('horizon.delayed', { v: label }) : t('horizon.delayedNote')
     }
     case 'release':
-      return t('horizon.release', { project: projectName(h.projectId), level: releaseLevelName(h.level ?? 1) })
+      return t('horizon.release', { project: projectName(h.projectId), level: releaseName(h.level ?? 1, h.update) })
     case 'roundClose':
       return t('horizon.roundClose')
     case 'roundReady':
@@ -41,6 +41,13 @@ export function horizonLabel(h: HorizonItem, projectName: (id: string | undefine
 
 function whenLabel(days: number): string {
   return days < 0.5 ? t('horizon.today') : t('horizon.inDays', { v: Math.max(1, Math.round(days)) })
+}
+
+/** Phone form, the number first: "30g · −$1.5K" (the icon already says payday / release / decision). */
+export function horizonShort(h: HorizonItem, days: number, projectName: (id: string | undefined) => string): string {
+  const when = days < 0.5 ? t('horizon.today') : t('horizon.inDaysShort', { v: Math.max(1, Math.round(days)) })
+  const what = h.kind === 'payday' ? `−${money(h.amount ?? 0)}` : h.kind === 'release' ? releaseName(h.level ?? 1, h.update) : horizonLabel(h, projectName)
+  return `${when} · ${what}`
 }
 
 function useHorizon() {
@@ -120,9 +127,7 @@ export function HorizonNext({ className }: { className?: string }) {
       <span className="grid size-5 shrink-0 place-items-center rounded-full" style={{ color: c, background: soft(c, 16) }}>
         <Icon name={k.icon} size={11} />
       </span>
-      <span className="min-w-0 truncate">
-        <span className="font-semibold text-ink">{whenLabel(first.day - day)}</span> · {horizonLabel(first, name)}
-      </span>
+      <span className="min-w-0 truncate font-semibold text-ink">{horizonShort(first, first.day - day, name)}</span>
     </span>
   )
 }

@@ -3,13 +3,21 @@
 // Merged into UI_TEXT by the content barrel (index.ts); keys never collide with strings.ts / timeText.ts.
 export const LOOP_TEXT: Record<string, string> = {
   'time.resumeTo': '{v}× dönecek',
+  // Short focus-pause reasons for the HUD pill ("Karar · 1× dönecek").
+  'time.reasonShort.decision': 'Karar',
+  'time.reasonShort.concept': 'Defter',
+  'time.reasonShort.modal': 'Ekran',
+  'time.reasonShort.offer': 'Teklif',
   'time.slowed': 'Önemli an · 1×’e yavaşladı',
   'time.frame.still': 'Zaman durdu',
   'time.frame.focus': 'Okurken zaman durur',
   'time.frame.running': 'Zaman {v}× akıyor',
 
   // Kasa: costs pile up until payday
-  'cash.owed': 'Maaş gününe {d} gün · {v} birikti',
+  'cash.owed': 'Maaş gününe {d} gün · {v} ayrıldı · kasada {c}',
+  'cash.paid': '−{v} ödendi',
+  'cash.availableTitle': 'Kullanılabilir para: kasadaki paradan maaş gününe biriken giderler düşülmüş hali. Her gün erir; maaş günü asıl ödeme yapılır.',
+  'cash.runwayShort': 'runway {v} ay',
   'cash.owedShort': 'Maaşa {d} gün',
   'cash.paydayTitle': 'Maaş, kira ve altyapı ayın 1’inde tek kalemde ödenir. Gelir her gün kasaya akar.',
 
@@ -17,6 +25,9 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.label': 'Sıradaki adım',
   'step.of': '{i}/{n}',
   'step.start': 'Zamanı başlat (Space)',
+  'step.startTouch': 'Zamanı başlat',
+  'step.team': 'Ekibi büyüt: kişi başı +{v} değerleme · runway {a} → {b} ay',
+  'step.teamPlain': 'Ekibi büyüt: kişi başı +{v} değerleme',
   'step.idea': 'Bir ürün fikri seç',
   'step.findUsers': 'Elle ilk kullanıcıları bul',
   'step.desk': 'Ekip için önce bir masa al',
@@ -44,6 +55,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'horizon.roundClose': 'Tur kapanışı (tahmini)',
   'horizon.roundReady': 'Tur açılabilir',
   'horizon.inDays': '{v} gün',
+  'horizon.inDaysShort': '{v}g',
   'horizon.today': 'bugün',
   'horizon.empty': 'Önümüzdeki haftalar sakin',
 
@@ -61,6 +73,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'receipt.runway': 'Runway',
   'receipt.runwayMove': '{a} → {b}',
   'receipt.growth': 'büyüme {v} → {m}×',
+  'receipt.preRevenue': 'gelir öncesi değerleme',
   'receipt.open': 'Ayrıntı için Büyüme paneli',
   'receipt.compact': 'Maaş günü {v} · Net {n}',
   'receipt.infinite': '∞',
@@ -71,10 +84,16 @@ export const LOOP_TEXT: Record<string, string> = {
   'release.level.3': 'v2',
   'release.level.4': 'v3',
   'release.level.5': 'tam sürüm',
+  'release.update': 'güncelleme {n}',
   'release.title': 'Yayında! {project} {level}',
   'release.wave': '+{u} kullanıcı · MRR +{m}',
   'release.banner': 'Yayında! {level}',
   'release.waveShort': '+{u} kullanıcı',
+
+  // Valuation breakdown (değerleme dökümü)
+  'val.pre': 'Değerleme = ekip {t} × $40K ({tv}) + {u} kullanıcı × $150 ({uv}) + {l} yayında × $100K ({lv})',
+  'val.post': 'Değerleme = MRR {m} × 12 × {x}× (3 aylık büyüme {g}, tavan {c}×)',
+  'val.postBlend': 'Değerleme = MRR {m} × 12 × {x}× × {b} (gelir $1K MRR’a kadar kademeli sayılır)',
 
   // Stage goals
   'goals.title': 'Aşama hedefleri',
@@ -109,13 +128,18 @@ export const LOOP_TEXT: Record<string, string> = {
 
   // Round window, size choice, live offer, due diligence, weekly pitch (docs/CORE_LOOP.md §4.3)
   'round.notReady': 'Değerleme hedefin %60’ına gelince açılır.',
-  'round.metricsMatter': 'Teklif her hafta metriklere göre değişir: değerleme, runway, büyüme, moral.',
+  'round.metricsMatter': 'Teklif her hafta metriklere göre değişir: değerleme, runway, 3 aylık büyüme, moral.',
   'round.windowTitle': '{stage} turu',
   'round.windowClosed': 'Pencere {v} değerlemede açılır',
   'round.windowOpen': 'Pencere açık: şimdi mi, biraz daha mı?',
   'round.windowProgress': 'Değerleme {v} / pencere {w}',
   'round.priceNow': 'Değerleme hedefin {p} kadarı → teklif çarpanı ×{f}',
-  'round.priceHint': 'Erken başlarsan güvendesin ama teklif küçük. Beklersen teklif büyür, runway erir.',
+  'round.priceHint': 'Fiyatın yarısı turu başlattığın gün kilitlenir: erken başlarsan güvendesin ama teklif küçük kalır. Beklersen teklif büyür, runway erir.',
+  'round.takesWeeksRange': 'Tur {a}–{b} hafta sürer, kasa beklemez.',
+  'round.runwayShort': 'Runway {r} ay: tur {w} haftaya kadar sürebilir, köprü krediye ya da ödenemeyen maaşa gidebilir.',
+  'round.preMoney': 'Teklifin ima ettiği değer',
+  'round.preMoneyHint': 'Teklif ÷ satılan hisse. Bugünkü değerlemen {v}; yatırımcı bir sonraki aşamanın fiyatını öder.',
+  'round.pitchAvg': 'Yatırımcı izlenimi (pitch ortalaması, boş hafta 0): {v} · sınır ±{c}',
   'round.sizeTitle': 'Tur büyüklüğü',
   'round.size.small': 'Küçük',
   'round.size.target': 'Hedef',
@@ -131,18 +155,18 @@ export const LOOP_TEXT: Record<string, string> = {
   'round.diligenceTitle': 'Due diligence (kapanışta)',
   'round.diligenceHint': 'Karşılanan her madde teklife +%5, karşılanmayan −%10.',
   'round.dd.runway': 'Runway ≥ {t} ay',
-  'round.dd.growth': 'Aylık büyüme ≥ {t}',
+  'round.dd.growth': 'Aylık büyüme (3 ay ort.) ≥ {t}',
   'round.dd.morale': 'Moral ≥ {t}',
   'round.dd.now': 'şu an {v}',
   'round.pitchTitle': 'Hafta {w} pitch’i',
-  'round.pitchSub': 'Her hafta bir pitch seç. Seçmezsen hafta boş geçer.',
+  'round.pitchSub': 'Her hafta bir pitch seç. Seçmezsen hafta izlenime 0 olarak girer.',
   'round.pitchWait': 'Yeni pitch her tur haftasında gelir.',
   'round.pitchDone': 'Hafta {w}: {p} ({d})',
   'pitch.metrics': 'Metrik göster',
   'pitch.story': 'Hikâye anlat',
   'pitch.coinvestor': 'İkinci yatırımcı getir',
-  'pitch.metrics.desc': 'Rakamlar konuşur: büyüme {v}, istenen {t} → teklif {d}',
-  'pitch.story.desc': 'Teklif {v} (itibarla artar) · enerji −{e}',
+  'pitch.metrics.desc': 'Rakamlar konuşur: 3 aylık büyüme {v}, istenen {t} → teklif {d}',
+  'pitch.story.desc': 'Risk: teklif {a} ile {b} arası (itibarla artar) · enerji −{e}',
   'pitch.coinvestor.desc': 'Tur {w} hafta kısalır · hisse +{e}',
 
   // Moment cards (round)
@@ -152,7 +176,10 @@ export const LOOP_TEXT: Record<string, string> = {
   'moment.roundWeekSub': 'Bu haftanın pitch’ini seç',
 
   // "Elle kullanıcı bul" saturation (dont-scale)
-  'founder.findUsers.preview': '+{a}–{b} kullanıcı · bu ay {n} tam hak',
-  'founder.findUsers.circle': 'Tanıdık çevren tükeniyor: +{a}–{b} kullanıcı',
-  'founder.findUsers.big': 'Elle bulmak artık az getirir: +{a}–{b} kullanıcı. Pazarlamacı zamanı.',
+  'founder.findUsers.preview': '{r} kullanıcı · bu ay {n} tam hak',
+  'founder.findUsers.circle': 'Tanıdık çevren tükeniyor: {r} kullanıcı',
+  'founder.findUsers.big': 'Elle bulmak az getirir: {r} kullanıcı. Pazarlamacı zamanı.',
+  'founder.talkToUsers.update': 'Ürün olgunlukta: konuşmak bir sonraki güncellemeyi yaklaştırır.',
+  'founder.salesCall.preview': '{r} MRR · {d} günlük sözleşme · bu ay {n} tam hak',
+  'founder.salesCall.saturated': 'Bu ayın pipeline’ı doldu: {r} MRR',
 }

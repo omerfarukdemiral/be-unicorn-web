@@ -50,7 +50,7 @@ export function endRun(s: GameState, content: EngineContent, kind: 'bankrupt' | 
   s.gameOver = { kind, day: s.time.day, reasons: postMortemReasons(s, kind), xpEarned: xp }
   s.time.speed = 0
   queueConcept(s, content, 'failure-is-data')
-  promoteConcept(s, content.concepts)
+  promoteConcept(s, content.concepts, true)
   pushEvent(s, { kind: 'gameOver', value: xp })
 }
 

@@ -16,6 +16,8 @@ import { soft } from './theme'
 import { NextStepChip } from './NextStepChip'
 import { HorizonNext, HorizonStrip } from './Horizon'
 import { MomentFeed } from './Moments'
+import { PANEL_RESERVE } from './RightPanel'
+import { valuationLine } from './loopUi'
 
 /** Round button → Büyüme panel, scrolled to the round block (again closes it, like the dock tabs). */
 function openRound() {
@@ -53,8 +55,12 @@ function useWidgetLists(): { primary: HudWidget[]; secondary: HudWidget[] } {
 
 function DesktopHud() {
   const { primary, secondary } = useWidgetLists()
+  // An open panel (top 76px down, right side) would cover the horizon, the chip and the moment cards: the HUD row
+  // then ends at the panel's left edge and the centre column shrinks into the scene area. The view controls sit
+  // above the panel's top edge, so they move out of the row and stay where they are.
+  const panelOpen = useGameStore((s) => s.ui.panel !== null)
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3">
+    <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3" style={panelOpen ? { paddingRight: PANEL_RESERVE } : undefined}>
       <div className="pointer-events-auto flex w-[260px] flex-col gap-2 lg:w-[300px]">
         <div className="ui-card grid divide-y divide-border p-1">
           {primary.map((id) => {
@@ -76,15 +82,21 @@ function DesktopHud() {
         )}
       </div>
       {/* Center column: stage + time, the horizon ahead, the next link of the chain, short moment cards. */}
-      <div className="pointer-events-none flex w-[min(560px,48vw)] flex-col items-stretch gap-1.5">
+      <div className={cx('pointer-events-none flex min-w-0 flex-col items-stretch gap-1.5', panelOpen ? 'mx-auto w-full max-w-[560px] flex-1' : 'w-[min(560px,48vw)]')}>
         <StageBar />
         <HorizonStrip />
-        <div className="flex justify-center">
+        <div className="flex min-w-0 justify-center">
           <NextStepChip className="max-w-full" />
         </div>
         <MomentFeed />
       </div>
-      <ViewControls />
+      {panelOpen ? (
+        <div className="pointer-events-none absolute right-3 top-3">
+          <ViewControls />
+        </div>
+      ) : (
+        <ViewControls />
+      )}
     </div>
   )
 }
@@ -150,6 +162,7 @@ function StageBar({ compact }: { compact?: boolean }) {
       canStart: st.state.derived.canStartRound,
       roundActive: !!st.state.round?.active,
       weeksLeft: st.state.round?.weeksLeft ?? 0,
+      parts: st.state.derived.valuationParts,
     })),
   )
   const dispatch = useGameStore((st) => st.dispatch)
@@ -204,7 +217,7 @@ function StageBar({ compact }: { compact?: boolean }) {
           <DayClock compact={compact} />
         </div>
         {next ? (
-          <div className="mt-1 flex items-center gap-2" title={t('hud.stageProgressTitle', { stage: next.name })}>
+          <div className="mt-1 flex items-center gap-2" title={`${t('hud.stageProgressTitle', { stage: next.name })}\n${valuationLine(s.parts)}`}>
             <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-brand/15">
               <div className="h-full rounded-full bg-brand transition-[width] duration-700" style={{ width: `${pctW}%` }} />
             </div>

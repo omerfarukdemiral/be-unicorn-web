@@ -271,7 +271,14 @@ describe('time: paused start and focus pauses', () => {
     expect(store().ui.pauseReasons).toEqual(['modal'])
     expect(effectiveSpeed(store())).toBe(0)
     store().closeOverlay()
-    expect(effectiveSpeed(store())).toBe(4)
+    // "Yeni ofise geç": the new office opens paused with the Başlat call (docs/CORE_LOOP.md §3.2 rule 1).
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(store().state.time.speed).toBe(0)
+    expect(store().ui.runStarted).toBe(false)
+    expect(effectiveSpeed(store())).toBe(0)
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    expect(store().ui.runStarted).toBe(true)
+    expect(effectiveSpeed(store())).toBe(1)
   })
 
   it('a manual pause survives the focus pause: closing the card keeps it paused', () => {
@@ -294,8 +301,9 @@ describe('time: paused start and focus pauses', () => {
     store().closePanel()
     store().openOverlay({ kind: 'moveScene' })
     store().closeOverlay()
+    // The settle-in pause after a move is not a player choice either: still one setSpeed in the log.
     expect(speedSets()).toHaveLength(1)
-    expect(store().state.time.speed).toBe(1)
+    expect(store().state.time.speed).toBe(0)
   })
 })
 
@@ -516,5 +524,67 @@ describe('core loop phase 2: round offer / weekly pitch (store side)', () => {
     const ev = (kind: GameEvent['kind']): GameState => ({ ...s, events: [...s.events, { id: s.nextId + 100, day: s.time.day, kind }] })
     expect(hasImportantMoment(s, ev('roundWindow'))).toBe(true)
     expect(hasImportantMoment(s, ev('roundWeek'))).toBe(false)
+  })
+})
+
+describe('review fixes (store side)', () => {
+  beforeEach(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 }))
+  const ev = (s: GameState, kind: GameEvent['kind'], extra: Partial<GameEvent> = {}): GameEvent => ({ id: s.nextId + 100, day: s.time.day, kind, ...extra })
+
+  it('4× slows on a tight payday only when runway crosses below 3 months, not every tight month', () => {
+    const s = store().state
+    const receipt = (before: number | null, after: number | null): GameState => ({
+      ...s,
+      finance: { ...s.finance, runway: after, lastReceipt: { month: 1, day: 60, revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0, paid: 0, net: 0, cashAfter: 0, runwayBefore: before, runwayAfter: after, mom: 0, multiple: 0, mrr: 0, users: 0 } },
+      events: [...s.events, ev(s, 'payday')],
+    })
+    expect(hasImportantMoment(s, receipt(4, 2.5))).toBe(true)
+    expect(hasImportantMoment(s, receipt(null, 2.5))).toBe(true)
+    expect(hasImportantMoment(s, receipt(2.5, 2))).toBe(false)
+    expect(hasImportantMoment(s, receipt(8, 6))).toBe(false)
+  })
+
+  it('4× slows for the first decision card of a stage only, and for versions but not updates after 1.0', () => {
+    const s = store().state
+    const card = (history: GameState['decisions']['history']): GameState => ({ ...s, decisions: { ...s.decisions, history }, events: [...s.events, ev(s, 'decisionShown', { refId: 'x' })] })
+    expect(hasImportantMoment(s, card([]))).toBe(true)
+    expect(hasImportantMoment(s, card([{ cardId: 'early-sidegig', optionIndex: 0, day: s.time.day }]))).toBe(false)
+    const rel = (update?: number): GameState => ({
+      ...s,
+      releases: [{ id: 'rel-x', day: 0, projectId: 'p', projectName: 'P', level: 5, users: 1, mrr: 0, ...(update !== undefined ? { update } : {}) }],
+      events: [...s.events, ev(s, 'release', { refId: 'rel-x', value: 5 })],
+    })
+    expect(hasImportantMoment(s, rel())).toBe(true)
+    expect(hasImportantMoment(s, rel(2))).toBe(false)
+  })
+
+  it('the HUD layer never blocks: payday (month receipt) and a release add no pause reason and keep the speed', () => {
+    store().dispatch({ type: 'startProject', category: 'web' })
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    // Half a day before payday, and a project about to pass the MVP threshold.
+    useGameStore.setState((st) => ({
+      state: { ...st.state, time: { ...st.state.time, day: 29.5 }, projects: st.state.projects.map((p) => ({ ...p, maturity: 0.25, releaseLevel: 0 })) },
+    }))
+    for (let i = 0; i < 40 && !store().state.finance.lastReceipt; i++) store().tick(SECONDS_PER_DAY / 8)
+    const s = store().state
+    expect(s.finance.lastReceipt?.day).toBe(30)
+    expect(s.events.some((e) => e.kind === 'release')).toBe(true)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(store().ui.panel).toBeNull()
+    expect(s.time.speed).toBe(1)
+    expect(effectiveSpeed(store())).toBe(1)
+  })
+
+  it('a move (Yeni ofise geç) opens the new office paused with the Başlat call', () => {
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    store().openOverlay({ kind: 'moveScene' })
+    store().closeOverlay()
+    expect(store().state.time.speed).toBe(0)
+    expect(store().ui.runStarted).toBe(false)
+    // Other overlays keep the player's speed.
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    store().openOverlay({ kind: 'victory' })
+    store().closeOverlay()
+    expect(store().state.time.speed).toBe(2)
   })
 })

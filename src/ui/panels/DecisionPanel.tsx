@@ -1,7 +1,6 @@
 // Decision card in the single panel (opened from its scene bubble; never a blocking modal).
 // After a choice the same panel shows the one-sentence reflection + Defter link.
-import { DECISION_DEFAULT_AFTER_DAYS } from '../../engine/balance'
-import { defaultOptionOf } from '../../engine/decisions'
+import { defaultAfterDaysOf, defaultOptionOf } from '../../engine/decisions'
 import type { DecisionCardId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
@@ -39,7 +38,7 @@ export function DecisionPanel({ cardId, answered }: { cardId: DecisionCardId; an
         }}
       />
       {def && (
-        <p className="font-text text-xs text-ink-3">{t('decision.defaultAfter', { d: DECISION_DEFAULT_AFTER_DAYS, v: def.label })}</p>
+        <p className="font-text text-xs text-ink-3">{t('decision.defaultAfter', { d: defaultAfterDaysOf(card), v: def.label })}</p>
       )}
     </div>
   )

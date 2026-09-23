@@ -1,7 +1,7 @@
 // Shared engine helpers: content context, id/activity/event writers, modifier queries.
 import type { ContentBundle, FurnitureItem } from '../content/index'
 import { ACTIVITY_MAX, EVENTS_MAX } from './balance'
-import type { ActivityKind, GameEvent, GameState, ModifierKind } from './types'
+import type { ActivityKind, GameEvent, GameState, ModifierKind, StageBaseline } from './types'
 
 /** The slice of content the engine reads. Tests inject fakes. */
 export type EngineContent = Pick<ContentBundle, 'concepts' | 'decisions' | 'furniture' | 'officeLines' | 'employeeNames' | 'goals'>
@@ -58,3 +58,17 @@ export function uniquePush<T>(list: T[], v: T): boolean {
   list.push(v)
   return true
 }
+
+/** Where the current stage starts: stage goals measure what is done from here (review fix: goals done on arrival). */
+export function stageBaseline(s: GameState): StageBaseline {
+  return {
+    stage: s.stage,
+    day: s.time.day,
+    users: s.stats.users,
+    team: s.employees.length,
+    releases: s.releaseCount ?? 0,
+    mrr: s.finance.mrr,
+    projects: s.projects.length,
+  }
+}
+

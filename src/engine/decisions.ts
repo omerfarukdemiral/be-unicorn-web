@@ -16,7 +16,8 @@ function safeCondition(c: DecisionCard, s: GameState): boolean {
   }
 }
 
-export function isCardEligible(c: DecisionCard, s: GameState): boolean {
+/** `ignoreCooldown`: a newly missed payday brings the rescue card even inside its repeat cooldown (max still holds). */
+export function isCardEligible(c: DecisionCard, s: GameState, opts: { ignoreCooldown?: boolean } = {}): boolean {
   if (c.stage > s.stage) return false
   if (c.maxStage !== undefined && c.maxStage < s.stage) return false
   const once = c.once ?? true
@@ -26,7 +27,7 @@ export function isCardEligible(c: DecisionCard, s: GameState): boolean {
     const past = s.decisions.history.filter((h) => h.cardId === c.id)
     if (past.length >= B.REPEAT_CARD_MAX) return false
     const last = past[past.length - 1]
-    if (last && s.time.day - last.day < B.REPEAT_CARD_COOLDOWN_DAYS) return false
+    if (!opts.ignoreCooldown && last && s.time.day - last.day < B.REPEAT_CARD_COOLDOWN_DAYS) return false
   }
   return safeCondition(c, s)
 }
@@ -98,18 +99,26 @@ export function defaultOptionOf(card: DecisionCard): number {
   return d !== undefined && Number.isInteger(d) && d >= 0 && d < card.options.length ? d : card.options.length - 1
 }
 
+/** Days an unanswered card waits before its default applies (the card's own, else DECISION_DEFAULT_AFTER_DAYS). */
+export function defaultAfterDaysOf(card: DecisionCard | undefined): number {
+  const d = card?.defaultAfterDays
+  return d !== undefined && d > 0 ? d : B.DECISION_DEFAULT_AFTER_DAYS
+}
+
 /**
- * Daily: a card left unanswered for DECISION_DEFAULT_AFTER_DAYS applies its default option, so it never locks the
- * other cards forever (docs/CORE_LOOP.md §3.2 "Zamanlı kart yok": no timer is shown, the default is written up front).
+ * Daily: a card left unanswered for its default days applies its default option, so it never locks the other cards
+ * forever (docs/CORE_LOOP.md §3.2 "Zamanlı kart yok": no timer is shown, the default is written up front).
+ * Crisis cards wait less: the rescue card's default lands well before the 60-day bankruptcy clock.
  */
 export function applyDefaultDecision(s: GameState, content: EngineContent): void {
   const a = s.decisions.active
-  if (!a || s.time.day - a.shownDay < B.DECISION_DEFAULT_AFTER_DAYS) return
+  if (!a) return
   const card = content.decisions.find((c) => c.id === a.cardId)
   if (!card) {
     s.decisions.active = undefined
     return
   }
+  if (s.time.day - a.shownDay < defaultAfterDaysOf(card)) return
   const i = defaultOptionOf(card)
   if (answerDecision(s, content, card.id, i) !== null) return
   pushActivity(s, 'decisionDefaulted', { option: card.options[i]?.label ?? '' })
@@ -140,4 +149,20 @@ export function applyDueEffects(s: GameState, content: EngineContent): void {
     if (list.length > B.OUTCOMES_MAX) list.splice(0, list.length - B.OUTCOMES_MAX)
     pushEvent(s, { kind: 'delayedEffect', refId: p.sourceCardId, value: optionIndex })
   }
+}
+
+/**
+ * A crisis card that must come now (the rescue on a missed payday) takes the stage: an unanswered active card steps
+ * back into the queue right behind it (its visitor leaves and comes back later), so it never blocks the way out.
+ */
+export function bringCardNow(s: GameState, cardId: DecisionCardId): void {
+  const q = s.decisions.queue.filter((id) => id !== cardId)
+  const a = s.decisions.active
+  if (a && a.cardId !== cardId) {
+    for (const v of s.visitors) if (v.id === a.visitorId) v.leaveDay = Math.min(v.leaveDay, s.time.day)
+    q.unshift(a.cardId)
+    s.decisions.active = undefined
+  }
+  if (s.decisions.active?.cardId !== cardId) q.unshift(cardId)
+  s.decisions.queue = q
 }

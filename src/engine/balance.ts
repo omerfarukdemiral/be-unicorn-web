@@ -169,9 +169,9 @@ export const MULTIPLE_GROWTH = 100
 /**
  * [Faz 3] Multiple ceiling by the company's stage (CORE_LOOP §5, S5). [DENGE ≠ CORE_LOOP 30 → 25 → 20 → 15 → 12 → 10]
  * Investors pay less for growth % the bigger the company is; the lower late ceilings stretch Series A–C so the run
- * lands in 60–90 min (sim/REPORT.md).
+ * lands in 60–90 min (sim/REPORT.md). The doc's own values end the run at 38–44 min (4 seeds, DECISIONS #18).
  */
-export const MULTIPLE_MAX_BY_STAGE: readonly number[] = [30, 30, 15, 10, 7.5, 5.5, 5.5]
+export const MULTIPLE_MAX_BY_STAGE: readonly number[] = [30, 30, 15, 10, 7, 5.15, 5.15]
 /** [Faz 3] The multiple prices the average MoM of the last N months (finance.mrrHistory), not one noisy month. */
 export const MULTIPLE_MOM_MONTHS = 3
 /** Continuity fix: once revenue starts, valuation never drops below the pre-revenue formula. */
@@ -193,17 +193,23 @@ export const ROUND_RUNWAY_MONTHS: Readonly<Record<RoundSize, number>> = { small:
 export const ROUND_SIZE_EQUITY: Readonly<Record<RoundSize, number>> = { small: 0.75, target: 1, large: 1.3 }
 /**
  * "Yeni burn": the burn the company will run after the round (bigger office, the hires the money is for),
- * as a multiple of today's burn. Amount = clamp(table × MIN × months/18, table × MAX, burn × this × months):
- * the floor follows the size, so Küçük never brings a Hedef round's money for less equity (Faz 3).
+ * as a multiple of today's round burn (round.ts roundBurn: ads count at most what last payday paid).
+ * Amount = clamp(table × MIN × months/18, table × MAX × months/18, burn × this × months): both bounds follow the
+ * size, so Küçük < Hedef < Büyük always (review fix: at a small burn all three used to clip to the same ceiling).
  */
-export const ROUND_NEW_BURN_MULT = 2
+export const ROUND_NEW_BURN_MULT = 1.25
 export const ROUND_AMOUNT_TABLE_MIN = 0.5
-export const ROUND_AMOUNT_TABLE_MAX = 0.8
+export const ROUND_AMOUNT_TABLE_MAX = 0.7
 /** Price part of the offer: valuation / target, clamped to this range. */
 export const ROUND_OFFER_CLAMP: readonly [number, number] = [0.6, 1.2]
-/** Whole offer factor (price × diligence × pitches) floor and ceiling. */
+/**
+ * Offer factor = clamp(price × diligence, FLOOR, CEIL) + pitch bonus (±PITCH_BONUS_CAP): the ceiling holds the
+ * numbers only, so pitches still move the money at the top (review fix: 38/40 rounds closed pinned at 1.1).
+ * The price part is √(price at start × price at close): an early start locks a cheaper price.
+ */
 export const ROUND_OFFER_FLOOR = 0.5
-export const ROUND_OFFER_CEIL = 1.1
+export const ROUND_OFFER_CEIL = 1.15
+export const PITCH_BONUS_CAP = 0.15
 /** Due diligence: each met item +5%, each unmet −10% of the offer. */
 export const DILIGENCE_MET = 0.05
 export const DILIGENCE_UNMET = -0.1
@@ -211,11 +217,12 @@ export const DILIGENCE_RUNWAY_MONTHS = 3
 /** MoM growth asked for, by the round's current stage (index = stage). */
 export const DILIGENCE_MOM: readonly number[] = [0.04, 0.06, 0.06, 0.05, 0.04, 0.03, 0.03]
 export const DILIGENCE_MORALE = 50
-/** Pitch "Metrik göster": + when MoM meets the diligence ask, − when it does not (the numbers speak). */
-export const PITCH_METRICS_GOOD = 0.06
+/** Pitch "Metrik göster": + when the 3-month MoM meets the diligence ask, − when it does not (the numbers speak). */
+export const PITCH_METRICS_GOOD = 0.05
 export const PITCH_METRICS_BAD = -0.03
-/** Pitch "Hikâye anlat": base + reputation/100 × per-rep, costs founder energy. */
-export const PITCH_STORY_BASE = 0.02
+/** Pitch "Hikâye anlat": a gamble in [MIN, MAX] + reputation/100 × per-rep (both ends), costs founder energy. */
+export const PITCH_STORY_MIN = -0.04
+export const PITCH_STORY_MAX = 0.06
 export const PITCH_STORY_PER_REP = 0.04
 export const PITCH_STORY_ENERGY = 10
 /** Pitch "İkinci yatırımcı getir": one week shorter, but the co-investor takes this much extra equity. */
@@ -266,6 +273,7 @@ export const FIND_USERS_FULL_PER_MONTH = 3
 export const FIND_USERS_SATURATION = 0.5
 export const FIND_USERS_BIG_AT = 100
 export const FIND_USERS_BIG_FACTOR = 0.5
+/** "Kullanıcıyla konuş": +maturity on an unfinished project, or the same progress toward the next update after 1.0. */
 export const TALK_MATURITY = 0.03
 export const MOTIVATE_MORALE = 10
 export const MOTIVATE_DAYS = 10
@@ -274,6 +282,11 @@ export const COFFEE_REPUTATION = 2
 /** Enterprise deal MRR = arpu × users-equivalent. */
 export const SALES_CALL_SEATS_MIN = 14
 export const SALES_CALL_SEATS_MAX = 40
+/** "Satış görüşmesi" saturation: full-size deals per month, then each further deal × this again. */
+export const SALES_CALL_FULL_PER_MONTH = 2
+export const SALES_CALL_SATURATION = 0.5
+/** Enterprise contracts run this long, then the customer leaves (contract length, no churn in between). */
+export const SALES_CONTRACT_DAYS = 360
 
 // ---------------------------------------------------------------------------
 // Hiring
@@ -314,6 +327,8 @@ export const DECISION_DELAY_MAX_DAYS = 30
 // Concepts & world flavour
 // ---------------------------------------------------------------------------
 export const CONCEPT_VISITOR_DAYS = 20
+/** At most one new concept bubble per this many days (review fix: three Defter cards in the first 20 s). */
+export const CONCEPT_GAP_DAYS = 5
 export const BUBBLE_DAYS = 1.5
 export const BUBBLE_MAX = 3
 export const IDLE_BUBBLE_EVERY_DAYS = 3
@@ -341,6 +356,15 @@ export const RELEASE_WAVE_STAGE_GROWTH = 2
 /** Plus this share of current users (word of mouth from the people already there). */
 export const RELEASE_WAVE_USER_SHARE = 0.02
 export const RELEASES_MAX = 12
+/**
+ * After 1.0 the builders keep shipping updates (review fix: the five threshold releases were used up in the garage and
+ * the main beat never fired again). Each RELEASE_UPDATE_SIZE of maturity-equivalent work is one update, at most one
+ * per RELEASE_UPDATE_MIN_DAYS per project; its wave is RELEASE_UPDATE_USERS × stage scale + a share of users.
+ */
+export const RELEASE_UPDATE_SIZE = 0.2
+export const RELEASE_UPDATE_MIN_DAYS = 20
+export const RELEASE_UPDATE_USERS = 15
+export const RELEASE_UPDATE_USER_SHARE = 0.003
 /** Landed delayed decision effects kept for "Kararın → sonucu". */
 export const OUTCOMES_MAX = 20
 /** Horizon strip looks this many days ahead (6 weeks). */

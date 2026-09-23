@@ -7,19 +7,19 @@ Botlar yalnızca engine’in `createGame / applyAction / step` API’siyle oynar
 
 | Arketip | Pre-seed | Seed | Series A | Series B | Series C | Unicorn |
 |---|---|---|---|---|---|---|
-| bootstrap | 4.4 dk · g133 (8/8) | 8.4 dk · g254 (8/8) | 15.5 dk · g465 (8/8) | 27.3 dk · g820 (8/8) | 44.6 dk · g1340 (8/8) | 79.5 dk · g2386 (8/8) |
-| vcRocket | 3.8 dk · g114 (8/8) | 7.8 dk · g234 (8/8) | 19.8 dk · g595 (8/8) | 29.6 dk · g888 (8/8) | 44.4 dk · g1331 (8/8) | 63.0 dk · g1892 (8/8) |
-| niche | 4.1 dk · g124 (8/8) | 8.4 dk · g251 (8/8) | 13.7 dk · g411 (8/8) | 26.1 dk · g782 (8/8) | 44.2 dk · g1325 (8/8) | 71.0 dk · g2130 (8/8) |
-| platform | 4.3 dk · g129 (8/8) | 8.2 dk · g245 (8/8) | 17.1 dk · g513 (8/8) | 29.1 dk · g872 (8/8) | 46.6 dk · g1397 (8/8) | 69.8 dk · g2095 (8/8) |
+| bootstrap | 4.3 dk · g128 (8/8) | 7.9 dk · g238 (8/8) | 13.9 dk · g419 (8/8) | 24.6 dk · g739 (8/8) | 41.0 dk · g1229 (8/8) | 67.2 dk · g2015 (8/8) |
+| vcRocket | 4.2 dk · g127 (8/8) | 7.0 dk · g211 (8/8) | 16.5 dk · g496 (8/8) | 25.3 dk · g758 (8/8) | 38.9 dk · g1167 (8/8) | 59.9 dk · g1796 (8/8) |
+| niche | 4.4 dk · g131 (8/8) | 7.0 dk · g210 (8/8) | 12.6 dk · g379 (8/8) | 22.9 dk · g686 (8/8) | 40.6 dk · g1218 (8/8) | 76.0 dk · g2281 (8/8) |
+| platform | 4.2 dk · g125 (8/8) | 7.3 dk · g218 (8/8) | 16.0 dk · g481 (8/8) | 27.4 dk · g822 (8/8) | 42.1 dk · g1265 (8/8) | 66.1 dk · g1982 (8/8) |
 
 ## Sonuç, iflas, kavramlar
 
 | Arketip | İflas oranı | Bitiş dağılımı | Kavram @5 dk (medyan/min) | Kavram @10 dk (medyan/min) | Kurucu hissesi (medyan) | Tepe ekip (medyan) |
 |---|---|---|---|---|---|---|
-| bootstrap | 0% | unicorn 8 | 8 / 8 | 9.5 / 9 | %47 | 36 |
-| vcRocket | 0% | unicorn 8 | 8 / 8 | 11 / 11 | %35 | 36 |
-| niche | 0% | unicorn 8 | 8 / 8 | 10 / 8 | %48 | 36 |
-| platform | 0% | unicorn 8 | 8 / 8 | 11 / 8 | %47 | 36 |
+| bootstrap | 0% | unicorn 8 | 7 / 6 | 8.5 / 8 | %53 | 36 |
+| vcRocket | 0% | unicorn 8 | 7 / 7 | 9.5 / 9 | %40 | 36 |
+| niche | 0% | unicorn 8 | 7 / 7 | 9 / 8 | %53 | 36 |
+| platform | 0% | unicorn 8 | 7 / 7 | 10 / 8 | %52 | 36 |
 
 Toplam iflas oranı: **0%** (0/32).
 
@@ -27,17 +27,17 @@ Toplam iflas oranı: **0%** (0/32).
 
 | Bot | Batan | En erken batış | 4 dk’dan önce batan | Kavram @5 dk (medyan) |
 |---|---|---|---|---|
-| idle (hiçbir şey yapmaz) | 8/8 | 12.0 dk · g360 | 0 | 0 |
-| random (rastgele aksiyon) | 8/8 | 15.0 dk · g450 | 0 | 4 |
+| idle (hiçbir şey yapmaz) | 8/8 | 28.0 dk · g840 | 0 | 0 |
+| random (rastgele aksiyon) | 7/8 | 25.0 dk · g750 | 0 | 3 |
 
 ## Tur penceresi ve aksiyonlar (docs/CORE_LOOP.md §10 Faz 2)
 
 | Arketip | En sık aksiyon (koşu başına medyan) | Elle kullanıcı bul (medyan) | Turda en uzun boşluk (medyan / en kötü) | Tur tutarı / eski tablo (medyan) |
 |---|---|---|---|---|
-| bootstrap | founderAction:salesCall 234.5 | 32 | 14 sn / 14 sn | 0.56× |
-| vcRocket | upgradeItem 72 | 28.5 | 14 sn / 14 sn | 0.88× |
-| niche | founderAction:salesCall 203.5 | 32 | 14 sn / 14 sn | 0.55× |
-| platform | upgradeItem 72 | 31 | 14 sn / 14 sn | 0.62× |
+| bootstrap | founderAction:salesCall 179 | 31 | 14 sn / 14 sn | 0.60× |
+| vcRocket | upgradeItem 72 | 26 | 14 sn / 14 sn | 0.80× |
+| niche | founderAction:salesCall 208 | 27 | 14 sn / 14 sn | 0.60× |
+| platform | upgradeItem 72 | 28.5 | 14 sn / 14 sn | 0.60× |
 
 - findUsers hiçbir arketipte en sık aksiyon değil: **EVET**
 - Tur penceresinde en uzun boşluk ≤ 20 sn: **EVET**
@@ -48,33 +48,79 @@ Toplam iflas oranı: **0%** (0/32).
 
 | Arketip | İlk 5 dk aralık medyanı | İlk 5 dk p90 / en uzun | Tüm koşu medyanı / p90 | Ödenemeyen maaş günü (koşu başına medyan) | Cevapsız → varsayılan (medyan) |
 |---|---|---|---|---|---|
-| bootstrap | 2.0 sn | 8.0 sn / 24.0 sn | 4.0 sn / 12.0 sn | 1 | 0 |
-| vcRocket | 2.0 sn | 8.0 sn / 24.0 sn | 4.0 sn / 24.0 sn | 1 | 0 |
-| niche | 2.0 sn | 6.0 sn / 24.0 sn | 4.0 sn / 12.0 sn | 1 | 0 |
-| platform | 2.0 sn | 6.0 sn / 24.0 sn | 5.5 sn / 24.0 sn | 1 | 0 |
+| bootstrap | 2.0 sn | 6.0 sn / 24.0 sn | 4.0 sn / 12.0 sn | 0.5 | 0 |
+| vcRocket | 2.0 sn | 6.5 sn / 24.0 sn | 4.0 sn / 18.0 sn | 1 | 0 |
+| niche | 2.0 sn | 6.0 sn / 24.0 sn | 4.0 sn / 12.0 sn | 0.5 | 0 |
+| platform | 2.0 sn | 6.0 sn / 22.0 sn | 4.0 sn / 17.5 sn | 1 | 0 |
 
 | Bot | İflas oranı | En erken batış | Ödenemeyen maaş günü (medyan) |
 |---|---|---|---|
 | iyi (4 arketip) | 0% (0/32) | — | 1 |
-| dikkatsiz (random) | 100% (8/8) | 15.0 dk · g450 | 4 |
-| idle | 100% (8/8) | 12.0 dk · g360 | 1 |
+| dikkatsiz (bootstrap planı, özensiz) | 0% (0/8) | — | 1 |
+| kaos (random) | 88% (7/8) | 25.0 dk · g750 | 4 |
+| idle | 100% (8/8) | 28.0 dk · g840 | 4 |
 
 Karar politikası (bootstrap, aynı seed’ler): kartlara en iyi / en kötü / hep ilk seçenekle cevap veren bot.
 
 | Politika | Unicorn medyanı | Unicorn’a ulaşan | İflas | Kurucu hissesi (medyan) |
 |---|---|---|---|---|
-| best | 79.5 dk | 8/8 | 0% | %47 |
-| worst | 68.9 dk | 8/8 | 0% | %37 |
-| first | 64.4 dk | 8/8 | 0% | %33 |
+| best | 67.2 dk | 8/8 | 0% | %53 |
+| worst | 66.5 dk | 8/8 | 0% | %40 |
+| first | 62.7 dk | 8/8 | 0% | %41 |
+
+## İnceleme düzeltmeleri: tur büyüklüğü, tur zamanlaması, teklif, para, sürüm
+
+Tur büyüklüğü politikası (aynı seed’ler, bot yalnızca büyüklüğü zorla seçer). Kriter: hiçbir büyüklük hem süre hem hissede baskın değil, ya da süre farkı ≥ %15.
+
+| Arketip | Küçük (12 ay) | Hedef (18 ay) | Büyük (24 ay) | Süre farkı | Baskın büyüklük |
+|---|---|---|---|---|---|
+| bootstrap | 71.9 dk · %64 · 8/8 | 67.2 dk · %53 · 8/8 | 64.0 dk · %41 · 8/8 | %12 | — |
+| vcRocket | 60.9 dk · %62 · 8/8 | 60.3 dk · %51 · 8/8 | 59.9 dk · %40 · 8/8 | %2 | — |
+
+Tur zamanlaması: pencere açılır açılmaz başla (0.6) ↔ hedefe kadar bekle (1.0).
+
+| Arketip | Erken 0.6: Unicorn · hisse | Bekle 1.0: Unicorn · hisse | Erken baskın mı |
+|---|---|---|---|
+| bootstrap | 61.5 dk · %52 | 67.2 dk · %53 | hayır |
+| platform | 61.6 dk · %52 | 66.1 dk · %52 | hayır |
+
+Tur kapanışları (iyi botlar, 160 tur): metrik kısmı tavanda 68% · metrik tavanda **ve** pitch tavanda 0% (hedef ≤ %30) · tutarı burn × ay belirledi 7% · tablo tavanı 18% · tablo tabanı 76%.
+
+Para kısıtı: maaş günündeki runway (ay, kâr = 99), aşamaya göre, iyi botlar.
+
+| Aşama | Maaş günü sayısı | Runway medyanı | p90 | > 24 ay payı |
+|---|---|---|---|---|
+| Garaj | 124 | 0.9 | 2.0 | 0% |
+| Pre-seed | 105 | 11.4 | 21.1 | 8% |
+| Seed | 241 | 99.0 | 99.0 | 99% |
+| Series A | 320 | 99.0 | 99.0 | 100% |
+| Series B | 525 | 99.0 | 99.0 | 100% |
+| Series C | 821 | 99.0 | 99.0 | 100% |
+
+Sürüm anı her aşamada: aşama başına sürüm + güncelleme (koşu başına medyan, iyi botlar).
+
+| Arketip | Garaj | Pre-seed | Seed | Series A | Series B | Series C |
+|---|---|---|---|---|---|---|
+| bootstrap | 7 | 5 | 9 | 15 | 21 | 39 |
+| vcRocket | 7 | 4 | 19 | 14 | 24 | 32.5 |
+| niche | 7.5 | 4 | 7 | 15 | 22 | 52 |
+| platform | 7 | 4.5 | 21 | 17.5 | 28 | 35 |
+
+En sık aksiyonun tüm aksiyonlara payı (iyi botlar): medyan 23%, en kötü 35% (hedef ≤ %35).
 
 ## §9 / §10 kriterleri
 
 - M1: 4 bot da Pre-seed’e ulaşıyor (tüm seed’ler): **EVET**
 - İlk 5 dakikada ≥3 kavram (her arketipte medyan): **EVET**
 - Dikkatsiz oyuncu 4 dk’dan önce batmıyor: **EVET**
-- Unicorn’a varış 60–90 dk: medyanlar 79.5 / 63.0 / 71.0 / 69.8 dk → **hedef aralıkta**; arketip farkı 1.26× (hedef ≤ 1.3×) — yalnızca çoğunluğu Unicorn’a ulaşan 4/4 arketip sayıldı
+- Unicorn’a varış 60–90 dk: medyanlar 67.2 / 59.9 / 76.0 / 66.1 dk → **hedefin 0 dk altında (en hızlı)**; arketip farkı 1.27× (hedef ≤ 1.3×) — yalnızca çoğunluğu Unicorn’a ulaşan 4/4 arketip sayıldı
 - İlk 5 dk’da iki anlamlı an arası medyan ≤ 10 sn (her arketip): **EVET** (en kötü arketip 2.0 sn)
-- İflas: iyi botlar 0% (hedef ≤ %3) · dikkatsiz 100% · idle 100% (sonunda batmalı, 4 dk’dan önce değil: 4 dk’dan önce batan 0) · iyi + dikkatsiz toplamı 20% (hedef %5–20): **EVET**
-- Karar politikaları arası Unicorn süresi farkı (en hızlı ↔ en yavaş): %23 (hedef ≥ %15): **EVET** · kurucu hissesi farkı 15 puan
+- İflas (ayrı ayrı): iyi botlar 0% (hedef ≤ %3): **EVET** · dikkatsiz (bootstrap planı, runway’e bakmadan işe alır, kartlara rastgele cevap) 0% (hedef %10–25): **HAYIR** · idle 100% ve kaos (random) 88%: sonunda batabilir, 4 dk’dan önce batan 0: **EVET**
+- İyi botlarda ödenemeyen maaş günü (koşu başına medyan): 1 (hedef 0–1): **EVET**
+- Tur büyüklüğü: hiçbiri hem süre hem hissede baskın değil ya da süre farkı ≥ %15: **EVET** · erken tur (0.6) baskın değil: **EVET**
+- Tur kapanışlarının ≤ %30’u metrik + pitch tavanında: **EVET** (0%)
+- Pre-seed–Series B maaş günlerinde runway > 24 ay payı (en kötü aşama): 100% (hedef ≤ %30): **HAYIR**
+- Garaj sonrası her aşamada en az 1 sürüm/güncelleme (medyan, her arketip): **EVET**
+- Karar politikaları arası Unicorn süresi farkı (en hızlı ↔ en yavaş): %7 (hedef ≥ %15): **HAYIR** · kurucu hissesi farkı 12 puan
 
-_Süre: 351.1 sn · `npm run sim -- --seeds 8 --days 4500`_
+_Süre: 414.0 sn · `npm run sim -- --seeds 8 --days 4500`_

@@ -255,6 +255,12 @@ export interface Project {
   launchedDay?: number
   /** Release thresholds passed (balance RELEASE_THRESHOLDS: MVP 0.2, 0.4, 0.6, 0.8, 1.0). Missing = not seen yet. */
   releaseLevel?: number
+  /**
+   * After 1.0 the builders keep shipping updates (docs/CORE_LOOP.md §5 "Sürüm anı"): progress toward the next update
+   * (maturity-equivalent, balance RELEASE_UPDATE_SIZE) and updates shipped so far.
+   */
+  updateProgress?: number
+  updates?: number
   createdDay: number
   assignedIds: EmployeeId[]
 }
@@ -264,6 +270,8 @@ export interface EnterpriseCustomer {
   name: string
   mrr: number
   sinceDay: number
+  /** Contract end (balance SALES_CONTRACT_DAYS): the customer leaves unless renewed. Missing = old save, open-ended. */
+  untilDay?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -350,8 +358,20 @@ export interface RoundState {
   baseAmount?: number
   /** Valuation the round is priced against (the next stage's target). */
   targetValuation?: number
-  /** Product of the weekly pitch results (1 = neutral). */
+  /** Product of the weekly pitch results (1 = neutral). Older saves; replaced by pitchBonus. */
   pitchFactor?: number
+  /**
+   * The investor's overall impression: the AVERAGE result of the weekly pitches (a week whose pitch was skipped counts
+   * as 0), within ±PITCH_BONUS_CAP, added on top of price × diligence. An average never saturates, so every pitch
+   * still moves the money (review fix: pitches stopped mattering once a sum hit the ceiling).
+   */
+  pitchBonus?: number
+  /** Weeks a pitch was due so far (the average's denominator). */
+  pitchWeeks?: number
+  /** Price ratio (valuation / target) when the round started: half of the price is locked at the start. */
+  priceAtStart?: number
+  /** What decided the amount at the last weekly re-size: the table floor, the burn × months, or the table ceiling. */
+  amountBy?: 'floor' | 'burn' | 'ceiling'
   /** Week (1-based, weeks done) whose pitch waits for the player's choice; undefined = none due. */
   pitchDue?: number
   /** Pitches made, oldest first. `delta`: offer factor change (fraction). */
@@ -408,8 +428,18 @@ export interface RoundView {
   windowAt: number
   /** Valuation / target, clamped to the offer range (the price part of the offer factor). */
   priceRatio: number
-  /** Whole offer factor if the round closed now: price × diligence × pitches, clamped. */
+  /** Whole offer factor if the round closed now: clamp(price × diligence) + pitch bonus. */
   factor: number
+  /** Ceiling of price × diligence (ROUND_OFFER_CEIL); the pitch bonus is added on top. */
+  ceiling: number
+  /** Pitch bonus so far (running round) and its cap (±PITCH_BONUS_CAP). */
+  pitchBonus: number
+  pitchCap: number
+  /** Round length range in weeks (ROUND_WEEKS_MIN–MAX), for the panel text. */
+  weeksMin: number
+  weeksMax: number
+  /** Running round: price ratio locked at the start (half of the price counts it). */
+  priceAtStart?: number
   /** Pre-round: the three size options. */
   sizes?: RoundSizeOption[]
   /** Due-diligence list: the running round's, or what the investor would ask now. */
@@ -425,8 +455,11 @@ export interface RoundView {
 /** Preview of one weekly pitch (engine computed). */
 export interface PitchOption {
   pitch: RoundPitch
-  /** Offer factor change, fraction. */
+  /** Offer factor change, fraction (the expected value for 'story'). */
   delta: number
+  /** 'story' is a gamble: the change lands between min and max (reputation moves both up). */
+  min?: number
+  max?: number
   /** Weeks taken off the round. */
   weeks: number
   /** Extra equity sold, fraction. */
@@ -574,8 +607,45 @@ export interface DerivedMetrics {
   nextStep?: NextStep
   /** What is coming in the next weeks: paydays, delayed decision effects, releases, round (§5 "Ufuk şeridi"). */
   horizon?: HorizonItem[]
-  /** Maturity gained per day by each unfinished project (for release ETAs). */
+  /** Maturity gained per day by each project (unfinished: maturity; finished: update progress). For release ETAs. */
   maturityPerDay?: Record<ProjectId, number>
+  /** How valuation is built right now (pre-revenue parts or MRR × 12 × multiple). */
+  valuationParts?: ValuationBreakdown
+  /** "Satış görüşmesi" return preview (monthly saturation). */
+  salesCall?: SalesCallPreview
+}
+
+/** Valuation breakdown (docs/CORE_LOOP.md §4.3 "çarpan dökümü"): engine computed, the UI only prints it. */
+export interface ValuationBreakdown {
+  /** 'pre': team × $40K + users × $150 + launched × $100K; 'post': MRR × 12 × multiple (blended in below $1K MRR). */
+  mode: 'pre' | 'post'
+  team: number
+  users: number
+  launched: number
+  /** Pre-revenue parts in dollars. */
+  teamValue: number
+  usersValue: number
+  launchedValue: number
+  mrr: number
+  multiple: number
+  /** 3-month average MoM the multiple prices, and the stage's ceiling. */
+  momAvg: number
+  cap: number
+  /** Share of the post-revenue formula counted (mrr / PRE_REVENUE_MRR, max 1). */
+  blend: number
+  total: number
+}
+
+/** Preview of the next "Satış görüşmesi": contract MRR range and the month's saturation. */
+export interface SalesCallPreview {
+  min: number
+  max: number
+  /** Return multiplier (1 = full). */
+  factor: number
+  /** Full-return deals left this month. */
+  fullLeft: number
+  /** Contract length in days. */
+  contractDays: number
 }
 
 /** Preview of the next "Elle kullanıcı bul": users range and why it is reduced. */
@@ -590,8 +660,8 @@ export interface FindUsersPreview {
   reasons: ('circle' | 'big')[]
 }
 
-/** Main chain: idea → first users → desk → hire → release → users → revenue → round. */
-export const NEXT_STEP_IDS = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'revenue', 'round', 'roundWait', 'grow'] as const
+/** Main chain: idea → first users → desk → hire → release → users → team (pre-revenue valuation) → round. */
+export const NEXT_STEP_IDS = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'revenue', 'team', 'round', 'roundWait', 'grow'] as const
 export type NextStepId = (typeof NEXT_STEP_IDS)[number]
 
 export interface NextStep {
@@ -605,6 +675,10 @@ export interface NextStep {
   slotId?: SlotId
   /** Target number (users / MRR / valuation). */
   target?: number
+  /** 'team': valuation one more hire adds, and runway (months) today → after that hire. */
+  value?: number
+  runwayNow?: number | null
+  runwayAfter?: number | null
 }
 
 export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady'
@@ -621,6 +695,8 @@ export interface HorizonItem {
   projectId?: ProjectId
   /** Release level it would reach. */
   level?: number
+  /** Update number (after 1.0), when the release is an update. */
+  update?: number
 }
 
 /** A release moment (maturity threshold passed): the user wave and the MRR jump it brought. */
@@ -631,8 +707,22 @@ export interface ReleaseEntry {
   projectName: string
   /** 1 = MVP (0.2), 2 = 0.4, 3 = 0.6, 4 = 0.8, 5 = 1.0 */
   level: number
+  /** Update number after 1.0 (level stays 5). */
+  update?: number
   users: number
   mrr: number
+}
+
+/** Where a stage started (goals ☆ measure progress inside the stage, not what was carried in). */
+export interface StageBaseline {
+  stage: StageIndex
+  day: number
+  users: number
+  team: number
+  /** Total releases (levels + updates) shipped before the stage. */
+  releases: number
+  mrr: number
+  projects: number
 }
 
 // ---------------------------------------------------------------------------
@@ -800,6 +890,10 @@ export interface GameState {
   releases?: ReleaseEntry[]
   /** Optional stage goals (☆) reached, content goal ids (content/goals.ts). */
   goalsDone?: string[]
+  /** Baseline taken on arriving at the current stage (stage goals measure from here). */
+  stageStart?: StageBaseline
+  /** Releases shipped over the run (levels + updates), for stage goals. */
+  releaseCount?: number
 }
 
 // ---------------------------------------------------------------------------

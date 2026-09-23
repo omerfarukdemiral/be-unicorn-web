@@ -16,6 +16,7 @@ import type {
   PostMortemCode,
   ProjectCategory,
   SlotType,
+  StageBaseline,
   StageIndex,
   StageKey,
   ToolId,
@@ -90,6 +91,8 @@ export interface DecisionCard {
    * Omitted = the last option (usually the cautious one).
    */
   defaultOption?: number
+  /** Days before the default applies (crisis / rescue cards are short); omitted = DECISION_DEFAULT_AFTER_DAYS. */
+  defaultAfterDays?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +245,11 @@ export interface StageGoal {
   text: string
   /** One line: why it matters / how. */
   hint: string
-  /** Pure: reached right now? The engine latches the first true (goalsDone). */
-  check: (s: GameState) => boolean
+  /**
+   * Pure: reached right now? The engine latches the first true (goalsDone). `base` is where the stage started
+   * (state.stageStart), so a goal measures progress made in this stage, not what was carried in.
+   */
+  check: (s: GameState, base: StageBaseline) => boolean
 }
 
 export interface ContentBundle {

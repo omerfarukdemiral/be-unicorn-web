@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { findUsersPreview } from '../founder'
 import { createEngine } from '../index'
-import { diligenceFactor, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { diligenceFactor, lockedPrice, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
 import type { DiligenceItem, GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
@@ -25,13 +25,17 @@ function launched(users: number, seed = 1): GameState {
   return refresh({ ...s, finance: { ...s.finance, priceMultiplier: B.PRICE_MIN } })
 }
 
+const target = B.STAGE_TARGET_VALUATION[1]!
+
+/** The same state with a round burn of `b` a month (all salaries; round.ts sizes on burnBreakdown). */
+const withBurn = (s: GameState, b: number): GameState => ({ ...s, finance: { ...s.finance, burn: b, burnBreakdown: { salaries: b, rent: 0, infra: 0, ads: 0, founder: 0 } } })
+
 /** Users that put the garage valuation at `v`. */
 const usersFor = (v: number) => Math.ceil((v - B.VAL_PER_TEAM - B.VAL_PER_LAUNCHED) / B.VAL_PER_USER)
 
 const dd = (met: boolean[]): DiligenceItem[] => met.map((m, i) => ({ id: (['runway', 'growth', 'morale'] as const)[i]!, target: 1, value: 1, met: m }))
 
 describe('round window (erken tur penceresi)', () => {
-  const target = B.STAGE_TARGET_VALUATION[1]!
 
   it('opens at 60% of the target valuation, not before', () => {
     const below = launched(usersFor(target * B.ROUND_EARLY_RATIO) - 40)
@@ -70,18 +74,43 @@ describe('round size (12 / 18 / 24 months ↔ equity)', () => {
     expect(sizes[1]!.equity).toBeCloseTo(B.ROUND_EQUITY[1]!, 6)
     for (const o of sizes) {
       expect(o.amount).toBeGreaterThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (o.months / 18) - 1)
-      expect(o.amount).toBeLessThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
+      expect(o.amount).toBeLessThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX * (o.months / 18) + 1)
     }
     // A bigger burn buys a bigger round (until the table cap).
-    const low = { ...s, finance: { ...s.finance, burn: 1_000 } }
-    const high = { ...s, finance: { ...s.finance, burn: 4_000 } }
+    const low = withBurn(s, 1_000)
+    const high = withBurn(s, 6_000)
     expect(roundAmountFor(high, 1, 12)).toBeGreaterThan(roundAmountFor(low, 1, 12))
     // The floor scales with the months asked for: a small round on a small burn brings less than a target one.
     expect(roundAmountFor(low, 1, 12)).toBe(Math.round(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (12 / 18)))
     expect(roundAmountFor(low, 1, 18)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN)
     expect(roundAmountFor(low, 1, 12)).toBeLessThan(roundAmountFor(low, 1, 18))
     expect(roundAmountFor(low, 1, 18)).toBeLessThan(roundAmountFor(low, 1, 24))
-    expect(roundAmountFor({ ...s, finance: { ...s.finance, burn: 1e9 } }, 1, 24)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
+    // The ceiling scales too: a huge burn still buys Küçük < Hedef < Büyük.
+    const huge = withBurn(s, 1e9)
+    expect(roundAmountFor(huge, 1, 18)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
+    expect(roundAmountFor(huge, 1, 12)).toBeLessThan(roundAmountFor(huge, 1, 18))
+    expect(roundAmountFor(huge, 1, 18)).toBeLessThan(roundAmountFor(huge, 1, 24))
+  })
+
+  it('small burn where burn × months passes the ceiling for every size: amounts still rise with size (review #3)', () => {
+    // Pre-seed playtest: burn $5.2K, all three sizes clipped to the same $120K while equity differed.
+    const s = refresh(withBurn(launched(usersFor(330_000)), 5_200))
+    const sizes = s.derived.round!.sizes!
+    expect(sizes[0]!.amount).toBeLessThan(sizes[1]!.amount)
+    expect(sizes[1]!.amount).toBeLessThan(sizes[2]!.amount)
+    for (const o of sizes) expect(o.amount / o.equity).toBeGreaterThan(0)
+  })
+
+  it('an ad spike right before startRound does not change the amount (review #18)', () => {
+    const base = launched(usersFor(450_000))
+    const calm = api.applyAction(base, { type: 'startRound', size: 'small' }).state
+    // Ads count at most what the last payday paid for them (none yet): a 50M budget for an instant buys nothing.
+    const spiked = refresh({ ...base, finance: { ...base.finance, adBudget: 50_000_000 } })
+    const r = api.applyAction(spiked, { type: 'startRound', size: 'small' }).state
+    expect(r.round!.baseAmount).toBe(calm.round!.baseAmount)
+    // And the live offer re-sizes on the burn actually run: dropping the ads after the start changes nothing either.
+    const after = api.step(refresh({ ...r, finance: { ...r.finance, adBudget: 0 } }), 7)
+    expect(after.round!.offer.amount).toBeLessThanOrEqual(api.step(calm, 7).round!.offer.amount + 1)
   })
 
   it('startRound takes the size; the round remembers months and equity (☆ discounts still apply)', () => {
@@ -106,9 +135,21 @@ describe('live offer: clamp and due diligence', () => {
     expect(diligenceFactor(dd([true, true, true]))).toBeCloseTo(1.15, 9)
     expect(diligenceFactor(dd([true, false, true]))).toBeCloseTo(1.0, 9)
     expect(diligenceFactor(dd([false, false, false]))).toBeCloseTo(0.7, 9)
-    expect(offerFactor(1, dd([true, true, false]), 1)).toBeCloseTo(1.0, 9)
-    expect(offerFactor(0.6, dd([false, false, false]), 1)).toBe(B.ROUND_OFFER_FLOOR)
-    expect(offerFactor(1.2, dd([true, true, true]), 1.2)).toBe(B.ROUND_OFFER_CEIL)
+    expect(offerFactor(1, dd([true, true, false]), 0)).toBeCloseTo(1.0, 9)
+    expect(offerFactor(0.6, dd([false, false, false]), 0)).toBe(B.ROUND_OFFER_FLOOR)
+    // The ceiling holds price × diligence only; the pitch bonus (±cap) is added on top (review #17).
+    expect(offerFactor(1.2, dd([true, true, true]), 0)).toBe(B.ROUND_OFFER_CEIL)
+    expect(offerFactor(1.2, dd([true, true, true]), 0.1)).toBeCloseTo(B.ROUND_OFFER_CEIL + 0.1, 9)
+    expect(offerFactor(1.2, dd([true, true, true]), 1)).toBeCloseTo(B.ROUND_OFFER_CEIL + B.PITCH_BONUS_CAP, 9)
+  })
+
+  it('half the price is locked at the start: an early start closes cheaper than a late one at the same close (review #16)', () => {
+    expect(lockedPrice(0.6, 1.2)).toBeCloseTo(Math.sqrt(0.72), 9)
+    const early = api.applyAction(launched(usersFor(target * 0.62)), { type: 'startRound' }).state
+    const late = api.applyAction(launched(usersFor(target * 1.0)), { type: 'startRound' }).state
+    // Same numbers at the close (valuation at target): the early round still carries its cheap start.
+    const closeAt = (s: GameState) => refresh({ ...s, stats: { ...s.stats, users: usersFor(target) } })
+    expect(closeAt(early).derived.round!.projected!).toBeLessThan(closeAt(late).derived.round!.projected!)
   })
 
   it('the round carries the investor’s checklist with live values', () => {
@@ -156,7 +197,10 @@ describe('round weeks: live offer + weekly pitch', () => {
 
     const st = api.applyAction(s, { type: 'roundPitch', pitch: 'story' })
     expect(st.state.founder.energy).toBeCloseTo(s.founder.energy - B.PITCH_STORY_ENERGY, 6)
-    expect(st.state.round!.pitchFactor!).toBeGreaterThan(1)
+    // "Hikâye anlat" is a gamble inside the previewed range.
+    const so = s.derived.round!.pitchOptions!.find((o) => o.pitch === 'story')!
+    expect(st.state.round!.pitchBonus!).toBeGreaterThanOrEqual(so.min! - 1e-9)
+    expect(st.state.round!.pitchBonus!).toBeLessThanOrEqual(so.max! + 1e-9)
     expect(api.applyAction({ ...s, founder: { ...s.founder, energy: 1 } }, { type: 'roundPitch', pitch: 'story' }).error).toBe('noEnergy')
 
     const co = api.applyAction(s, { type: 'roundPitch', pitch: 'coinvestor' })

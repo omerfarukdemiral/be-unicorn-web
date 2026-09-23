@@ -7,7 +7,7 @@ import { t } from '../i18n'
 import { money } from '../format'
 import { Bar, cx, SectionTitle } from '../primitives'
 import { Icon } from '../icons'
-import { effectSummary, optionLabel } from '../loopUi'
+import { effectSummary, optionLabel, valuationLine } from '../loopUi'
 
 export function GoalsCard() {
   const g = useGameStore(
@@ -16,6 +16,7 @@ export function GoalsCard() {
       valuation: s.state.finance.valuation,
       progress: s.state.derived.stageProgress,
       done: s.state.goalsDone ?? [],
+      parts: s.state.derived.valuationParts,
     })),
   )
   const next = STAGES[g.stage + 1]
@@ -37,6 +38,8 @@ export function GoalsCard() {
               </span>
             </div>
             <Bar className="mt-1.5" height={4} value={Math.max(0, Math.min(1, g.progress))} />
+            {/* Değerleme dökümü: what moves the number (team / users / launches before revenue, then MRR × multiple). */}
+            {g.parts && <p className="tabular font-text mt-1 text-[11px] leading-snug text-ink-2">{valuationLine(g.parts)}</p>}
           </li>
         ) : (
           <li className="font-text text-xs text-ink-2">{t('goals.final')}</li>

@@ -204,12 +204,22 @@ export function valuationPostRevenue(mrrValue: number, multiple: number): number
   return mrrValue * 12 * multiple
 }
 
-/** PLAN piecewise valuation (+ optional pre-revenue floor for continuity, see balance). */
+/** Share of the post-revenue formula counted: MRR / PRE_REVENUE_MRR, max 1 (blends in, no jump at $1K MRR). */
+export function revenueBlend(mrrValue: number): number {
+  return mrrValue <= 0 ? 0 : Math.min(1, mrrValue / B.PRE_REVENUE_MRR)
+}
+
+/**
+ * PLAN piecewise valuation (+ pre-revenue floor for continuity, see balance). Below PRE_REVENUE_MRR the revenue part
+ * blends in (× MRR / $1K), so crossing $1K no longer jumps valuation (review fix: 296K → 375K in one day).
+ */
 export function valuation(mrrValue: number, momGrowth: number, team: number, users: number, launched: number, cap: number = B.MULTIPLE_MAX): number {
   const pre = valuationPreRevenue(team, users, launched)
-  if (mrrValue < B.PRE_REVENUE_MRR) return pre
-  const post = valuationPostRevenue(mrrValue, valuationMultiple(momGrowth, cap))
-  return B.VALUATION_KEEP_PRE_REVENUE_FLOOR ? Math.max(pre, post) : post
+  const blend = revenueBlend(mrrValue)
+  if (blend <= 0) return pre
+  const post = valuationPostRevenue(mrrValue, valuationMultiple(momGrowth, cap)) * blend
+  if (!B.VALUATION_KEEP_PRE_REVENUE_FLOOR && blend >= 1) return post
+  return Math.max(pre, post)
 }
 
 /** MoM growth from two monthly MRR snapshots. */

@@ -8,8 +8,14 @@ import { panelSelection, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { Bar, cx, Ring } from './primitives'
+import { money } from './format'
 import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone, soft } from './theme'
 import { useIsMobile } from './hooks'
+
+/** "+3–6", or "+1" when both ends are the same (never "+1–1"). */
+function range(a: number, b: number, f: (v: number) => string = String): string {
+  return a === b ? `+${f(a)}` : `+${f(a)}–${f(b)}`
+}
 
 export function FounderActions() {
   const mobile = useIsMobile()
@@ -29,14 +35,25 @@ export function FounderActions() {
   )
   // "Elle kullanıcı bul" return preview (monthly saturation, docs/CORE_LOOP.md §5 dont-scale).
   const find = useGameStore(useShallow((s) => s.state.derived.findUsers))
+  const findRange = find ? range(find.min, find.max) : ''
   const findText = find
     ? find.reasons.includes('big')
-      ? t('founder.findUsers.big', { a: find.min, b: find.max })
+      ? t('founder.findUsers.big', { r: findRange })
       : find.reasons.includes('circle')
-        ? t('founder.findUsers.circle', { a: find.min, b: find.max })
-        : t('founder.findUsers.preview', { a: find.min, b: find.max, n: find.fullLeft })
+        ? t('founder.findUsers.circle', { r: findRange })
+        : t('founder.findUsers.preview', { r: findRange, n: find.fullLeft })
     : ''
   const findSaturated = !!find && find.factor < 1
+  // "Satış görüşmesi": contract size preview, the month's saturation and the contract length.
+  const sales = useGameStore(useShallow((s) => s.state.derived.salesCall))
+  const salesText = sales
+    ? sales.factor < 1
+      ? t('founder.salesCall.saturated', { r: range(sales.min, sales.max, money) })
+      : t('founder.salesCall.preview', { r: range(sales.min, sales.max, money), d: sales.contractDays, n: sales.fullLeft })
+    : ''
+  const salesSaturated = !!sales && sales.factor < 1
+  // Talking on a finished product feeds the next update (engine founder.ts), not maturity.
+  const allDone = useGameStore((s) => s.state.projects.length > 0 && s.state.projects.every((p) => p.maturity >= 1))
   const dispatch = useGameStore((s) => s.dispatch)
   const selection = useGameStore(useShallow((s) => panelSelection(s.ui.panel)))
   const projects = useGameStore(useShallow((s) => s.state.projects))
@@ -64,7 +81,7 @@ export function FounderActions() {
         <span className={cx('tabular min-w-[2ch] text-right text-[11px] font-semibold', lowEnergy ? 'text-negative-ink' : 'text-energy-ink')}>{Math.round(f.energy)}</span>
       </div>
       <div className="flex items-center gap-1">
-        {FOUNDER_ACTIONS.map((kind) => {
+        {FOUNDER_ACTIONS.map((kind, index) => {
           const unlockStage = founderActionStage(kind)
           const locked = f.stage < unlockStage
           const cdEnd = f.cooldowns[kind]
@@ -90,7 +107,13 @@ export function FounderActions() {
                   ? t('founder.noProject', { action })
                   : kind === 'findUsers' && findText
                     ? `${action}: ${findText}`
-                    : `${action}: ${t(`founder.${kind}.desc`)}`
+                    : kind === 'salesCall' && salesText
+                      ? `${action}: ${salesText}`
+                      : kind === 'talkToUsers' && allDone
+                        ? `${action}: ${t('founder.talkToUsers.update')}`
+                        : `${action}: ${t(`founder.${kind}.desc`)}`
+          const tip = locked ? action : kind === 'findUsers' && findText ? findText : kind === 'salesCall' && salesText ? salesText : action
+          const saturated = (kind === 'findUsers' && findSaturated) || (kind === 'salesCall' && salesSaturated)
           const size = mobile ? 44 : 48
           const hue = FOUNDER_COLOR[kind]
           // Available / running: the action's own hue (icon + light tint + frame). Unavailable: neutral dashed.
@@ -118,15 +141,21 @@ export function FounderActions() {
               {cdFrac > 0 && !locked && <Ring value={cdFrac} size={size} tone={soft(hue, 70)} />}
               {running && <Ring value={runFrac} size={size} stroke={2.5} tone={hue} />}
               <Icon name={locked ? 'lock' : FOUNDER_ICON[kind]} size={mobile ? 18 : 20} />
-              {kind === 'findUsers' && findSaturated && !locked && (
+              {saturated && !locked && (
                 // Saturated: a small amber "½" so the diminishing return is visible before the click.
                 <span aria-hidden="true" className="tabular absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-energy-ink px-0.5 text-[9px] font-bold leading-none text-on-ink">
                   ½
                 </span>
               )}
               {!mobile && (
-                <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10.5px] font-semibold tracking-wide text-on-ink shadow-pop group-hover:block">
-                  {kind === 'findUsers' && findText && !locked ? findText : action}
+                // The first buttons sit at the screen's left edge: their tip grows rightwards, never off-screen.
+                <span
+                  className={cx(
+                    'pointer-events-none absolute -top-8 hidden whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10.5px] font-semibold tracking-wide text-on-ink shadow-pop group-hover:block',
+                    index < 2 ? 'left-0' : 'left-1/2 -translate-x-1/2',
+                  )}
+                >
+                  {tip}
                 </span>
               )}
             </button>

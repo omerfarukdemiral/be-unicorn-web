@@ -1,12 +1,12 @@
 // Pure core-loop selectors (docs/CORE_LOOP.md §5): the next link of the main chain and the horizon ahead.
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
-import { ledgerCosts } from './economy'
+import { ledgerCosts, runway } from './economy'
 import { firstFreeDesk, isFreeDesk } from './office'
 import { DAYS_PER_WEEK, type GameState, type HorizonItem, type NextStep, type NextStepId } from './types'
 
 /** Chain order; round / roundWait / grow share the last link. */
-const CHAIN: readonly NextStepId[] = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'revenue', 'round']
+const CHAIN: readonly NextStepId[] = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'team', 'round']
 const CHAIN_TOTAL = CHAIN.length
 
 function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = {}): NextStep {
@@ -16,8 +16,23 @@ function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = 
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
 
+/** Monthly salary of the next hire: the cheapest candidate on offer, else an engineer at today's stage. */
+function nextHireSalary(s: GameState): number {
+  const c = s.candidates.reduce((m, x) => Math.min(m, x.salary), Infinity)
+  return Number.isFinite(c) ? c : B.BASE_SALARY.eng * B.SALARY_STAGE_GROWTH ** s.stage
+}
+
+/** Day of a project's last update or 1.0 release (−∞ = none on record). */
+export function lastUpdateDay(s: GameState, projectId: string): number {
+  const list = s.releases ?? []
+  for (let i = list.length - 1; i >= 0; i--) if (list[i]!.projectId === projectId && list[i]!.level >= B.RELEASE_THRESHOLDS.length) return list[i]!.day
+  return -Infinity
+}
+
 /**
- * First unmet link of: idea → first manual users → desk → hire → release (MVP) → users → revenue → round.
+ * First unmet link of: idea → first manual users → desk → hire → release (MVP) → users → team → round.
+ * 'team' is the garage / pre-seed valuation link before revenue: valuation there is team × $40K + users × $150 +
+ * launched × $100K (economy.valuationPreRevenue), so the chip names the hire and what it costs in runway.
  * Links that are done stay done (a later stage never sends the player back to "pick an idea" once a project runs).
  */
 export function nextStep(s: GameState): NextStep {
@@ -36,8 +51,24 @@ export function nextStep(s: GameState): NextStep {
     return step('launch', { progress: clamp01(best / B.MVP_MATURITY), target: B.MVP_MATURITY })
   }
   if (s.stats.users < B.NEXT_STEP_USERS && s.stage === 0) return step('users', { progress: clamp01(s.stats.users / B.NEXT_STEP_USERS), target: B.NEXT_STEP_USERS })
-  if (s.finance.mrr < B.PRE_REVENUE_MRR && s.stage <= 1) return step('revenue', { progress: clamp01(s.finance.mrr / B.PRE_REVENUE_MRR), target: B.PRE_REVENUE_MRR })
   const target = B.STAGE_TARGET_VALUATION[s.stage + 1] ?? null
+  if (s.finance.mrr < B.PRE_REVENUE_MRR && s.stage <= 1 && !s.round?.active && !s.derived.canStartRound && target !== null) {
+    const windowAt = target * B.ROUND_EARLY_RATIO
+    const net = s.finance.net
+    const free = s.stats.cash - ledgerCosts(s.finance.ledger ?? { salaries: 0, rent: 0, infra: 0, ads: 0 })
+    const extra: Omit<NextStep, 'id' | 'index' | 'total'> = {
+      progress: clamp01(s.finance.valuation / windowAt),
+      target: windowAt,
+      value: B.VAL_PER_TEAM,
+      runwayNow: s.finance.runway,
+      runwayAfter: runway(free, net - nextHireSalary(s)),
+    }
+    if (!firstFreeDesk(s.office)) {
+      const empty = s.office.slots.find((x) => isFreeDesk(s.office, x) && x.itemId === undefined && x.spanOf === undefined)
+      if (empty) extra.slotId = empty.id
+    }
+    return step('team', extra)
+  }
   if (s.round?.active) {
     const r = s.round
     return step('roundWait', { progress: r.weeksTotal > 0 ? clamp01(1 - r.weeksLeft / r.weeksTotal) : 0 })
@@ -84,7 +115,13 @@ export function horizon(s: GameState): HorizonItem[] {
   const rates = s.derived.maturityPerDay ?? {}
   for (const p of s.projects) {
     const rate = rates[p.id] ?? 0
-    if (p.maturity >= 1 || rate <= 0) continue
+    if (rate <= 0) continue
+    if (p.maturity >= 1) {
+      // The next update: its work left at today's speed, but not before the update cool-down ends.
+      const eta = Math.max(now + Math.max(0, B.RELEASE_UPDATE_SIZE - (p.updateProgress ?? 0)) / rate, lastUpdateDay(s, p.id) + B.RELEASE_UPDATE_MIN_DAYS)
+      if (eta <= end) out.push({ kind: 'release', day: eta, projectId: p.id, level: B.RELEASE_THRESHOLDS.length, update: (p.updates ?? 0) + 1 })
+      continue
+    }
     const lvl = B.RELEASE_THRESHOLDS.findIndex((t) => p.maturity < t - 1e-9)
     if (lvl < 0) continue
     const eta = now + (B.RELEASE_THRESHOLDS[lvl]! - p.maturity) / rate

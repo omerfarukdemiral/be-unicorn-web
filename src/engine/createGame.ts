@@ -6,7 +6,7 @@ import { buildOffice } from './office'
 import { fillCandidates } from './people'
 import { Rng, createRngState } from './rng'
 import { DEPTS, INITIAL_WIDGETS, SAVE_VERSION, type Dept, type GameState, type NewGameOptions } from './types'
-import type { EngineContent } from './util'
+import { stageBaseline, type EngineContent } from './util'
 
 function perDept(v: number): Record<Dept, number> {
   const o = {} as Record<Dept, number>
@@ -82,5 +82,6 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
   fillCandidates(s, content, rng, true)
   s.rng = rng.snapshot()
   recomputeDerived(s, content)
+  s.stageStart = stageBaseline(s)
   return s
 }

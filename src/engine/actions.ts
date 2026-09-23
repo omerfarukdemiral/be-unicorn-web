@@ -358,7 +358,7 @@ const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => answer
 
 const startRoundH: Handler<'startRound'> = ({ s, rng, content }, a) => startRound(s, rng, starsOfStage(s, content, s.stage), a.size ?? 'target')
 
-const roundPitchH: Handler<'roundPitch'> = ({ s }, a) => roundPitch(s, a.pitch)
+const roundPitchH: Handler<'roundPitch'> = ({ s, rng }, a) => roundPitch(s, a.pitch, rng)
 
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,

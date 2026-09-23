@@ -8,7 +8,7 @@ import { applyDefaultDecision, applyDueEffects, maybeShowDecision } from './deci
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
 import { accrueMonth, checkGoals, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
-import { completeFounderAction, dailyFounder, regenEnergy } from './founder'
+import { completeFounderAction, dailyFounder, expireContracts, regenEnergy } from './founder'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
 import { checkRoundWindow, progressRound } from './round'
@@ -70,12 +70,19 @@ function advance(s: GameState, content: EngineContent, rng: Rng, dt: number): vo
   }
 }
 
-/** §5.3: assigned builders (+ idle founder) raise maturity; parallel projects & tech debt slow it. */
+/**
+ * §5.3: assigned builders (+ idle founder) raise maturity; parallel projects & tech debt slow it. A finished project
+ * (1.0) keeps its builders shipping updates: the same work fills updateProgress (checkReleases ships it).
+ */
 export function progressProjects(s: GameState, o: Outputs, dt: number): void {
-  const active = s.projects.filter((p) => p.maturity < 1)
-  if (!active.length) return
+  if (!s.projects.length) return
   const rates = maturityRates(s, o)
-  for (const p of active) {
+  for (const p of s.projects) {
+    if (p.maturity >= 1) {
+      // Waiting for the update cool-down: the progress holds at one update's worth.
+      p.updateProgress = Math.min(B.RELEASE_UPDATE_SIZE, (p.updateProgress ?? 0) + (rates[p.id] ?? 0) * dt)
+      continue
+    }
     p.maturity = Math.min(1, p.maturity + (rates[p.id] ?? 0) * dt)
     if (!p.launched && E.isLaunched(p.maturity)) {
       p.launched = true
@@ -92,6 +99,7 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   if (s.gameOver) return
   dailyPeople(s, content)
   dailyFounder(s)
+  expireContracts(s)
   s.modifiers = s.modifiers.filter((m) => m.untilDay > s.time.day)
   s.candidates = s.candidates.filter((c) => c.expiresDay > s.time.day)
   if (day % DAYS_PER_WEEK === 0) fillCandidates(s, content, rng)

@@ -159,33 +159,57 @@ function Pie({ fraction, color }: { fraction: number; color: string }) {
 // ---------------------------------------------------------------------------
 
 /**
- * Kasa value with enough digits that a single day's burn moves it ("$29.98K" → "$29.97K"): the compact
- * convention (K/M/B, '.' decimal), one or two more decimals than money().
+ * Kasa value: whole dollars under $100K ("$14,950", every day's cost moves it: docs/CORE_LOOP.md §4.1), the compact
+ * convention above (K/M/B, '.' decimal) with one more decimal than money().
  */
-function ledgerMoney(n: number): string {
+export function ledgerMoney(n: number): string {
   if (!Number.isFinite(n)) return '—'
   const a = Math.abs(n)
-  const sign = n < 0 ? '-' : ''
-  const body = a < 1e3 ? `${Math.round(a)}` : a < 1e5 ? `${(a / 1e3).toFixed(2)}K` : a < 1e6 ? `${(a / 1e3).toFixed(1)}K` : a < 1e9 ? `${(a / 1e6).toFixed(a < 1e8 ? 2 : 1)}M` : `${(a / 1e9).toFixed(2)}B`
+  const sign = n < 0 ? '−' : ''
+  const body =
+    a < 1e5
+      ? Math.round(a).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+      : a < 1e6
+        ? `${(a / 1e3).toFixed(1)}K`
+        : a < 1e9
+          ? `${(a / 1e6).toFixed(a < 1e8 ? 2 : 1)}M`
+          : `${(a / 1e9).toFixed(2)}B`
   return `${sign}$${body}`
 }
 
 /** Months of runway under which the Kasa chip pulses red. */
 const RUNWAY_CRITICAL = 3
 
+export type RunwayTone = 'calm' | 'amber' | 'orange' | 'red'
+
+/** Runway colour bands (docs/CORE_LOOP.md §7): > 12 months neutral, 6–12 amber, 3–6 orange, < 3 red (pulses). */
+export function runwayTone(runway: number | null): RunwayTone {
+  if (runway === null || runway > 12) return 'calm'
+  if (runway >= 6) return 'amber'
+  if (runway >= RUNWAY_CRITICAL) return 'orange'
+  return 'red'
+}
+
+const RUNWAY_TONE_COLOR: Record<RunwayTone, string | undefined> = {
+  calm: undefined,
+  amber: 'var(--color-lemon-600)',
+  orange: 'var(--color-peach-600)',
+  red: 'var(--color-negative-ink)',
+}
+
 /**
- * Kasa: the value counts smoothly. Revenue flows in every day (a green "+$X" floats out of the value); salaries,
- * rent and infra pile up and leave in one lump on payday (the 1st): the value shakes, flashes red and drops a big
- * "−$X" (docs/CORE_LOOP.md §5 "Maaş günü"). The pill counts what has piled up and the days left to payday.
+ * Kasa: the headline is the money you can still use (cash − what payday already owes), so it falls every day by
+ * that day's costs and rises by that day's revenue (review fix: the real cash rose while the pill said "melting").
+ * On payday (the 1st) the owed lump really leaves the bank: the value shakes, flashes red and drops a big "−$X"
+ * (docs/CORE_LOOP.md §5 "Maaş günü"). The line under it says what is set aside and how much is in the bank.
  */
 function CashWidget({ compact: c }: { compact?: boolean }) {
-  const { cash, net, mrr, owed, debt, runway, day, flowing } = useGameStore(
+  const { cash, net, owed, debt, runway, day, flowing } = useGameStore(
     useShallow((s) => {
       const l = s.state.finance.ledger
       return {
         cash: s.state.stats.cash,
         net: s.state.finance.net,
-        mrr: s.state.finance.mrr,
         owed: l ? l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0) : 0,
         debt: s.state.finance.debt,
         runway: s.state.finance.runway,
@@ -194,15 +218,18 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
       }
     }),
   )
-  const shown = useTween(cash)
+  const available = cash - owed
+  const shown = useTween(available)
   const perDay = net / 30
-  const critical = cash < 0 || (runway !== null && runway < RUNWAY_CRITICAL)
-  const tone = perDay >= 0 ? 'text-positive-ink' : 'text-negative-ink'
+  const tone = runwayTone(runway)
+  const critical = available < 0 || tone === 'red'
+  const flowTone = perDay >= 0 ? 'text-positive-ink' : 'text-negative-ink'
   const toPayday = 30 - (day % 30)
 
   // Floating deltas: the day's revenue (small, green) and payday's lump (big, red). Each fades on its own.
-  const [drops, setDrops] = useState<{ id: number; text: string; up: boolean; big?: boolean }[]>([])
-  const pushDrop = (d: { id: number; text: string; up: boolean; big?: boolean }, ms: number) => {
+  type Drop = { id: number; text: string; short?: string; up: boolean; big?: boolean }
+  const [drops, setDrops] = useState<Drop[]>([])
+  const pushDrop = (d: Drop, ms: number) => {
     setDrops((cur) => [...cur.slice(-2), d])
     // No cleanup: at 4× the next day lands before this one has faded (a late setState after unmount is a no-op).
     window.setTimeout(() => setDrops((cur) => cur.filter((x) => x.id !== d.id)), ms)
@@ -212,9 +239,10 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
     if (day === lastDay.current) return
     const fresh = day > lastDay.current && flowing
     lastDay.current = day
-    const inflow = mrr / 30
-    if (!fresh || inflow < 0.5) return
-    pushDrop({ id: day, text: signedMoney(inflow), up: true }, 1200)
+    // The day's net flow out of the usable money: red "−$50" while burning, green "+$120" once revenue wins.
+    const flow = net / 30
+    if (!fresh || Math.abs(flow) < 0.5) return
+    pushDrop({ id: day, text: flow >= 0 ? signedMoney(flow) : `−${money(-flow)}`, up: flow >= 0 }, 1200)
   }, [day]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [payFlash, setPayFlash] = useState(0)
@@ -222,7 +250,7 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
     for (const e of events) {
       if (e.kind !== 'payday' || !(e.value !== undefined && e.value > 0.5)) continue
       setPayFlash(e.id)
-      pushDrop({ id: -e.id, text: `−${money(e.value)}`, up: false, big: true }, 1800)
+      pushDrop({ id: -e.id, text: t('cash.paid', { v: money(e.value) }), short: `−${money(e.value)}`, up: false, big: true }, 1800)
     }
   })
 
@@ -235,8 +263,9 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
       alert={critical}
       className={cx('relative', critical && 'animate-danger-pulse')}
       value={
-        <span className="relative inline-block">
-          <span key={payFlash} className={cx(shown < 0 && 'text-negative-ink', payFlash > 0 && 'inline-block animate-payday')}>
+        // Drops float in the chip's top-right corner (the chip is `relative`), clear of the value and its sub line.
+        <span className="inline-block">
+          <span key={payFlash} className={cx(shown < 0 && 'text-negative-ink', payFlash > 0 && 'inline-block animate-payday')} title={t('cash.availableTitle')}>
             {ledgerMoney(shown)}
           </span>
           {drops.map((d) => (
@@ -244,29 +273,31 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
               key={d.id}
               aria-hidden="true"
               className={cx(
-                'pointer-events-none absolute left-full top-0 ml-1 whitespace-nowrap font-bold',
-                d.big ? 'animate-payday-drop text-[15px]' : 'animate-cash-rise text-[11px]',
+                'pointer-events-none absolute whitespace-nowrap font-bold',
+                // Phones: a small figure at the chip's bottom-right, clear of the value.
+                c ? 'bottom-0.5 right-1' : d.big ? 'right-2 top-1.5' : 'right-2 top-2',
+                d.big ? cx('animate-payday-drop', c ? 'text-[11px]' : 'text-[15px]') : cx('animate-cash-rise', c ? 'text-[10px]' : 'text-[11px]'),
                 d.up ? 'text-positive-ink' : 'text-negative-ink',
               )}
             >
-              {d.text}
+              {c && d.short ? d.short : d.text}
             </span>
           ))}
         </span>
       }
       sub={
         c ? (
-          <span className={tone}>{t('time.perDay', { v: signedMoney(perDay) })}</span>
+          <span className={flowTone}>{t('time.perDay', { v: signedMoney(perDay) })}</span>
         ) : (
-          <span className={tone}>{t('hud.perMonth', { v: signedMoney(net) })}</span>
+          <span className={flowTone}>{t('hud.perMonth', { v: signedMoney(net) })}</span>
         )
       }
-      title={debt > 0 ? t('hud.debtTitle', { v: money(debt) }) : t('hud.cashTitle')}
+      title={debt > 0 ? t('hud.debtTitle', { v: money(debt) }) : t('cash.availableTitle')}
     >
       {!c && (
         <span className="mt-1 flex flex-wrap items-center gap-1">
           <span
-            className={cx('tabular inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold', tone)}
+            className={cx('tabular inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold', flowTone)}
             style={{ background: soft(perDay >= 0 ? 'var(--color-positive)' : 'var(--color-negative)', 12) }}
           >
             <Icon name="arrowUp" size={11} className={perDay >= 0 ? undefined : 'rotate-180'} />
@@ -274,7 +305,12 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
           </span>
           {owed > 0.5 && (
             <span className="tabular text-[10.5px] font-medium text-ink-2" title={t('cash.paydayTitle')}>
-              {t('cash.owed', { d: toPayday, v: `−${money(owed)}` })}
+              {t('cash.owed', { d: toPayday, v: money(owed), c: money(cash) })}
+            </span>
+          )}
+          {tone !== 'calm' && runway !== null && (
+            <span className="tabular text-[10.5px] font-semibold" style={{ color: RUNWAY_TONE_COLOR[tone] }}>
+              {t('cash.runwayShort', { v: fixed(runway, 1) })}
             </span>
           )}
         </span>
@@ -313,15 +349,17 @@ function MoraleWidget({ compact: c }: { compact?: boolean }) {
 
 function RunwayWidget({ compact: c }: { compact?: boolean }) {
   const runway = useGameStore((s) => s.state.finance.runway)
-  const danger = runway !== null && runway < 6
+  // Bands (docs/CORE_LOOP.md §7): > 12 neutral, 6–12 amber, 3–6 orange, < 3 red with the alert mark.
+  const tone = runwayTone(runway)
   return (
     <WidgetChip
       compact={c}
       color={WIDGET_COLOR.runway}
       icon="hourglass"
       label={t('hud.runway')}
-      alert={danger}
-      value={runway === null ? '∞' : <span className={danger ? 'text-negative-ink' : undefined}>{t('unit.months', { v: fixed(runway, 1) })}</span>}
+      alert={tone === 'red'}
+      warn={tone === 'orange'}
+      value={runway === null ? '∞' : <span style={{ color: RUNWAY_TONE_COLOR[tone] }}>{t('unit.months', { v: fixed(runway, 1) })}</span>}
       sub={runway === null ? t('hud.profitable') : undefined}
     />
   )

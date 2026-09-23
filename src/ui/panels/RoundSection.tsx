@@ -58,8 +58,10 @@ export function RoundSection() {
       canStart: st.state.derived.canStartRound,
       valuation: st.state.finance.valuation,
       equity: st.state.stats.equity,
-      mom: st.state.derived.momGrowth,
+      // The investor looks at the 3-month average growth (engine round.ts investorGrowth).
+      mom: st.state.derived.momAvg ?? st.state.derived.momGrowth,
       progress: st.state.derived.stageProgress,
+      runway: st.state.finance.runway,
     })),
   )
   const dispatch = useGameStore((st) => st.dispatch)
@@ -88,6 +90,9 @@ export function RoundSection() {
           amount={active.offer.amount}
           equity={active.offer.equity}
           preMoney={active.offer.preMoney}
+          valuation={s.valuation}
+          pitchBonus={view?.pitchBonus ?? 0}
+          pitchCap={view?.pitchCap ?? 0}
           lastMove={active.lastMove}
           projected={view?.projected}
           diligence={view?.diligence ?? active.diligence ?? []}
@@ -158,8 +163,15 @@ export function RoundSection() {
           <ul className="font-text flex flex-col gap-1.5 text-xs leading-relaxed text-ink">
             <li className="flex gap-2">
               <Icon name="timer" size={14} className="mt-0.5 shrink-0 text-ink-2" />
-              {t('round.takesWeeks')}
+              {t('round.takesWeeksRange', { a: view.weeksMin, b: view.weeksMax })}
             </li>
+            {/* A round longer than the runway ends in a bridge or a missed payday: say so before the start. */}
+            {s.runway !== null && s.runway * 4.3 < view.weeksMax && (
+              <li className="flex gap-2 font-semibold text-negative-ink">
+                <Icon name="warning" size={14} className="mt-0.5 shrink-0" />
+                {t('round.runwayShort', { r: fixed(s.runway, 1), w: view.weeksMax })}
+              </li>
+            )}
             <li className="flex gap-2">
               <Icon name="trend" size={14} className="mt-0.5 shrink-0 text-ink-2" />
               {t('round.metricsMatter')}
@@ -180,6 +192,9 @@ function ActiveRound(p: {
   amount: number
   equity: number
   preMoney: number
+  valuation: number
+  pitchBonus: number
+  pitchCap: number
   lastMove?: { week: number; from: number; to: number }
   projected?: number
   diligence: readonly DiligenceItem[]
@@ -194,7 +209,7 @@ function ActiveRound(p: {
   const signed = (v: number) => (v >= 0 ? `+${pct(v, 1)}` : `−${pct(-v, 1)}`)
   const pitchDesc = (o: PitchOption): string => {
     if (o.pitch === 'metrics') return t('pitch.metrics.desc', { t: pct(p.growthAsk, 0), d: signed(o.delta), v: pct(p.mom, 1) })
-    if (o.pitch === 'story') return t('pitch.story.desc', { v: signed(o.delta), e: o.energy })
+    if (o.pitch === 'story') return t('pitch.story.desc', { a: signed(o.min ?? o.delta), b: signed(o.max ?? o.delta), e: o.energy })
     return t('pitch.coinvestor.desc', { w: o.weeks, e: pct(o.equity, 0) })
   }
   const lastPitch = p.pitches[p.pitches.length - 1]
@@ -230,6 +245,8 @@ function ActiveRound(p: {
         <Stat label={t('round.equitySold')} value={pct(p.equity, 1)} />
         <Stat label={t('round.preMoney')} value={money(p.preMoney)} />
       </div>
+      <p className="font-text -mt-2 text-[11px] leading-snug text-ink-2">{t('round.preMoneyHint', { v: money(p.valuation) })}</p>
+      <p className="tabular text-[11px] font-semibold text-ink-2">{t('round.pitchAvg', { v: signed(p.pitchBonus), c: pct(p.pitchCap, 0) })}</p>
 
       {p.pitchDue !== undefined ? (
         <div className="flex flex-col gap-1.5 rounded-control border border-brand/40 bg-brand-soft/60 p-2">

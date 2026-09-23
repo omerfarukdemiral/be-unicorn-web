@@ -40,15 +40,32 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
 /** A payday that leaves less than this many months of runway is an important moment too (docs/CORE_LOOP.md §3.2). */
 export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
 
-/** True when `next` brought an event that should slow 4× down to 1× (see IMPORTANT_EVENT_KINDS). */
+/**
+ * True when `next` brought an event that should slow 4× down to 1× (see IMPORTANT_EVENT_KINDS), with three edges so
+ * 4× is not dropped every ~25 s (review fix):
+ * - a decision card only when it is the first one of the stage (opening any card pauses anyway);
+ * - a release only for a new version, not for the updates after 1.0;
+ * - a payday only when runway CROSSES below PAYDAY_SLOW_RUNWAY_MONTHS, not on every tight month.
+ */
 export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   const since = lastEventId(prev)
   for (const e of next.events) {
     if (e.id <= since) continue
+    if (e.kind === 'decisionShown') {
+      const from = next.stageStart?.day ?? 0
+      if (!next.decisions.history.some((h) => h.day >= from)) return true
+      continue
+    }
+    if (e.kind === 'release') {
+      if (next.releases?.find((r) => r.id === e.refId)?.update === undefined) return true
+      continue
+    }
     if (IMPORTANT_EVENT_KINDS.has(e.kind)) return true
     if (e.kind === 'payday') {
-      const r = next.finance.runway
-      if (r !== null && r < PAYDAY_SLOW_RUNWAY_MONTHS) return true
+      const rc = next.finance.lastReceipt
+      const after = rc ? rc.runwayAfter : next.finance.runway
+      const before = rc ? rc.runwayBefore : null
+      if (after !== null && after < PAYDAY_SLOW_RUNWAY_MONTHS && (before === null || before >= PAYDAY_SLOW_RUNWAY_MONTHS)) return true
     }
   }
   return false
@@ -289,7 +306,17 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: withPause({ ...s.ui, panel: s.ui.panelBack, panelBack: null }, s.state) } : s)),
   setHoverSlot: (hoverSlotId) => set((s) => (s.ui.hoverSlotId === hoverSlotId ? s : { ui: { ...s.ui, hoverSlotId } })),
   openOverlay: (overlay) => set((s) => ({ ui: withPause({ ...s.ui, overlay }, s.state) })),
-  closeOverlay: () => set((s) => ({ ui: withPause({ ...s.ui, overlay: null }, s.state) })),
+  closeOverlay: () =>
+    set((s) => {
+      // "Yeni ofise geç": the new office opens paused with the Başlat call, like a new game (docs/CORE_LOOP.md §3.2
+      // rule 1, §4.3 "Yerleşme"). Like pausedStart this is not a player action: the replay keeps the player's choices.
+      if (s.ui.overlay?.kind === 'moveScene' && !s.state.gameOver) {
+        pendingDays = 0
+        const state = pausedStart(s.state)
+        return { state, ui: withPause({ ...s.ui, overlay: null, runStarted: false }, state) }
+      }
+      return { ui: withPause({ ...s.ui, overlay: null }, s.state) }
+    }),
   setPlacing: (placing) => set((s) => ({ ui: { ...s.ui, placing } })),
   setZoom: (zoom) => set((s) => ({ ui: { ...s.ui, zoom } })),
   setSceneInset: (inset) =>

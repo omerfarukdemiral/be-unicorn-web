@@ -309,6 +309,9 @@ describe('concept queue', () => {
     s = capi.applyAction(s, { type: 'openConcept', conceptId: 'runway' }).state
     expect(s.concepts.learned).toContain('runway')
     expect(s.unlockedWidgets).toContain('runway')
+    // One new concept per CONCEPT_GAP_DAYS: the next bubble comes a beat later, not right away.
+    expect(s.concepts.active).toBeUndefined()
+    s = capi.step(s, B.CONCEPT_GAP_DAYS)
     expect(s.concepts.active?.id).toBe('burn')
     s = capi.applyAction(s, { type: 'minimizeConcept', conceptId: 'burn' }).state
     expect(s.concepts.minimized).toEqual(['burn'])

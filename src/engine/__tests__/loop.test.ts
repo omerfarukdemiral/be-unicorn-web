@@ -155,7 +155,7 @@ describe('release moments (sürüm anı)', () => {
 })
 
 describe('next step chain (sıradaki adım)', () => {
-  it('garage: idea → first users → desk → hire → launch → users → revenue → grow', () => {
+  it('garage: idea → first users → desk → hire → launch → users → team → grow', () => {
     let s = api.createGame({ seed: 1 })
     expect(nextStep(s).id).toBe('idea')
     expect(s.derived.nextStep?.id).toBe('idea')
@@ -177,7 +177,12 @@ describe('next step chain (sıradaki adım)', () => {
     s = { ...s, projects: s.projects.map((p) => ({ ...p, maturity: 0.3, launched: true, releaseLevel: 1 })), stats: { ...s.stats, users: 10 } }
     expect(nextStep(s).id).toBe('users')
     s = { ...s, stats: { ...s.stats, users: 60 } }
-    expect(nextStep(s).id).toBe('revenue')
+    // Pre-revenue the valuation link is the team: it names what one hire adds and what it costs in runway.
+    const team = nextStep(s)
+    expect(team.id).toBe('team')
+    expect(team.value).toBe(B.VAL_PER_TEAM)
+    expect(team.target).toBe(B.STAGE_TARGET_VALUATION[1]! * B.ROUND_EARLY_RATIO)
+    if (team.runwayNow != null && team.runwayAfter != null) expect(team.runwayAfter).toBeLessThan(team.runwayNow)
     s = { ...s, finance: { ...s.finance, mrr: 2000 } }
     expect(nextStep(s).id).toBe('grow')
     // Links are numbered along the chain.

@@ -164,20 +164,32 @@ function holdLabel(hold: TimeHold): string {
 function TimeStatusPill({ status, compact, flowLabel, slowed }: { status: TimeStatus; compact?: boolean; flowLabel: boolean; slowed: boolean }) {
   if (status.gameOver) return null
   if (status.effective === 0) {
+    // A focus pause reads as "reason · 2× dönecek" (short, never cut: the pause icon already says "still");
+    // a plain pause as "DURAKLATILDI · Space ile devam". The full sentence stays in the title.
+    const focus = isFocusHold(status.hold) && status.chosen > 0
+    const full = `${t('time.paused')} · ${holdLabel(status.hold)}${focus ? ` · ${t('time.resumeTo', { v: status.chosen })}` : ''}`
     return (
       <span
         role="status"
-        className="inline-flex min-w-0 shrink items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-negative-ink"
+        title={full}
+        aria-label={full}
+        className="inline-flex min-w-0 shrink items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-negative-ink"
         style={{ background: soft('var(--color-speed-pause)', 14), boxShadow: 'inset 0 0 0 1px color-mix(in oklab, var(--color-speed-pause) 45%, transparent)' }}
       >
         <Icon name="pause" size={10} className="shrink-0" />
-        <span className="truncate">{t(compact ? 'time.pausedShort' : 'time.paused')}</span>
-        {!compact && <span className="truncate font-semibold normal-case tracking-normal text-ink-2">· {holdLabel(status.hold)}</span>}
-        {/* Focus pause: the speed time returns to once the card closes, in its own (faded) colour. */}
-        {!compact && isFocusHold(status.hold) && status.chosen > 0 && (
-          <span className="shrink-0 font-semibold normal-case tracking-normal opacity-75" style={{ color: 'var(--color-ink-2)' }}>
-            · <span style={{ textDecoration: `underline dashed ${SPEED_COLOR[status.chosen]}`, textUnderlineOffset: 3 }}>{t('time.resumeTo', { v: status.chosen })}</span>
-          </span>
+        {focus && !compact ? (
+          <>
+            <span className="shrink-0 normal-case tracking-normal">{t(`time.reasonShort.${status.hold}`)}</span>
+            {/* The speed time returns to once the card closes, in its own (faded) colour. */}
+            <span className="shrink-0 font-semibold normal-case tracking-normal" style={{ color: 'var(--color-ink-2)' }}>
+              · <span style={{ textDecoration: `underline dashed ${SPEED_COLOR[status.chosen]}`, textUnderlineOffset: 3 }}>{t('time.resumeTo', { v: status.chosen })}</span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="truncate">{t(compact ? 'time.pausedShort' : 'time.paused')}</span>
+            {!compact && <span className="truncate font-semibold normal-case tracking-normal text-ink-2">· {holdLabel(status.hold)}</span>}
+          </>
         )}
       </span>
     )

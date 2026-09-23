@@ -85,7 +85,8 @@ export const CONCEPTS: readonly Concept[] = [
   {
     id: 'pmf',
     stage: 0,
-    trigger: (s) => s.stats.users > 0 && s.derived.avgMaturity < 0.4 && s.stats.churn > 0.08,
+    // Felt at a release moment: users arrive with the release and some walk out again (never before the MVP).
+    trigger: (s) => (s.releases?.length ?? 0) > 0 && s.stats.users > 0 && s.derived.avgMaturity < 0.4 && s.stats.churn > 0.08,
     speaker: 'customer',
     bubble: 'Geliyorlar ama kalmıyorlar, ürün henüz tutmuyor.',
     card: {
@@ -117,7 +118,8 @@ export const CONCEPTS: readonly Concept[] = [
   {
     id: 'default-alive',
     stage: 0,
-    trigger: (s) => s.finance.mrr > 0,
+    // Felt on a month receipt that already shows revenue next to the costs.
+    trigger: (s) => s.finance.mrr > 0 && (s.finance.lastReceipt?.revenue ?? 0) > 0,
     speaker: 'mentor',
     bubble: 'Yatırım almasak bu gidişle kâra geçer miyiz?',
     card: {

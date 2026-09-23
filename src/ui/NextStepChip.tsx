@@ -6,6 +6,7 @@ import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
 import { followStep, stepGo, stepText, type StepGo } from './loopUi'
+import { useIsMobile } from './hooks'
 
 const GO_ICON: Record<StepGo | 'start', IconName> = {
   projects: 'rocket',
@@ -30,10 +31,12 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
     }),
   )
   const dispatch = useGameStore((s) => s.dispatch)
+  // Touch screens have no Space key: the hint lives only on keyboards.
+  const touch = useIsMobile()
   const step = v.step
   if (!step || v.over) return null
   const go: StepGo | 'start' = v.needsStart ? 'start' : stepGo(step)
-  const text = v.needsStart ? t('step.start') : v.text
+  const text = v.needsStart ? t(touch || compact ? 'step.startTouch' : 'step.start') : v.text
   const onClick = () => (v.needsStart ? dispatch({ type: 'setSpeed', speed: 1 }) : followStep(step))
   const progress = step.progress
   return (

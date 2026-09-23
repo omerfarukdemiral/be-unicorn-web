@@ -3,7 +3,7 @@ import { ENTERPRISE_NAMES } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
 import type { Rng } from './rng'
-import type { ActionErrorCode, FindUsersPreview, FounderActionKind, GameState } from './types'
+import type { ActionErrorCode, FindUsersPreview, FounderActionKind, GameState, SalesCallPreview } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
 
 /** Flag: "Elle kullanıcı bul" uses this month (reset on month end). */
@@ -33,6 +33,44 @@ export function findUsersPreview(s: GameState): FindUsersPreview {
   }
 }
 
+/** Flag: "Satış görüşmesi" deals closed this month (reset on month end). */
+export const SALES_CALLS_FLAG = 'salesCallsThisMonth'
+
+/**
+ * Return of the next "Satış görüşmesi" (review fix: 200+ calls per run, customers never left): the month's first
+ * SALES_CALL_FULL_PER_MONTH deals are full size, each further deal halves again; every contract runs
+ * SALES_CONTRACT_DAYS and then leaves. Pure: the button preview and the action use the same numbers.
+ */
+export function salesCallPreview(s: GameState): SalesCallPreview {
+  const used = Number(s.flags[SALES_CALLS_FLAG] ?? 0)
+  const extra = Math.max(0, used - B.SALES_CALL_FULL_PER_MONTH + 1)
+  const factor = used < B.SALES_CALL_FULL_PER_MONTH ? 1 : B.SALES_CALL_SATURATION ** extra
+  const per = Math.max(1, s.stats.arpu) * (1 + s.stage * 0.5) * factor
+  return {
+    min: Math.round(per * B.SALES_CALL_SEATS_MIN),
+    max: Math.round(per * B.SALES_CALL_SEATS_MAX),
+    factor,
+    fullLeft: Math.max(0, B.SALES_CALL_FULL_PER_MONTH - used),
+    contractDays: B.SALES_CONTRACT_DAYS,
+  }
+}
+
+/** Daily: contracts past their end leave (their MRR goes with them). */
+export function expireContracts(s: GameState): void {
+  const list = s.finance.enterpriseCustomers
+  if (!list.some((c) => c.untilDay !== undefined && c.untilDay <= s.time.day)) return
+  s.finance.enterpriseCustomers = list.filter((c) => {
+    if (c.untilDay === undefined || c.untilDay > s.time.day) return true
+    pushActivity(s, 'enterpriseLost', { customer: c.name })
+    return false
+  })
+}
+
+/** A project the founder can talk to users about: the least mature one (after 1.0 talks feed the next update). */
+function talkTarget(s: GameState, targetId?: string) {
+  return s.projects.find((x) => x.id === targetId) ?? s.projects.find((x) => x.maturity < 1) ?? s.projects[0]
+}
+
 export function founderActionError(s: GameState, kind: FounderActionKind): ActionErrorCode | null {
   const def = B.FOUNDER_ACTION_DEFS[kind]
   if (!def) return 'invalid'
@@ -41,7 +79,7 @@ export function founderActionError(s: GameState, kind: FounderActionKind): Actio
   const cd = s.founder.cooldowns[kind]
   if (cd !== undefined && s.time.day < cd) return 'cooldown'
   if (s.founder.energy < def.energy) return 'noEnergy'
-  if (kind === 'talkToUsers' && !s.projects.some((p) => p.maturity < 1)) return 'notFound'
+  if (kind === 'talkToUsers' && s.projects.length === 0) return 'notFound'
   return null
 }
 
@@ -51,7 +89,7 @@ export function startFounderAction(s: GameState, kind: FounderActionKind, target
   const def = B.FOUNDER_ACTION_DEFS[kind]
   let target = targetId
   if (kind === 'talkToUsers') {
-    const p = s.projects.find((x) => x.id === targetId && x.maturity < 1) ?? s.projects.find((x) => x.maturity < 1)
+    const p = talkTarget(s, targetId)
     if (!p) return 'notFound'
     target = p.id
   }
@@ -83,7 +121,8 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
     }
     case 'talkToUsers': {
       const p = s.projects.find((x) => x.id === run.targetId)
-      if (p) p.maturity = clamp(0, 1, p.maturity + B.TALK_MATURITY)
+      if (p && p.maturity < 1) p.maturity = clamp(0, 1, p.maturity + B.TALK_MATURITY)
+      else if (p) p.updateProgress = Math.min(B.RELEASE_UPDATE_SIZE, (p.updateProgress ?? 0) + B.TALK_MATURITY)
       incCounter(s, 'userTalks')
       params.project = p?.name ?? ''
       break
@@ -98,12 +137,14 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
       incCounter(s, 'investorCoffees')
       break
     case 'salesCall': {
+      const pv = salesCallPreview(s)
       const seats = rng.int(B.SALES_CALL_SEATS_MIN, B.SALES_CALL_SEATS_MAX)
-      const mrr = Math.round(Math.max(1, s.stats.arpu) * seats * (1 + s.stage * 0.5))
+      const mrr = Math.max(1, Math.round(Math.max(1, s.stats.arpu) * seats * (1 + s.stage * 0.5) * pv.factor))
       const id = newId(s, 'ent')
       const won = s.counters.salesCalls ?? 0
       const name = ENTERPRISE_NAMES[won % Math.max(1, ENTERPRISE_NAMES.length)] ?? id
-      s.finance.enterpriseCustomers.push({ id, name, mrr, sinceDay: s.time.day })
+      s.flags[SALES_CALLS_FLAG] = Number(s.flags[SALES_CALLS_FLAG] ?? 0) + 1
+      s.finance.enterpriseCustomers.push({ id, name, mrr, sinceDay: s.time.day, untilDay: s.time.day + B.SALES_CONTRACT_DAYS })
       incCounter(s, 'salesCalls')
       pushActivity(s, 'enterpriseWon', { customer: name, value: mrr })
       params.value = mrr

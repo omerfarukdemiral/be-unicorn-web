@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, SECONDS_PER_DAY } from '../src/engine/index'
-import { DAYS_10_MIN, DAYS_5_MIN, playBot, type BotKind, type BotRun, type DecisionPolicy } from './bots'
+import { DAYS_10_MIN, DAYS_5_MIN, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -32,9 +32,9 @@ function median(xs: number[]): number | null {
   return a.length % 2 ? a[m]! : (a[m - 1]! + a[m]!) / 2
 }
 
-function runMany(kind: BotKind, policy: DecisionPolicy = 'best'): BotRun[] {
+function runMany(kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}): BotRun[] {
   const out: BotRun[] = []
-  for (let seed = 1; seed <= SEEDS; seed++) out.push(playBot(kind, seed, CONTENT, DAYS, undefined, policy))
+  for (let seed = 1; seed <= SEEDS; seed++) out.push(playBot(kind, seed, CONTENT, DAYS, undefined, policy, overrides))
   return out
 }
 
@@ -51,9 +51,23 @@ const POLICY_ARCH: BotKind = 'bootstrap'
 const t0 = Date.now()
 const byArch = new Map<BotKind, BotRun[]>()
 for (const a of ARCHETYPES) byArch.set(a, runMany(a))
-const idle = runMany('idle')
-const random = runMany('random')
-const policyRuns: [DecisionPolicy, BotRun[]][] = [['best', byArch.get(POLICY_ARCH)!], ['worst', runMany(POLICY_ARCH, 'worst')], ['first', runMany(POLICY_ARCH, 'first')]]
+/** --quick 1: archetypes (+ careless) only, for tuning loops; the extra comparisons reuse the archetype runs. */
+const QUICK = arg('quick', 0) > 0
+const extra = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}): BotRun[] => (QUICK ? byArch.get(kind === 'idle' || kind === 'random' || kind === 'careless' ? 'bootstrap' : kind)! : runMany(kind, policy, overrides))
+const idle = extra('idle')
+const random = extra('random')
+const careless = runMany('careless')
+const policyRuns: [DecisionPolicy, BotRun[]][] = [['best', byArch.get(POLICY_ARCH)!], ['worst', extra(POLICY_ARCH, 'worst')], ['first', extra(POLICY_ARCH, 'first')]]
+/** Round size policy (docs/CORE_LOOP.md §4.3, S5-a): the same bots forced to Küçük / Hedef / Büyük. */
+const SIZE_ARCHS: BotKind[] = ['bootstrap', 'vcRocket']
+const sizeRuns = SIZE_ARCHS.map((a) => {
+  const cfgSize = a === 'vcRocket' ? 'large' : 'target'
+  const bySize = (['small', 'target', 'large'] as const).map((size) => [size, size === cfgSize ? byArch.get(a)! : extra(a, 'best', { roundSize: size })] as const)
+  return [a, bySize] as const
+})
+/** Round timing: take the window as soon as it opens (eagerness 0.6) vs wait for the target (1.0). */
+const EAGER_ARCHS: BotKind[] = ['bootstrap', 'platform']
+const eagerRuns = EAGER_ARCHS.map((a) => [a, extra(a, 'best', { roundEagerness: 0.6 }), byArch.get(a)!] as const)
 
 const md: string[] = []
 const line = (s = '') => md.push(s)
@@ -152,7 +166,7 @@ line()
 line('| Bot | İflas oranı | En erken batış | Ödenemeyen maaş günü (medyan) |')
 line('|---|---|---|---|')
 const goodRuns = [...byArch.values()].flat()
-for (const [name, runs] of [['iyi (4 arketip)', goodRuns], ['dikkatsiz (random)', random], ['idle', idle]] as const) {
+for (const [name, runs] of [['iyi (4 arketip)', goodRuns], ['dikkatsiz (bootstrap planı, özensiz)', careless], ['kaos (random)', random], ['idle', idle]] as const) {
   const dead = runs.filter(failedRun)
   const first = dead.length ? Math.min(...dead.map((r) => r.endDay)) : null
   line(`| ${name} | ${pct(dead.length, runs.length)} (${dead.length}/${runs.length}) | ${first === null ? '—' : `${fmtMin(first)} · g${first}`} | ${median(runs.map((r) => r.payrollMissed))} |`)
@@ -170,6 +184,79 @@ for (const [policy, runs] of policyRuns) {
   line(`| ${policy} | ${fmtMin(m)} | ${uni.length}/${runs.length} | ${pct(runs.filter(failedRun).length, runs.length)} | %${Math.round((median(runs.map((r) => r.equity)) ?? 0) * 100)} |`)
 }
 const policySpread = policyUni.length > 1 ? Math.max(...policyUni) / Math.min(...policyUni) - 1 : 0
+line()
+
+function goodRunsAll(): BotRun[] {
+  return [...byArch.values()].flat()
+}
+const uniOf = (runs: BotRun[]) => median(runs.map((r) => r.stageDays[6]).filter((d): d is number => d !== null && d !== undefined))
+const eqOf = (runs: BotRun[]) => median(runs.map((r) => r.equity)) ?? 0
+
+line('## İnceleme düzeltmeleri: tur büyüklüğü, tur zamanlaması, teklif, para, sürüm')
+line()
+line('Tur büyüklüğü politikası (aynı seed’ler, bot yalnızca büyüklüğü zorla seçer). Kriter: hiçbir büyüklük hem süre hem hissede baskın değil, ya da süre farkı ≥ %15.')
+line()
+line('| Arketip | Küçük (12 ay) | Hedef (18 ay) | Büyük (24 ay) | Süre farkı | Baskın büyüklük |')
+line('|---|---|---|---|---|---|')
+let sizeOk = true
+for (const [a, bySize] of sizeRuns) {
+  const cells = bySize.map(([, runs]) => ({ t: uniOf(runs), e: eqOf(runs), n: runs.filter((r) => r.stageDays[6] != null).length, f: runs.filter(failedRun).length, len: runs.length }))
+  const ts = cells.map((c) => c.t ?? Infinity)
+  const spread = Math.max(...ts) / Math.min(...ts) - 1
+  // A size dominates when it is at least as fast AND keeps at least as much equity as every other size.
+  const dom = cells.findIndex((c, i) => cells.every((o, j) => i === j || ((c.t ?? Infinity) <= (o.t ?? Infinity) && c.e >= o.e && c.f <= o.f)))
+  const domName = dom >= 0 ? bySize[dom]![0] : '—'
+  if (dom >= 0 && spread < 0.15) sizeOk = false
+  line(`| ${a} | ${cells.map((c) => `${fmtMin(c.t)} · %${Math.round(c.e * 100)} · ${c.n}/${c.len}${c.f ? ` · iflas ${c.f}` : ''}`).join(' | ')} | %${Math.round((Number.isFinite(spread) ? spread : 0) * 100)} | ${domName} |`)
+}
+line()
+line('Tur zamanlaması: pencere açılır açılmaz başla (0.6) ↔ hedefe kadar bekle (1.0).')
+line()
+line('| Arketip | Erken 0.6: Unicorn · hisse | Bekle 1.0: Unicorn · hisse | Erken baskın mı |')
+line('|---|---|---|---|')
+let eagerDominant = false
+for (const [a, early, wait] of eagerRuns) {
+  const te = uniOf(early) ?? Infinity
+  const tw = uniOf(wait) ?? Infinity
+  const dom = te < tw * 0.97 && eqOf(early) >= eqOf(wait)
+  if (dom) eagerDominant = true
+  line(`| ${a} | ${fmtMin(uniOf(early))} · %${Math.round(eqOf(early) * 100)} | ${fmtMin(uniOf(wait))} · %${Math.round(eqOf(wait) * 100)} | ${dom ? 'EVET' : 'hayır'} |`)
+}
+line()
+const closes = goodRunsAll().flatMap((r) => r.roundCloses)
+const atCeil = closes.filter((c) => c.metricsAtCeil).length
+const bothCap = closes.filter((c) => c.metricsAtCeil && c.pitchAtCap).length
+const byBurn = closes.filter((c) => c.by === 'burn').length
+const byCeil = closes.filter((c) => c.by === 'ceiling').length
+line(`Tur kapanışları (iyi botlar, ${closes.length} tur): metrik kısmı tavanda ${pct(atCeil, closes.length)} · metrik tavanda **ve** pitch tavanda ${pct(bothCap, closes.length)} (hedef ≤ %30) · tutarı burn × ay belirledi ${pct(byBurn, closes.length)} · tablo tavanı ${pct(byCeil, closes.length)} · tablo tabanı ${pct(closes.length - byBurn - byCeil, closes.length)}.`)
+line()
+line('Para kısıtı: maaş günündeki runway (ay, kâr = 99), aşamaya göre, iyi botlar.')
+line()
+line('| Aşama | Maaş günü sayısı | Runway medyanı | p90 | > 24 ay payı |')
+line('|---|---|---|---|---|')
+const paydays = goodRunsAll().flatMap((r) => r.paydayRunway)
+let richShareMid = 0
+for (let st = 0; st <= 5; st++) {
+  const rs = paydays.filter((p) => p.stage === st).map((p) => p.runway)
+  if (!rs.length) continue
+  const rich = rs.filter((x) => x > 24).length
+  if (st >= 1 && st <= 4) richShareMid = Math.max(richShareMid, rich / rs.length)
+  line(`| ${STAGES[st]} | ${rs.length} | ${(median(rs) ?? 0).toFixed(1)} | ${(quantile(rs, 0.9) ?? 0).toFixed(1)} | ${pct(rich, rs.length)} |`)
+}
+line()
+line('Sürüm anı her aşamada: aşama başına sürüm + güncelleme (koşu başına medyan, iyi botlar).')
+line()
+line(`| Arketip | ${STAGES.slice(0, 6).join(' | ')} |`)
+line(`|---|${STAGES.slice(0, 6).map(() => '---').join('|')}|`)
+let releasesEveryStage = true
+for (const [kind, runs] of byArch) {
+  const cells = STAGES.slice(0, 6).map((_, st) => median(runs.map((r) => r.releasesByStage[st] ?? 0)) ?? 0)
+  if (cells.slice(1).some((c) => c < 1)) releasesEveryStage = false
+  line(`| ${kind} | ${cells.join(' | ')} |`)
+}
+line()
+const topShares = goodRunsAll().map((r) => r.topActionShare)
+line(`En sık aksiyonun tüm aksiyonlara payı (iyi botlar): medyan ${pct(median(topShares) ?? 0, 1)}, en kötü ${pct(Math.max(...topShares), 1)} (hedef ≤ %35).`)
 line()
 
 line('## §9 / §10 kriterleri')
@@ -194,9 +281,13 @@ const goodFail = goodRuns.filter(failedRun).length / goodRuns.length
 line(`- İlk 5 dk’da iki anlamlı an arası medyan ≤ 10 sn (her arketip): **${gap5Worst * SECONDS_PER_DAY <= 10 ? 'EVET' : 'HAYIR'}** (en kötü arketip ${sec(gap5Worst)})`)
 const carelessRuns = [...random, ...idle]
 const carelessEarly = carelessRuns.filter((r) => failedRun(r) && r.endDay < CARELESS_LIMIT_DAYS).length
-const mixed = [...goodRuns, ...random]
-const mixedFail = mixed.filter(failedRun).length / mixed.length
-line(`- İflas: iyi botlar ${pct(goodRuns.filter(failedRun).length, goodRuns.length)} (hedef ≤ %3) · dikkatsiz ${pct(random.filter(failedRun).length, random.length)} · idle ${pct(idle.filter(failedRun).length, idle.length)} (sonunda batmalı, 4 dk’dan önce değil: 4 dk’dan önce batan ${carelessEarly}) · iyi + dikkatsiz toplamı ${Math.round(mixedFail * 100)}% (hedef %5–20): **${goodFail <= 0.03 && idle.every(failedRun) && carelessEarly === 0 && mixedFail >= 0.05 && mixedFail <= 0.2 ? 'EVET' : 'KISMEN'}**`)
+const carelessFail = careless.filter(failedRun).length / careless.length
+line(`- İflas (ayrı ayrı): iyi botlar ${pct(goodRuns.filter(failedRun).length, goodRuns.length)} (hedef ≤ %3): **${goodFail <= 0.03 ? 'EVET' : 'HAYIR'}** · dikkatsiz (bootstrap planı, runway’e bakmadan işe alır, kartlara rastgele cevap) ${pct(careless.filter(failedRun).length, careless.length)} (hedef %10–25): **${carelessFail >= 0.1 && carelessFail <= 0.25 ? 'EVET' : 'HAYIR'}** · idle ${pct(idle.filter(failedRun).length, idle.length)} ve kaos (random) ${pct(random.filter(failedRun).length, random.length)}: sonunda batabilir, 4 dk’dan önce batan ${carelessEarly}: **${carelessEarly === 0 ? 'EVET' : 'HAYIR'}**`)
+line(`- İyi botlarda ödenemeyen maaş günü (koşu başına medyan): ${median(goodRuns.map((r) => r.payrollMissed))} (hedef 0–1): **${(median(goodRuns.map((r) => r.payrollMissed)) ?? 0) <= 1 ? 'EVET' : 'HAYIR'}**`)
+line(`- Tur büyüklüğü: hiçbiri hem süre hem hissede baskın değil ya da süre farkı ≥ %15: **${sizeOk ? 'EVET' : 'HAYIR'}** · erken tur (0.6) baskın değil: **${eagerDominant ? 'HAYIR' : 'EVET'}**`)
+line(`- Tur kapanışlarının ≤ %30’u metrik + pitch tavanında: **${closes.length && bothCap / closes.length <= 0.3 ? 'EVET' : 'HAYIR'}** (${pct(bothCap, closes.length)})`)
+line(`- Pre-seed–Series B maaş günlerinde runway > 24 ay payı (en kötü aşama): ${pct(richShareMid, 1)} (hedef ≤ %30): **${richShareMid <= 0.3 ? 'EVET' : 'HAYIR'}**`)
+line(`- Garaj sonrası her aşamada en az 1 sürüm/güncelleme (medyan, her arketip): **${releasesEveryStage ? 'EVET' : 'HAYIR'}**`)
 const policyEq = policyRuns.map(([, runs]) => median(runs.map((r) => r.equity)) ?? 0)
 const eqSpread = Math.max(...policyEq) - Math.min(...policyEq)
 line(`- Karar politikaları arası Unicorn süresi farkı (en hızlı ↔ en yavaş): %${Math.round(policySpread * 100)} (hedef ≥ %15): **${policySpread >= 0.15 ? 'EVET' : 'HAYIR'}** · kurucu hissesi farkı ${Math.round(eqSpread * 100)} puan`)

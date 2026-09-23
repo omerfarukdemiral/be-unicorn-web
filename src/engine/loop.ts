@@ -1,10 +1,11 @@
 // Core loop beats (docs/CORE_LOOP.md §4–§5): payday + month receipt, release moments, stage goals (☆).
 import * as B from './balance'
-import { isCardEligible } from './decisions'
+import { bringCardNow, isCardEligible } from './decisions'
 import { recomputeDerived } from './derive'
 import { ledgerCosts } from './economy'
-import { DAYS_PER_MONTH, type GameState, type MonthLedger } from './types'
-import { newId, pushActivity, pushEvent, uniquePush, type EngineContent } from './util'
+import { lastUpdateDay } from './loopSelectors'
+import { DAYS_PER_MONTH, type GameState, type MonthLedger, type Project, type ReleaseEntry } from './types'
+import { newId, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 
 const emptyLedger = (): MonthLedger => ({ revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0, founder: 0 })
 
@@ -78,8 +79,9 @@ function missedPayroll(s: GameState, content: EngineContent): void {
   pushEvent(s, { kind: 'payrollMissed', value: -s.stats.cash })
   const id = B.RESCUE_CARD_ID
   const card = content.decisions.find((c) => c.id === id)
-  // The rescue keeps its repeat limits (REPEAT_CARD_COOLDOWN_DAYS, REPEAT_CARD_MAX): it is a way out, not a tap.
-  if (card && isCardEligible(card, s) && !s.decisions.queue.includes(id)) s.decisions.queue.unshift(id)
+  // The rescue skips the repeat cooldown (a second missed payday must still have a way out) but keeps REPEAT_CARD_MAX,
+  // and it takes over from an unanswered active card instead of waiting behind it.
+  if (card && isCardEligible(card, s, { ignoreCooldown: true })) bringCardNow(s, id)
 }
 
 /** Release level (0–5) of a maturity: how many RELEASE_THRESHOLDS it has reached. */
@@ -96,9 +98,31 @@ export function releaseWave(s: GameState, level: number): number {
   return Math.max(1, Math.round(w))
 }
 
+/** Users an update (after 1.0) brings: a smaller wave than a version, plus word of mouth. */
+export function updateWave(s: GameState): number {
+  const w = B.RELEASE_UPDATE_USERS * B.RELEASE_WAVE_STAGE_GROWTH ** s.stage * (0.5 + s.stats.reputation / 100) + s.stats.users * B.RELEASE_UPDATE_USER_SHARE
+  return Math.max(1, Math.round(w))
+}
+
+function ship(s: GameState, content: EngineContent, p: Project, level: number, users: number, update?: number): void {
+  const mrrBefore = s.finance.mrr
+  s.stats.users += users
+  recomputeDerived(s, content)
+  const entry: ReleaseEntry = { id: newId(s, 'rel'), day: s.time.day, projectId: p.id, projectName: p.name, level, users, mrr: Math.max(0, s.finance.mrr - mrrBefore) }
+  if (update !== undefined) entry.update = update
+  const list = (s.releases ??= [])
+  list.push(entry)
+  if (list.length > B.RELEASES_MAX) list.splice(0, list.length - B.RELEASES_MAX)
+  s.releaseCount = (s.releaseCount ?? 0) + 1
+  pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0 })
+  pushEvent(s, { kind: 'release', refId: entry.id, value: level })
+}
+
 /**
  * Release moment: a project passing a maturity threshold ships a version (MVP, then 40/60/80/100%) and a user
- * wave walks in; MRR jumps with it. A project seen for the first time (old save) is set silently.
+ * wave walks in; MRR jumps with it. After 1.0 its builders ship updates (RELEASE_UPDATE_SIZE of work, at most one per
+ * RELEASE_UPDATE_MIN_DAYS), so the beat keeps coming in every stage. A project seen for the first time (old save) is
+ * set silently.
  */
 export function checkReleases(s: GameState, content: EngineContent): void {
   for (const p of s.projects) {
@@ -107,30 +131,34 @@ export function checkReleases(s: GameState, content: EngineContent): void {
       p.releaseLevel = lvl
       continue
     }
-    if (lvl <= p.releaseLevel) continue
-    p.releaseLevel = lvl
-    const mrrBefore = s.finance.mrr
-    const users = releaseWave(s, lvl)
-    s.stats.users += users
-    recomputeDerived(s, content)
-    const entry = { id: newId(s, 'rel'), day: s.time.day, projectId: p.id, projectName: p.name, level: lvl, users, mrr: Math.max(0, s.finance.mrr - mrrBefore) }
-    const list = (s.releases ??= [])
-    list.push(entry)
-    if (list.length > B.RELEASES_MAX) list.splice(0, list.length - B.RELEASES_MAX)
-    pushActivity(s, 'release', { project: p.name, level: lvl, users, mrr: Math.round(entry.mrr) })
-    pushEvent(s, { kind: 'release', refId: entry.id, value: lvl })
+    if (lvl > p.releaseLevel) {
+      p.releaseLevel = lvl
+      ship(s, content, p, lvl, releaseWave(s, lvl))
+      continue
+    }
+    if (p.maturity < 1 || (p.updateProgress ?? 0) < B.RELEASE_UPDATE_SIZE - 1e-9) continue
+    if (s.time.day - lastUpdateDay(s, p.id) < B.RELEASE_UPDATE_MIN_DAYS) continue
+    p.updateProgress = 0
+    p.updates = (p.updates ?? 0) + 1
+    ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s), p.updates)
   }
 }
 
-/** Daily: latch the current stage's ☆ goals the first time they hold. */
+/** Daily: latch the current stage's ☆ goals the first time they hold (measured from the stage's baseline). */
 export function checkGoals(s: GameState, content: EngineContent): void {
   const goals = content.goals
   if (!goals?.length) return
+  // A save from before baselines (or a stage entered outside enterStage) starts measuring today.
+  if (!s.stageStart || s.stageStart.stage !== s.stage) {
+    s.stageStart = stageBaseline(s)
+    return
+  }
+  const base = s.stageStart
   for (const g of goals) {
     if (g.stage !== s.stage || s.goalsDone?.includes(g.id)) continue
     let ok = false
     try {
-      ok = g.check(s) === true
+      ok = g.check(s, base) === true
     } catch {
       ok = false
     }

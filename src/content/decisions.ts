@@ -9,6 +9,11 @@ import type { GameState, ModifierKind } from '../engine/types'
 import type { DecisionCard } from './types'
 
 const mod = (kind: ModifierKind, value: number, days: number) => ({ kind, value, days })
+/**
+ * Cards that bring free money only come while money is a real limit (runway < 12 months): with a long runway they
+ * would just pile up cash (docs/CORE_LOOP.md §2 "para her aşamada kısıt kalır").
+ */
+const needsCash = (s: GameState): boolean => s.finance.runway !== null && s.finance.runway < 12
 const rivalPressure = (s: GameState): number => {
   const v = s.flags['rivalPressure']
   return typeof v === 'number' ? v : 0
@@ -23,6 +28,8 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'cofounder',
     question: 'İki fikir birden cazip geliyor. Hangisine odaklanalım?',
+    // Only once a second idea is on the table (a single project has nothing to focus between).
+    condition: (s) => s.projects.length >= 2,
     options: [
       {
         label: 'Tek ürüne odaklan',
@@ -47,6 +54,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'mentor',
     question: 'İlk kullanıcıları nereden bulacağız? Bir kanal seçmen lazım.',
+    condition: (s) => s.stats.users < 30,
     options: [
       {
         label: 'Topluluklarda tek tek konuş',
@@ -170,6 +178,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'mentor',
     question: 'Ailen ve arkadaşların küçük bir destek teklif ediyor. Alalım mı?',
+    condition: needsCash,
     options: [
       {
         label: 'Kabul et',
@@ -196,6 +205,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'investor',
     question: 'Bir melek yatırımcı SAFE ile $40K koymak istiyor. Değerlemeyi sonraki tura bırakıyor.',
+    condition: needsCash,
     options: [
       {
         label: "SAFE'i imzala",
@@ -221,6 +231,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'mentor',
     question: 'Bir hızlandırıcı programdan davet geldi. Mentorluk ve ağ var, karşılığı %6 hisse.',
+    condition: needsCash,
     options: [
       {
         label: 'Katıl',
@@ -245,6 +256,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'accountant',
     question: 'Ar-Ge hibesi başvurusu açıldı. Dosya hazırlamak iki hafta sürer.',
+    condition: needsCash,
     options: [
       {
         label: 'Başvur',
@@ -799,6 +811,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'customer',
     question: 'Büyük bir şirket ürünümüzü kurumsal olarak kullanmak istiyor.',
+    condition: needsCash,
     options: [
       {
         label: 'Anlaş',
@@ -881,6 +894,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'customer',
     question: 'Bir holding ihale açtı. Kazanmak aylar sürebilir.',
+    condition: needsCash,
     options: [
       {
         label: 'Teklif hazırla',
@@ -1084,6 +1098,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'investor',
     question: 'Sektörün devi stratejik yatırım yapmak istiyor.',
+    condition: needsCash,
     options: [
       {
         label: 'Yatırımı al',
@@ -1190,8 +1205,8 @@ export const DECISIONS: readonly DecisionCard[] = [
     once: false,
     options: [
       {
-        label: 'Maaşları geçici kıs',
-        tradeoff: { gain: 'Runway uzar', cost: 'Moral belirgin düşer' },
+        label: 'Maaşları bir ay ertele',
+        tradeoff: { gain: '+%15 kasa (bir kerelik)', cost: 'Moral belirgin düşer' },
         effects: { cashPercent: 0.15, morale: -10 },
         reflection: 'Zor anda açık konuşmak, güveni korur.',
         conceptId: 'runway',
@@ -1239,6 +1254,9 @@ export const DECISIONS: readonly DecisionCard[] = [
     condition: (s) => s.stats.cash < 0,
     weight: 5,
     once: false,
+    // The rescue must land well before the 60-day bankruptcy clock: unanswered, the savings go in after 14 days.
+    defaultOption: 1,
+    defaultAfterDays: 14,
     options: [
       {
         label: 'Acil kredi çek',

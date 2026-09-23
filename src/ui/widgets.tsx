@@ -186,7 +186,7 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
         cash: s.state.stats.cash,
         net: s.state.finance.net,
         mrr: s.state.finance.mrr,
-        owed: l ? l.salaries + l.rent + l.infra + l.ads : 0,
+        owed: l ? l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0) : 0,
         debt: s.state.finance.debt,
         runway: s.state.finance.runway,
         day: Math.floor(s.state.time.day),

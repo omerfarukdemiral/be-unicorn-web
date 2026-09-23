@@ -1,6 +1,7 @@
 // Pure core-loop selectors (docs/CORE_LOOP.md §5): the next link of the main chain and the horizon ahead.
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
+import { ledgerCosts } from './economy'
 import { firstFreeDesk, isFreeDesk } from './office'
 import { DAYS_PER_WEEK, type GameState, type HorizonItem, type NextStep, type NextStepId } from './types'
 
@@ -61,7 +62,7 @@ export function horizon(s: GameState): HorizonItem[] {
   const out: HorizonItem[] = []
   const burn = s.finance.burn
   const l = s.finance.ledger
-  const owed = l ? l.salaries + l.rent + l.infra + l.ads : 0
+  const owed = l ? ledgerCosts(l) : 0
   let pay = now + daysToPayday(now)
   let first = true
   while (pay <= end + 1e-9) {

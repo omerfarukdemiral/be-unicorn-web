@@ -31,6 +31,8 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   roundWindow: '{stage} turu için pencere açıldı: şimdi mi, biraz daha mı?',
   roundOffer: 'Tur haftası {done}/{total}: teklif {from} → {amount}.',
   roundPitch: 'Pitch: {pitch}. Teklif {amount}.',
+  payrollMissed: 'Maaşlar ödenemedi: kasa {amount} ekside. İflas sayacı başladı.',
+  decisionDefaulted: 'Cevapsız kart kendi varsayılanıyla kapandı: {option}.',
 }
 
 export const POST_MORTEM_TEXT: PostMortemTextTable = {

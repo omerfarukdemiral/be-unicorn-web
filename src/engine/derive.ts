@@ -80,7 +80,7 @@ export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, numbe
 /** Costs accrued since the last payday (still to be paid). */
 export function owedCosts(s: GameState): number {
   const l = s.finance.ledger
-  return l ? l.salaries + l.rent + l.infra + l.ads : 0
+  return l ? E.ledgerCosts(l) : 0
 }
 
 export function averageLaunchedMaturity(s: GameState): number {
@@ -130,20 +130,24 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const salaries = s.employees.reduce((a, e) => a + e.salary, 0)
   const rent = E.rent(s.stage, openExtraRingCount(s.office))
   const infra = E.infra(s.stats.users, o.fx.infraMult) + o.fx.upkeep
-  const burn = E.burn(salaries, rent, infra, s.finance.adBudget)
+  const living = E.founderLiving(s.stage)
+  const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living)
   const net = mrr - burn
 
   const hist = s.finance.mrrHistory
   const mom = E.momGrowth(hist[hist.length - 2], hist[hist.length - 1])
-  const multiple = E.valuationMultiple(mom)
+  // The multiple prices the 3-month average growth, capped by stage (CORE_LOOP §5, S5).
+  const momAvg = E.averageMom(hist)
+  const multCap = E.multipleCap(s.stage)
+  const multiple = E.valuationMultiple(momAvg, multCap)
   const launched = s.projects.filter((p) => p.launched).length
-  const valuation = E.valuation(mrr, mom, s.employees.length, s.stats.users, launched)
+  const valuation = E.valuation(mrr, momAvg, s.employees.length, s.stats.users, launched, multCap)
 
   s.stats.arpu = arpu
   s.stats.churn = churn
   s.finance.mrr = mrr
   s.finance.burn = burn
-  s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget }
+  s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget, founder: living }
   s.finance.net = net
   // Runway counts what payday will take: cash already earmarked for accrued costs is not runway.
   s.finance.runway = E.runway(s.stats.cash - owedCosts(s), net)
@@ -170,6 +174,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     ltv: ltvValue,
     ltvCac: arpu > 0 && churn > 0 && cacValue > 0 ? ltvValue / cacValue : null,
     momGrowth: mom,
+    momAvg,
+    multipleCap: multCap,
     valuationMultiple: multiple,
     channels: { organic, paid, manual: Math.max(manualNow, manualLast), enterprise: s.finance.enterpriseCustomers.length },
     stageProgress: target ? valuation / target : 1,

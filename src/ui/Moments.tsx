@@ -131,6 +131,7 @@ function body(m: Moment) {
         [t('receipt.salaries'), neg(r.salaries)],
         [t('receipt.rent'), neg(r.rent)],
       ]
+      if ((r.founder ?? 0) > 0.5) rows.push([t('receipt.founder'), neg(r.founder ?? 0)])
       if (r.infra > 0.5) rows.push([t('receipt.infra'), neg(r.infra)])
       if (r.ads > 0.5) rows.push([t('receipt.ads'), neg(r.ads)])
       return (

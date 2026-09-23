@@ -54,6 +54,9 @@ export const LOOP_TEXT: Record<string, string> = {
   'receipt.rent': 'Kira',
   'receipt.infra': 'Altyapı',
   'receipt.ads': 'Reklam',
+  'receipt.founder': 'Kurucu',
+  // Unanswered card default (Faz 3)
+  'decision.defaultAfter': 'Cevapsız kalırsa {d} gün sonra: {v}',
   'receipt.net': 'Net',
   'receipt.runway': 'Runway',
   'receipt.runwayMove': '{a} → {b}',

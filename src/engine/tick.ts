@@ -4,7 +4,7 @@ import type { OfficeLineTrigger } from '../content/index'
 import * as B from './balance'
 import * as E from './economy'
 import { evaluateConcepts } from './concepts'
-import { applyDueEffects, maybeShowDecision } from './decisions'
+import { applyDefaultDecision, applyDueEffects, maybeShowDecision } from './decisions'
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
 import { accrueMonth, checkGoals, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
@@ -110,6 +110,7 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
     s.decisions.queue.push(B.BRIDGE_CARD_ID)
   }
   checkRoundWindow(s)
+  applyDefaultDecision(s, content)
   maybeShowDecision(s, content, rng)
   dailyVisitors(s, rng)
   eventLines(s, content, rng)

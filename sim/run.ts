@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, SECONDS_PER_DAY } from '../src/engine/index'
-import { DAYS_10_MIN, DAYS_5_MIN, playBot, type BotKind, type BotRun } from './bots'
+import { DAYS_10_MIN, DAYS_5_MIN, playBot, type BotKind, type BotRun, type DecisionPolicy } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -32,17 +32,28 @@ function median(xs: number[]): number | null {
   return a.length % 2 ? a[m]! : (a[m - 1]! + a[m]!) / 2
 }
 
-function runMany(kind: BotKind): BotRun[] {
+function runMany(kind: BotKind, policy: DecisionPolicy = 'best'): BotRun[] {
   const out: BotRun[] = []
-  for (let seed = 1; seed <= SEEDS; seed++) out.push(playBot(kind, seed, CONTENT, DAYS))
+  for (let seed = 1; seed <= SEEDS; seed++) out.push(playBot(kind, seed, CONTENT, DAYS, undefined, policy))
   return out
 }
+
+function quantile(xs: number[], q: number): number | null {
+  if (!xs.length) return null
+  const a = [...xs].sort((x, y) => x - y)
+  return a[Math.min(a.length - 1, Math.floor(q * a.length))]!
+}
+const sec = (days: number | null): string => (days === null ? '—' : `${(days * SECONDS_PER_DAY).toFixed(1)} sn`)
+const failedRun = (r: BotRun) => r.end === 'bankrupt' || r.end === 'teamLost'
+/** Decision-policy comparison runs on this archetype (docs/CORE_LOOP.md §10 Faz 3: kararlar sonucu değiştirmeli). */
+const POLICY_ARCH: BotKind = 'bootstrap'
 
 const t0 = Date.now()
 const byArch = new Map<BotKind, BotRun[]>()
 for (const a of ARCHETYPES) byArch.set(a, runMany(a))
 const idle = runMany('idle')
 const random = runMany('random')
+const policyRuns: [DecisionPolicy, BotRun[]][] = [['best', byArch.get(POLICY_ARCH)!], ['worst', runMany(POLICY_ARCH, 'worst')], ['first', runMany(POLICY_ARCH, 'first')]]
 
 const md: string[] = []
 const line = (s = '') => md.push(s)
@@ -123,6 +134,44 @@ line(`- findUsers hiçbir arketipte en sık aksiyon değil: **${findUsersTop ? '
 line(`- Tur penceresinde en uzun boşluk ≤ 20 sn: **${worstGapSec <= 20 ? 'EVET' : `HAYIR (${worstGapSec.toFixed(0)} sn)`}**`)
 line()
 
+line('## Para kısıtı ve ölü süre (docs/CORE_LOOP.md §10 Faz 3)')
+line()
+line('Ölü süre = iki anlamlı an arası (dünya vuruşu: maaş günü, sürüm, karar, kavram, tur haftası, kurucu hamlesinin sonucu, işe alım, ziyaretçi; ya da botun anlamlı hamlesi). 1x saniye.')
+line()
+line('| Arketip | İlk 5 dk aralık medyanı | İlk 5 dk p90 / en uzun | Tüm koşu medyanı / p90 | Ödenemeyen maaş günü (koşu başına medyan) | Cevapsız → varsayılan (medyan) |')
+line('|---|---|---|---|---|---|')
+let gap5Worst = 0
+for (const [kind, runs] of byArch) {
+  const g5 = runs.flatMap((r) => r.gaps5)
+  const ga = runs.flatMap((r) => r.gapsAll)
+  const med5 = median(g5) ?? 0
+  gap5Worst = Math.max(gap5Worst, med5)
+  line(`| ${kind} | ${sec(med5)} | ${sec(quantile(g5, 0.9))} / ${sec(g5.length ? Math.max(...g5) : null)} | ${sec(median(ga))} / ${sec(quantile(ga, 0.9))} | ${median(runs.map((r) => r.payrollMissed))} | ${median(runs.map((r) => r.decisionsDefaulted))} |`)
+}
+line()
+line('| Bot | İflas oranı | En erken batış | Ödenemeyen maaş günü (medyan) |')
+line('|---|---|---|---|')
+const goodRuns = [...byArch.values()].flat()
+for (const [name, runs] of [['iyi (4 arketip)', goodRuns], ['dikkatsiz (random)', random], ['idle', idle]] as const) {
+  const dead = runs.filter(failedRun)
+  const first = dead.length ? Math.min(...dead.map((r) => r.endDay)) : null
+  line(`| ${name} | ${pct(dead.length, runs.length)} (${dead.length}/${runs.length}) | ${first === null ? '—' : `${fmtMin(first)} · g${first}`} | ${median(runs.map((r) => r.payrollMissed))} |`)
+}
+line()
+line(`Karar politikası (${POLICY_ARCH}, aynı seed’ler): kartlara en iyi / en kötü / hep ilk seçenekle cevap veren bot.`)
+line()
+line('| Politika | Unicorn medyanı | Unicorn’a ulaşan | İflas | Kurucu hissesi (medyan) |')
+line('|---|---|---|---|---|')
+const policyUni: number[] = []
+for (const [policy, runs] of policyRuns) {
+  const uni = runs.map((r) => r.stageDays[6]).filter((d): d is number => d !== null && d !== undefined)
+  const m = median(uni)
+  if (m !== null) policyUni.push(m)
+  line(`| ${policy} | ${fmtMin(m)} | ${uni.length}/${runs.length} | ${pct(runs.filter(failedRun).length, runs.length)} | %${Math.round((median(runs.map((r) => r.equity)) ?? 0) * 100)} |`)
+}
+const policySpread = policyUni.length > 1 ? Math.max(...policyUni) / Math.min(...policyUni) - 1 : 0
+line()
+
 line('## §9 / §10 kriterleri')
 line()
 const preseedAll = [...byArch.values()].every((runs) => runs.every((r) => r.stageDays[1] !== null))
@@ -141,6 +190,16 @@ if (unicornMedians.length) {
 } else {
   line(`- Unicorn’a varış 60–90 dk: hiçbir arketipte seed’lerin çoğu ${toMin(DAYS).toFixed(0)} dk içinde Unicorn’a ulaşmadı → **hedefin gerisinde**`)
 }
+const goodFail = goodRuns.filter(failedRun).length / goodRuns.length
+line(`- İlk 5 dk’da iki anlamlı an arası medyan ≤ 10 sn (her arketip): **${gap5Worst * SECONDS_PER_DAY <= 10 ? 'EVET' : 'HAYIR'}** (en kötü arketip ${sec(gap5Worst)})`)
+const carelessRuns = [...random, ...idle]
+const carelessEarly = carelessRuns.filter((r) => failedRun(r) && r.endDay < CARELESS_LIMIT_DAYS).length
+const mixed = [...goodRuns, ...random]
+const mixedFail = mixed.filter(failedRun).length / mixed.length
+line(`- İflas: iyi botlar ${pct(goodRuns.filter(failedRun).length, goodRuns.length)} (hedef ≤ %3) · dikkatsiz ${pct(random.filter(failedRun).length, random.length)} · idle ${pct(idle.filter(failedRun).length, idle.length)} (sonunda batmalı, 4 dk’dan önce değil: 4 dk’dan önce batan ${carelessEarly}) · iyi + dikkatsiz toplamı ${Math.round(mixedFail * 100)}% (hedef %5–20): **${goodFail <= 0.03 && idle.every(failedRun) && carelessEarly === 0 && mixedFail >= 0.05 && mixedFail <= 0.2 ? 'EVET' : 'KISMEN'}**`)
+const policyEq = policyRuns.map(([, runs]) => median(runs.map((r) => r.equity)) ?? 0)
+const eqSpread = Math.max(...policyEq) - Math.min(...policyEq)
+line(`- Karar politikaları arası Unicorn süresi farkı (en hızlı ↔ en yavaş): %${Math.round(policySpread * 100)} (hedef ≥ %15): **${policySpread >= 0.15 ? 'EVET' : 'HAYIR'}** · kurucu hissesi farkı ${Math.round(eqSpread * 100)} puan`)
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)
 

@@ -66,16 +66,16 @@ describe('§5.5 revenue', () => {
   it('MRR = users × arpu + enterprise', () => {
     expect(E.mrr(100, 3, 50)).toBe(350)
   })
-  it('price increase churn penalty for one month', () => {
-    expect(E.priceChurnFactor(1.5, 10)).toBeCloseTo(1.4)
-    expect(E.priceChurnFactor(1.5, 31)).toBe(1)
+  it('price increase churn penalty while PRICE_CHURN_DAYS last (Faz 3: a lasting cost of a high price)', () => {
+    expect(E.priceChurnFactor(1.5, 10)).toBeCloseTo(1 + 0.5 * B.PRICE_CHURN_FACTOR)
+    expect(E.priceChurnFactor(1.5, B.PRICE_CHURN_DAYS)).toBe(1)
     expect(E.priceChurnFactor(0.8, 1)).toBe(1)
   })
 })
 
 describe('§5.6 costs', () => {
-  it('salary × 1.5^stage', () => {
-    expect(E.salary(1000, 2)).toBeCloseTo(2250)
+  it('salary × SALARY_STAGE_GROWTH^stage', () => {
+    expect(E.salary(1000, 2)).toBeCloseTo(1000 * B.SALARY_STAGE_GROWTH ** 2)
   })
   it('infra with server room', () => {
     expect(E.infra(5000)).toBeCloseTo(50)
@@ -107,7 +107,7 @@ describe('§5.7 morale', () => {
 
 describe('§5.8 valuation', () => {
   it('pre-revenue', () => {
-    expect(E.valuationPreRevenue(3, 100, 1)).toBe(180_000 + 15_000 + 200_000)
+    expect(E.valuationPreRevenue(3, 100, 1)).toBe(3 * B.VAL_PER_TEAM + 100 * B.VAL_PER_USER + B.VAL_PER_LAUNCHED)
   })
   it('multiple = clamp(MIN, MAX, BASE + GROWTH × mom)', () => {
     expect(E.valuationMultiple(0)).toBe(B.MULTIPLE_BASE)
@@ -115,12 +115,33 @@ describe('§5.8 valuation', () => {
     expect(E.valuationMultiple(1)).toBe(B.MULTIPLE_MAX)
     expect(E.valuationMultiple(-0.5)).toBe(B.MULTIPLE_MIN)
   })
-  it('pins the PLAN §5.8 multiple: clamp(4, 30, 6 + 150 × MoM)', () => {
-    expect(E.valuationMultiple(0)).toBe(6)
-    expect(E.valuationMultiple(0.05)).toBeCloseTo(13.5)
-    expect(E.valuationMultiple(0.1)).toBeCloseTo(21)
-    expect(E.valuationMultiple(0.2)).toBe(30)
+  it('pins the Faz 3 multiple: clamp(4, cap(stage), 5 + 100 × 3-month MoM) (DECISIONS #12 → #17)', () => {
+    expect(B.MULTIPLE_BASE).toBe(5)
+    expect(B.MULTIPLE_GROWTH).toBe(100)
+    expect(E.valuationMultiple(0)).toBe(5)
+    expect(E.valuationMultiple(0.05)).toBeCloseTo(10)
+    expect(E.valuationMultiple(0.1)).toBeCloseTo(15)
+    expect(E.valuationMultiple(0.3)).toBe(30)
     expect(E.valuationMultiple(-0.1)).toBe(4)
+    // Stage ceiling: the same growth buys a smaller multiple in a bigger company.
+    expect(E.valuationMultiple(0.2, E.multipleCap(4))).toBe(B.MULTIPLE_MAX_BY_STAGE[4])
+    expect(E.multipleCap(5)).toBeLessThan(E.multipleCap(2))
+    expect(E.multipleCap(99)).toBe(B.MULTIPLE_MAX)
+  })
+  it('the multiple prices the average MoM of the last 3 months, not one lucky month', () => {
+    expect(E.averageMom([100, 110, 121, 133.1])).toBeCloseTo(0.1)
+    // One spike month is averaged out.
+    expect(E.averageMom([100, 100, 100, 200])).toBeCloseTo(1 / 3)
+    // Months before revenue (0) are skipped; no history → 0.
+    expect(E.averageMom([0, 0, 100, 120])).toBeCloseTo(0.2)
+    expect(E.averageMom([])).toBe(0)
+    expect(E.averageMom([100])).toBe(0)
+  })
+  it('founder living cost: $1.2K/month in the garage, rising by stage', () => {
+    expect(E.founderLiving(0)).toBe(1_200)
+    expect(E.founderLiving(1)).toBe(1_200)
+    expect(E.founderLiving(99)).toBe(B.FOUNDER_LIVING_COST[B.FOUNDER_LIVING_COST.length - 1])
+    expect(E.burn(1000, 500, 20, 100, 1200)).toBe(2820)
   })
   it('post-revenue = MRR × 12 × multiple; growth is priced', () => {
     expect(E.valuationPostRevenue(10_000, 10)).toBe(1_200_000)
@@ -134,8 +155,8 @@ describe('§5.8 valuation', () => {
 
 describe('§5.10 founder XP', () => {
   it('+10% per XP, max +40%', () => {
-    expect(E.startCash(0)).toBe(30_000)
-    expect(E.startCash(2)).toBeCloseTo(36_000)
-    expect(E.startCash(10)).toBeCloseTo(42_000)
+    expect(E.startCash(0)).toBe(15_000)
+    expect(E.startCash(2)).toBeCloseTo(18_000)
+    expect(E.startCash(10)).toBeCloseTo(21_000)
   })
 })

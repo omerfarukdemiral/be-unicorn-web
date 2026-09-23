@@ -1,10 +1,12 @@
 // Core loop beats (docs/CORE_LOOP.md §4–§5): payday + month receipt, release moments, stage goals (☆).
 import * as B from './balance'
+import { isCardEligible } from './decisions'
 import { recomputeDerived } from './derive'
+import { ledgerCosts } from './economy'
 import { DAYS_PER_MONTH, type GameState, type MonthLedger } from './types'
 import { newId, pushActivity, pushEvent, uniquePush, type EngineContent } from './util'
 
-const emptyLedger = (): MonthLedger => ({ revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0 })
+const emptyLedger = (): MonthLedger => ({ revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0, founder: 0 })
 
 /**
  * The month's ledger. Saves from before payday had no ledger: their costs so far this month were already taken
@@ -26,13 +28,14 @@ export function accrueMonth(s: GameState, dt: number): void {
   l.rent += bb.rent * k
   l.infra += bb.infra * k
   l.ads += bb.ads * k
+  l.founder = (l.founder ?? 0) + (bb.founder ?? 0) * k
   s.stats.cash += revenue
 }
 
 /** Payday (day % 30 === 0): salaries, rent, infra and ads leave in one lump; the month receipt is written. */
 export function payday(s: GameState, content: EngineContent): void {
   const l = ledgerOf(s)
-  const paid = l.salaries + l.rent + l.infra + l.ads
+  const paid = ledgerCosts(l)
   // Runway already counts owed costs, so payday itself does not move it: compare with last payday instead.
   const prev = s.finance.lastReceipt
   s.stats.cash -= paid
@@ -46,6 +49,7 @@ export function payday(s: GameState, content: EngineContent): void {
     rent: l.rent,
     infra: l.infra,
     ads: l.ads,
+    founder: l.founder ?? 0,
     paid,
     net: l.revenue - paid,
     cashAfter: s.stats.cash,
@@ -58,6 +62,24 @@ export function payday(s: GameState, content: EngineContent): void {
   }
   if (paid > 0.5) pushActivity(s, 'payday', { amount: Math.round(paid) })
   pushEvent(s, { kind: 'payday', value: paid })
+  missedPayroll(s, content)
+}
+
+/**
+ * Payday left the cash below zero: payroll was missed. The bankruptcy clock starts (endgame.ts counts it until
+ * cash − owed ≥ 0 again) and the rescue card comes (docs/CORE_LOOP.md §5 "maaş ödenemedi → kurtarma kartı → 60 gün").
+ * A dip below zero between paydays (a card, a desk) does not start the clock.
+ */
+function missedPayroll(s: GameState, content: EngineContent): void {
+  if (s.stats.cash >= 0 || s.finance.payrollMissed) return
+  s.finance.payrollMissed = true
+  s.finance.negativeCashDays = 0
+  pushActivity(s, 'payrollMissed', { amount: Math.round(-s.stats.cash) })
+  pushEvent(s, { kind: 'payrollMissed', value: -s.stats.cash })
+  const id = B.RESCUE_CARD_ID
+  const card = content.decisions.find((c) => c.id === id)
+  // The rescue keeps its repeat limits (REPEAT_CARD_COOLDOWN_DAYS, REPEAT_CARD_MAX): it is a way out, not a tap.
+  if (card && isCardEligible(card, s) && !s.decisions.queue.includes(id)) s.decisions.queue.unshift(id)
 }
 
 /** Release level (0–5) of a maturity: how many RELEASE_THRESHOLDS it has reached. */

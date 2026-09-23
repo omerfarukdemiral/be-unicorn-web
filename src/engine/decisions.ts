@@ -74,7 +74,8 @@ export function answerDecision(s: GameState, content: EngineContent, cardId: Dec
   if (opt.delayed) {
     s.decisions.pending.push({
       id: newId(s, 'd'),
-      applyDay: s.time.day + opt.delayed.days,
+      // Delayed effects land within the 6-week horizon (docs/CORE_LOOP.md §5 "Karar sıklığı").
+      applyDay: s.time.day + Math.min(B.DECISION_DELAY_MAX_DAYS, opt.delayed.days),
       effects: opt.delayed.effects,
       sourceCardId: cardId,
       sourceOption: optionIndex,
@@ -89,6 +90,30 @@ export function answerDecision(s: GameState, content: EngineContent, cardId: Dec
   s.decisions.active = undefined
   pushEvent(s, { kind: 'decisionAnswered', refId: cardId, value: optionIndex })
   return null
+}
+
+/** The option an unanswered card falls back to (written on the card: "Cevapsız kalırsa: …"). */
+export function defaultOptionOf(card: DecisionCard): number {
+  const d = card.defaultOption
+  return d !== undefined && Number.isInteger(d) && d >= 0 && d < card.options.length ? d : card.options.length - 1
+}
+
+/**
+ * Daily: a card left unanswered for DECISION_DEFAULT_AFTER_DAYS applies its default option, so it never locks the
+ * other cards forever (docs/CORE_LOOP.md §3.2 "Zamanlı kart yok": no timer is shown, the default is written up front).
+ */
+export function applyDefaultDecision(s: GameState, content: EngineContent): void {
+  const a = s.decisions.active
+  if (!a || s.time.day - a.shownDay < B.DECISION_DEFAULT_AFTER_DAYS) return
+  const card = content.decisions.find((c) => c.id === a.cardId)
+  if (!card) {
+    s.decisions.active = undefined
+    return
+  }
+  const i = defaultOptionOf(card)
+  if (answerDecision(s, content, card.id, i) !== null) return
+  pushActivity(s, 'decisionDefaulted', { option: card.options[i]?.label ?? '' })
+  pushEvent(s, { kind: 'decisionDefaulted', refId: card.id, value: i })
 }
 
 /** Daily: apply delayed effects whose day has come. */

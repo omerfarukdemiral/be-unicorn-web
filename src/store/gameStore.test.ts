@@ -424,6 +424,8 @@ describe('core loop phase 1 (store side)', () => {
     expect(hasImportantMoment(s, withEvent(s, 'payday', 8))).toBe(false)
     expect(hasImportantMoment(s, withEvent(s, 'payday', null))).toBe(false)
     expect(hasImportantMoment(s, withEvent(s, 'hired', 1))).toBe(false)
+    // Phase 3: a missed payroll (bankruptcy clock starts) is a moment too.
+    expect(hasImportantMoment(s, withEvent(s, 'payrollMissed', 1))).toBe(true)
   })
 
   it('at 4× a tight payday slows the run to 1×', () => {

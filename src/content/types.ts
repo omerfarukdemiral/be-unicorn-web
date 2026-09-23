@@ -85,6 +85,11 @@ export interface DecisionCard {
   weight?: number
   /** Default true: card shown at most once per run. */
   once?: boolean
+  /**
+   * Option applied if the card stays unanswered for DECISION_DEFAULT_AFTER_DAYS ("Cevapsız kalırsa: A").
+   * Omitted = the last option (usually the cautious one).
+   */
+  defaultOption?: number
 }
 
 // ---------------------------------------------------------------------------

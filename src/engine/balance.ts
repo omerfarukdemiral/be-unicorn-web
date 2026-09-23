@@ -5,7 +5,8 @@ import type { Dept, FounderActionKind, ProjectCategory, RoundSize, StageIndex, T
 // ---------------------------------------------------------------------------
 // Start (PLAN §5.10)
 // ---------------------------------------------------------------------------
-export const START_CASH = 30_000
+/** [Faz 3] Garage (CORE_LOOP §9 S1-b): $15K + founder living cost → ~10 months runway, ~4–5 after the first hire. */
+export const START_CASH = 15_000
 export const START_MORALE = 70
 export const START_REPUTATION = 10
 /** Start cash bonus = min(XP_BONUS_CAP, XP_BONUS_PER_XP × xp). */
@@ -87,13 +88,13 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
 // Users (PLAN §5.4)
 // ---------------------------------------------------------------------------
 export const CAPACITY_MIN = 50
-/** [DENGE ≠ PLAN 1500] */
-export const CAPACITY_PER_ENG = 4000
+/** [DENGE ≠ PLAN 1500] Faz 3: 20K (was 4K): with 36 desks the late game hit a server wall that stalled user-heavy archetypes at random. */
+export const CAPACITY_PER_ENG = 20000
 /** [DENGE ≠ PLAN 25] */
-export const ORGANIC_PER_MARKETING = 45
+export const ORGANIC_PER_MARKETING = 42
 /** [DENGE ≠ PLAN 8 × 1.3^aşama] */
-export const CAC_BASE = 20
-export const CAC_STAGE_GROWTH = 1.4
+export const CAC_BASE = 45
+export const CAC_STAGE_GROWTH = 1.7
 export const CHURN_BASE = 0.06
 export const CHURN_OPS_PER = 0.02
 export const CHURN_OPS_MAX = 0.6
@@ -104,23 +105,28 @@ export const AD_BUDGET_MAX = 50_000_000
 // ---------------------------------------------------------------------------
 export const ARPU_BASE = 4
 /** [DENGE ≠ PLAN 1.15 / 0.04] */
-export const ARPU_STAGE_GROWTH = 1.3
+export const ARPU_STAGE_GROWTH = 1.45
 export const ARPU_SALES_PER = 0.06
 export const ARPU_SALES_MAX = 0.8
 export const PRICE_MIN = 0.7
 export const PRICE_MAX = 1.6
-export const PRICE_CHURN_FACTOR = 0.8
-export const PRICE_CHURN_DAYS = 30
+export const PRICE_CHURN_FACTOR = 1.8
+export const PRICE_CHURN_DAYS = 100_000
 
 // ---------------------------------------------------------------------------
 // Costs (PLAN §5.6)
 // ---------------------------------------------------------------------------
 /** Garage-level monthly salary; × SALARY_STAGE_GROWTH^stage at hire, then fixed (DECISIONS #5). */
 export const BASE_SALARY: Readonly<Record<Dept, number>> = { eng: 1_200, product: 1_000, marketing: 900, sales: 900, ops: 800 }
-export const SALARY_STAGE_GROWTH = 1.5
+export const SALARY_STAGE_GROWTH = 1.6
 export const INFRA_PER_1000_USERS = 10
 export const SERVER_ROOM_INFRA_MULT = 0.8
 export const SEVERANCE_MONTHS = 0.5
+/**
+ * Founder living cost per month (index = stage; CORE_LOOP §5 "Garaj burn'ü"). Paid on payday like a salary
+ * ("Kurucu" line on the month receipt). Garage–Pre-seed make the money visible; later it is noise next to payroll.
+ */
+export const FOUNDER_LIVING_COST: readonly number[] = [1_200, 1_200, 2_000, 3_000, 5_000, 8_000, 8_000]
 
 // ---------------------------------------------------------------------------
 // Morale (PLAN §5.7)
@@ -149,22 +155,33 @@ export const ROUND_CLOSE_REPUTATION = 15
 // Valuation (PLAN §5.8)
 // ---------------------------------------------------------------------------
 export const PRE_REVENUE_MRR = 1_000
-export const VAL_PER_TEAM = 60_000
+export const VAL_PER_TEAM = 40_000
 export const VAL_PER_USER = 150
-export const VAL_PER_LAUNCHED = 200_000
-/** PLAN §5.8 exactly: clamp(4, 30, 6 + 150 × MoM) — growth is what investors price. */
+export const VAL_PER_LAUNCHED = 100_000
+/**
+ * [DENGE ≠ PLAN 6 + 150 × MoM] Faz 3: clamp(4, cap(stage), 5 + 100 × 3-month MoM) — growth is what investors price,
+ * and a flat quarter now costs multiple instead of sitting on the ceiling (DECISIONS #17).
+ */
 export const MULTIPLE_MIN = 4
 export const MULTIPLE_MAX = 30
-export const MULTIPLE_BASE = 6
-export const MULTIPLE_GROWTH = 150
+export const MULTIPLE_BASE = 5
+export const MULTIPLE_GROWTH = 100
+/**
+ * [Faz 3] Multiple ceiling by the company's stage (CORE_LOOP §5, S5). [DENGE ≠ CORE_LOOP 30 → 25 → 20 → 15 → 12 → 10]
+ * Investors pay less for growth % the bigger the company is; the lower late ceilings stretch Series A–C so the run
+ * lands in 60–90 min (sim/REPORT.md).
+ */
+export const MULTIPLE_MAX_BY_STAGE: readonly number[] = [30, 30, 15, 10, 7.5, 5.5, 5.5]
+/** [Faz 3] The multiple prices the average MoM of the last N months (finance.mrrHistory), not one noisy month. */
+export const MULTIPLE_MOM_MONTHS = 3
 /** Continuity fix: once revenue starts, valuation never drops below the pre-revenue formula. */
 export const VALUATION_KEEP_PRE_REVENUE_FLOOR = true
 
 // ---------------------------------------------------------------------------
 // Rounds (PLAN §5.9)
 // ---------------------------------------------------------------------------
-export const ROUND_WEEKS_MIN = 4
-export const ROUND_WEEKS_MAX = 8
+export const ROUND_WEEKS_MIN = 8
+export const ROUND_WEEKS_MAX = 12
 export const BRIDGE_CARD_ID = 'vc-bridge-loan'
 
 // Live round window (docs/CORE_LOOP.md §4.3, phase 2) ------------------------
@@ -176,16 +193,17 @@ export const ROUND_RUNWAY_MONTHS: Readonly<Record<RoundSize, number>> = { small:
 export const ROUND_SIZE_EQUITY: Readonly<Record<RoundSize, number>> = { small: 0.75, target: 1, large: 1.3 }
 /**
  * "Yeni burn": the burn the company will run after the round (bigger office, the hires the money is for),
- * as a multiple of today's burn. Amount = clamp(table × MIN, table × MAX, burn × this × months).
+ * as a multiple of today's burn. Amount = clamp(table × MIN × months/18, table × MAX, burn × this × months):
+ * the floor follows the size, so Küçük never brings a Hedef round's money for less equity (Faz 3).
  */
-export const ROUND_NEW_BURN_MULT = 3
-export const ROUND_AMOUNT_TABLE_MIN = 0.75
-export const ROUND_AMOUNT_TABLE_MAX = 1.0
+export const ROUND_NEW_BURN_MULT = 2
+export const ROUND_AMOUNT_TABLE_MIN = 0.5
+export const ROUND_AMOUNT_TABLE_MAX = 0.8
 /** Price part of the offer: valuation / target, clamped to this range. */
 export const ROUND_OFFER_CLAMP: readonly [number, number] = [0.6, 1.2]
 /** Whole offer factor (price × diligence × pitches) floor and ceiling. */
 export const ROUND_OFFER_FLOOR = 0.5
-export const ROUND_OFFER_CEIL = 1.3
+export const ROUND_OFFER_CEIL = 1.1
 /** Due diligence: each met item +5%, each unmet −10% of the offer. */
 export const DILIGENCE_MET = 0.05
 export const DILIGENCE_UNMET = -0.1
@@ -208,6 +226,8 @@ export const PITCH_COINVESTOR_EQUITY = 0.01
 // Bankruptcy (PLAN §5.10)
 // ---------------------------------------------------------------------------
 export const BANKRUPT_DAYS = 60
+/** [Faz 3] The bankruptcy clock starts only when payday cannot be paid (cash < 0 after payday), not on a dip. */
+export const RESCUE_CARD_ID = 'emergency-bridge'
 export const BANKRUPT_WARNING_DAYS: readonly number[] = [1, 30, 45, 55]
 /** Team at 0 (after first hire) ends the run after this many days (DECISIONS #6). */
 export const TEAM_ZERO_GRACE_DAYS = 14
@@ -252,8 +272,8 @@ export const MOTIVATE_DAYS = 10
 export const COFFEE_ROUND_WEEKS = 1
 export const COFFEE_REPUTATION = 2
 /** Enterprise deal MRR = arpu × users-equivalent. */
-export const SALES_CALL_SEATS_MIN = 20
-export const SALES_CALL_SEATS_MAX = 60
+export const SALES_CALL_SEATS_MIN = 14
+export const SALES_CALL_SEATS_MAX = 40
 
 // ---------------------------------------------------------------------------
 // Hiring
@@ -270,8 +290,9 @@ export const CANDIDATE_DEPT_WEIGHT: Readonly<Record<Dept, number>> = { eng: 3, p
 // Decisions (PLAN §6.3)
 // ---------------------------------------------------------------------------
 export const FIRST_CARD_DAY = 8
-export const CARD_COOLDOWN_DAYS = 10
-export const CARD_DAILY_CHANCE = 0.35
+/** [Faz 3] Fewer, heavier cards (CORE_LOOP §5 "Karar sıklığı"): ~1 per 30–40 days instead of ~1 per 13. */
+export const CARD_COOLDOWN_DAYS = 25
+export const CARD_DAILY_CHANCE = 0.1
 /** Repeatable (once: false) cards: days before the same card may show again, and max shows per run. */
 export const REPEAT_CARD_COOLDOWN_DAYS = 90
 export const REPEAT_CARD_MAX = 3
@@ -284,6 +305,10 @@ export const USERS_PERCENT_CAP = 0.5
  * far out and answering sets it to "now". Finite so the state stays JSON-serializable.
  */
 export const DECISION_VISITOR_WAIT_DAYS = 100_000
+/** [Faz 3] An unanswered card applies its written default option after this many days ("Cevapsız kalırsa: A"). */
+export const DECISION_DEFAULT_AFTER_DAYS = 60
+/** [Faz 3] Delayed effects land within this many days (they must stay visible on the 6-week horizon). */
+export const DECISION_DELAY_MAX_DAYS = 30
 
 // ---------------------------------------------------------------------------
 // Concepts & world flavour

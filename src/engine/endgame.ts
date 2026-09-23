@@ -2,6 +2,7 @@
 import * as B from './balance'
 import { promoteConcept } from './concepts'
 import { queueConcept } from './effects'
+import { owedCosts } from './derive'
 import { enterStage } from './round'
 import type { ConceptId, GameState, PostMortemCode, PostMortemReason } from './types'
 import { pushActivity, pushEvent, type EngineContent } from './util'
@@ -61,9 +62,13 @@ export function winRun(s: GameState): void {
   pushEvent(s, { kind: 'victory', value: s.finance.valuation })
 }
 
-/** Daily: negative cash counter + warnings, team-zero grace, unicorn check. */
+/**
+ * Daily: bankruptcy clock + warnings, team-zero grace, unicorn check. The clock runs only after a missed payday
+ * (loop.ts `missedPayroll`) and stops once cash covers what is owed again (docs/CORE_LOOP.md §5 "Maaş günü").
+ */
 export function dailyEndgame(s: GameState, content: EngineContent): void {
-  if (s.stats.cash < 0) {
+  if (s.finance.payrollMissed && s.stats.cash - owedCosts(s) >= 0) s.finance.payrollMissed = false
+  if (s.finance.payrollMissed) {
     s.finance.negativeCashDays += 1
     const n = s.finance.negativeCashDays
     if (B.BANKRUPT_WARNING_DAYS.includes(n)) {

@@ -42,7 +42,8 @@ describe('payday (maaş günü)', () => {
     expect(r.day).toBe(30)
     expect(r.month).toBe(0)
     expect(s.stats.cash).toBeCloseTo(cash0 + r.revenue - r.paid + s.finance.ledger!.revenue, 6)
-    expect(r.paid).toBeCloseTo(r.salaries + r.rent + r.infra + r.ads, 6)
+    expect(r.paid).toBeCloseTo(r.salaries + r.rent + r.infra + r.ads + (r.founder ?? 0), 6)
+    expect(r.founder).toBeGreaterThan(0)
     expect(r.paid).toBeCloseTo(due.amount!, 0)
     expect(r.net).toBeCloseTo(r.revenue - r.paid, 6)
     expect(r.runwayAfter).not.toBeNull()
@@ -59,7 +60,7 @@ describe('payday (maaş günü)', () => {
     s = api.step(s, 0.25)
     // Cash net of what payday already owes for the first quarter day.
     const l0 = s.finance.ledger!
-    const cash0 = s.stats.cash - (l0.salaries + l0.rent + l0.infra + l0.ads)
+    const cash0 = s.stats.cash - (l0.salaries + l0.rent + l0.infra + l0.ads + (l0.founder ?? 0))
     const dayStart = s.time.day
     let expected = 0
     let cur = s
@@ -75,7 +76,8 @@ describe('payday (maaş günü)', () => {
   it('runway counts the costs already owed for payday', () => {
     let s = withTeam()
     s = api.step(s, 20)
-    const owed = s.finance.ledger!.salaries + s.finance.ledger!.rent + s.finance.ledger!.infra
+    const l = s.finance.ledger!
+    const owed = l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0)
     expect(s.finance.runway).toBeCloseTo((s.stats.cash - owed) / -s.finance.net, 6)
   })
 

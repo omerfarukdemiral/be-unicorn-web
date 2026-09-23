@@ -27,7 +27,10 @@ export function roundAmountFor(s: GameState, target: StageIndex, months: number)
   const table = B.ROUND_AMOUNT[target]
   if (table == null) return 0
   const sized = Math.max(0, s.finance.burn) * B.ROUND_NEW_BURN_MULT * months
-  return Math.round(clamp(table * B.ROUND_AMOUNT_TABLE_MIN, table * B.ROUND_AMOUNT_TABLE_MAX, sized))
+  // The floor scales with the months asked for (table = the 18-month "target" size): a small round on a small burn
+  // must not bring the same money as a target round for less equity.
+  const floor = table * B.ROUND_AMOUNT_TABLE_MIN * (months / B.ROUND_RUNWAY_MONTHS.target)
+  return Math.round(clamp(Math.min(floor, table * B.ROUND_AMOUNT_TABLE_MAX), table * B.ROUND_AMOUNT_TABLE_MAX, sized))
 }
 
 /** Equity sold for a size; each ☆ stage goal takes GOAL_STAR_EQUITY_DISCOUNT off. */

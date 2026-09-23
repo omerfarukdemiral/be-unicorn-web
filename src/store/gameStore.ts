@@ -33,6 +33,8 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
   'release',
   // The early round window opening is the "tur teklifi" moment.
   'roundWindow',
+  // Payroll could not be paid: the bankruptcy clock started (phase 3).
+  'payrollMissed',
 ])
 
 /** A payday that leaves less than this many months of runway is an important moment too (docs/CORE_LOOP.md §3.2). */

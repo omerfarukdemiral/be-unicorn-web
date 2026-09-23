@@ -9,7 +9,16 @@ export interface SaveFile {
 type Migration = (state: Record<string, unknown>) => Record<string, unknown>
 
 /** MIGRATIONS[v] upgrades a v-save to v+1. Add one per SAVE_VERSION bump. */
-const MIGRATIONS: Record<number, Migration> = {}
+const MIGRATIONS: Record<number, Migration> = {
+  // v1 → v2 (core loop phase 3): the bankruptcy clock now runs only after a missed payday. A v1 save already
+  // counting negative-cash days keeps its clock (as a missed payday); everything else defaults lazily in the engine
+  // (ledger.founder, derived.momAvg, finance.payrollMissed).
+  1: (st) => {
+    const finance = st.finance as { negativeCashDays?: number; payrollMissed?: boolean } | undefined
+    if (finance && (finance.negativeCashDays ?? 0) > 0) finance.payrollMissed = true
+    return st
+  },
+}
 
 export function serialize(state: GameState): string {
   const file: SaveFile = { version: SAVE_VERSION, state }

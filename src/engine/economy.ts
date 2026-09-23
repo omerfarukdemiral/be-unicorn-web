@@ -112,9 +112,19 @@ export function infra(users: number, infraMult = 1): number {
   return (users / 1000) * B.INFRA_PER_1000_USERS * infraMult
 }
 
-/** burn = maaşlar + kira + altyapı + reklamBütçesi. */
-export function burn(salaries: number, rentValue: number, infraValue: number, adBudget: number): number {
-  return salaries + rentValue + infraValue + adBudget
+/** burn = maaşlar + kira + altyapı + reklamBütçesi (+ kurucu yaşam gideri, Faz 3). */
+export function burn(salaries: number, rentValue: number, infraValue: number, adBudget: number, founderLiving = 0): number {
+  return salaries + rentValue + infraValue + adBudget + founderLiving
+}
+
+/** Costs in a payday ledger (salaries + rent + infra + ads + founder living). */
+export function ledgerCosts(l: { salaries: number; rent: number; infra: number; ads: number; founder?: number }): number {
+  return l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0)
+}
+
+/** Founder living cost per month at a stage (CORE_LOOP §5 "Garaj burn'ü"). */
+export function founderLiving(stage: number): number {
+  return B.FOUNDER_LIVING_COST[stage] ?? B.FOUNDER_LIVING_COST[B.FOUNDER_LIVING_COST.length - 1] ?? 0
 }
 
 /** runway (months) = net < 0 ? cash / −net : ∞ (null). */
@@ -165,9 +175,28 @@ export function valuationPreRevenue(team: number, users: number, launchedProject
   return B.VAL_PER_TEAM * team + B.VAL_PER_USER * users + B.VAL_PER_LAUNCHED * launchedProjects
 }
 
-/** çarpan = clamp(4, 30, 6 + 150 × aylıkBüyüme). */
-export function valuationMultiple(momGrowth: number): number {
-  return clamp(B.MULTIPLE_MIN, B.MULTIPLE_MAX, B.MULTIPLE_BASE + B.MULTIPLE_GROWTH * momGrowth)
+/** çarpan = clamp(4, tavan, 6 + 150 × aylıkBüyüme); tavan = MULTIPLE_MAX, or the stage's MULTIPLE_MAX_BY_STAGE (Faz 3). */
+export function valuationMultiple(momGrowth: number, cap: number = B.MULTIPLE_MAX): number {
+  return clamp(B.MULTIPLE_MIN, Math.max(B.MULTIPLE_MIN, cap), B.MULTIPLE_BASE + B.MULTIPLE_GROWTH * momGrowth)
+}
+
+/** The stage's multiple ceiling: 30 → 25 → 20 → 15 → 12 → 10. */
+export function multipleCap(stage: number): number {
+  return B.MULTIPLE_MAX_BY_STAGE[stage] ?? B.MULTIPLE_MAX
+}
+
+/**
+ * Average MoM of the last `months` monthly snapshots (CORE_LOOP §5 "Değerleme çarpanı"): one lucky month no longer
+ * pins the multiple to the ceiling, and one flat month does not crash it. Months before revenue (0) are skipped.
+ */
+export function averageMom(hist: readonly number[], months: number = B.MULTIPLE_MOM_MONTHS): number {
+  const rates: number[] = []
+  for (let i = hist.length - 1; i >= 1 && rates.length < months; i--) {
+    const prev = hist[i - 1]!
+    if (prev <= 0) break
+    rates.push(momGrowth(prev, hist[i]))
+  }
+  return rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0
 }
 
 /** gelir sonrası: MRR × 12 × çarpan. */
@@ -176,10 +205,10 @@ export function valuationPostRevenue(mrrValue: number, multiple: number): number
 }
 
 /** PLAN piecewise valuation (+ optional pre-revenue floor for continuity, see balance). */
-export function valuation(mrrValue: number, momGrowth: number, team: number, users: number, launched: number): number {
+export function valuation(mrrValue: number, momGrowth: number, team: number, users: number, launched: number, cap: number = B.MULTIPLE_MAX): number {
   const pre = valuationPreRevenue(team, users, launched)
   if (mrrValue < B.PRE_REVENUE_MRR) return pre
-  const post = valuationPostRevenue(mrrValue, valuationMultiple(momGrowth))
+  const post = valuationPostRevenue(mrrValue, valuationMultiple(momGrowth, cap))
   return B.VALUATION_KEEP_PRE_REVENUE_FLOOR ? Math.max(pre, post) : post
 }
 

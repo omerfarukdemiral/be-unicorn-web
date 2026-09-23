@@ -13,7 +13,7 @@ export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
 export const FIXED_STEP_DAYS = 0.25
 /** Bump when GameState shape changes incompatibly; save.ts migrates. */
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2
 
 // ---------------------------------------------------------------------------
 // Enums (string unions + const lists for iteration)
@@ -446,6 +446,8 @@ export interface BurnBreakdown {
   rent: number
   infra: number
   ads: number
+  /** Founder living cost (FOUNDER_LIVING_COST[stage]); optional for older saves and mocks. */
+  founder?: number
 }
 
 /** Costs accrued since the last payday (+ revenue, which already flowed into cash day by day). */
@@ -455,6 +457,8 @@ export interface MonthLedger {
   rent: number
   infra: number
   ads: number
+  /** Founder living cost accrued (optional: older saves). */
+  founder?: number
 }
 
 /** Month receipt ("ay fişi"): what the month earned and what payday paid, in one line. */
@@ -468,7 +472,9 @@ export interface MonthReceipt {
   rent: number
   infra: number
   ads: number
-  /** Costs paid on payday (salaries + rent + infra + ads). */
+  /** Founder living cost ("Kurucu"). */
+  founder?: number
+  /** Costs paid on payday (salaries + rent + infra + ads + founder). */
   paid: number
   /** revenue − paid. */
   net: number
@@ -496,8 +502,10 @@ export interface FinanceState {
   mrrHistory: number[]
   /** Users snapshot at the end of each month. */
   usersHistory: number[]
-  /** Consecutive days with cash < 0 (game over at 60). */
+  /** Days since a payday that could not be paid, while cash stays short (game over at 60). */
   negativeCashDays: number
+  /** Payday left cash < 0: the bankruptcy clock runs until cash − owed ≥ 0 again (docs/CORE_LOOP.md §5). */
+  payrollMissed?: boolean
   /** Monthly ad spend, 0 until adBudget tool. */
   adBudget: number
   /** 0.7–1.6, player-set once priceControl unlocked. */
@@ -548,6 +556,10 @@ export interface DerivedMetrics {
   ltvCac: number | null
   /** Month-over-month MRR growth fraction. */
   momGrowth: number
+  /** Average MoM of the last MULTIPLE_MOM_MONTHS months: what the multiple prices. Optional for old saves/mocks. */
+  momAvg?: number
+  /** The stage's multiple ceiling (MULTIPLE_MAX_BY_STAGE). */
+  multipleCap?: number
   valuationMultiple: number
   /** Monthly user inflow by channel (channelBreakdown widget). */
   channels: { organic: number; paid: number; manual: number; enterprise: number }
@@ -661,6 +673,7 @@ export type ActivityKind =
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'
   | 'payday' | 'release' | 'goalDone'
   | 'roundWindow' | 'roundOffer' | 'roundPitch'
+  | 'payrollMissed' | 'decisionDefaulted'
 
 /** Bottom-left activity line. Text lives in content (ACTIVITY_TEXT[kind]) with {param} placeholders. */
 export interface ActivityEntry {
@@ -685,6 +698,10 @@ export type GameEventKind =
   | 'roundWeek'
   /** The player pitched (refId = RoundPitch, value = offer factor change). */
   | 'roundPitched'
+  /** Payday left cash < 0 (value = shortfall): the bankruptcy clock starts, the rescue card comes. */
+  | 'payrollMissed'
+  /** An unanswered card applied its default option (refId = card, value = option index). */
+  | 'decisionDefaulted'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).

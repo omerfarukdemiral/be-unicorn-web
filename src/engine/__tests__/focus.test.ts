@@ -19,7 +19,7 @@ describe('focus: engine side', () => {
     const active = s.decisions.active!
     expect(active.cardId).toBe('c1')
     const vid = active.visitorId!
-    s = api.step(s, 90)
+    s = api.step(s, 50) // well past the old 20-day timer, before the 60-day default
     expect(s.decisions.active?.cardId).toBe('c1')
     const v = s.visitors.find((x) => x.id === vid)!
     expect(v).toBeDefined()

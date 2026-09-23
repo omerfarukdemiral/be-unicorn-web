@@ -62,7 +62,11 @@ export function applyMorale(s: GameState, delta: number): void {
   for (const e of s.employees) e.morale = clamp(0, 100, e.morale + delta)
 }
 
+/** Flags that make the cash an option brings a loan: it becomes finance.debt, repaid from the next round. */
+const LOAN_FLAGS: ReadonlySet<string> = new Set(['emergencyLoan', 'bridgeLoan'])
+
 export function applyEffects(s: GameState, content: EngineContent, fx: EffectBundle, source: string): void {
+  const cash0 = s.stats.cash
   if (fx.cash !== undefined) s.stats.cash += fx.cash
   if (fx.cashPercent !== undefined) s.stats.cash += cappedCashPercent(s, fx.cashPercent)
   if (fx.users !== undefined) s.stats.users = Math.max(0, s.stats.users + fx.users)
@@ -94,5 +98,7 @@ export function applyEffects(s: GameState, content: EngineContent, fx: EffectBun
     s.flags[flag] = true
     const counter = FLAG_COUNTERS[flag]
     if (counter) incCounter(s, counter)
+    // "Borç ve faiz" (content/decisions.ts): a rescue or bridge loan is paid back from the next round's money.
+    if (LOAN_FLAGS.has(flag)) s.finance.debt += Math.max(0, s.stats.cash - cash0)
   }
 }

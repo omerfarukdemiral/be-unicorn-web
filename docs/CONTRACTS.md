@@ -59,7 +59,9 @@ Bir dosyaya yalnızca sahibi yazar. Sözleşme dosyalarına yapılan değişikli
 - Karar kartları: engine seçer (aşama, `condition`, `once`, `weight`, deterministik RNG), `decisions.active` doldurur, genelde bir `Visitor` (purpose `'decision'`) yaratır. `answerDecision` efektleri uygular, `delayed` varsa `decisions.pending`'e ekler, `lastAnswer`'ı set eder.
 - Ortam balonları: engine `OFFICE_LINES`'tan duruma göre seçer, `state.bubbles`'a yazar (`untilDay` ≈ şimdi + 1.5 gün = 3 sn @1x).
 - Aktivite satırları `state.activity` (son ~30), tek seferlik efektler `state.events` (son ~64, artan `id`). Engine metin üretmez: `ActivityKind` + `params`, metni content çevirir.
-- İflas: `finance.negativeCashDays ≥ 60` veya ekip 0 (ilk işe alımdan sonra) ⇒ `gameOver` (tam 3 `PostMortemReason`). Unicorn ⇒ `gameOver.kind = 'unicorn'`.
+- İflas: maaş günü kasayı eksiye düşürürse (`payrollMissed` olayı, `finance.payrollMissed = true`, kurtarma kartı `emergency-bridge` kuyruğa) sayaç başlar; `finance.negativeCashDays ≥ 60` veya ekip 0 (ilk işe alımdan sonra) ⇒ `gameOver` (tam 3 `PostMortemReason`). Maaş günleri arasındaki anlık eksi sayacı başlatmaz; `kasa − birikmiş borç ≥ 0` olunca sayaç sıfırlanır. Unicorn ⇒ `gameOver.kind = 'unicorn'`.
+- Kararlar (Faz 3): cevapsız kart `DECISION_DEFAULT_AFTER_DAYS` (60) gün sonra `DecisionCard.defaultOption` seçeneğini uygular (yoksa son seçenek; `decisionDefaulted` olayı). Gecikmeli etkiler en fazla `DECISION_DELAY_MAX_DAYS` (30) gün sonra gelir. `emergencyLoan` / `bridgeLoan` bayraklı seçeneğin getirdiği para `finance.debt` olur.
+- Para (Faz 3): `finance.burnBreakdown.founder` / `ledger.founder` / `lastReceipt.founder` = kurucu yaşam gideri (`FOUNDER_LIVING_COST[aşama]`). Çarpan `derived.momAvg` (son 3 ay MoM ortalaması) ve `derived.multipleCap` (aşama tavanı) ile hesaplanır. `SAVE_VERSION = 2` (v1 → v2 migrasyonu: sayacı işleyen eski kayıt `payrollMissed = true` olur).
 - Sim (`sim/run.ts`, `npm run sim`): 4 arketip bot, engine'i doğrudan import eder, rapor yazar (§8.3).
 
 ## 4. Content şeridi

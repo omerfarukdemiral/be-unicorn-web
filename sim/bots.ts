@@ -49,14 +49,14 @@ export interface BotConfig {
   weights: { cash: number; users: number; morale: number; equity: number; reputation: number }
 }
 
-const ALL_CAP = [4, 8, 12, 21, 28, 36, 36]
+const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
 
 export const BOTS: Record<Archetype, BotConfig> = {
   // Low burn, early revenue, late and few rounds, protects equity.
   bootstrap: {
     kind: 'bootstrap', firstCategory: 'web', extraCategories: [],
     buildMix: { eng: 2, product: 1, marketing: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
-    minRunwayToHire: 9, teamCap: [3, 7, 11, 18, 25, 32, 32], adAggression: 0.15, minLtvCac: 3, price: 1.25,
+    minRunwayToHire: 5, teamCap: [3, 7, 11, 18, 30, 40, 40], adAggression: 0.25, minLtvCac: 3, price: 1.25,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
   },
@@ -64,15 +64,15 @@ export const BOTS: Record<Archetype, BotConfig> = {
   vcRocket: {
     kind: 'vcRocket', firstCategory: 'mobile', extraCategories: ['ai'],
     buildMix: { eng: 3, product: 1, marketing: 2 }, growMix: { eng: 3, product: 1, marketing: 4, sales: 1, ops: 2 },
-    minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5, price: 1,
+    minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5, price: 1,
     roundEagerness: 1, roundSize: 'large', weakPitch: 'coinvestor', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
   },
   // One project, high price, small senior team, enterprise deals.
   niche: {
     kind: 'niche', firstCategory: 'api', extraCategories: [],
-    buildMix: { eng: 2, product: 1, sales: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
-    minRunwayToHire: 6, teamCap: [4, 8, 11, 18, 24, 30, 30], adAggression: 0.2, minLtvCac: 3, price: 1.5,
+    buildMix: { eng: 2, marketing: 1, sales: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
+    minRunwayToHire: 4, teamCap: [4, 8, 11, 18, 28, 36, 36], adAggression: 0.2, minLtvCac: 3, price: 1.5,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
   },
@@ -80,7 +80,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
   platform: {
     kind: 'platform', firstCategory: 'marketplace', extraCategories: ['api', 'web'],
     buildMix: { eng: 3, product: 1, marketing: 1 }, growMix: { eng: 3, product: 1, marketing: 3, sales: 1, ops: 2 },
-    minRunwayToHire: 5, teamCap: ALL_CAP, adAggression: 0.35, minLtvCac: 2.5, price: 1.1,
+    minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.45, minLtvCac: 2.5, price: 1.1,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
   },
@@ -104,13 +104,30 @@ export interface BotRun {
   roundGapMaxDays: number
   /** Rounds closed: amount vs the old fixed table, and the size picked. */
   rounds: { stage: number; amount: number; table: number; equity: number }[]
+  /**
+   * Dead time (docs/CORE_LOOP.md §10): gaps (game days) between consecutive meaningful moments — a world beat the
+   * player sees or a meaningful action of the bot — in the first 5 minutes, and over the whole run.
+   */
+  gaps5: number[]
+  gapsAll: number[]
+  /** Paydays that could not be paid (bankruptcy clock started). */
+  payrollMissed: number
+  /** Cards that ran out their 60 days and applied the default. */
+  decisionsDefaulted: number
 }
+
+/** How the bot answers decision cards: its weighted best (default), its worst, or always the first option. */
+export type DecisionPolicy = 'best' | 'worst' | 'first'
 
 /** World beats the player sees (not their own clicks): the dead-time metric during rounds counts gaps between these. */
 const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
   'roundStarted', 'roundWeek', 'roundClosed', 'payday', 'release', 'decisionShown', 'conceptQueued', 'milestone',
-  'goalDone', 'delayedEffect', 'projectLaunched', 'resigned', 'bankruptWarning', 'roundWindow',
+  'goalDone', 'delayedEffect', 'projectLaunched', 'resigned', 'bankruptWarning', 'roundWindow', 'payrollMissed',
 ])
+/** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
+const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT_KINDS, 'founderActionDone', 'hired', 'visitorArrived', 'stageUp'])
+/** Bot actions that count as a meaningful player move (not background knob-twiddling like ad/price/assign). */
+const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem'])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -131,15 +148,17 @@ function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig
 }
 
 /** Concepts, decision cards and resignation windows: the "answer the bubbles" part of play. */
-function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng): void {
+function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: DecisionPolicy = 'best'): void {
   const { act, content } = c
   for (let i = 0; i < 5 && c.s.concepts.active; i++) if (!act({ type: 'openConcept', conceptId: c.s.concepts.active.id })) break
   const active = c.s.decisions.active
   const card = active && content.decisions.find((c) => c.id === active.cardId)
   if (card) {
     let best = 0
-    if (cfg) card.options.forEach((_, i) => { if (scoreOption(c.s, card, i, cfg) > scoreOption(c.s, card, best, cfg)) best = i })
-    else if (rng) best = rng.int(0, card.options.length - 1)
+    if (cfg && policy !== 'first') {
+      const sign = policy === 'worst' ? -1 : 1
+      card.options.forEach((_, i) => { if (sign * scoreOption(c.s, card, i, cfg) > sign * scoreOption(c.s, card, best, cfg)) best = i })
+    } else if (!cfg && rng) best = rng.int(0, card.options.length - 1)
     act({ type: 'answerDecision', cardId: card.id, optionIndex: best })
   }
   for (const e of c.s.employees) {
@@ -152,13 +171,14 @@ function freeDesks(s: GameState): number {
   return s.office.slots.filter((x) => x.type === 'desk' && x.id !== 'founder' && open.has(x.ring) && x.occupantId === undefined).length
 }
 
-function neededDept(s: GameState, cfg: BotConfig): Dept[] {
+function neededDept(s: GameState, cfg: BotConfig, mem?: Record<string, number>): Dept[] {
   const building = s.projects.some((p) => p.maturity < 0.6)
   const mix = building ? cfg.buildMix : cfg.growMix
   const total = Object.values(mix).reduce((a, b) => a + (b ?? 0), 0)
   const team = s.employees.length + 1
   const gap = (d: Dept) => ((mix[d] ?? 0) / total) * team - s.derived.deptCounts[d]
   const order = (Object.keys(mix) as Dept[]).sort((a, b) => gap(b) - gap(a))
+  if (s.time.day < (mem?.preferMarketingUntil ?? -1)) return ['marketing', ...order.filter((d) => d !== 'marketing')]
   // Capacity first: users near the server limit need engineers.
   if (s.derived.capacity < s.stats.users * 1.15) return ['eng', ...order.filter((d) => d !== 'eng')]
   return order
@@ -224,10 +244,19 @@ function furnish(c: Ctx, cfg: BotConfig): void {
   }
 }
 
+const GARAGE_MIN_RUNWAY = 2.5
+
 function hiring(c: Ctx, cfg: BotConfig): void {
   const { act } = c
   const runway = c.s.finance.runway ?? 99
-  if (runway <= cfg.minRunwayToHire || c.s.employees.length >= (cfg.teamCap[c.s.stage] ?? 99)) return
+  // Servers overflowing: an engineer is a need, not growth — the soft team cap gives way (up to +50%).
+  const overloaded = c.s.derived.capacity < c.s.stats.users * 1.05
+  // A valuation stuck below the window (the growth trough) makes a sensible player hire past the plan: +2 per stall.
+  const stallBonus = c.mem.progStage === c.s.stage ? 2 * Math.floor((c.s.time.day - (c.mem.bestDay ?? c.s.time.day)) / STALL_DAYS) : 0
+  const cap = (cfg.teamCap[c.s.stage] ?? 99) * (overloaded ? 1.5 : 1) + stallBonus
+  // The garage is a survival level: the first small team is hired on thin runway (the round is the way out).
+  const minRunway = c.s.stage === 0 ? Math.min(cfg.minRunwayToHire, GARAGE_MIN_RUNWAY) : cfg.minRunwayToHire
+  if (runway <= minRunway || c.s.employees.length >= cap) return
   const reserve = Math.max(5_000, c.s.finance.burn * 3)
   if (freeDesks(c.s) === 0) {
     const ring = nextLockedRing(c.s.office)
@@ -243,7 +272,7 @@ function hiring(c: Ctx, cfg: BotConfig): void {
     if (slot && basic) act({ type: 'placeItem', itemId: basic.id, slotId: slot.id })
     if (!deskFree(c.s)) return
   }
-  const order = neededDept(c.s, cfg)
+  const order = neededDept(c.s, cfg, c.mem)
   const want = order[0]!
   const pickFor = (d: Dept) => c.s.candidates.filter((c) => c.dept === d).sort((a, b) => b.quality - a.quality)[0]
   let pick = pickFor(want)
@@ -258,6 +287,17 @@ function hiring(c: Ctx, cfg: BotConfig): void {
 /** Office full and products built: swap one surplus builder for a growth hire (at most monthly). */
 function rebalance(c: Ctx, cfg: BotConfig): void {
   const s = c.s
+  // Growth trough with a full office: swap a non-growth seat for a marketer (organic reach is what moves MoM).
+  const stalledDays = c.mem.progStage === s.stage ? s.time.day - (c.mem.bestDay ?? s.time.day) : 0
+  if (s.stage <= 2 && freeDesks(s) === 0 && stalledDays >= STALL_DAYS && s.time.day - (c.mem.rebalanceDay ?? -99) >= 30 && s.derived.overload < 0.3) {
+    const pool = s.employees.filter((e) => e.dept === 'ops' || (e.dept === 'sales' && !cfg.useSalesCalls) || (e.dept === 'product' && s.projects.every((p) => p.maturity >= 1)))
+    const victim = pool.sort((a, b) => a.quality - b.quality)[0]
+    if (victim && c.act({ type: 'fire', employeeId: victim.id })) {
+      c.mem.rebalanceDay = s.time.day
+      c.mem.preferMarketingUntil = s.time.day + 30
+      return
+    }
+  }
   if (freeDesks(s) > 0 || nextLockedRing(s.office) !== null || s.projects.some((p) => p.maturity < 0.6)) return
   if (s.time.day - (c.mem.rebalanceDay ?? -99) < 30) return
   const mix = cfg.growMix
@@ -265,9 +305,10 @@ function rebalance(c: Ctx, cfg: BotConfig): void {
   const team = s.employees.length + 1
   const surplus = (d: Dept) => s.derived.deptCounts[d] - ((mix[d] ?? 0) / total) * team
   // Overloaded servers: trade a non-engineer for an engineer.
-  const overloaded = s.derived.overload > 0.5
+  const overloaded = s.derived.overload > 0.2
   const worst = (Object.keys(s.derived.deptCounts) as Dept[]).filter((d) => !overloaded || d !== 'eng').sort((a, b) => surplus(b) - surplus(a))[0]!
-  if (surplus(worst) < (overloaded ? 0 : 1.5)) return
+  // Overloaded servers are worth one swap a month even from a dept at its mix share (the mix is a guide, not a rule).
+  if (!overloaded && surplus(worst) < 1.5) return
   if (worst === 'eng' && s.derived.capacity - balance.CAPACITY_PER_ENG < s.stats.users * 1.2) return
   const victim = s.employees.filter((e) => e.dept === worst).sort((a, b) => a.quality - b.quality)[0]
   if (victim && c.act({ type: 'fire', employeeId: victim.id })) c.mem.rebalanceDay = s.time.day
@@ -301,11 +342,17 @@ function growth(c: Ctx, cfg: BotConfig): void {
   }
   if (c.s.unlockedTools.includes('priceControl') && c.s.finance.priceMultiplier !== cfg.price) act({ type: 'setPrice', multiplier: cfg.price })
   if (c.s.unlockedTools.includes('adBudget')) {
-    const ok = (c.s.derived.ltvCac ?? 0) >= cfg.minLtvCac && (c.s.finance.runway ?? 99) > 6 && c.s.derived.overload < 1
+    // A stalled valuation (no progress for STALL_DAYS) makes the bot accept a thinner LTV/CAC: growth is the way out.
+    const stalled = c.mem.progStage === c.s.stage && c.s.time.day - (c.mem.bestDay ?? c.s.time.day) >= STALL_DAYS
+    const minLtvCac = cfg.minLtvCac * (stalled ? 0.75 : 1)
+    const ok = (c.s.derived.ltvCac ?? 0) >= minLtvCac && (c.s.finance.runway ?? 99) > 6 && c.s.derived.overload < 1
     const t = ok ? Math.round(cfg.adAggression * (c.s.finance.mrr + Math.max(0, c.s.stats.cash) / 24)) : 0
     if (Math.abs(t - c.s.finance.adBudget) > 0.2 * Math.max(1, c.s.finance.adBudget)) act({ type: 'setAdBudget', amount: Math.max(0, t) })
   }
 }
+
+/** Days without new progress after which a bot takes the open round window. */
+const STALL_DAYS = 60
 
 function fundraise(c: Ctx, cfg: BotConfig): void {
   const { act } = c
@@ -317,9 +364,18 @@ function fundraise(c: Ctx, cfg: BotConfig): void {
     if (!act({ type: 'roundPitch', pitch }) && pitch === 'story') act({ type: 'roundPitch', pitch: 'metrics' })
     return
   }
+  // Track the best progress of this stage: a valuation that stopped climbing (the multiple follows 3-month growth)
+  // is the "şimdi mi, biraz daha mı?" answer a sensible player gives: now.
+  const p = c.s.derived.stageProgress
+  if (c.mem.progStage !== c.s.stage || p > (c.mem.bestProg ?? 0) + 0.01) {
+    c.mem.progStage = c.s.stage
+    c.mem.bestProg = p
+    c.mem.bestDay = c.s.time.day
+  }
   if (!c.s.derived.canStartRound) return
   const short = (c.s.finance.runway ?? 99) < 6
-  if (short || c.s.derived.stageProgress >= cfg.roundEagerness) act({ type: 'startRound', size: cfg.roundSize })
+  const stalled = c.s.time.day - (c.mem.bestDay ?? c.s.time.day) >= STALL_DAYS
+  if (short || stalled || p >= cfg.roundEagerness) act({ type: 'startRound', size: cfg.roundSize })
 }
 
 /** Careless player: a random valid-looking action on some days, random card answers, ignores bubbles half the time. */
@@ -341,7 +397,7 @@ function randomTurn(c: Ctx, rng: Rng): void {
   }
 }
 
-export function playBot(kind: BotKind, seed: number, content: EngineContent, maxDays = 2700, onDay?: (s: GameState) => void): BotRun {
+export function playBot(kind: BotKind, seed: number, content: EngineContent, maxDays = 2700, onDay?: (s: GameState) => void, policy: DecisionPolicy = 'best'): BotRun {
   const cfg = kind === 'idle' || kind === 'random' ? null : BOTS[kind]
   const api = createEngine(content)
   let s = api.createGame({ seed })
@@ -351,6 +407,17 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
   let c10 = 0
   const actionCounts: Record<string, number> = {}
   const rounds: BotRun['rounds'] = []
+  let lastMoment = 0
+  const gaps5: number[] = []
+  const gapsAll: number[] = []
+  const moment = (day: number) => {
+    const g = day - lastMoment
+    if (g > 1e-9) {
+      gapsAll.push(g)
+      if (day <= DAYS_5_MIN) gaps5.push(g)
+    }
+    lastMoment = Math.max(lastMoment, day)
+  }
   const ctx: Ctx = {
     get s() { return s },
     act: (a: Action): boolean => {
@@ -359,6 +426,7 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
         s = r.state
         const key = a.type === 'founderAction' ? `founderAction:${a.kind}` : a.type
         actionCounts[key] = (actionCounts[key] ?? 0) + 1
+        if (MOVE_ACTIONS.has(a.type)) moment(s.time.day)
       }
       return r.ok
     },
@@ -371,10 +439,12 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
   let lastBeat = 0
   let roundGapMax = 0
   let seenId = 0
+  let payrollMissed = 0
+  let defaulted = 0
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg) {
-      housekeeping(ctx, cfg)
+      housekeeping(ctx, cfg, undefined, policy)
       furnish(ctx, cfg)
       rebalance(ctx, cfg)
       hiring(ctx, cfg)
@@ -390,7 +460,11 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
     for (let st = prev + 1; st <= s.stage; st++) stageDays[st] = Math.round(s.time.day)
     // Dead time inside a round: gap between world beats while the round runs.
     for (const e of s.events) {
-      if (e.id <= seenId || !BEAT_KINDS.has(e.kind)) continue
+      if (e.id <= seenId) continue
+      if (MOMENT_KINDS.has(e.kind)) moment(e.day)
+      if (e.kind === 'payrollMissed') payrollMissed++
+      if (e.kind === 'decisionDefaulted') defaulted++
+      if (!BEAT_KINDS.has(e.kind)) continue
       if (e.kind === 'roundClosed' && before.round) {
         rounds.push({ stage: before.round.targetStage, amount: e.value ?? 0, table: balance.ROUND_AMOUNT[before.round.targetStage] ?? 0, equity: before.round.offer.equity })
       }
@@ -420,6 +494,10 @@ export function playBot(kind: BotKind, seed: number, content: EngineContent, max
     actionCounts,
     roundGapMaxDays: roundGapMax,
     rounds,
+    gaps5,
+    gapsAll,
+    payrollMissed,
+    decisionsDefaulted: defaulted,
   }
 }
 

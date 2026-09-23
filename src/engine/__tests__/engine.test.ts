@@ -253,9 +253,16 @@ describe('auto placement (findAutoSlot / placeItem without slotId)', () => {
 })
 
 describe('bankruptcy', () => {
-  it('60 days of negative cash ends the run with exactly 3 reasons', () => {
+  it('a missed payday starts the clock; 60 more days of short cash end the run with exactly 3 reasons', () => {
     let s = api.createGame({ seed: 1 })
     s = { ...s, stats: { ...s.stats, cash: -1 } }
+    // A dip below zero between paydays does not start the clock (docs/CORE_LOOP.md §5).
+    s = api.step(s, 29)
+    expect(s.finance.negativeCashDays).toBe(0)
+    expect(s.finance.payrollMissed).toBeFalsy()
+    s = api.step(s, 1)
+    expect(s.finance.payrollMissed).toBe(true)
+    expect(s.events.some((e) => e.kind === 'payrollMissed')).toBe(true)
     s = api.step(s, 59)
     expect(s.gameOver).toBeUndefined()
     expect(s.finance.negativeCashDays).toBe(59)
@@ -269,13 +276,15 @@ describe('bankruptcy', () => {
   })
   it('recovering above zero resets the counter', () => {
     let s = api.createGame({ seed: 1 })
-    s = api.step({ ...s, stats: { ...s.stats, cash: -1 } }, 10)
+    s = api.step({ ...s, stats: { ...s.stats, cash: -1 } }, 40)
+    expect(s.finance.negativeCashDays).toBe(10)
     s = api.step({ ...s, stats: { ...s.stats, cash: 50_000 } }, 1)
     expect(s.finance.negativeCashDays).toBe(0)
+    expect(s.finance.payrollMissed).toBe(false)
   })
   it('founder XP raises start cash (+10%/XP, max +40%)', () => {
-    expect(api.createGame({ seed: 1, founderXp: 2 }).stats.cash).toBe(36_000)
-    expect(api.createGame({ seed: 1, founderXp: 9 }).stats.cash).toBe(42_000)
+    expect(api.createGame({ seed: 1, founderXp: 2 }).stats.cash).toBe(18_000)
+    expect(api.createGame({ seed: 1, founderXp: 9 }).stats.cash).toBe(21_000)
   })
 })
 

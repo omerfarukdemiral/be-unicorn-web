@@ -69,14 +69,18 @@ describe('round size (12 / 18 / 24 months ↔ equity)', () => {
     expect(sizes[1]!.equity).toBeLessThan(sizes[2]!.equity)
     expect(sizes[1]!.equity).toBeCloseTo(B.ROUND_EQUITY[1]!, 6)
     for (const o of sizes) {
-      expect(o.amount).toBeGreaterThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN)
+      expect(o.amount).toBeGreaterThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (o.months / 18) - 1)
       expect(o.amount).toBeLessThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
     }
     // A bigger burn buys a bigger round (until the table cap).
     const low = { ...s, finance: { ...s.finance, burn: 1_000 } }
     const high = { ...s, finance: { ...s.finance, burn: 4_000 } }
     expect(roundAmountFor(high, 1, 12)).toBeGreaterThan(roundAmountFor(low, 1, 12))
-    expect(roundAmountFor(low, 1, 12)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN)
+    // The floor scales with the months asked for: a small round on a small burn brings less than a target one.
+    expect(roundAmountFor(low, 1, 12)).toBe(Math.round(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (12 / 18)))
+    expect(roundAmountFor(low, 1, 18)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN)
+    expect(roundAmountFor(low, 1, 12)).toBeLessThan(roundAmountFor(low, 1, 18))
+    expect(roundAmountFor(low, 1, 18)).toBeLessThan(roundAmountFor(low, 1, 24))
     expect(roundAmountFor({ ...s, finance: { ...s.finance, burn: 1e9 } }, 1, 24)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
   })
 

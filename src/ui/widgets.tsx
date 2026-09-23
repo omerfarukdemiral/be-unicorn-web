@@ -1,7 +1,8 @@
 // HUD widget registry (PLAN §2 "Kullan"): each unlocked HudWidget maps to a small chip.
 // Widgets only display engine numbers; no formulas beyond presentation (shares, 1 − churn).
-// Look (docs/DESIGN.md): neutral chip, ink-2 icon without a disc, Oxanium uppercase label,
-// tabular value. Hue only on numbers (positive/negative) and the tiny alert dot.
+// Look (docs/DESIGN.md): neutral chip on a warm card; each gauge owns a hue (WIDGET_COLOR) used on its
+// icon (on a ~12% tile) and on its thin bar / sparkline / stacked ramp. Values stay ink (AA); only
+// warnings turn a number red.
 import type { ComponentType, ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { HudWidget } from '../engine/types'
@@ -10,12 +11,15 @@ import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { compact, fixed, money, num, pct, signedMoney } from './format'
 import { Bar, cx, Dot } from './primitives'
+import { iconTone, soft, WIDGET_COLOR } from './theme'
 
 export type WidgetTier = 'primary' | 'secondary' | 'hidden'
 
 export interface WidgetDef {
   id: HudWidget
   icon: IconName
+  /** Gauge hue (CSS colour): icon, icon tile and bar. */
+  color: string
   tier: WidgetTier
   /** Renders the chip, or null when nothing to show right now. */
   Component: ComponentType<{ compact?: boolean }>
@@ -27,6 +31,7 @@ export interface WidgetDef {
 
 export function WidgetChip({
   icon,
+  color = 'var(--color-ink-2)',
   label,
   value,
   sub,
@@ -37,6 +42,8 @@ export function WidgetChip({
   compact: isCompact,
 }: {
   icon: IconName
+  /** Gauge hue (WIDGET_COLOR[id]). */
+  color?: string
   label: string
   value: ReactNode
   sub?: ReactNode
@@ -53,7 +60,13 @@ export function WidgetChip({
       className={cx('flex min-w-0 items-start rounded-control', isCompact ? 'gap-1.5 px-1.5 py-1' : 'gap-2 px-2 py-1.5')}
       title={title ?? label}
     >
-      <Icon name={icon} size={isCompact ? 13 : 15} className={cx('shrink-0 text-ink-2', isCompact ? 'mt-[3px]' : 'mt-px')} />
+      <span
+        aria-hidden="true"
+        className={cx('grid shrink-0 place-items-center rounded-[7px]', isCompact ? 'mt-px size-5' : 'size-7')}
+        style={{ color: iconTone(color), background: soft(color) }}
+      >
+        <Icon name={icon} size={isCompact ? 12 : 15} />
+      </span>
       <div className="min-w-0 flex-1">
         {!isCompact && (
           // Label never truncates (a cut label loses its meaning): tighter tracking, wraps to 2 lines if needed.
@@ -91,8 +104,11 @@ function StatusMark({ alert, warn, size }: { alert?: boolean; warn?: boolean; si
   return null
 }
 
-/** Stacked share bar in an ink ramp (no pastel hues). The last step (ink-4) still reads on the bg-border track. */
-const RAMP = ['var(--color-ink)', 'var(--color-ink-2)', 'var(--color-ink-3)', 'var(--color-ink-4)'] as const
+/** Stacked share bar ramp: one gauge hue in four strengths (100 / 70 / 45 / 25% over the surface). */
+function ramp(color: string): [string, string, string, string] {
+  const at = (p: number) => `color-mix(in oklab, ${color} ${p}%, var(--color-surface))`
+  return [color, at(70), at(45), at(25)]
+}
 
 function StackBar({ parts }: { parts: { value: number; color: string; label: string }[] }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0)
@@ -108,7 +124,7 @@ function StackBar({ parts }: { parts: { value: number; color: string; label: str
   )
 }
 
-function Spark({ values, line }: { values: number[]; line?: number }) {
+function Spark({ values, line, color }: { values: number[]; line?: number; color: string }) {
   const w = 72
   const h = 18
   const pts = values.slice(-12)
@@ -117,18 +133,18 @@ function Spark({ values, line }: { values: number[]; line?: number }) {
   return (
     <svg width={w} height={h} className="mt-1 overflow-visible" aria-hidden="true">
       {line !== undefined && <line x1={0} x2={w} y1={h - (line / max) * h} y2={h - (line / max) * h} stroke="var(--color-ink-3)" strokeDasharray="3 2" />}
-      {pts.length > 0 && <polyline points={path} fill="none" stroke="var(--color-ink)" strokeWidth={1.5} strokeLinejoin="round" />}
+      {pts.length > 0 && <polyline points={path} fill="none" stroke={color} strokeWidth={1.75} strokeLinejoin="round" />}
     </svg>
   )
 }
 
-function Pie({ fraction }: { fraction: number }) {
+function Pie({ fraction, color }: { fraction: number; color: string }) {
   const r = 7
   const c = 2 * Math.PI * r
   return (
     <svg width={14} height={14} viewBox="0 0 18 18" className="-rotate-90" aria-hidden="true">
-      <circle cx={9} cy={9} r={r} fill="var(--color-border)" />
-      <circle cx={9} cy={9} r={r / 2} fill="none" stroke="var(--color-ink)" strokeWidth={r} strokeDasharray={`${(fraction * c) / 2} ${c}`} />
+      <circle cx={9} cy={9} r={r} fill={soft(color, 22)} />
+      <circle cx={9} cy={9} r={r / 2} fill="none" stroke={color} strokeWidth={r} strokeDasharray={`${(fraction * c) / 2} ${c}`} />
     </svg>
   )
 }
@@ -142,6 +158,7 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
   return (
     <WidgetChip
       compact={c}
+      color={WIDGET_COLOR.cash}
       icon="cash"
       label={t('hud.cash')}
       value={<span className={cash < 0 ? 'text-negative-ink' : undefined}>{money(cash)}</span>}
@@ -157,6 +174,7 @@ function UsersWidget({ compact: c }: { compact?: boolean }) {
   return (
     <WidgetChip
       compact={c}
+      color={WIDGET_COLOR.users}
       icon="users"
       label={t('hud.users')}
       alert={overload > 0}
@@ -172,8 +190,8 @@ function MoraleWidget({ compact: c }: { compact?: boolean }) {
   // 28–50 = the tired band: an early, quieter mark before it turns critical.
   const tired = !critical && morale < 50
   return (
-    <WidgetChip compact={c} icon="heart" label={t('hud.morale')} alert={critical} warn={tired} value={<span className={critical ? 'text-negative-ink' : undefined}>{Math.round(morale)}</span>}>
-      {!c && <Bar className="mt-1.5" height={4} value={Math.max(0, Math.min(100, morale)) / 100} tone={critical ? 'bg-negative' : 'bg-ink'} />}
+    <WidgetChip compact={c} color={WIDGET_COLOR.morale} icon="heart" label={t('hud.morale')} alert={critical} warn={tired} value={<span className={critical ? 'text-negative-ink' : undefined}>{Math.round(morale)}</span>}>
+      {!c && <Bar className="mt-1.5" height={4} value={Math.max(0, Math.min(100, morale)) / 100} color={critical ? 'var(--color-negative)' : WIDGET_COLOR.morale} />}
     </WidgetChip>
   )
 }
@@ -184,6 +202,7 @@ function RunwayWidget({ compact: c }: { compact?: boolean }) {
   return (
     <WidgetChip
       compact={c}
+      color={WIDGET_COLOR.runway}
       icon="hourglass"
       label={t('hud.runway')}
       alert={danger}
@@ -195,8 +214,9 @@ function RunwayWidget({ compact: c }: { compact?: boolean }) {
 
 function BurnWidget({ compact: c }: { compact?: boolean }) {
   const b = useGameStore(useShallow((s) => ({ burn: s.state.finance.burn, ...s.state.finance.burnBreakdown })))
+  const RAMP = ramp(WIDGET_COLOR.burnBreakdown)
   return (
-    <WidgetChip compact={c} icon="flame" label={t('hud.burn')} value={t('hud.perMonthPlain', { v: money(b.burn) })}>
+    <WidgetChip compact={c} color={WIDGET_COLOR.burnBreakdown} icon="flame" label={t('hud.burn')} value={t('hud.perMonthPlain', { v: money(b.burn) })}>
       <StackBar
         parts={[
           { value: b.salaries, color: RAMP[0], label: t('burn.salaries') },
@@ -211,7 +231,7 @@ function BurnWidget({ compact: c }: { compact?: boolean }) {
 
 function RetentionWidget({ compact: c }: { compact?: boolean }) {
   const churn = useGameStore((s) => s.state.stats.churn)
-  return <WidgetChip compact={c} icon="magnet" label={t('hud.retention')} value={pct(1 - churn, 1)} sub={t('hud.monthly')} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.retention} icon="magnet" label={t('hud.retention')} value={pct(1 - churn, 1)} sub={t('hud.monthly')} />
 }
 
 function ProfitWidget({ compact: c }: { compact?: boolean }) {
@@ -219,12 +239,13 @@ function ProfitWidget({ compact: c }: { compact?: boolean }) {
   return (
     <WidgetChip
       compact={c}
+      color={WIDGET_COLOR.profitProjection}
       icon="trend"
       label={t('hud.profitProjection')}
       value={net >= 0 ? t('hud.profitable') : money(-net)}
       sub={net >= 0 ? undefined : t('hud.gapSub')}
     >
-      {!c && <Spark values={hist} line={burn} />}
+      {!c && <Spark values={hist} line={burn} color={WIDGET_COLOR.profitProjection} />}
     </WidgetChip>
   )
 }
@@ -232,16 +253,16 @@ function ProfitWidget({ compact: c }: { compact?: boolean }) {
 function CapTableWidget({ compact: c }: { compact?: boolean }) {
   const equity = useGameStore((s) => s.state.stats.equity)
   return (
-    <WidgetChip compact={c} icon="pie" label={t('hud.capTable')} value={<span className="inline-flex items-center gap-1.5"><Pie fraction={equity} />{pct(equity)}</span>} sub={t('hud.yours')} />
+    <WidgetChip compact={c} color={WIDGET_COLOR.capTable} icon="pie" label={t('hud.capTable')} value={<span className="inline-flex items-center gap-1.5"><Pie fraction={equity} color={WIDGET_COLOR.capTable} />{pct(equity)}</span>} sub={t('hud.yours')} />
   )
 }
 
 function RoundTimerWidget({ compact: c }: { compact?: boolean }) {
   const round = useGameStore(useShallow((s) => (s.state.round?.active ? { left: s.state.round.weeksLeft, total: s.state.round.weeksTotal } : null)))
-  if (!round) return <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} value={<span className="text-ink-2">{t('hud.noRound')}</span>} />
+  if (!round) return <WidgetChip compact={c} color={WIDGET_COLOR.roundTimer} icon="timer" label={t('hud.roundTimer')} value={<span className="text-ink-2">{t('hud.noRound')}</span>} />
   return (
-    <WidgetChip compact={c} icon="timer" label={t('hud.roundTimer')} value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })}>
-      {!c && <Bar className="mt-1.5" height={4} value={round.total > 0 ? 1 - round.left / round.total : 0} />}
+    <WidgetChip compact={c} color={WIDGET_COLOR.roundTimer} icon="timer" label={t('hud.roundTimer')} value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })}>
+      {!c && <Bar className="mt-1.5" height={4} value={round.total > 0 ? 1 - round.left / round.total : 0} color={WIDGET_COLOR.roundTimer} />}
     </WidgetChip>
   )
 }
@@ -249,17 +270,17 @@ function RoundTimerWidget({ compact: c }: { compact?: boolean }) {
 function ChurnWidget({ compact: c }: { compact?: boolean }) {
   const churn = useGameStore((s) => s.state.stats.churn)
   const high = churn > 0.08
-  return <WidgetChip compact={c} icon="leak" label={t('hud.churn')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{pct(churn, 1)}</span>} sub={t('hud.monthly')} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.churn} icon="leak" label={t('hud.churn')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{pct(churn, 1)}</span>} sub={t('hud.monthly')} />
 }
 
 function ArpuWidget({ compact: c }: { compact?: boolean }) {
   const arpu = useGameStore((s) => s.state.stats.arpu)
-  return <WidgetChip compact={c} icon="coin" label={t('hud.arpu')} value={`$${fixed(arpu, 2)}`} sub={t('hud.perUser')} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.arpu} icon="coin" label={t('hud.arpu')} value={`$${fixed(arpu, 2)}`} sub={t('hud.perUser')} />
 }
 
 function ReputationWidget({ compact: c }: { compact?: boolean }) {
   const rep = useGameStore((s) => s.state.stats.reputation)
-  return <WidgetChip compact={c} icon="megaphone" label={t('hud.reputation')} value={Math.round(rep)} sub="/100" />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.reputation} icon="megaphone" label={t('hud.reputation')} value={Math.round(rep)} sub="/100" />
 }
 
 /** Founder control (cap-table-health): exact stake and whether the founder still holds a majority. */
@@ -269,6 +290,7 @@ function EquityWidget({ compact: c }: { compact?: boolean }) {
   return (
     <WidgetChip
       compact={c}
+      color={WIDGET_COLOR.equity}
       icon="key"
       label={t('hud.founderStake')}
       alert={!majority}
@@ -294,14 +316,14 @@ function MoraleMapWidget({ compact: c }: { compact?: boolean }) {
     }),
   )
   return (
-    <WidgetChip compact={c} icon="grid" label={t('hud.moraleMap')} alert={bands.low > 0} value={`${bands.low}/${bands.mid}/${bands.high}`} sub={t('hud.moraleMapSub')} title={t('hud.moraleMapValue', bands)}>
+    <WidgetChip compact={c} color={WIDGET_COLOR.moraleHeatmap} icon="grid" label={t('hud.moraleMap')} alert={bands.low > 0} value={`${bands.low}/${bands.mid}/${bands.high}`} sub={t('hud.moraleMapSub')} title={t('hud.moraleMapValue', bands)}>
       {!c && (
         <StackBar
           parts={[
-            // Burnout band is the one place a stacked bar may use red (DESIGN.md §5).
+            // Burnout band reads red; tired = faded morale hue; fine = full morale hue.
             { value: bands.low, color: 'var(--color-negative)', label: t('status.burnout') },
-            { value: bands.mid, color: RAMP[2], label: t('status.tired') },
-            { value: bands.high, color: RAMP[0], label: t('status.working') },
+            { value: bands.mid, color: ramp(WIDGET_COLOR.moraleHeatmap)[2], label: t('status.tired') },
+            { value: bands.high, color: WIDGET_COLOR.moraleHeatmap, label: t('status.working') },
           ]}
         />
       )}
@@ -315,6 +337,7 @@ function LtvCacWidget({ compact: c }: { compact?: boolean }) {
   return (
     <WidgetChip
       compact={c}
+      color={WIDGET_COLOR.ltvCac}
       icon="scale"
       label={t('hud.ltvCac')}
       alert={bad}
@@ -327,8 +350,9 @@ function LtvCacWidget({ compact: c }: { compact?: boolean }) {
 function ChannelsWidget({ compact: c }: { compact?: boolean }) {
   const ch = useGameStore(useShallow((s) => s.state.derived.channels))
   const total = ch.organic + ch.paid + ch.manual + ch.enterprise
+  const RAMP = ramp(WIDGET_COLOR.channelBreakdown)
   return (
-    <WidgetChip compact={c} icon="branch" label={t('hud.channels')} value={t('hud.perMonthPlain', { v: `+${num(total)}` })}>
+    <WidgetChip compact={c} color={WIDGET_COLOR.channelBreakdown} icon="branch" label={t('hud.channels')} value={t('hud.perMonthPlain', { v: `+${num(total)}` })}>
       <StackBar
         parts={[
           { value: ch.organic, color: RAMP[0], label: t('channel.organic') },
@@ -344,18 +368,18 @@ function ChannelsWidget({ compact: c }: { compact?: boolean }) {
 function DebtWidget({ compact: c }: { compact?: boolean }) {
   const debt = useGameStore((s) => s.state.techDebt)
   const high = debt > 50
-  return <WidgetChip compact={c} icon="bug" label={t('hud.techDebt')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{fixed(debt, 0)}</span>} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.debtCounter} icon="bug" label={t('hud.techDebt')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{fixed(debt, 0)}</span>} />
 }
 
 function CoordinationWidget({ compact: c }: { compact?: boolean }) {
   const coord = useGameStore((s) => s.state.derived.coordination)
-  if (coord >= 0.999) return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
-  return <WidgetChip compact={c} icon="network" label={t('hud.coordination')} alert value={<span className="text-negative-ink">{`−${pct(1 - coord)}`}</span>} sub={t('hud.output')} />
+  if (coord >= 0.999) return <WidgetChip compact={c} color={WIDGET_COLOR.coordinationWarning} icon="network" label={t('hud.coordination')} value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.coordinationWarning} icon="network" label={t('hud.coordination')} alert value={<span className="text-negative-ink">{`−${pct(1 - coord)}`}</span>} sub={t('hud.output')} />
 }
 
 function CultureWidget({ compact: c }: { compact?: boolean }) {
   const team = useGameStore((s) => s.state.derived.teamSize)
-  return <WidgetChip compact={c} icon="flag" label={t('hud.culture')} value={t('hud.cultureValue', { n: team })} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.cultureBadge} icon="flag" label={t('hud.culture')} value={t('hud.cultureValue', { n: team })} />
 }
 
 function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
@@ -363,8 +387,9 @@ function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
   const top = customers.reduce((a, x) => Math.max(a, x.mrr), 0)
   const share = mrr > 0 ? top / mrr : 0
   const concentrated = share > 0.3
+  const RAMP = ramp(WIDGET_COLOR.revenueDistribution)
   return (
-    <WidgetChip compact={c} icon="bars" label={t('hud.revenueDist')} alert={concentrated} value={pct(share)} sub={t('hud.topCustomerSub')}>
+    <WidgetChip compact={c} color={WIDGET_COLOR.revenueDistribution} icon="bars" label={t('hud.revenueDist')} alert={concentrated} value={pct(share)} sub={t('hud.topCustomerSub')}>
       {!c && (
         <StackBar
           parts={[
@@ -379,34 +404,34 @@ function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
 
 function ArchetypeWidget({ compact: c }: { compact?: boolean }) {
   const a = useGameStore((s) => s.state.archetype)
-  if (!a) return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} value={<span className="text-ink-2">{t('hud.archetypeUnknown')}</span>} />
-  return <WidgetChip compact={c} icon="compass" label={t('hud.archetype')} value={t(`archetype.${a}`)} />
+  if (!a) return <WidgetChip compact={c} color={WIDGET_COLOR.archetypeBadge} icon="compass" label={t('hud.archetype')} value={<span className="text-ink-2">{t('hud.archetypeUnknown')}</span>} />
+  return <WidgetChip compact={c} color={WIDGET_COLOR.archetypeBadge} icon="compass" label={t('hud.archetype')} value={t(`archetype.${a}`)} />
 }
 
 const Nothing = () => null
 
 export const WIDGETS: Record<HudWidget, WidgetDef> = {
-  cash: { id: 'cash', icon: 'cash', tier: 'primary', Component: CashWidget },
-  users: { id: 'users', icon: 'users', tier: 'primary', Component: UsersWidget },
-  morale: { id: 'morale', icon: 'heart', tier: 'primary', Component: MoraleWidget },
-  runway: { id: 'runway', icon: 'hourglass', tier: 'secondary', Component: RunwayWidget },
-  burnBreakdown: { id: 'burnBreakdown', icon: 'flame', tier: 'secondary', Component: BurnWidget },
-  retention: { id: 'retention', icon: 'magnet', tier: 'secondary', Component: RetentionWidget },
-  profitProjection: { id: 'profitProjection', icon: 'trend', tier: 'secondary', Component: ProfitWidget },
-  capTable: { id: 'capTable', icon: 'pie', tier: 'secondary', Component: CapTableWidget },
-  roundTimer: { id: 'roundTimer', icon: 'timer', tier: 'secondary', Component: RoundTimerWidget },
+  cash: { id: 'cash', color: WIDGET_COLOR.cash, icon: 'cash', tier: 'primary', Component: CashWidget },
+  users: { id: 'users', color: WIDGET_COLOR.users, icon: 'users', tier: 'primary', Component: UsersWidget },
+  morale: { id: 'morale', color: WIDGET_COLOR.morale, icon: 'heart', tier: 'primary', Component: MoraleWidget },
+  runway: { id: 'runway', color: WIDGET_COLOR.runway, icon: 'hourglass', tier: 'secondary', Component: RunwayWidget },
+  burnBreakdown: { id: 'burnBreakdown', color: WIDGET_COLOR.burnBreakdown, icon: 'flame', tier: 'secondary', Component: BurnWidget },
+  retention: { id: 'retention', color: WIDGET_COLOR.retention, icon: 'magnet', tier: 'secondary', Component: RetentionWidget },
+  profitProjection: { id: 'profitProjection', color: WIDGET_COLOR.profitProjection, icon: 'trend', tier: 'secondary', Component: ProfitWidget },
+  capTable: { id: 'capTable', color: WIDGET_COLOR.capTable, icon: 'pie', tier: 'secondary', Component: CapTableWidget },
+  roundTimer: { id: 'roundTimer', color: WIDGET_COLOR.roundTimer, icon: 'timer', tier: 'secondary', Component: RoundTimerWidget },
   // Shown in the Team panel instead of the HUD.
-  candidateQuality: { id: 'candidateQuality', icon: 'star', tier: 'hidden', Component: Nothing },
-  moraleHeatmap: { id: 'moraleHeatmap', icon: 'grid', tier: 'secondary', Component: MoraleMapWidget },
-  churn: { id: 'churn', icon: 'leak', tier: 'secondary', Component: ChurnWidget },
-  arpu: { id: 'arpu', icon: 'coin', tier: 'secondary', Component: ArpuWidget },
-  reputation: { id: 'reputation', icon: 'megaphone', tier: 'secondary', Component: ReputationWidget },
-  equity: { id: 'equity', icon: 'key', tier: 'secondary', Component: EquityWidget },
-  ltvCac: { id: 'ltvCac', icon: 'scale', tier: 'secondary', Component: LtvCacWidget },
-  channelBreakdown: { id: 'channelBreakdown', icon: 'branch', tier: 'secondary', Component: ChannelsWidget },
-  debtCounter: { id: 'debtCounter', icon: 'bug', tier: 'secondary', Component: DebtWidget },
-  coordinationWarning: { id: 'coordinationWarning', icon: 'network', tier: 'secondary', Component: CoordinationWidget },
-  cultureBadge: { id: 'cultureBadge', icon: 'flag', tier: 'secondary', Component: CultureWidget },
-  revenueDistribution: { id: 'revenueDistribution', icon: 'bars', tier: 'secondary', Component: RevenueDistWidget },
-  archetypeBadge: { id: 'archetypeBadge', icon: 'compass', tier: 'secondary', Component: ArchetypeWidget },
+  candidateQuality: { id: 'candidateQuality', color: WIDGET_COLOR.candidateQuality, icon: 'star', tier: 'hidden', Component: Nothing },
+  moraleHeatmap: { id: 'moraleHeatmap', color: WIDGET_COLOR.moraleHeatmap, icon: 'grid', tier: 'secondary', Component: MoraleMapWidget },
+  churn: { id: 'churn', color: WIDGET_COLOR.churn, icon: 'leak', tier: 'secondary', Component: ChurnWidget },
+  arpu: { id: 'arpu', color: WIDGET_COLOR.arpu, icon: 'coin', tier: 'secondary', Component: ArpuWidget },
+  reputation: { id: 'reputation', color: WIDGET_COLOR.reputation, icon: 'megaphone', tier: 'secondary', Component: ReputationWidget },
+  equity: { id: 'equity', color: WIDGET_COLOR.equity, icon: 'key', tier: 'secondary', Component: EquityWidget },
+  ltvCac: { id: 'ltvCac', color: WIDGET_COLOR.ltvCac, icon: 'scale', tier: 'secondary', Component: LtvCacWidget },
+  channelBreakdown: { id: 'channelBreakdown', color: WIDGET_COLOR.channelBreakdown, icon: 'branch', tier: 'secondary', Component: ChannelsWidget },
+  debtCounter: { id: 'debtCounter', color: WIDGET_COLOR.debtCounter, icon: 'bug', tier: 'secondary', Component: DebtWidget },
+  coordinationWarning: { id: 'coordinationWarning', color: WIDGET_COLOR.coordinationWarning, icon: 'network', tier: 'secondary', Component: CoordinationWidget },
+  cultureBadge: { id: 'cultureBadge', color: WIDGET_COLOR.cultureBadge, icon: 'flag', tier: 'secondary', Component: CultureWidget },
+  revenueDistribution: { id: 'revenueDistribution', color: WIDGET_COLOR.revenueDistribution, icon: 'bars', tier: 'secondary', Component: RevenueDistWidget },
+  archetypeBadge: { id: 'archetypeBadge', color: WIDGET_COLOR.archetypeBadge, icon: 'compass', tier: 'secondary', Component: ArchetypeWidget },
 }

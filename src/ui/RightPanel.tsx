@@ -4,9 +4,9 @@
 import { useCallback, useRef, type ReactNode } from 'react'
 import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
-import { Icon, type IconName } from './icons'
+import type { IconName } from './icons'
 import { t } from './i18n'
-import { cx, IconButton } from './primitives'
+import { cx, IconBadge, IconButton } from './primitives'
 import { useIsMobile } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
@@ -135,7 +135,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
       <div className="flex items-center gap-2 border-b border-border px-3 pb-2 pt-3">
         {back}
         <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-base font-semibold tracking-wide text-ink">
-          <Icon name={meta.icon} size={18} className="shrink-0 text-ink-2" />
+          <IconBadge icon={meta.icon} size={28} color="var(--color-brand)" />
           <span className="truncate">{meta.title}</span>
         </h2>
         {close}

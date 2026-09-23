@@ -27,7 +27,7 @@ export function RoundSection() {
   return (
     <section id="round-section" className="flex scroll-mt-2 flex-col gap-4 border-t border-border-strong pt-4">
         <header className="flex items-center gap-3">
-          <IconBadge icon={active ? 'timer' : 'rocket'} size={40} filled />
+          <IconBadge icon={active ? 'timer' : 'rocket'} size={40} color="var(--color-brand)" />
           <div>
             <h2 className="text-lg font-semibold leading-tight tracking-wide">{active ? t('round.activeTitle') : t('round.confirmTitle', { stage: next?.name ?? '' })}</h2>
             <p className="font-text text-xs text-ink-2">{active ? t('round.activeSub') : t('round.confirmSub')}</p>

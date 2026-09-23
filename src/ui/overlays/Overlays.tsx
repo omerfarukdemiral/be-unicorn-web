@@ -54,10 +54,10 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
 function OfficeGlyph({ size, muted }: { size: number; muted?: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      {/* Neutral isometric block: muted = old office (hairline tones), new office = ink ramp. */}
-      <path d="M32 6 58 20 32 34 6 20Z" fill={muted ? 'var(--color-surface-2)' : 'var(--color-ink-3)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
-      <path d="M6 20v22l26 14V34Z" fill={muted ? 'var(--color-border)' : 'var(--color-ink)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
-      <path d="M58 20v22L32 56V34Z" fill={muted ? 'var(--color-surface-2)' : 'var(--color-ink-2)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
+      {/* Isometric block: muted = old office (hairline tones), new office = brand ramp. */}
+      <path d="M32 6 58 20 32 34 6 20Z" fill={muted ? 'var(--color-surface-2)' : 'color-mix(in oklab, var(--color-brand) 45%, var(--color-surface))'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
+      <path d="M6 20v22l26 14V34Z" fill={muted ? 'var(--color-border)' : 'var(--color-brand-ink)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
+      <path d="M58 20v22L32 56V34Z" fill={muted ? 'var(--color-surface-2)' : 'var(--color-brand)'} stroke={muted ? 'var(--color-border-strong)' : 'none'} strokeLinejoin="round" />
     </svg>
   )
 }
@@ -120,7 +120,7 @@ export function PostMortemOverlay() {
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3 rounded-control border border-border px-4 py-3">
-          <IconBadge icon="sparkle" size={32} filled />
+          <IconBadge icon="sparkle" size={32} color="var(--color-g-equity)" />
           <div className="min-w-0 flex-1">
             <div className="tabular text-sm font-semibold text-ink">{t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}</div>
             <div className="tabular text-xs text-ink-2">{t('pm.xpHint', { total: fixed(s.xp + s.go.xpEarned, 1) })}</div>
@@ -133,7 +133,7 @@ export function PostMortemOverlay() {
             onClick={() => setOpen(open === 'failure-is-data' ? null : 'failure-is-data')}
             className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
           >
-            <Icon name="book" size={13} className="text-ink-2" />
+            <Icon name="book" size={13} className="text-kind-concept" />
             {t('decision.notebookLink', { v: conceptTitle('failure-is-data') })}
           </button>
         </div>
@@ -160,7 +160,7 @@ function ReasonRow({ index, reason, open, setOpen }: { index: number; reason: Po
             onClick={() => setOpen(open === cid ? null : cid)}
             className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
           >
-            <Icon name="book" size={13} className="text-ink-2" />
+            <Icon name="book" size={13} className="text-kind-concept" />
             {t('decision.notebookLink', { v: conceptTitle(cid) })}
           </button>
         )}
@@ -176,7 +176,7 @@ export function VictoryOverlay() {
   return (
     <OverlayFrame wide>
       <div className="relative flex flex-col items-center gap-5 overflow-hidden p-6 text-center sm:p-8">
-        <span className="relative grid size-16 place-items-center rounded-card bg-ink text-on-ink">
+        <span className="relative grid size-16 place-items-center rounded-card bg-brand text-on-ink shadow-[0_10px_24px_-8px_var(--color-brand)]">
           <Icon name="unicorn" size={36} />
         </span>
         <div className="relative">

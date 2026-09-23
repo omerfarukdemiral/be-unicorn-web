@@ -55,7 +55,7 @@ export function ActivityLine() {
         aria-expanded={open}
         className="ui-card flex min-h-10 max-w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink transition-colors hover:bg-surface-2 max-md:min-h-11"
       >
-        <span className={cx('size-1.5 shrink-0 rounded-full bg-positive', 'animate-pulse')} />
+        <span className={cx('size-1.5 shrink-0 rounded-full bg-brand', 'animate-pulse')} />
         <span key={last.id} className="font-text min-w-0 animate-fade-in truncate">
           {activityText(last)}
         </span>

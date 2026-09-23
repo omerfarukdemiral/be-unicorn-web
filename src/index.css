@@ -36,61 +36,94 @@
 }
 @import "tailwindcss";
 
-/* Design tokens: minimal "neutral + one accent" (docs/DESIGN.md). Owned by the foundation lane. */
+/* Design tokens: "calm UI + coloured accents" (docs/DESIGN.md). Owned by the foundation lane.
+   Warm off-white surfaces and ink text stay neutral; hue lives on the brand CTA / progress, on each HUD
+   gauge's icon + bar, on department marks and on small bubble/kind marks. Text stays ink (AA). */
 @theme {
-  /* --- Semantic palette (use these in new code) --- */
-  --color-surface: #f6f5f2;       /* panels, cards, bubbles */
-  --color-surface-2: #eeede9;     /* inset fills: stat tiles, hover, tracks */
-  --color-canvas-bg: #e9e8e4;     /* page + 3D scene backdrop */
-  --color-border: #e4e2dd;        /* 1px hairlines */
-  --color-border-strong: #d3d1cb; /* dividers that must read on surface-2 */
-  --color-ink: #1c1b1f;           /* primary text, primary buttons, active tab, progress fill */
-  --color-ink-2: #6b6a70;         /* secondary text, icons */
-  --color-ink-3: #9c9ba1;         /* tertiary text, disabled, placeholders */
-  --color-on-ink: #f6f5f2;        /* text/icons on ink fills */
-  --color-accent: #3e63dd;        /* focus ring + selection only */
-  --color-positive: #2f9e6b;      /* tiny status marks (dots, icons, bar fills) */
-  --color-negative: #d2463c;      /* tiny status marks (dots, icons, bar fills) */
-  /* Number text in green/red: darker so small figures pass WCAG AA (≥4.5:1 on surface and surface-2).
-     Text uses text-positive-ink / text-negative-ink; dots, icons and bar fills keep the brighter marks. */
-  --color-positive-ink: #1f7249;
+  /* --- Neutrals (slightly warm) --- */
+  --color-surface: #fbfaf7;       /* panels, cards, bubbles */
+  --color-surface-2: #f3f1ec;     /* inset fills: hover, pressed, segmented-control track */
+  --color-canvas-bg: #f3ebdf;     /* page backdrop behind the scene (warm light) */
+  --color-border: #e8e4dc;        /* 1px hairlines, progress track */
+  --color-border-strong: #d6d0c5; /* dividers that must read on surface-2, dashed hints */
+  --color-ink: #1f1d24;           /* primary text */
+  --color-ink-2: #64616b;         /* secondary text, neutral icons */
+  --color-ink-3: #9b978f;         /* tertiary text, disabled, placeholders */
+  --color-ink-4: #c4bfb6;         /* lightest ramp step that still reads on a bg-border track */
+  --color-on-ink: #fbfaf7;        /* text/icons on ink or brand fills */
+
+  /* --- Brand: unicorn violet. Primary buttons, active tab/chip, stage progress, "Tur başlat". --- */
+  --color-brand: #6b4ef0;         /* fills (white text 5.3:1) */
+  --color-brand-hover: #5a3de0;
+  --color-brand-ink: #4b2fc9;     /* brand-coloured text on light surfaces (7.9:1) */
+  --color-brand-soft: #efebfe;    /* ~12% brand on surface: active chip, selected row */
+  --color-accent: #6b4ef0;        /* 3D selection ring (= brand); the focus ring is ink */
+
+  /* --- Status (numbers + small marks) --- */
+  --color-positive: #1f9d63;
+  --color-negative: #e0483e;
+  /* Number text in green/red: darker so small figures pass WCAG AA (>=4.5:1 on surface and surface-2). */
+  --color-positive-ink: #1b7248;
   --color-negative-ink: #b3372e;
-  --color-ink-4: #bdbbb5;         /* lightest ramp step that still reads on a bg-border track */
-  /* Department dots (6-8px only, never fills). */
-  --color-dept-eng: #4c7bd9;
-  --color-dept-product: #8a63d2;
-  --color-dept-marketing: #e07a45;
-  --color-dept-sales: #c9a227;
-  --color-dept-ops: #2f9e8b;
+
+  /* --- HUD gauge hues: icon + thin bar/track + ~12% icon tile. Never body text. (theme.ts WIDGET_COLOR)
+         Identity only: a threshold warning uses --color-negative, so no gauge hue is a warning red.
+         Icons on their tile go through iconTone() (hue 80% + ink 20%) to keep >= 3:1. --- */
+  --color-g-cash: #1f9d63;        /* kasa, kâr projeksiyonu */
+  --color-g-users: #3a7bea;       /* kullanıcı, kanallar */
+  --color-g-morale: #ec6fa8;      /* moral, moral haritası, kültür (clear pink, not a warning red) */
+  --color-g-runway: #d9730d;      /* runway */
+  --color-g-burn: #c65a34;        /* yakıt / burn (brick: identity, never --color-negative) */
+  --color-g-churn: #b8487f;       /* churn (plum) */
+  --color-g-retention: #139c8c;   /* elde tutma, LTV/CAC */
+  --color-g-reputation: #8b5cf6;  /* itibar */
+  --color-g-equity: #b8860b;      /* cap table, kurucu payı */
+  --color-g-sky: #0e8fc9;         /* ARPU, koordinasyon */
+  --color-g-indigo: #5b6ce0;      /* gelir dağılımı */
+  --color-g-debt: #7d6b5d;        /* teknik borç (taupe) */
+  --color-energy: #f2a11f;        /* founder energy bar (fill only) */
+  --color-energy-ink: #a45f00;    /* energy number (4.8:1 on surface) */
+
+  /* --- Bubble kind marks --- */
+  --color-kind-decision: #e8790f; /* karar */
+  --color-kind-concept: #8b5cf6;  /* kavram */
+  --color-shelf: #d8c3a5;         /* Defter bookshelf plank (warm wood) */
+
+  /* --- Departments (dots, chip tints, shirts). Mirror src/render/palette.ts DEPT_COLORS. --- */
+  --color-dept-eng: #3f7fe8;
+  --color-dept-product: #9a5cf0;
+  --color-dept-marketing: #f0605a;
+  --color-dept-sales: #f5a81c;
+  --color-dept-ops: #14a98f;
 
   /* --- Legacy aliases (DEPRECATED, mapped to neutrals so old classes keep working).
          Migrate with the map in docs/DESIGN.md; do not use in new code. --- */
-  --color-cream-50: #f6f5f2;
-  --color-cream-100: #eeede9;
-  --color-cream-200: #eceae5;
-  --color-cream-300: #e4e2dd;
-  --color-ink-900: #1c1b1f;
-  --color-ink-700: #3a393e;
-  --color-ink-600: #6b6a70;
-  --color-ink-400: #9c9ba1;
-  --color-lilac-100: #eeede9;
-  --color-lilac-300: #d3d1cb;
-  --color-lilac-500: #1c1b1f;
-  --color-mint-100: #eeede9;
-  --color-mint-300: #d3d1cb;
-  --color-mint-600: #2f9e6b;
-  --color-peach-100: #eeede9;
-  --color-peach-300: #d3d1cb;
-  --color-peach-600: #6b6a70;
-  --color-sky-100: #eeede9;
-  --color-sky-300: #d3d1cb;
-  --color-sky-600: #6b6a70;
-  --color-lemon-100: #eeede9;
-  --color-lemon-300: #d3d1cb;
-  --color-lemon-600: #6b6a70;
-  --color-rose-100: #eeede9;
-  --color-rose-300: #d3d1cb;
-  --color-rose-600: #d2463c;
+  --color-cream-50: #fbfaf7;
+  --color-cream-100: #f3f1ec;
+  --color-cream-200: #f0ede7;
+  --color-cream-300: #e8e4dc;
+  --color-ink-900: #1f1d24;
+  --color-ink-700: #3a3840;
+  --color-ink-600: #64616b;
+  --color-ink-400: #9b978f;
+  --color-lilac-100: #f3f1ec;
+  --color-lilac-300: #d6d0c5;
+  --color-lilac-500: #1f1d24;
+  --color-mint-100: #f3f1ec;
+  --color-mint-300: #d6d0c5;
+  --color-mint-600: #1f9d63;
+  --color-peach-100: #f3f1ec;
+  --color-peach-300: #d6d0c5;
+  --color-peach-600: #64616b;
+  --color-sky-100: #f3f1ec;
+  --color-sky-300: #d6d0c5;
+  --color-sky-600: #64616b;
+  --color-lemon-100: #f3f1ec;
+  --color-lemon-300: #d6d0c5;
+  --color-lemon-600: #64616b;
+  --color-rose-100: #f3f1ec;
+  --color-rose-300: #d6d0c5;
+  --color-rose-600: #e0483e;
 
   /* --- Type --- */
   --font-ui: "Oxanium Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -100,8 +133,8 @@
   /* --- Shape --- */
   --radius-card: 14px;
   --radius-control: 10px;
-  --shadow-card: 0 1px 2px rgb(28 27 31 / 0.05), 0 4px 12px -6px rgb(28 27 31 / 0.10);
-  --shadow-pop: 0 12px 32px -12px rgb(28 27 31 / 0.22), 0 2px 6px -2px rgb(28 27 31 / 0.08);
+  --shadow-card: 0 1px 2px rgb(31 29 36 / 0.05), 0 4px 12px -6px rgb(31 29 36 / 0.10);
+  --shadow-pop: 0 12px 32px -12px rgb(31 29 36 / 0.22), 0 2px 6px -2px rgb(31 29 36 / 0.08);
 
   --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   --animate-fade-in: fade-in 200ms ease-out both;
@@ -247,21 +280,24 @@ input[type="range"].ui-range::-webkit-slider-thumb {
   height: 20px;
   margin-top: -8px;
   border-radius: 999px;
-  background: var(--color-ink);
+  background: var(--color-brand);
   border: 3px solid var(--color-surface);
-  box-shadow: 0 1px 3px rgb(28 27 31 / 0.25);
+  box-shadow: 0 1px 3px rgb(31 29 36 / 0.25);
 }
 input[type="range"].ui-range::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  background: var(--color-ink);
+  background: var(--color-brand);
   border: 3px solid var(--color-surface);
 }
 
+/* Keyboard focus: ink outline + a surface gap, so it never reads as the brand "selected" state
+   (active tab / chip / row are brand) and still shows on brand fills. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--color-surface);
 }
 
 @media (prefers-reduced-motion: reduce) {

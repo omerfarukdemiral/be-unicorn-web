@@ -8,7 +8,7 @@ import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
 import { Bar, Button, Chip, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
-import { DEPT_COLOR, moraleTone, STATUS_DOT, STATUS_TONE } from '../theme'
+import { DEPT_COLOR, moraleTone, soft, STATUS_DOT, STATUS_TONE } from '../theme'
 
 type Sub = 'hire' | 'team'
 
@@ -32,11 +32,11 @@ export function TeamPanel() {
 }
 
 export function DeptPill({ dept }: { dept: Dept }) {
-  return <Pill dot={DEPT_COLOR[dept].dot}>{DEPT_TEXT[dept].short}</Pill>
+  return <Pill dot={DEPT_COLOR[dept].dot} tint={DEPT_COLOR[dept].dot}>{DEPT_TEXT[dept].short}</Pill>
 }
 
-// `dept` stays in the signature for callers; the avatar itself is neutral (department = the pill's dot).
-export function Avatar({ name, size = 36 }: { name: string; dept: Dept; size?: number }) {
+/** Initials on a light tint of the department hue, with a thin ring in the same hue. Text stays ink. */
+export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; size?: number }) {
   const initials = name
     .split(' ')
     .map((p) => p[0] ?? '')
@@ -44,7 +44,10 @@ export function Avatar({ name, size = 36 }: { name: string; dept: Dept; size?: n
     .slice(0, 2)
     .toUpperCase()
   return (
-    <span className="grid shrink-0 place-items-center rounded-full border border-border bg-surface-2 text-[11px] font-semibold tracking-wide text-ink-2" style={{ width: size, height: size }}>
+    <span
+      className="grid shrink-0 place-items-center rounded-full border text-[11px] font-semibold tracking-wide text-ink"
+      style={{ width: size, height: size, background: soft(DEPT_COLOR[dept].dot, 18), borderColor: soft(DEPT_COLOR[dept].dot, 45) }}
+    >
       {initials}
     </span>
   )
@@ -149,7 +152,7 @@ export function EmployeeRow({ employee: e }: { employee: Employee }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-semibold">{e.name}</span>
-          {e.star && <Icon name="star" size={13} fill="currentColor" className="shrink-0 text-ink" />}
+          {e.star && <Icon name="star" size={13} fill="currentColor" className="shrink-0 text-g-equity" />}
           <DeptPill dept={e.dept} />
           <Pill className={STATUS_TONE[e.status]} dot={STATUS_DOT[e.status]}>{t(`status.${e.status}`)}</Pill>
         </div>

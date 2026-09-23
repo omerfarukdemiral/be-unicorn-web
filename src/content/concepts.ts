@@ -95,7 +95,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Kalıcılık gelmeden büyümeye para dökme.',
     },
     unlocks: 'retention',
-    shelfColor: '#3D405B',
+    shelfColor: '#8E9BF0',
   },
   {
     id: 'focus',
@@ -112,7 +112,7 @@ export const CONCEPTS: readonly Concept[] = [
       },
       rule: 'Erken aşamada tek şeyi mükemmel yap.',
     },
-    shelfColor: '#6D597A',
+    shelfColor: '#C08BD9',
   },
   {
     id: 'default-alive',
@@ -143,7 +143,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Her tur hisseni eritir, sonraki turun fiyat çapasıdır.',
     },
     unlocks: 'capTable',
-    shelfColor: '#5E60CE',
+    shelfColor: '#8B8CF2',
   },
   {
     id: 'safe',
@@ -156,7 +156,7 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `Hissenin ${formatPercent(s.stats.equity)} kadarı sende, SAFE bunu sonraki turda eritecek.`,
       rule: "SAFE dilution'ı erteler, ortadan kaldırmaz.",
     },
-    shelfColor: '#7400B8',
+    shelfColor: '#B58AF5',
   },
   {
     id: 'fundraise-time',
@@ -216,7 +216,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Yeni kullanıcıdan önce gideni durdur.',
     },
     unlocks: 'churn',
-    shelfColor: '#D62828',
+    shelfColor: '#F07167',
   },
   {
     id: 'pricing',
@@ -244,7 +244,7 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `Portföyünde ${s.projects.length} proje var, ${s.projects.filter((p) => p.launched).length} tanesi yayında.`,
       rule: 'Özelliği ürün diye satma, ürünü özelliğe hapsetme.',
     },
-    shelfColor: '#2A9D8F',
+    shelfColor: '#4CC4B4',
   },
   {
     id: 'premature-scaling',
@@ -275,7 +275,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: "LTV:CAC 3'ün altındaysa reklam para yakar.",
     },
     unlocks: 'ltvCac',
-    shelfColor: '#264653',
+    shelfColor: '#5FA8C9',
   },
   {
     id: 'organic-vs-paid',
@@ -306,7 +306,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Teknik borç faizle birikir.',
     },
     unlocks: 'debtCounter',
-    shelfColor: '#495057',
+    shelfColor: '#7FC8A9',
   },
   {
     id: 'ten-x-myth',
@@ -336,7 +336,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Değerleri ekip küçükken yaz.',
     },
     unlocks: 'cultureBadge',
-    shelfColor: '#B5838D',
+    shelfColor: '#E39AAE',
   },
 
   // ---------------------------------------------------------------- Series B–C
@@ -352,7 +352,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Tek müşteri, tek kanal, tek tedarikçi görünmez tasmadır.',
     },
     unlocks: 'revenueDistribution',
-    shelfColor: '#9D4EDD',
+    shelfColor: '#C39BF2',
   },
   {
     id: 'compliance',
@@ -365,7 +365,7 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `Kurumsal satış açıldı, ${s.finance.enterpriseCustomers.length} kurumsal müşterin var.`,
       rule: 'Uyum sıkıcıdır ama kurumsal kapının anahtarıdır.',
     },
-    shelfColor: '#6C757D',
+    shelfColor: '#8FC0E8',
   },
   {
     id: 'trough',
@@ -378,7 +378,7 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `${count(s, 'lowGrowthMonths')} aydır büyüme %2'nin altında, son ay ${formatPercent(s.derived.momGrowth)}.`,
       rule: 'Hayal kırıklığı vadisi normaldir, pusula verindir.',
     },
-    shelfColor: '#0077B6',
+    shelfColor: '#5AA9E6',
   },
   {
     id: 'cap-table-health',
@@ -392,7 +392,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Bugünkü %1 yarının pazarlık gücüdür.',
     },
     unlocks: 'equity',
-    shelfColor: '#4361EE',
+    shelfColor: '#7B93F5',
   },
   {
     id: 'no-single-path',
@@ -406,7 +406,7 @@ export const CONCEPTS: readonly Concept[] = [
       rule: 'Dört farklı patikadan unicorn çıkar.',
     },
     unlocks: 'archetypeBadge',
-    shelfColor: '#F72585',
+    shelfColor: '#F57AB3',
   },
 
   // ---------------------------------------------------------------- Every stage
@@ -434,6 +434,6 @@ export const CONCEPTS: readonly Concept[] = [
       where: (s) => `Şirket ${Math.floor(s.time.day)}. günde durdu, ${s.concepts.learned.length} ders öğrendin.`,
       rule: 'İyi post-mortem suçlu değil kör nokta arar.',
     },
-    shelfColor: '#adb5bd',
+    shelfColor: '#A8D5A2',
   },
 ]

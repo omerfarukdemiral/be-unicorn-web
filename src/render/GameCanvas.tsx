@@ -4,6 +4,7 @@
 import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 import { useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
+import { NeutralToneMapping } from 'three'
 import type { GameState } from '../engine/types'
 import type { ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
@@ -94,6 +95,11 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
         shadows="percentage"
         dpr={lowPower ? [1, 1.5] : [1, 2]}
         gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
+        // Neutral (Khronos PBR Neutral) instead of R3F's default ACES: ACES greys out light pastels (the warm
+        // ground rendered khaki, pastel walls grey). Neutral keeps hue and saturation of the palette.ts colours.
+        onCreated={({ gl }) => {
+          gl.toneMapping = NeutralToneMapping
+        }}
         onPointerMissed={(e) => {
           if (e.button !== 0) return
           const api = storeApi()

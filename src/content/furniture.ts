@@ -69,7 +69,7 @@ export const FURNITURE: readonly FurnitureItem[] = [
     stageUnlock: 0,
     upgradesTo: 'desk-ergo',
     effects: { deskQuality: 1.0 },
-    visual: { shape: 'desk', primitives: deskParts(1), colors: { primary: '#D9C8A9', secondary: '#8C7B6B', accent: '#6C8EAD' } },
+    visual: { shape: 'desk', primitives: deskParts(1), colors: { primary: '#F3EBDD', secondary: '#8C7B6B', accent: '#86BDF7' } },
   },
   {
     id: 'desk-ergo',
@@ -110,7 +110,7 @@ export const FURNITURE: readonly FurnitureItem[] = [
     visual: {
       shape: 'deskDual',
       primitives: [...deskParts(2, { wide: true }), box([0.12, 0.3, 0.2], [0.36, 0.15, -0.1], '#2B2D42'), box([0.02, 0.02, 0.02], [0.36, 0.25, 0.01], '#06D6A0')],
-      colors: { primary: '#CAD2C5', secondary: '#2F3E46', accent: '#52796F' },
+      colors: { primary: '#CAD2C5', secondary: '#2F3E46', accent: '#4FC79A' },
     },
   },
   {
@@ -178,7 +178,7 @@ export const FURNITURE: readonly FurnitureItem[] = [
     visual: {
       shape: 'deskOps',
       primitives: [...deskParts(1), cyl(0.05, 0.08, [0.3, 0.49, -0.15], '#B5838D'), sphere(0.07, [0.3, 0.58, -0.15], '#6A994E')],
-      colors: { primary: '#DDE5B6', secondary: '#6C584C', accent: '#A98467' },
+      colors: { primary: '#DDE5B6', secondary: '#6C584C', accent: '#F2A65A' },
     },
   },
 
@@ -488,7 +488,7 @@ export const FURNITURE: readonly FurnitureItem[] = [
         box([0.3, 0.3, 0.3], [0.9, 0.15, 0.4], 'accent'),
         box([0.04, 0.9, 0.04], [-0.3, 0.45, -0.3], 'secondary'),
       ],
-      colors: { primary: '#F2E9E4', secondary: '#4A4E69', accent: '#9A8C98' },
+      colors: { primary: '#F2E9E4', secondary: '#4A4E69', accent: '#B79CFF' },
     },
   },
   {

@@ -6,6 +6,8 @@ import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
 import { Bar, Dot, Empty, LockedHint, SectionTitle, Stat } from '../primitives'
+import { iconTone, WIDGET_COLOR } from '../theme'
+import { Icon } from '../icons'
 import { RoundSection } from './RoundSection'
 
 const AD_STEPS = [0, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000]
@@ -48,14 +50,16 @@ function ProductSection() {
     <section>
       <SectionTitle>{t('growth.product')}</SectionTitle>
       <div className="grid grid-cols-2 gap-2 @lg:grid-cols-4">
-        <Stat label={t('growth.avgMaturity')} value={pct(d.avg)} sub={<Bar value={d.avg} height={4} className="mt-1" />} />
-        <Stat label={t('growth.liveProjects')} value={`${d.live}/${d.total}`} />
+        <Stat label={t('growth.avgMaturity')} icon="rocket" color="var(--color-brand)" value={pct(d.avg)} sub={<Bar value={d.avg} height={4} className="mt-1" />} />
+        <Stat label={t('growth.liveProjects')} icon="flag" color="var(--color-positive)" value={`${d.live}/${d.total}`} />
         <Stat
           label={t('growth.capacity')}
+          icon="users"
+          color={WIDGET_COLOR.users}
           value={`${num(d.users)} / ${num(d.capacity)}`}
           sub={d.overload > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-ink"><Dot color="var(--color-negative)" size={6} />{t('hud.overload')}</span> : undefined}
         />
-        <Stat label={t('growth.mrr')} value={money(d.mrr)} sub={t('growth.mom', { v: pct(d.growth, 1) })} />
+        <Stat label={t('growth.mrr')} icon="cash" color={WIDGET_COLOR.cash} value={money(d.mrr)} sub={t('growth.mom', { v: pct(d.growth, 1) })} />
       </div>
     </section>
   )
@@ -100,9 +104,18 @@ function ChannelSection() {
             onBlur={commit}
           />
           <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
-            <Stat label={t('growth.cac')} value={money(d.cac)} />
-            <Stat label={t('growth.paidUsers')} value={`+${num(d.ch.paid)}`} sub={t('hud.monthly')} />
-            {showLtv && <Stat label={t('hud.ltvCac')} value={d.ltvCac === null ? '—' : `${fixed(d.ltvCac, 1)}×`} sub={d.ltvCac !== null && d.ltvCac < 3 ? t('hud.ltvLow') : undefined} />}
+            <Stat label={t('growth.cac')} icon="coin" color={WIDGET_COLOR.burnBreakdown} value={money(d.cac)} />
+            <Stat label={t('growth.paidUsers')} icon="magnet" color={WIDGET_COLOR.channelBreakdown} value={`+${num(d.ch.paid)}`} sub={t('hud.monthly')} />
+            {showLtv && (
+              <Stat
+                label={t('hud.ltvCac')}
+                icon="scale"
+                color={WIDGET_COLOR.ltvCac}
+                // Same warning rule as the HUD chip: under 3x is red, otherwise green.
+                value={d.ltvCac === null ? '—' : <span className={d.ltvCac < 3 ? 'text-negative-ink' : 'text-positive-ink'}>{`${fixed(d.ltvCac, 1)}×`}</span>}
+                sub={d.ltvCac !== null && d.ltvCac < 3 ? t('hud.ltvLow') : undefined}
+              />
+            )}
           </div>
         </div>
       )}
@@ -160,7 +173,10 @@ function PriceSection() {
             onBlur={commit}
           />
           <div className="flex items-center justify-between gap-2 text-[11px] text-ink-2">
-            <span>{t('growth.arpuNow', { v: `$${fixed(d.arpu, 2)}` })}</span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="coin" size={12} style={{ color: iconTone(WIDGET_COLOR.arpu) }} />
+              {t('growth.arpuNow', { v: `$${fixed(d.arpu, 2)}` })}
+            </span>
             {v > d.mult + 1e-6 && (
               <span className="inline-flex items-center gap-1 text-right font-semibold text-ink">
                 <Dot color="var(--color-negative)" size={6} />

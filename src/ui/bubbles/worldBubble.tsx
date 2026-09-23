@@ -38,7 +38,7 @@ export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
     case 'conceptIcon':
       return <ConceptIconView label={conceptTitle(b.conceptId)} onClick={() => openConceptCard(b.conceptId)} />
     case 'decision':
-      // Mark: chat icon + "Karar" (vs. the concept's book icon); no coloured frame.
+      // Mark: orange chat tile + "Karar" (vs. the concept's violet book); neutral body.
       return (
         <button
           type="button"
@@ -46,7 +46,7 @@ export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
           className={cx(BUBBLE_SHELL, BUBBLE_HOVER, 'group flex w-max max-w-[min(300px,60vw)] animate-pop-in items-center gap-2 py-2 pl-3 pr-2 text-left')}
         >
           <span className="flex min-w-0 flex-col gap-1">
-            <SpeakerLine icon="chat" speaker={`${t('decision.title')} · ${NPC_TEXT[b.role].name}`} />
+            <SpeakerLine icon="chat" color="var(--color-kind-decision)" speaker={`${t('decision.title')} · ${NPC_TEXT[b.role].name}`} />
             <BubbleText className="line-clamp-2">{b.text}</BubbleText>
           </span>
           <Icon name="chevronRight" size={14} className="shrink-0 text-ink-2 transition-transform group-hover:translate-x-0.5 group-hover:text-ink" />

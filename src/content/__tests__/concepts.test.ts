@@ -93,3 +93,25 @@ describe('concepts', () => {
     }
   })
 })
+
+// Defter shelf (docs/DESIGN.md): learned spines are one pastel-saturated family with ink text on top,
+// so every shelfColor must be light enough for ink (#1f1d24) at AA (>= 4.5:1). No greys, no near-black.
+describe('shelfColor', () => {
+  const lum = (hex: string) => {
+    const h = hex.replace('#', '')
+    const [r, g, b] = [0, 2, 4].map((i) => {
+      const v = parseInt(h.slice(i, i + 2), 16) / 255
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+  }
+  const INK = lum('#1f1d24')
+  it.each(CONCEPTS.map((c) => [c.id, c.shelfColor] as const))('%s spine %s reads with ink text (AA)', (_id, color) => {
+    expect(color).toMatch(/^#[0-9a-fA-F]{6}$/)
+    expect((lum(color) + 0.05) / (INK + 0.05)).toBeGreaterThanOrEqual(4.5)
+    const h = color.slice(1)
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16))
+    // Saturation proxy: a spine is a colour, not a grey.
+    expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeGreaterThanOrEqual(40)
+  })
+})

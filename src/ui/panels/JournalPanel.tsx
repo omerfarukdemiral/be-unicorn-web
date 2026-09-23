@@ -4,7 +4,8 @@ import { CONCEPT_IDS, type ConceptId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
-import { cx, Dot, Empty, SectionTitle } from '../primitives'
+import { cx, Empty, SectionTitle } from '../primitives'
+import { readableOn } from '../theme'
 import { conceptById, openConceptCard } from '../uiActions'
 import { NotebookCard } from '../NotebookCard'
 
@@ -43,7 +44,7 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
                 onClick={() => openConceptCard(id)}
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-border px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
               >
-                <Icon name="chat" size={14} className="animate-wiggle text-ink-2" />
+                <Icon name="book" size={14} className="animate-wiggle text-kind-concept" />
                 {conceptTitle(id)}
               </button>
             ))}
@@ -62,6 +63,7 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
                 {shelf.map((b, j) => {
                   const c = conceptById(b.id)
                   const h = 90 + ((j * 37 + i * 13) % 5) * 5
+                  const spine = c?.shelfColor ?? '#8b5cf6'
                   return b.learned ? (
                     <button
                       key={b.id}
@@ -69,13 +71,13 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
                       onClick={() => openConceptCard(b.id)}
                       title={conceptTitle(b.id)}
                       aria-label={conceptTitle(b.id)}
-                      className="group relative flex w-9 shrink-0 flex-col items-center gap-1.5 rounded-t-md rounded-b-sm border border-border-strong bg-surface px-0.5 pb-2 pt-2 transition-[transform,background-color] hover:-translate-y-1.5 hover:bg-surface-2"
-                      style={{ height: h }}
+                      className="group relative flex w-9 shrink-0 flex-col items-center gap-1.5 rounded-t-md rounded-b-sm px-0.5 pb-2 pt-2 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08),inset_3px_0_0_rgb(255_255_255/0.18)] transition-[transform,filter] hover:-translate-y-1.5 hover:brightness-105"
+                      style={{ height: h, background: spine, color: readableOn(spine) }}
                     >
-                      {/* The book's own colour survives only as a small mark on the spine. */}
-                      <Dot color={c?.shelfColor ?? 'var(--color-ink-3)'} size={6} />
+                      {/* Learned book = a solid spine in its own shelf colour; two thin bands like a binding. */}
+                      <span aria-hidden="true" className="h-0.5 w-5 rounded-full bg-current opacity-50" />
                       {/* One line, bottom-to-top; a title longer than the spine ends in an ellipsis (full title in aria-label/title). */}
-                      <span aria-hidden="true" className="min-h-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px] font-semibold leading-none tracking-[0.02em] text-ink [writing-mode:vertical-rl] rotate-180">
+                      <span aria-hidden="true" className="min-h-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px] font-semibold leading-none tracking-[0.02em] [writing-mode:vertical-rl] rotate-180">
                         {conceptTitle(b.id)}
                       </span>
                     </button>
@@ -84,7 +86,7 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
                   )
                 })}
               </div>
-              <div className="h-1 rounded-full bg-border-strong" />
+              <div className="h-1.5 rounded-full bg-shelf" />
             </div>
           ))}
         </div>

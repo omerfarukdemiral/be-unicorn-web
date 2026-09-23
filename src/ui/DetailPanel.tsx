@@ -13,7 +13,7 @@ import { Bar, Button, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './
 import { moraleTone, STATUS_DOT, STATUS_TONE } from './theme'
 import { useIsMobile } from './hooks'
 import { effectTags } from './panels/ShopPanel'
-import { AssignList, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
+import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
 
 export type RenderPreview = (target: Selection) => ReactNode
@@ -251,7 +251,7 @@ function EmployeeDetail({ id }: { id: string }) {
                   type="button"
                   aria-pressed={on}
                   onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: on ? null : p.id })}
-                  className={cx('inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold max-md:min-h-11', on ? 'border-ink bg-ink text-on-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink')}
+                  className={cx('inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold max-md:min-h-11', on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink')}
                 >
                   <Icon name={CATEGORY_ICON[p.category]} size={13} />
                   {p.name}
@@ -302,7 +302,7 @@ function ProjectDetail({ id }: { id: string }) {
           <SectionTitle>{t('detail.maturity')}</SectionTitle>
           <span className="tabular text-sm font-semibold">{pct(p.maturity)}</span>
         </div>
-        <MaturityBar value={p.maturity} />
+        <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
         <p className="font-text mt-2 text-[11px] text-ink-2">{p.launched ? t('detail.launched') : t('detail.mvpHint', { v: pct(0.2) })}</p>
       </section>
       <div className="grid grid-cols-2 gap-2">
@@ -340,7 +340,7 @@ function FounderDetail() {
   const f = useGameStore(useShallow((s) => ({ energy: s.state.founder.energy, current: s.state.founder.currentAction, equity: s.state.stats.equity, xp: s.state.meta.founderXp })))
   return (
     <div className="grid grid-cols-2 gap-2">
-      <Stat label={t('founder.energy')} value={Math.round(f.energy)} sub={<Bar value={f.energy / 100} tone="bg-ink" height={4} className="mt-1" />} />
+      <Stat label={t('founder.energy')} value={Math.round(f.energy)} sub={<Bar value={f.energy / 100} color="var(--color-energy)" height={4} className="mt-1" />} />
       <Stat label={t('hud.equity')} value={pct(f.equity, 1)} />
       <Stat label={t('detail.doing')} value={f.current ? t(`founder.${f.current.kind}`) : t('detail.idle')} />
       <Stat label={t('detail.xp')} value={fixed(f.xp, 1)} />

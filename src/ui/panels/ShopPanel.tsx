@@ -12,7 +12,7 @@ import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
 import { Button, Chip, cx, Dot, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
-import { SLOT_ICON, slotTypeStage, stageName } from '../theme'
+import { SLOT_ICON, slotTypeStage, soft, stageName } from '../theme'
 
 export function effectTags(e: FurnitureEffects): string[] {
   const out: string[] = []
@@ -70,6 +70,11 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
   const items = FURNITURE.filter((f) => filter === 'all' || f.slotType === filter)
     .slice()
     .sort((a, b) => a.stageUnlock - b.stageUnlock || a.price - b.price)
+    .map((item) => ({ item, place: placementFor(office, item, target) }))
+  // Full office: ONE "open the next ring" call to action above the list instead of a brand button per item.
+  const ringOffer = items.find(
+    ({ item, place }) => !place.slot && place.roomRing !== null && place.nextRing && item.stageUnlock <= stage && slotTypeStage(item.slotType) <= stage,
+  )?.place.nextRing
 
   const buy = (item: FurnitureItem, place: ShopPlacement) => {
     // Untargeted buys use the engine's own auto placement (placeItem without slotId).
@@ -132,11 +137,22 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
         {items.length === 0 ? (
           <Empty text={t('shop.empty')} icon="bag" />
         ) : (
-          <ul className="flex flex-col divide-y divide-border border-y border-border">
-            {items.map((item) => (
-              <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={placementFor(office, item, target)} onBuy={buy} />
-            ))}
-          </ul>
+          <>
+            {ringOffer && (
+              <div className="mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3">
+                <Icon name="building" size={16} className="shrink-0 text-brand-ink" />
+                <span className="min-w-0 flex-1 text-xs font-semibold text-ink">{t('shop.noRoomOpenRing', { n: ringOffer.index, cost: money(ringOffer.openCost) })}</span>
+                <Button size="sm" tone="primary" icon="plus" disabled={cash < ringOffer.openCost} onClick={() => dispatch({ type: 'openRing', ring: ringOffer.index })}>
+                  {t('shop.openRing')}
+                </Button>
+              </div>
+            )}
+            <ul className="flex flex-col divide-y divide-border border-y border-border">
+              {items.map(({ item, place }) => (
+                <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={place} onBuy={buy} />
+              ))}
+            </ul>
+          </>
         )}
       </div>
       <RingSection />
@@ -157,7 +173,6 @@ function ShopItem({
   place: ShopPlacement
   onBuy: (item: FurnitureItem, place: ShopPlacement) => void
 }) {
-  const dispatch = useGameStore((s) => s.dispatch)
   const locked = item.stageUnlock > stage || slotTypeStage(item.slotType) > stage
   const afford = cash >= item.price
   const noRoom = !locked && !place.slot
@@ -204,10 +219,12 @@ function ShopItem({
         {!locked &&
           (noRoom ? (
             next ? (
-              <span className="flex min-w-0 flex-col items-end gap-1">
-                <Button size="sm" tone="primary" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
-                  {t('shop.noRoomOpenRing', { n: next.index, cost: money(next.openCost) })}
-                </Button>
+              // Blocked, not an action: neutral note; the single ring CTA sits above the list.
+              <span className="flex min-w-0 flex-col items-end gap-0.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-2">
+                  <Icon name="building" size={12} />
+                  {t('shop.noRoom')}
+                </span>
                 {place.roomRing !== null && place.roomRing !== next.index && (
                   <span className="text-right text-[10px] leading-tight text-ink-2">{t('shop.roomInRing', { ring: place.roomRing })}</span>
                 )}
@@ -228,10 +245,13 @@ function ShopItem({
 function Swatch({ item, locked }: { item: FurnitureItem; locked: boolean }) {
   const c = item.visual.colors
   return (
-    // Neutral tile + the item's own colour as a small mark (no pastel fills in the UI).
-    <span className="relative grid size-11 shrink-0 place-items-center rounded-control border border-border bg-surface-2 text-ink-2">
+    // Light tint of the item's own colour + its slot icon; the solid colour as a small corner mark.
+    <span
+      className={cx('relative grid size-11 shrink-0 place-items-center rounded-control', locked ? 'border border-border bg-surface-2 text-ink-2' : 'text-ink')}
+      style={locked ? undefined : { background: soft(c.primary, 30) }}
+    >
       <Icon name={locked ? 'lock' : SLOT_ICON[item.slotType]} size={18} />
-      <Dot color={c.primary} size={7} className="absolute right-1 top-1 ring-1 ring-ink/10" />
+      <Dot color={c.primary} size={8} className="absolute right-1 top-1 ring-2 ring-surface" />
     </span>
   )
 }
@@ -249,7 +269,7 @@ function RingSection() {
       </SectionTitle>
       {next ? (
         <div className="flex flex-wrap items-center gap-3 rounded-control border border-border p-3">
-          <IconBadge icon="building" size={40} filled />
+          <IconBadge icon="building" size={40} color="var(--color-brand)" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">{t('shop.ringTitle', { n: next.index })}</div>
             <div className="tabular text-[11px] text-ink-2">

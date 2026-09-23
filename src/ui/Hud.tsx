@@ -149,7 +149,7 @@ function StageBar({ compact }: { compact?: boolean }) {
       aria-label={roundInProgress}
       title={roundInProgress}
       className={cx(
-        'tabular inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-border-strong text-xs font-semibold text-ink transition-colors hover:bg-surface-2',
+        'tabular inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-brand/40 bg-brand-soft text-xs font-semibold text-brand-ink transition-colors hover:border-brand',
         compact ? 'min-h-11 min-w-11 px-1.5' : 'min-h-9 px-3',
       )}
     >
@@ -163,7 +163,7 @@ function StageBar({ compact }: { compact?: boolean }) {
       aria-label={t('round.start')}
       title={t('round.start')}
       className={cx(
-        'inline-flex shrink-0 animate-pop-in items-center justify-center gap-1 rounded-control bg-ink text-xs font-semibold tracking-wide text-on-ink transition-colors hover:bg-ink/85',
+        'inline-flex shrink-0 animate-pop-in items-center justify-center gap-1 rounded-control bg-brand text-xs font-semibold tracking-wide text-on-ink shadow-[0_4px_12px_-4px_var(--color-brand)] transition-colors hover:bg-brand-hover',
         compact ? 'size-11' : 'min-h-9 px-3',
       )}
     >
@@ -176,13 +176,16 @@ function StageBar({ compact }: { compact?: boolean }) {
     <div className={cx('pointer-events-auto ui-card flex min-w-0 items-center gap-2 p-1.5', compact ? 'flex-1' : 'w-[min(520px,46vw)] px-3')}>
       <div className="min-w-0 flex-1">
         <div className={cx('flex gap-2', compact ? 'flex-wrap items-baseline gap-y-0' : 'items-baseline')}>
-          <span className="shrink-0 text-sm font-semibold tracking-wide text-ink">{STAGES[s.stage]?.name ?? '—'}</span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-wide text-ink">
+            <span aria-hidden="true" className="size-2 rounded-full bg-brand" />
+            {STAGES[s.stage]?.name ?? '—'}
+          </span>
           <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">{t('hud.date', { m: s.month + 1, d: dayOfMonth })}</span>
         </div>
         {next ? (
           <div className="mt-1 flex items-center gap-2" title={t('hud.stageProgressTitle', { stage: next.name })}>
-            <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-border">
-              <div className="h-full rounded-full bg-ink transition-[width] duration-700" style={{ width: `${pctW}%` }} />
+            <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-brand/15">
+              <div className="h-full rounded-full bg-brand transition-[width] duration-700" style={{ width: `${pctW}%` }} />
             </div>
             {!compact && (
               <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
@@ -209,9 +212,9 @@ function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange
         type="button"
         onClick={() => onChange(nextSpeed)}
         aria-label={t('speed.label')}
-        // Status, not a CTA: hairline frame while running; paused gets an ink ring on a surface-2 fill
-        // so "the game is stopped" reads louder than "running".
-        className={cx('tabular flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border text-xs font-semibold text-ink transition-colors', speed === 0 ? 'border-ink bg-surface-2' : 'border-border-strong hover:bg-surface-2')}
+        // Status, not a CTA: hairline frame while running; paused gets a brand frame + tint + brand-ink
+        // text so "the game is stopped" reads louder than "running" (one text-* per branch: no CSS-order race).
+        className={cx('tabular flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border text-xs font-semibold transition-colors', speed === 0 ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border-strong text-ink hover:bg-surface-2')}
       >
         <Icon name={speed === 0 ? 'pause' : 'play'} size={14} />
         {speed > 0 && `${speed}×`}
@@ -230,7 +233,7 @@ function SpeedControl({ speed, onChange, compact }: { speed: GameSpeed; onChange
           className={cx(
             'tabular flex h-8 min-w-9 items-center justify-center rounded-[8px] px-2 text-xs font-semibold transition-colors',
             // Segmented control: active = raised surface + hairline (ink fill stays reserved for the primary CTA).
-            speed === v ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--color-border-strong),var(--shadow-card)]' : 'text-ink-2 hover:bg-surface hover:text-ink',
+            speed === v ? 'bg-surface text-brand-ink shadow-[0_0_0_1px_var(--color-border-strong),var(--shadow-card)]' : 'text-ink-2 hover:bg-surface hover:text-ink',
           )}
         >
           {v === 0 ? <Icon name="pause" size={14} /> : `${v}×`}

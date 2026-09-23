@@ -7,7 +7,7 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { pct } from '../format'
-import { Bar, Button, cx, Empty, Pill, SectionTitle } from '../primitives'
+import { Bar, Button, cx, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
 
 /** Turkish project name from content, unique within the run. */
@@ -31,6 +31,16 @@ export const CATEGORY_ICON: Record<ProjectCategory, IconName> = {
   api: 'branch',
   game: 'star',
   marketplace: 'bag',
+}
+
+/** Category hue: icon tile on the "new project" cards and in the project list. */
+export const CATEGORY_COLOR: Record<ProjectCategory, string> = {
+  mobile: 'var(--color-g-users)',
+  web: 'var(--color-g-sky)',
+  ai: 'var(--color-kind-concept)',
+  api: 'var(--color-g-indigo)',
+  game: 'var(--color-g-runway)',
+  marketplace: 'var(--color-g-morale)',
 }
 
 export function ProjectsPanel() {
@@ -61,11 +71,11 @@ export function ProjectsPanel() {
               className="flex min-h-16 flex-col items-start gap-1 rounded-control border border-border p-2.5 text-left transition-colors hover:border-border-strong hover:bg-surface-2"
             >
               <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <Icon name={CATEGORY_ICON[c]} size={16} className="shrink-0 text-ink-2" />
+                <IconBadge icon={CATEGORY_ICON[c]} size={24} color={CATEGORY_COLOR[c]} />
                 {PROJECT_CATEGORY_TEXT[c].name}
               </span>
               <span className="font-text text-[11px] leading-snug text-ink-2">{PROJECT_CATEGORY_TEXT[c].description}</span>
-              <span className="mt-auto inline-flex items-center gap-1 pt-1 text-[11px] font-semibold text-ink">
+              <span className="mt-auto inline-flex items-center gap-1 pt-1 text-[11px] font-semibold text-brand-ink">
                 <Icon name="plus" size={12} />
                 {t('projects.start')}
               </span>
@@ -77,10 +87,11 @@ export function ProjectsPanel() {
   )
 }
 
-export function MaturityBar({ value }: { value: number }) {
+/** Maturity progress in the project's category hue (brand when no category is known). */
+export function MaturityBar({ value, color = 'var(--color-brand)' }: { value: number; color?: string }) {
   return (
     <div className="relative">
-      <Bar value={value} marker={MVP_MATURITY} tone="bg-ink" height={6} />
+      <Bar value={value} marker={MVP_MATURITY} color={color} height={6} />
       <span className="absolute -top-4 text-[10.5px] font-semibold tracking-wider text-ink-2" style={{ left: `calc(${MVP_MATURITY * 100}% - 12px)` }}>
         MVP
       </span>
@@ -94,15 +105,15 @@ function ProjectCard({ project: p }: { project: Project }) {
   return (
     <li className="px-1 py-3">
       <div className="flex items-center gap-2">
-        <Icon name={CATEGORY_ICON[p.category]} size={18} className="shrink-0 text-ink-2" />
+        <IconBadge icon={CATEGORY_ICON[p.category]} size={28} color={CATEGORY_COLOR[p.category]} />
         <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-semibold hover:underline max-md:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
           {p.name}
         </button>
-        {p.launched ? <Pill className="text-ink" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
+        {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
         <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>
       </div>
       <div className="mt-4">
-        <MaturityBar value={p.maturity} />
+        <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>
@@ -132,13 +143,13 @@ export function AssignList({ project }: { project: Project }) {
               type="button"
               onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: here ? null : project.id })}
               aria-pressed={here}
-              className={cx('flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left transition-colors', here ? 'bg-surface-2' : 'hover:bg-surface-2')}
+              className={cx('flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left transition-colors', here ? 'bg-brand-soft' : 'hover:bg-surface-2')}
             >
               <Avatar name={e.name} dept={e.dept} size={28} />
               <span className="min-w-0 flex-1 truncate text-xs font-semibold">{e.name}</span>
               <DeptPill dept={e.dept} />
               {elsewhere && <span className="max-w-24 truncate text-[10.5px] text-ink-2">{elsewhere}</span>}
-              <span className={cx('grid size-5 shrink-0 place-items-center rounded-md border', here ? 'border-ink bg-ink text-on-ink' : 'border-border-strong text-transparent')}>
+              <span className={cx('grid size-5 shrink-0 place-items-center rounded-md border', here ? 'border-brand bg-brand text-on-ink' : 'border-border-strong text-transparent')}>
                 <Icon name="check" size={12} />
               </span>
             </button>

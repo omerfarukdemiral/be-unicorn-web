@@ -19,14 +19,14 @@ export function decisionById(id: DecisionCardId): DecisionCard | undefined {
   return DECISIONS.find((d) => d.id === id)
 }
 
-/** Shared card body (screen bubble + panel). Category is a small icon mark (crisis adds a red dot). */
+/** Shared card body (screen bubble + panel). Kind mark = orange tile (crisis = red tile + dot). */
 export function DecisionCardView({ card, onChoose, dense, stacked }: { card: DecisionCard; onChoose: (optionIndex: number) => void; dense?: boolean; /** One option per row (narrow panel). */ stacked?: boolean }) {
   const crisis = card.category === 'crisis'
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2.5">
         <span className="relative">
-          <IconBadge icon={crisis ? 'warning' : card.category === 'rival' ? 'flag' : 'chat'} size={32} filled />
+          <IconBadge icon={crisis ? 'warning' : card.category === 'rival' ? 'flag' : 'chat'} size={32} color={crisis ? 'var(--color-negative)' : 'var(--color-kind-decision)'} />
           {crisis && <Dot color="var(--color-negative)" size={7} className="absolute -right-0.5 -top-0.5 ring-2 ring-surface" />}
         </span>
         <div className="min-w-0">
@@ -40,7 +40,7 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
             key={i}
             type="button"
             onClick={() => onChoose(i)}
-            className="group flex min-h-11 flex-col gap-1.5 rounded-control border border-border bg-transparent p-3 text-left transition-colors hover:border-ink"
+            className="group flex min-h-11 flex-col gap-1.5 rounded-control border border-border bg-transparent p-3 text-left transition-colors hover:border-brand hover:bg-brand-soft/60"
           >
             <span className="font-text text-sm font-semibold leading-snug text-ink">{o.label}</span>
             <span className="font-text flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-2">
@@ -64,7 +64,7 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
   if (!opt) return null
   return (
     <div className="flex items-start gap-2.5">
-      <IconBadge icon="sparkle" size={32} filled />
+      <IconBadge icon="sparkle" size={32} color="var(--color-kind-concept)" />
       <div className="min-w-0 flex-1">
         <div className="ui-label">{t('decision.youChose', { v: opt.label })}</div>
         <p className="font-text mt-0.5 text-sm leading-snug text-ink">{opt.reflection}</p>
@@ -77,7 +77,7 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
             }}
             className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
           >
-            <Icon name="book" size={13} className="text-ink-2" />
+            <Icon name="book" size={13} className="text-kind-concept" />
             {t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
           </button>
         )}
@@ -125,7 +125,7 @@ export function DecisionBubble() {
           </>
         ) : (
           <button type="button" onClick={() => setExpanded(true)} className="flex min-h-11 w-full items-center gap-2 text-left">
-            <IconBadge icon={card.category === 'crisis' ? 'warning' : 'chat'} size={28} filled />
+            <IconBadge icon={card.category === 'crisis' ? 'warning' : 'chat'} size={28} color={card.category === 'crisis' ? 'var(--color-negative)' : 'var(--color-kind-decision)'} />
             <span className="font-text min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.question}</span>
             <Icon name="chevronDown" size={16} className="shrink-0 text-ink-2" />
           </button>

@@ -84,7 +84,7 @@ function selectHeat(s: GameState): string {
     .map((e) => `${e.deskSlotId}:${e.morale < 28 ? 0 : e.morale < 50 ? 1 : 2}`)
     .join(',')
 }
-const HEAT_COLORS = ['#f19a9a', '#ffd66e', '#7fdca6'] as const
+const HEAT_COLORS = ['#f26464', '#ffc93d', '#4fd08a'] as const
 
 function onSlotClick(slot: Slot, e: ThreeEvent<MouseEvent>): void {
   if (e.delta > 10) return

@@ -45,9 +45,9 @@ export function Dock({ compact }: { /** Desktop with the panel open and little r
               type="button"
               onClick={() => togglePanel(d.id)}
               aria-pressed={active === d.id}
-              className={cx('relative flex min-w-11 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold tracking-wide', active === d.id ? 'text-ink' : 'text-ink-2')}
+              className={cx('relative flex min-w-11 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold tracking-wide', active === d.id ? 'text-brand-ink' : 'text-ink-2')}
             >
-              <span className={cx('grid h-8 w-12 place-items-center rounded-control transition-colors', active === d.id && 'bg-ink text-on-ink')}>
+              <span className={cx('grid h-8 w-12 place-items-center rounded-control transition-colors', active === d.id && 'bg-brand text-on-ink')}>
                 <Icon name={d.icon} size={20} />
               </span>
               {t(`dock.${d.id}`)}
@@ -72,7 +72,7 @@ export function Dock({ compact }: { /** Desktop with the panel open and little r
           className={cx(
             'relative flex h-11 items-center gap-2 rounded-control text-sm font-semibold tracking-wide transition-colors',
             compact ? 'px-3 lg:px-4' : 'px-4',
-            active === d.id ? 'bg-ink text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
+            active === d.id ? 'bg-brand text-on-ink shadow-[0_4px_12px_-6px_var(--color-brand)]' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
           )}
         >
           <Icon name={d.icon} size={18} />

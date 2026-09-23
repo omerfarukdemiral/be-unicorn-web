@@ -8,7 +8,7 @@ import { panelSelection, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { Bar, cx, Ring } from './primitives'
-import { FOUNDER_ICON, founderActionStage } from './theme'
+import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone, soft } from './theme'
 import { useIsMobile } from './hooks'
 
 export function FounderActions() {
@@ -47,11 +47,11 @@ export function FounderActions() {
   return (
     <div className={cx('pointer-events-auto ui-card flex flex-col gap-1.5', mobile ? 'p-1.5' : 'p-2')}>
       <div className="flex items-center gap-2 px-1">
-        <Icon name="bolt" size={14} className="shrink-0 text-ink-2" />
+        <Icon name="bolt" size={14} className={cx('shrink-0', lowEnergy ? 'text-negative' : 'text-energy')} fill="currentColor" />
         <div className="flex-1" title={t('founder.energy')}>
-          <Bar value={Math.max(0, Math.min(100, f.energy)) / 100} height={4} tone={lowEnergy ? 'bg-negative' : 'bg-ink'} />
+          <Bar value={Math.max(0, Math.min(100, f.energy)) / 100} height={5} color={lowEnergy ? 'var(--color-negative)' : 'var(--color-energy)'} />
         </div>
-        <span className={cx('tabular min-w-[2ch] text-right text-[11px] font-semibold', lowEnergy ? 'text-negative-ink' : 'text-ink-2')}>{Math.round(f.energy)}</span>
+        <span className={cx('tabular min-w-[2ch] text-right text-[11px] font-semibold', lowEnergy ? 'text-negative-ink' : 'text-energy-ink')}>{Math.round(f.energy)}</span>
       </div>
       <div className="flex items-center gap-1">
         {FOUNDER_ACTIONS.map((kind) => {
@@ -80,6 +80,9 @@ export function FounderActions() {
                   ? t('founder.noProject', { action })
                   : `${action}: ${t(`founder.${kind}.desc`)}`
           const size = mobile ? 44 : 48
+          const hue = FOUNDER_COLOR[kind]
+          // Available / running: the action's own hue (icon + light tint + frame). Unavailable: neutral dashed.
+          const tinted = running || !disabled
           const button = (
             <button
               key={kind}
@@ -90,14 +93,18 @@ export function FounderActions() {
               aria-label={label}
               className={cx(
                 'group relative grid shrink-0 place-items-center rounded-full border transition-colors',
-                running ? 'border-transparent bg-surface-2 text-ink' : 'border-border bg-transparent',
-                // Disabled: dashed frame + faded icon, clearly apart from the solid hairline of an available action.
-                !running && (disabled ? 'border-dashed border-border-strong text-ink-2 [&>svg:last-child]:opacity-40' : 'border-border-strong text-ink hover:bg-surface-2 active:scale-95'),
+                running ? 'border-transparent' : 'bg-transparent',
+                // Disabled: dashed neutral frame + faded icon, clearly apart from the tinted available actions.
+                !running && (disabled ? 'border-dashed border-border-strong text-ink-2 [&>svg:last-child]:opacity-40' : 'hover:brightness-95 active:scale-95'),
               )}
-              style={{ width: size, height: size }}
+              style={{
+                width: size,
+                height: size,
+                ...(tinted ? { color: iconTone(hue), background: soft(hue, running ? 20 : 12), borderColor: running ? 'transparent' : soft(hue, 45) } : null),
+              }}
             >
-              {cdFrac > 0 && <Ring value={cdFrac} size={size} tone="var(--color-ink-3)" />}
-              {running && <Ring value={runFrac} size={size} tone="var(--color-ink)" />}
+              {cdFrac > 0 && !locked && <Ring value={cdFrac} size={size} tone={soft(hue, 70)} />}
+              {running && <Ring value={runFrac} size={size} stroke={2.5} tone={hue} />}
               <Icon name={locked ? 'lock' : FOUNDER_ICON[kind]} size={mobile ? 18 : 20} />
               {!mobile && (
                 <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10.5px] font-semibold tracking-wide text-on-ink shadow-pop group-hover:block">

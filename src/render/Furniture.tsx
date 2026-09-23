@@ -96,7 +96,7 @@ function Desk({ colors, variant }: { colors: ResolvedFurniture['colors']; varian
           <P g="sphere" s={[0.12, 0.12, 0.12]} p={[-0.32, 0.46, -0.12]} c="#8fcf8a" />
         </>
       )}
-      <Chair color={variant === 'basic' ? '#6e6b7a' : colors.accent} />
+      <Chair color={colors.accent} />
     </group>
   )
 }

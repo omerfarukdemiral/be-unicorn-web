@@ -6,7 +6,7 @@ import { NPC_TEXT, type Concept } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
-import { Button, cx, Dot, IconBadge, Label, Pill } from './primitives'
+import { Button, cx, IconBadge, Label, Pill } from './primitives'
 import { conceptById } from './uiActions'
 import { conceptTitle } from './panels/JournalPanel'
 
@@ -59,9 +59,9 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
     <article className="relative overflow-hidden rounded-card bg-surface">
       <div className="flex flex-col gap-4 p-4 @lg:p-6">
         <header className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            {/* Shelf colour survives only as a tiny mark (was a full-width colour strip). */}
-            <Dot color={concept.shelfColor} size={7} />
+          <div className="flex items-center gap-2">
+            {/* The book's own shelf colour: a small tinted book badge (the spine on the shelf is solid). */}
+            <IconBadge icon="book" size={24} color={concept.shelfColor} />
             <Label>{t('journal.cardLabel')}</Label>
           </div>
           <h2 className="mt-1.5 text-xl font-semibold leading-tight tracking-tight text-ink">{conceptTitle(concept.id)}</h2>
@@ -73,23 +73,23 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
           </p>
         </header>
         <div className="flex flex-col divide-y divide-border border-y border-border">
-          <Row label={t('journal.what')} icon="sparkle">
+          <Row label={t('journal.what')} icon="sparkle" color="var(--color-kind-concept)">
             {concept.card.what}
           </Row>
           {where !== null && (
-            <Row label={t('journal.where')} icon="search">
+            <Row label={t('journal.where')} icon="search" color="var(--color-g-users)">
               {where}
             </Row>
           )}
-          <Row label={t('journal.rule')} icon="check" emphasis>
+          <Row label={t('journal.rule')} icon="check" color="var(--color-g-cash)" emphasis>
             {concept.card.rule}
           </Row>
         </div>
         {(unlock || onClose) && (
           <footer className="flex flex-wrap items-center justify-between gap-2">
             {unlock ? (
-              <Pill className="text-ink">
-                <Icon name="plus" size={12} className="text-ink-2" />
+              <Pill tint="var(--color-brand)" className="text-brand-ink">
+                <Icon name="plus" size={12} />
                 {t('journal.unlocked', { v: unlock })}
               </Pill>
             ) : (
@@ -107,10 +107,10 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
   )
 }
 
-function Row({ label, icon, emphasis, children }: { label: string; icon: 'sparkle' | 'search' | 'check'; emphasis?: boolean; children: ReactNode }) {
+function Row({ label, icon, color, emphasis, children }: { label: string; icon: 'sparkle' | 'search' | 'check'; color: string; emphasis?: boolean; children: ReactNode }) {
   return (
     <div className="flex gap-3 py-3">
-      <IconBadge icon={icon} size={28} />
+      <IconBadge icon={icon} size={28} color={color} />
       <div className="min-w-0">
         <Label>{label}</Label>
         <p className={cx('font-text mt-0.5 text-sm leading-relaxed text-ink', emphasis && 'font-semibold')}>{children}</p>

@@ -14,7 +14,7 @@ import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, BubbleText, SpeakerLine } from 
 
 export const CONCEPT_MINIMIZE_MS = 20_000
 
-/** Presentational bubble; render may embed this inside a drei <Html>. Mark: book icon (vs. decision's chat). */
+/** Presentational bubble; render may embed this inside a drei <Html>. Mark: violet book (vs. decision's orange chat). */
 export function ConceptBubbleView({ text, speaker, onClick, className, tail }: { text: string; speaker?: string; onClick: () => void; className?: string; tail?: boolean }) {
   return (
     <button
@@ -22,9 +22,9 @@ export function ConceptBubbleView({ text, speaker, onClick, className, tail }: {
       onClick={onClick}
       className={cx(BUBBLE_SHELL, BUBBLE_HOVER, 'group flex max-w-[min(340px,86vw)] animate-pop-in flex-col gap-1 px-3 py-2 text-left', className)}
     >
-      <SpeakerLine icon="book" speaker={speaker} />
+      <SpeakerLine icon="book" color="var(--color-kind-concept)" speaker={speaker} />
       <BubbleText>{text}</BubbleText>
-      <span className="flex items-center gap-1 font-ui text-[11px] font-semibold text-ink-2 transition-colors group-hover:text-ink">
+      <span className="flex items-center gap-1 font-ui text-[11px] font-semibold text-brand-ink transition-colors group-hover:text-ink">
         {t('bubble.openNotebook')}
         <Icon name="chevronRight" size={12} className="transition-transform group-hover:translate-x-0.5" />
       </span>
@@ -33,7 +33,7 @@ export function ConceptBubbleView({ text, speaker, onClick, className, tail }: {
   )
 }
 
-/** Minimized concept: a small round icon with a tiny ink mark (kept until opened). */
+/** Minimized concept: a small round icon in the concept hue with a tiny mark (kept until opened). */
 export function ConceptIconView({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -41,10 +41,10 @@ export function ConceptIconView({ label, onClick }: { label: string; onClick: ()
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="relative grid size-11 animate-pop-in place-items-center rounded-full border border-border bg-surface text-ink shadow-card transition-colors hover:border-border-strong"
+      className="relative grid size-11 animate-pop-in place-items-center rounded-full border border-kind-concept/35 bg-surface text-kind-concept shadow-card transition-colors hover:border-kind-concept"
     >
       <Icon name="book" size={17} className="animate-wiggle" />
-      <span aria-hidden="true" className="absolute right-2 top-2 size-1.5 rounded-full bg-ink ring-2 ring-surface" />
+      <span aria-hidden="true" className="absolute right-2 top-2 size-2 rounded-full bg-kind-concept ring-2 ring-surface" />
     </button>
   )
 }

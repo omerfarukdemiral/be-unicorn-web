@@ -1,8 +1,10 @@
 // Shared speech-bubble chrome (lane C): neutral surface, 1px hairline, light shadow, optional tail.
-// Bubble kinds are told apart by a small icon mark next to the speaker, never by coloured frames.
+// Bubble kinds are told apart by a small coloured mark next to the speaker (karar = orange, kavram =
+// violet: --color-kind-*); the body stays neutral, never a coloured frame.
 import type { ReactNode } from 'react'
 import { Icon, type IconName } from '../icons'
 import { cx } from '../primitives'
+import { iconTone, soft } from '../theme'
 
 /** Surface + hairline + card radius. Interactive bubbles add hover/press feedback. */
 export const BUBBLE_SHELL = 'relative rounded-card border border-border bg-surface shadow-card'
@@ -18,12 +20,19 @@ export function BubbleTail({ className }: { className?: string }) {
   )
 }
 
-/** Speaker line: kind mark (tiny icon) + speaker name as a .ui-label (same label style as HUD/panels). */
-export function SpeakerLine({ icon, speaker, className }: { icon?: IconName; speaker?: string; className?: string }) {
+/** Speaker line: kind mark (tiny icon on a light tile of `color`) + speaker name as a .ui-label. */
+export function SpeakerLine({ icon, color, speaker, className }: { icon?: IconName; color?: string; speaker?: string; className?: string }) {
   if (!icon && !speaker) return null
   return (
     <span className={cx('ui-label flex min-w-0 items-center gap-1 leading-none', className)}>
-      {icon && <Icon name={icon} size={11} className="shrink-0 text-ink" />}
+      {icon &&
+        (color ? (
+          <span aria-hidden="true" className="grid size-[18px] shrink-0 place-items-center rounded-[5px]" style={{ color: iconTone(color), background: soft(color, 14) }}>
+            <Icon name={icon} size={11} />
+          </span>
+        ) : (
+          <Icon name={icon} size={11} className="shrink-0 text-ink" />
+        ))}
       {speaker && <span className="truncate">{speaker}</span>}
     </span>
   )

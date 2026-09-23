@@ -47,13 +47,13 @@ function StartScreen({ onStart }: { onStart: () => void }) {
   return (
     <div className="absolute inset-0 z-50 grid place-items-center bg-canvas-bg/55 p-4 backdrop-blur-[2px] safe-top safe-bottom safe-x">
       <div className="w-full max-w-sm animate-pop-in rounded-card border border-border bg-surface/95 p-6 text-ink shadow-pop">
-        <span className="grid size-10 place-items-center rounded-control bg-ink text-on-ink">
+        <span className="grid size-10 place-items-center rounded-control bg-brand text-on-ink shadow-[0_6px_16px_-6px_var(--color-brand)]">
           <Icon name="unicorn" size={24} />
         </span>
         {/* Title: Oxanium, uppercase, tight; the second word carries the weight. */}
         <h1 lang="en" aria-label={t('start.title')} className="mt-5 text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink">
           {title.head && <span className="block text-ink-2">{title.head}</span>}
-          <span className="block font-bold">{title.tail}</span>
+          <span className="block font-bold text-brand-ink">{title.tail}</span>
         </h1>
         <p className="font-text mt-3 text-sm leading-snug text-ink-2">{t('start.tagline')}</p>
 
@@ -76,7 +76,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
         <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-xs text-ink-2">
           {xp > 0 ? (
             <>
-              <Icon name="star" size={14} className="shrink-0 text-ink" />
+              <Icon name="star" size={14} fill="currentColor" className="shrink-0 text-g-equity" />
               <span className="tabular font-semibold text-ink">{t('start.xp', { v: xp })}</span>
               <span className="tabular ml-auto text-positive-ink">{t('start.xpBonus', { v: bonus })}</span>
             </>

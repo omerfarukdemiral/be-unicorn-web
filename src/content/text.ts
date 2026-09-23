@@ -25,6 +25,9 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   bankruptWarning: 'Kasa ekside: {days} gün kaldı.',
   enterpriseWon: '{customer} müşterimiz oldu.',
   enterpriseLost: '{customer} ayrıldı.',
+  payday: 'Maaş günü: {amount} ödendi.',
+  release: '{project} {level} yayında: +{users} kullanıcı.',
+  goalDone: 'Aşama hedefi tamam: {goal}.',
 }
 
 export const POST_MORTEM_TEXT: PostMortemTextTable = {

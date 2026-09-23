@@ -36,6 +36,7 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
       priceMultiplier: 1,
       enterpriseCustomers: [],
       debt: 0,
+      ledger: { revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0 },
     },
     derived: {
       teamSize: 0,
@@ -74,6 +75,8 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
     activity: [],
     events: [],
     nextId: 1,
+    releases: [],
+    goalsDone: [],
   }
   const rng = new Rng(s.rng)
   fillCandidates(s, content, rng, true)

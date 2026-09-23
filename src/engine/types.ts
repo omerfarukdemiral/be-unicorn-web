@@ -150,6 +150,20 @@ export interface DelayedEffect {
   sourceCardId?: DecisionCardId
   /** Optional activity note shown when it fires (ActivityKind 'delayedEffect'). */
   noteKey?: string
+  /** Option picked on the source card ("Kararın → sonucu", docs/CORE_LOOP.md §6). */
+  sourceOption?: number
+}
+
+/** A delayed decision effect that has landed: the card, the option and what it did. */
+export interface DecisionOutcome {
+  cardId: DecisionCardId
+  optionIndex: number
+  /** Day the card was answered. */
+  answeredDay: number
+  /** Day the effect landed. */
+  day: number
+  effects: EffectBundle
+  noteKey?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +253,8 @@ export interface Project {
   /** maturity ≥ 0.2 (MVP) has been reached. */
   launched: boolean
   launchedDay?: number
+  /** Release thresholds passed (balance RELEASE_THRESHOLDS: MVP 0.2, 0.4, 0.6, 0.8, 1.0). Missing = not seen yet. */
+  releaseLevel?: number
   createdDay: number
   assignedIds: EmployeeId[]
 }
@@ -305,6 +321,8 @@ export interface DecisionsState {
   /** Last answered option, for the reflection line in UI. */
   lastAnswer?: DecisionHistoryEntry
   lastCardDay: number
+  /** Landed delayed effects, newest last (capped). */
+  outcomes?: DecisionOutcome[]
 }
 
 export interface RoundOffer {
@@ -336,6 +354,41 @@ export interface BurnBreakdown {
   ads: number
 }
 
+/** Costs accrued since the last payday (+ revenue, which already flowed into cash day by day). */
+export interface MonthLedger {
+  revenue: number
+  salaries: number
+  rent: number
+  infra: number
+  ads: number
+}
+
+/** Month receipt ("ay fişi"): what the month earned and what payday paid, in one line. */
+export interface MonthReceipt {
+  /** 0-based index of the month that just closed. */
+  month: number
+  /** Payday (game day). */
+  day: number
+  revenue: number
+  salaries: number
+  rent: number
+  infra: number
+  ads: number
+  /** Costs paid on payday (salaries + rent + infra + ads). */
+  paid: number
+  /** revenue − paid. */
+  net: number
+  cashAfter: number
+  /** Runway (months) after the previous payday (null on the first one / profitable) and after this one. */
+  runwayBefore: number | null
+  runwayAfter: number | null
+  /** MoM MRR growth and valuation multiple at month end. */
+  mom: number
+  multiple: number
+  mrr: number
+  users: number
+}
+
 export interface FinanceState {
   mrr: number
   burn: number // monthly
@@ -360,6 +413,10 @@ export interface FinanceState {
   enterpriseCustomers: EnterpriseCustomer[]
   /** Bridge loan outstanding, if any. */
   debt: number
+  /** Costs accrue daily and are paid in one lump on payday (day % 30 === 0, the 1st of the month). */
+  ledger?: MonthLedger
+  /** Last payday's receipt. */
+  lastReceipt?: MonthReceipt
 }
 
 /** Main variables (PLAN §5.1). Per-project maturity lives on Project. */
@@ -403,6 +460,57 @@ export interface DerivedMetrics {
   /** Valuation / next stage target, 0–1+ (stage progress bar). */
   stageProgress: number
   canStartRound: boolean
+  /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
+  nextStep?: NextStep
+  /** What is coming in the next weeks: paydays, delayed decision effects, releases, round (§5 "Ufuk şeridi"). */
+  horizon?: HorizonItem[]
+  /** Maturity gained per day by each unfinished project (for release ETAs). */
+  maturityPerDay?: Record<ProjectId, number>
+}
+
+/** Main chain: idea → first users → desk → hire → release → users → revenue → round. */
+export const NEXT_STEP_IDS = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'revenue', 'round', 'roundWait', 'grow'] as const
+export type NextStepId = (typeof NEXT_STEP_IDS)[number]
+
+export interface NextStep {
+  id: NextStepId
+  /** 1-based link number in the chain (round / roundWait / grow share the last one). */
+  index: number
+  total: number
+  /** 0–1 toward this link, when measurable. */
+  progress?: number
+  /** Slot the step points at (empty desk slot for 'desk'). */
+  slotId?: SlotId
+  /** Target number (users / MRR / valuation). */
+  target?: number
+}
+
+export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady'
+
+export interface HorizonItem {
+  kind: HorizonKind
+  /** Game day it lands (estimate for releases and round close). */
+  day: number
+  /** Payday: projected costs. */
+  amount?: number
+  cardId?: DecisionCardId
+  optionIndex?: number
+  noteKey?: string
+  projectId?: ProjectId
+  /** Release level it would reach. */
+  level?: number
+}
+
+/** A release moment (maturity threshold passed): the user wave and the MRR jump it brought. */
+export interface ReleaseEntry {
+  id: string
+  day: number
+  projectId: ProjectId
+  projectName: string
+  /** 1 = MVP (0.2), 2 = 0.4, 3 = 0.6, 4 = 0.8, 5 = 1.0 */
+  level: number
+  users: number
+  mrr: number
 }
 
 // ---------------------------------------------------------------------------
@@ -441,6 +549,7 @@ export type ActivityKind =
   | 'founderActionStarted' | 'founderActionDone'
   | 'roundStarted' | 'roundProgress' | 'roundClosed' | 'roundShrunk'
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'
+  | 'payday' | 'release' | 'goalDone'
 
 /** Bottom-left activity line. Text lives in content (ACTIVITY_TEXT[kind]) with {param} placeholders. */
 export interface ActivityEntry {
@@ -458,6 +567,7 @@ export type GameEventKind =
   | 'conceptQueued' | 'conceptLearned' | 'decisionShown' | 'decisionAnswered'
   | 'visitorArrived' | 'visitorLeft' | 'founderActionStarted' | 'founderActionDone'
   | 'bankruptWarning' | 'gameOver' | 'victory'
+  | 'payday' | 'release' | 'goalDone' | 'delayedEffect'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -552,6 +662,10 @@ export interface GameState {
   /** Monotonic id source for activity/events/entities. */
   nextId: number
   gameOver?: GameOverState
+  /** Release moments, newest last (capped). */
+  releases?: ReleaseEntry[]
+  /** Optional stage goals (☆) reached, content goal ids (content/goals.ts). */
+  goalsDone?: string[]
 }
 
 // ---------------------------------------------------------------------------

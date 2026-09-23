@@ -10,6 +10,7 @@ import { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_
 import { UI_TEXT as BASE_UI_TEXT } from './strings'
 import { TIME_TEXT } from './timeText'
 import { LOOP_TEXT } from './loopText'
+import { GOALS, goalsOfStage } from './goals'
 
 /** strings.ts + feature tables (time flow, core loop). One flat key → text dictionary. */
 const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT }
@@ -19,6 +20,7 @@ export { STAGES, CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }
 export { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT, UI_TEXT }
 // Additions (content lane): extra name pools, typed text tables, formatting helpers.
 export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }
+export { GOALS, goalsOfStage }
 export {
   ACTION_ERROR_TEXT,
   ARCHETYPE_TEXT,
@@ -47,4 +49,5 @@ export const CONTENT: ContentBundle = {
   projectCategoryText: PROJECT_CATEGORY_TEXT,
   npcText: NPC_TEXT,
   uiText: UI_TEXT,
+  goals: GOALS,
 }

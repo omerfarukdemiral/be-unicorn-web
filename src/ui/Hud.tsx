@@ -13,6 +13,9 @@ import { WIDGETS } from './widgets'
 import { useExclusiveExpander, useIsMobile } from './hooks'
 import { DayClock, SPEED_COLOR, timeColor, useTimeStatus, type TimeStatus } from './time'
 import { soft } from './theme'
+import { NextStepChip } from './NextStepChip'
+import { HorizonNext, HorizonStrip } from './Horizon'
+import { MomentFeed } from './Moments'
 
 /** Round button → Büyüme panel, scrolled to the round block (again closes it, like the dock tabs). */
 function openRound() {
@@ -72,7 +75,15 @@ function DesktopHud() {
           </div>
         )}
       </div>
-      <StageBar />
+      {/* Center column: stage + time, the horizon ahead, the next link of the chain, short moment cards. */}
+      <div className="pointer-events-none flex w-[min(560px,48vw)] flex-col items-stretch gap-1.5">
+        <StageBar />
+        <HorizonStrip />
+        <div className="flex justify-center">
+          <NextStepChip className="max-w-full" />
+        </div>
+        <MomentFeed />
+      </div>
       <ViewControls />
     </div>
   )
@@ -108,6 +119,12 @@ function MobileHud() {
           </button>
         )}
       </div>
+      {/* Phone: chip and horizon share one line; moment cards stay thin under it. */}
+      <div className="flex min-w-0 items-stretch gap-1.5">
+        <NextStepChip compact className="min-w-0 flex-1" />
+        <HorizonNext className="max-w-[46%]" />
+      </div>
+      <MomentFeed />
       {open && secondary.length > 0 && (
         <div className="pointer-events-auto ui-card ui-scroll grid max-h-[45vh] animate-slide-up grid-cols-2 gap-1 p-1.5 landscape:grid-cols-3">
           {secondary.map((id) => {
@@ -175,7 +192,7 @@ function StageBar({ compact }: { compact?: boolean }) {
   return (
     // The card's 2px frame carries the time state: red = still, yellow 1×, orange 2×, green 4×.
     <div
-      className={cx('pointer-events-auto ui-card flex min-w-0 items-center gap-2 p-1.5 transition-[border-color,box-shadow] duration-300', compact ? 'flex-1' : 'w-[min(560px,48vw)] px-3')}
+      className={cx('pointer-events-auto ui-card flex min-w-0 items-center gap-2 p-1.5 transition-[border-color,box-shadow] duration-300', compact ? 'flex-1' : 'w-full px-3')}
       style={{ borderWidth: 2, borderColor: timeColor(time), boxShadow: `0 0 0 3px ${soft(timeColor(time), 14)}, var(--shadow-card)` }}
     >
       <div className="min-w-0 flex-1">

@@ -1,7 +1,7 @@
 // Bottom-left activity line: newest ActivityEntry rendered from ACTIVITY_TEXT; tap to expand history.
 import { useShallow } from 'zustand/react/shallow'
 import { FOUNDER_ACTIONS, type ActivityEntry } from '../engine/types'
-import { ACTIVITY_TEXT, FURNITURE, STAGES, UI_TEXT } from '../content'
+import { ACTIVITY_TEXT, FURNITURE, GOALS, STAGES, UI_TEXT } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { fill, t } from './i18n'
@@ -23,6 +23,8 @@ function formatParam(key: string, v: string | number): string | number {
   if (key === 'stage' && typeof v === 'number') return STAGES[v]?.name ?? v
   if (key === 'milestone' && typeof v === 'string') return t(`milestone.${v}`)
   if (key === 'note' && typeof v === 'string') return UI_TEXT[`note.${v}`] ?? v
+  if (key === 'level' && typeof v === 'number') return t(`release.level.${Math.max(1, Math.min(5, v))}`)
+  if (key === 'goal' && typeof v === 'string') return GOALS.find((g) => g.id === v)?.text ?? v
   if (typeof v === 'number') {
     if (key === 'amount' || key === 'cash' || key === 'mrr' || key === 'cost') return money(v)
     return num(v)

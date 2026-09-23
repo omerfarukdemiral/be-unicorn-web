@@ -9,13 +9,15 @@ import { incCounter, newId, pushActivity, pushEvent, type EngineContent } from '
 
 const WEEK_ACC = 'roundWeekAcc'
 
-export function startRound(s: GameState, rng: Rng): ActionErrorCode | null {
+/** `stars`: ☆ stage goals reached this stage; each takes GOAL_STAR_EQUITY_DISCOUNT off the equity sold. */
+export function startRound(s: GameState, rng: Rng, stars = 0): ActionErrorCode | null {
   if (s.round?.active) return 'roundActive'
   if (!s.derived.canStartRound) return 'roundNotReady'
   const target = (s.stage + 1) as StageIndex
   const amount = B.ROUND_AMOUNT[target]
-  const equity = B.ROUND_EQUITY[target]
-  if (amount == null || equity == null) return 'roundNotReady'
+  const baseEquity = B.ROUND_EQUITY[target]
+  if (amount == null || baseEquity == null) return 'roundNotReady'
+  const equity = Math.max(0.02, baseEquity - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT)
   const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
   s.round = {
     active: true,

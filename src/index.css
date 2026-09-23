@@ -156,6 +156,8 @@
   --animate-heartbeat: heartbeat 1s ease-in-out infinite;
   --animate-cta-glow: cta-glow 1.8s ease-in-out infinite;
   --animate-frame-beat: frame-beat 700ms ease-out both;
+  --animate-payday: payday-shake 600ms ease-in-out both;
+  --animate-payday-drop: payday-drop 1800ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 
   @keyframes pop-in {
     from { opacity: 0; transform: translateY(6px) scale(0.92); }
@@ -180,6 +182,19 @@
   }
   /* A new day: the date pops once. */
   /* Screen frame: a faint glow runs along the viewport edge once per game day while time flows. */
+  /* Payday: the Kasa value shakes and flashes red once (docs/CORE_LOOP.md §7 "Para"). */
+  @keyframes payday-shake {
+    0%, 100% { transform: none; color: inherit; }
+    10%, 50% { transform: translateX(-2px); color: var(--color-negative-ink); }
+    30%, 70% { transform: translateX(2px); color: var(--color-negative-ink); }
+    90% { transform: translateX(-1px); }
+  }
+  @keyframes payday-drop {
+    0% { opacity: 0; transform: translateY(-6px) scale(1.25); }
+    15% { opacity: 1; transform: translateY(0) scale(1.1); }
+    70% { opacity: 1; transform: translateY(6px) scale(1); }
+    100% { opacity: 0; transform: translateY(16px) scale(1); }
+  }
   @keyframes frame-beat {
     0% { opacity: 0.9; }
     100% { opacity: 0; }

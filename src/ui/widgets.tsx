@@ -14,6 +14,7 @@ import { Bar, cx, Dot } from './primitives'
 import { iconTone, soft, WIDGET_COLOR } from './theme'
 import { useTween } from './time'
 import { effectiveSpeed } from '../store/gameStore'
+import { useFreshEvents } from './loopUi'
 
 export type WidgetTier = 'primary' | 'secondary' | 'hidden'
 
@@ -173,37 +174,57 @@ function ledgerMoney(n: number): string {
 const RUNWAY_CRITICAL = 3
 
 /**
- * Kasa: the value counts smoothly (engine cash moves every quarter day), the daily net shows as a
- * coloured "−$X/gün" and each new day floats its delta out of the value, so money visibly drains or grows.
+ * Kasa: the value counts smoothly. Revenue flows in every day (a green "+$X" floats out of the value); salaries,
+ * rent and infra pile up and leave in one lump on payday (the 1st): the value shakes, flashes red and drops a big
+ * "−$X" (docs/CORE_LOOP.md §5 "Maaş günü"). The pill counts what has piled up and the days left to payday.
  */
 function CashWidget({ compact: c }: { compact?: boolean }) {
-  const { cash, net, debt, runway, day, flowing } = useGameStore(
-    useShallow((s) => ({
-      cash: s.state.stats.cash,
-      net: s.state.finance.net,
-      debt: s.state.finance.debt,
-      runway: s.state.finance.runway,
-      day: Math.floor(s.state.time.day),
-      flowing: effectiveSpeed(s) > 0,
-    })),
+  const { cash, net, mrr, owed, debt, runway, day, flowing } = useGameStore(
+    useShallow((s) => {
+      const l = s.state.finance.ledger
+      return {
+        cash: s.state.stats.cash,
+        net: s.state.finance.net,
+        mrr: s.state.finance.mrr,
+        owed: l ? l.salaries + l.rent + l.infra + l.ads : 0,
+        debt: s.state.finance.debt,
+        runway: s.state.finance.runway,
+        day: Math.floor(s.state.time.day),
+        flowing: effectiveSpeed(s) > 0,
+      }
+    }),
   )
   const shown = useTween(cash)
   const perDay = net / 30
   const critical = cash < 0 || (runway !== null && runway < RUNWAY_CRITICAL)
   const tone = perDay >= 0 ? 'text-positive-ink' : 'text-negative-ink'
+  const toPayday = 30 - (day % 30)
 
-  // One floating delta per new day while time flows (keeps the last few, each fades on its own).
-  const [drops, setDrops] = useState<{ id: number; text: string; up: boolean }[]>([])
+  // Floating deltas: the day's revenue (small, green) and payday's lump (big, red). Each fades on its own.
+  const [drops, setDrops] = useState<{ id: number; text: string; up: boolean; big?: boolean }[]>([])
+  const pushDrop = (d: { id: number; text: string; up: boolean; big?: boolean }, ms: number) => {
+    setDrops((cur) => [...cur.slice(-2), d])
+    // No cleanup: at 4× the next day lands before this one has faded (a late setState after unmount is a no-op).
+    window.setTimeout(() => setDrops((cur) => cur.filter((x) => x.id !== d.id)), ms)
+  }
   const lastDay = useRef(day)
   useEffect(() => {
     if (day === lastDay.current) return
     const fresh = day > lastDay.current && flowing
     lastDay.current = day
-    if (!fresh || Math.abs(perDay) < 0.5) return
-    setDrops((d) => [...d.slice(-2), { id: day, text: signedMoney(perDay), up: perDay >= 0 }])
-    // No cleanup: at 4× the next day lands before this one has faded (a late setState after unmount is a no-op).
-    window.setTimeout(() => setDrops((d) => d.filter((x) => x.id !== day)), 1200)
+    const inflow = mrr / 30
+    if (!fresh || inflow < 0.5) return
+    pushDrop({ id: day, text: signedMoney(inflow), up: true }, 1200)
   }, [day]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [payFlash, setPayFlash] = useState(0)
+  useFreshEvents((events) => {
+    for (const e of events) {
+      if (e.kind !== 'payday' || !(e.value !== undefined && e.value > 0.5)) continue
+      setPayFlash(e.id)
+      pushDrop({ id: -e.id, text: `−${money(e.value)}`, up: false, big: true }, 1800)
+    }
+  })
 
   return (
     <WidgetChip
@@ -215,12 +236,18 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
       className={cx('relative', critical && 'animate-danger-pulse')}
       value={
         <span className="relative inline-block">
-          <span className={shown < 0 ? 'text-negative-ink' : undefined}>{ledgerMoney(shown)}</span>
+          <span key={payFlash} className={cx(shown < 0 && 'text-negative-ink', payFlash > 0 && 'inline-block animate-payday')}>
+            {ledgerMoney(shown)}
+          </span>
           {drops.map((d) => (
             <span
               key={d.id}
               aria-hidden="true"
-              className={cx('pointer-events-none absolute left-full top-0 ml-1 animate-cash-rise whitespace-nowrap text-[11px] font-bold', d.up ? 'text-positive-ink' : 'text-negative-ink')}
+              className={cx(
+                'pointer-events-none absolute left-full top-0 ml-1 whitespace-nowrap font-bold',
+                d.big ? 'animate-payday-drop text-[15px]' : 'animate-cash-rise text-[11px]',
+                d.up ? 'text-positive-ink' : 'text-negative-ink',
+              )}
             >
               {d.text}
             </span>
@@ -237,12 +264,19 @@ function CashWidget({ compact: c }: { compact?: boolean }) {
       title={debt > 0 ? t('hud.debtTitle', { v: money(debt) }) : t('hud.cashTitle')}
     >
       {!c && (
-        <span
-          className={cx('tabular mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold', tone)}
-          style={{ background: soft(perDay >= 0 ? 'var(--color-positive)' : 'var(--color-negative)', 12) }}
-        >
-          <Icon name="arrowUp" size={11} className={perDay >= 0 ? undefined : 'rotate-180'} />
-          {t('time.perDay', { v: signedMoney(perDay) })}
+        <span className="mt-1 flex flex-wrap items-center gap-1">
+          <span
+            className={cx('tabular inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold', tone)}
+            style={{ background: soft(perDay >= 0 ? 'var(--color-positive)' : 'var(--color-negative)', 12) }}
+          >
+            <Icon name="arrowUp" size={11} className={perDay >= 0 ? undefined : 'rotate-180'} />
+            {t('time.perDay', { v: signedMoney(perDay) })}
+          </span>
+          {owed > 0.5 && (
+            <span className="tabular text-[10.5px] font-medium text-ink-2" title={t('cash.paydayTitle')}>
+              {t('cash.owed', { d: toPayday, v: `−${money(owed)}` })}
+            </span>
+          )}
         </span>
       )}
     </WidgetChip>

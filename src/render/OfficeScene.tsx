@@ -9,6 +9,7 @@ import type { Selection, ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
 import { CAMERA_DIR, CELL, ZOOM_FACTORS, clamp, damp } from './constants'
 import { EffectsLayer } from './Effects'
+import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
 import type { OfficeLayout } from './layout'
 import { Office } from './Office'
@@ -214,6 +215,8 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
         <People />
       </StageTransition>
       <EffectsLayer />
+      {/* Core loop beats: release banner + user wave, payday light (docs/CORE_LOOP.md §7). */}
+      <JuiceLayer />
       <WorldBubbles renderBubble={renderBubble} ambient={ambientBubbles} />
     </>
   )

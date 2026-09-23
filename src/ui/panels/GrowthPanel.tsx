@@ -9,6 +9,7 @@ import { Bar, Dot, Empty, LockedHint, SectionTitle, Stat } from '../primitives'
 import { iconTone, WIDGET_COLOR } from '../theme'
 import { Icon } from '../icons'
 import { RoundSection } from './RoundSection'
+import { DecisionOutcomes, GoalsCard } from './GoalsCard'
 
 const AD_STEPS = [0, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000]
 
@@ -24,8 +25,10 @@ export function GrowthPanel({ section }: { section?: 'round' }) {
   }, [section])
   return (
     <div className="flex flex-col gap-5">
+      <GoalsCard />
       {(showRound || section === 'round') && <RoundSection />}
       <ProductSection />
+      <DecisionOutcomes />
       <ChannelSection />
       <PriceSection />
       <EnterpriseSection />

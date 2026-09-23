@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FURNITURE } from '../content'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY } from '../engine/types'
-import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, panelSelection, useGameStore } from './gameStore'
+import type { GameEvent, GameState } from '../engine/types'
+import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, hasImportantMoment, panelSelection, PAYDAY_SLOW_RUNWAY_MONTHS, useGameStore } from './gameStore'
 
 const store = () => useGameStore.getState()
 
@@ -405,5 +406,42 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().state.decisions.active).toBeDefined()
     expect(store().state.time.speed).toBe(4)
     store().setSlowOnMoments(true)
+  })
+})
+
+describe('core loop phase 1 (store side)', () => {
+  const withEvent = (s: GameState, kind: GameEvent['kind'], runway: number | null): GameState => ({
+    ...s,
+    finance: { ...s.finance, runway },
+    events: [...s.events, { id: s.nextId + 100, day: s.time.day, kind }],
+  })
+
+  it('a release, or a payday that leaves < 3 months of runway, is an important moment (4× → 1×)', () => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    const s = store().state
+    expect(hasImportantMoment(s, withEvent(s, 'release', 12))).toBe(true)
+    expect(hasImportantMoment(s, withEvent(s, 'payday', PAYDAY_SLOW_RUNWAY_MONTHS - 0.5))).toBe(true)
+    expect(hasImportantMoment(s, withEvent(s, 'payday', 8))).toBe(false)
+    expect(hasImportantMoment(s, withEvent(s, 'payday', null))).toBe(false)
+    expect(hasImportantMoment(s, withEvent(s, 'hired', 1))).toBe(false)
+  })
+
+  it('at 4× a tight payday slows the run to 1×', () => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().setSlowOnMoments(true)
+    // Almost no cash, half a day before payday: day 30 leaves well under 3 months of runway.
+    useGameStore.setState((st) => ({ state: { ...st.state, time: { ...st.state.time, day: 29.5 }, stats: { ...st.state.stats, cash: 400 } } }))
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    for (let i = 0; i < 40 && !store().state.finance.lastReceipt; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.finance.lastReceipt?.day).toBe(30)
+    expect(store().state.time.speed).toBe(1)
+  })
+
+  it('derived carries the next step and the horizon for the HUD', () => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    const d = store().state.derived
+    expect(d.nextStep?.id).toBe('idea')
+    expect(d.horizon?.[0]?.kind).toBe('payday')
+    expect(d.horizon?.[0]?.day).toBe(30)
   })
 })

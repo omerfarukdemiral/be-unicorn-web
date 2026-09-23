@@ -261,3 +261,26 @@ export const RIVAL_PRESSURE_BASE = 0.05
 export const ARCHETYPE_MIN_STAGE: StageIndex = 3
 export const LOW_GROWTH_MOM = 0.02
 export const MOM_CLAMP_MAX = 5
+
+// ---------------------------------------------------------------------------
+// Core loop, phase 1 (docs/CORE_LOOP.md §4–§5): payday, release moments, next step, horizon, stage goals
+// ---------------------------------------------------------------------------
+/** Payday: costs (salaries, rent, infra, ads) accrue daily and are paid in one lump every DAYS_PER_MONTH days. */
+export const PAYDAY_EVERY_DAYS = 30
+/** Maturity thresholds that each make a release moment (1 = MVP). */
+export const RELEASE_THRESHOLDS: readonly number[] = [0.2, 0.4, 0.6, 0.8, 1.0]
+/** User wave per release level (garage scale), × RELEASE_WAVE_STAGE_GROWTH^stage × (0.5 + reputation/100). */
+export const RELEASE_WAVE_USERS: readonly number[] = [6, 15, 30, 50, 80]
+export const RELEASE_WAVE_STAGE_GROWTH = 2
+/** Plus this share of current users (word of mouth from the people already there). */
+export const RELEASE_WAVE_USER_SHARE = 0.02
+export const RELEASES_MAX = 12
+/** Landed delayed decision effects kept for "Kararın → sonucu". */
+export const OUTCOMES_MAX = 20
+/** Horizon strip looks this many days ahead (6 weeks). */
+export const HORIZON_DAYS = 42
+/** Next step chain targets: users before "revenue" becomes the step, and first manual users before the desk. */
+export const NEXT_STEP_USERS = 50
+export const NEXT_STEP_FIRST_USERS = 3
+/** Each ☆ stage goal reached takes this much off the equity sold in the next round (1 point). */
+export const GOAL_STAR_EQUITY_DISCOUNT = 0.01

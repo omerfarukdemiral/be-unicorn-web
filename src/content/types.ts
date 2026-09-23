@@ -229,6 +229,18 @@ export type ProjectCategoryTextTable = Record<ProjectCategory, { name: string; d
 export type NpcTextTable = Record<NpcRole, { name: string; title: string }>
 
 /** Everything the content lane exports from src/content/index.ts. */
+/** Optional stage goal (☆, docs/CORE_LOOP.md §4.3). The ★ goal is always the next stage's valuation. */
+export interface StageGoal {
+  id: string
+  stage: StageIndex
+  /** Short imperative, ≤ 8 words. */
+  text: string
+  /** One line: why it matters / how. */
+  hint: string
+  /** Pure: reached right now? The engine latches the first true (goalsDone). */
+  check: (s: GameState) => boolean
+}
+
 export interface ContentBundle {
   stages: readonly StageDef[]
   concepts: readonly Concept[]
@@ -243,4 +255,6 @@ export interface ContentBundle {
   npcText: NpcTextTable
   /** Generic UI strings, key → Turkish text (with {param} placeholders). */
   uiText: Record<string, string>
+  /** Optional stage goals (☆). */
+  goals?: readonly StageGoal[]
 }

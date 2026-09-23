@@ -29,7 +29,25 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
   'milestone',
   'bankruptWarning',
   'roundClosed',
+  'release',
 ])
+
+/** A payday that leaves less than this many months of runway is an important moment too (docs/CORE_LOOP.md §3.2). */
+export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
+
+/** True when `next` brought an event that should slow 4× down to 1× (see IMPORTANT_EVENT_KINDS). */
+export function hasImportantMoment(prev: GameState, next: GameState): boolean {
+  const since = lastEventId(prev)
+  for (const e of next.events) {
+    if (e.id <= since) continue
+    if (IMPORTANT_EVENT_KINDS.has(e.kind)) return true
+    if (e.kind === 'payday') {
+      const r = next.finance.runway
+      if (r !== null && r < PAYDAY_SLOW_RUNWAY_MONTHS) return true
+    }
+  }
+  return false
+}
 
 const initialUi = (): UiState => ({
   panel: null,
@@ -277,8 +295,7 @@ function afterStep(prev: GameState, next: GameState): void {
   const ac = next.concepts.active
   if (ac && next.time.day - ac.shownDay >= CONCEPT_MINIMIZE_DAYS) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
   if (ui.slowOnMoments && next.time.speed === 4) {
-    const since = lastEventId(prev)
-    if (next.events.some((e) => e.id > since && IMPORTANT_EVENT_KINDS.has(e.kind))) {
+    if (hasImportantMoment(prev, next)) {
       dispatch({ type: 'setSpeed', speed: 1 })
       useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownAt: performance.now() } }))
     }

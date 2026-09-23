@@ -77,6 +77,7 @@ export function answerDecision(s: GameState, content: EngineContent, cardId: Dec
       applyDay: s.time.day + opt.delayed.days,
       effects: opt.delayed.effects,
       sourceCardId: cardId,
+      sourceOption: optionIndex,
       ...(opt.delayed.note !== undefined ? { noteKey: opt.delayed.note } : {}),
     })
   }
@@ -98,5 +99,20 @@ export function applyDueEffects(s: GameState, content: EngineContent): void {
   for (const p of due) {
     applyEffects(s, content, p.effects, p.sourceCardId ?? p.id)
     pushActivity(s, 'delayedEffect', { note: p.noteKey ?? '', card: p.sourceCardId ?? '' })
+    if (p.sourceCardId === undefined) continue
+    // "Kararın → sonucu": which card and option this came from, and what it did (docs/CORE_LOOP.md §6).
+    const answer = [...s.decisions.history].reverse().find((h) => h.cardId === p.sourceCardId && h.day <= p.applyDay)
+    const optionIndex = p.sourceOption ?? answer?.optionIndex ?? 0
+    const list = (s.decisions.outcomes ??= [])
+    list.push({
+      cardId: p.sourceCardId,
+      optionIndex,
+      answeredDay: answer?.day ?? p.applyDay,
+      day: s.time.day,
+      effects: p.effects,
+      ...(p.noteKey !== undefined ? { noteKey: p.noteKey } : {}),
+    })
+    if (list.length > B.OUTCOMES_MAX) list.splice(0, list.length - B.OUTCOMES_MAX)
+    pushEvent(s, { kind: 'delayedEffect', refId: p.sourceCardId, value: optionIndex })
   }
 }

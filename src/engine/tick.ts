@@ -5,7 +5,8 @@ import * as B from './balance'
 import * as E from './economy'
 import { evaluateConcepts } from './concepts'
 import { applyDueEffects, maybeShowDecision } from './decisions'
-import { recomputeDerived, type Outputs } from './derive'
+import { maturityRates, recomputeDerived, type Outputs } from './derive'
+import { accrueMonth, checkGoals, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
 import { completeFounderAction, dailyFounder, regenEnergy } from './founder'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
@@ -51,9 +52,11 @@ function advance(s: GameState, content: EngineContent, rng: Rng, dt: number): vo
   const inflow = ((s.derived.channels.organic + s.derived.channels.paid) / DAYS_PER_MONTH) * dt
   const lost = ((s.stats.users * s.stats.churn) / DAYS_PER_MONTH) * dt
   s.stats.users = Math.max(0, s.stats.users + inflow - lost)
-  s.stats.cash += (s.finance.net / DAYS_PER_MONTH) * dt
+  // Revenue flows into cash day by day; costs accrue and are paid in one lump on payday (docs/CORE_LOOP.md §5).
+  accrueMonth(s, dt)
 
   progressProjects(s, o, dt)
+  checkReleases(s, content)
   driftMorale(s, content, o, dt)
   regenEnergy(s, dt)
   progressRound(s, content, dt, modifierMult(s, 'roundSpeed'))
@@ -71,21 +74,9 @@ function advance(s: GameState, content: EngineContent, rng: Rng, dt: number): vo
 export function progressProjects(s: GameState, o: Outputs, dt: number): void {
   const active = s.projects.filter((p) => p.maturity < 1)
   if (!active.length) return
-  const speed =
-    E.parallelProjectSpeed(active.length, s.stage) *
-    Math.max(B.TECH_DEBT_MIN_SPEED, 1 - B.TECH_DEBT_PER_POINT * s.techDebt) *
-    (1 + o.fx.maturityBonus)
-  const founderProject = s.founder.currentAction ? undefined : active[0]
+  const rates = maturityRates(s, o)
   for (const p of active) {
-    let eng = p === founderProject ? B.FOUNDER_PROJECT_OUTPUT : 0
-    let prod = 0
-    for (const id of p.assignedIds) {
-      const e = s.employees.find((x) => x.id === id)
-      if (!e) continue
-      if (e.dept === 'eng') eng += o.perEmployee[id] ?? 0
-      else if (e.dept === 'product') prod += o.perEmployee[id] ?? 0
-    }
-    p.maturity = Math.min(1, p.maturity + (E.maturityPerMonth(eng, prod, speed, p.size) / DAYS_PER_MONTH) * dt)
+    p.maturity = Math.min(1, p.maturity + (rates[p.id] ?? 0) * dt)
     if (!p.launched && E.isLaunched(p.maturity)) {
       p.launched = true
       p.launchedDay = s.time.day
@@ -106,7 +97,11 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   if (day % DAYS_PER_WEEK === 0) fillCandidates(s, content, rng)
   applyDueEffects(s, content)
   checkMilestones(s)
-  if (day % DAYS_PER_MONTH === 0) monthEnd(s)
+  if (day % DAYS_PER_MONTH === 0) {
+    monthEnd(s)
+    payday(s, content)
+  }
+  checkGoals(s, content)
   updateRivalPressure(s)
   detectArchetype(s)
   recomputeDerived(s, content)

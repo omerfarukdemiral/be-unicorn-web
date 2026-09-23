@@ -8,6 +8,7 @@ import { startFounderAction } from './founder'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
+import { starsOfStage } from './loop'
 import { startRound } from './round'
 import {
   FOUNDER_ACTIONS,
@@ -281,6 +282,7 @@ const startProject: Handler<'startProject'> = ({ s }, a) => {
     size: B.PROJECT_SIZE[a.category],
     maturity: 0,
     launched: false,
+    releaseLevel: 0,
     createdDay: s.time.day,
     assignedIds: [] as string[],
   }
@@ -354,7 +356,7 @@ const minimizeConceptH: Handler<'minimizeConcept'> = ({ s, content }, a) => (min
 
 const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => answerDecision(s, content, a.cardId, a.optionIndex)
 
-const startRoundH: Handler<'startRound'> = ({ s, rng }) => startRound(s, rng)
+const startRoundH: Handler<'startRound'> = ({ s, rng, content }) => startRound(s, rng, starsOfStage(s, content, s.stage))
 
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,

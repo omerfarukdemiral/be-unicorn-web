@@ -1,8 +1,9 @@
 // Recomputes stats/finance/derived from the raw state. Render/UI read these; they never compute formulas.
 import * as B from './balance'
 import * as E from './economy'
+import { horizon, nextStep } from './loopSelectors'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
-import { DEPTS, type Dept, type Employee, type GameState } from './types'
+import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId } from './types'
 import { modifierMult, moraleModifierSum, type EngineContent } from './util'
 
 export interface Outputs {
@@ -45,6 +46,39 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
     deptOutput[e.dept] += out
   }
   return { perEmployee, deptOutput, deptCounts, coordination: coord, fx }
+}
+
+/**
+ * §5.3 maturity gained per DAY by each unfinished project: assigned builders (+ the idle founder on the oldest one),
+ * slowed by parallel projects and tech debt. progressProjects applies it; the horizon uses it for release ETAs.
+ */
+export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, number> {
+  const rates: Record<ProjectId, number> = {}
+  const active = s.projects.filter((p) => p.maturity < 1)
+  if (!active.length) return rates
+  const speed =
+    E.parallelProjectSpeed(active.length, s.stage) *
+    Math.max(B.TECH_DEBT_MIN_SPEED, 1 - B.TECH_DEBT_PER_POINT * s.techDebt) *
+    (1 + o.fx.maturityBonus)
+  const founderProject = s.founder.currentAction ? undefined : active[0]
+  for (const p of active) {
+    let eng = p === founderProject ? B.FOUNDER_PROJECT_OUTPUT : 0
+    let prod = 0
+    for (const id of p.assignedIds) {
+      const e = s.employees.find((x) => x.id === id)
+      if (!e) continue
+      if (e.dept === 'eng') eng += o.perEmployee[id] ?? 0
+      else if (e.dept === 'product') prod += o.perEmployee[id] ?? 0
+    }
+    rates[p.id] = E.maturityPerMonth(eng, prod, speed, p.size) / DAYS_PER_MONTH
+  }
+  return rates
+}
+
+/** Costs accrued since the last payday (still to be paid). */
+export function owedCosts(s: GameState): number {
+  const l = s.finance.ledger
+  return l ? l.salaries + l.rent + l.infra + l.ads : 0
 }
 
 export function averageLaunchedMaturity(s: GameState): number {
@@ -109,7 +143,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.finance.burn = burn
   s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget }
   s.finance.net = net
-  s.finance.runway = E.runway(s.stats.cash, net)
+  // Runway counts what payday will take: cash already earmarked for accrued costs is not runway.
+  s.finance.runway = E.runway(s.stats.cash - owedCosts(s), net)
   s.finance.valuation = valuation
 
   const gTarget = globalMoraleTarget(s, o, over)
@@ -139,5 +174,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     canStartRound:
       s.gameOver === undefined && s.stage < B.LAST_STAGE - 1 && !(s.round?.active ?? false) && target !== null && valuation >= target,
   }
+  s.derived.maturityPerDay = maturityRates(s, o)
+  s.derived.nextStep = nextStep(s)
+  s.derived.horizon = horizon(s)
   return o
 }

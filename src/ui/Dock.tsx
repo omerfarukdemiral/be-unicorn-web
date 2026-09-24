@@ -1,12 +1,12 @@
-// Dock: Mağaza · Ekip · Projeler · Büyüme · Defter. Only the tab bar lives here; the tab content opens in
-// the single RightPanel (a tab replaces whatever the panel showed, the same tab again closes it).
-// Desktop = floating bar at the bottom of the scene area, mobile = fixed bottom icon bar.
+// Panel tabs: Mağaza · Ekip · Projeler · Büyüme · Metrikler · Kazanımlar. They live in the bottom bar
+// (layout/BottomBar.tsx, docs/LAYOUT.md §1); the tab content opens in the single RightPanel (a tab replaces whatever
+// the panel showed, the same tab again closes it). Badges (§4.1): counters in brand, a leaving employee in warning.
 import { useGameStore } from '../store/gameStore'
 import type { DockTab } from '../store/types'
+import { unseenMetrics } from '../store/metricPins'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
-import { useIsMobile } from './hooks'
 
 export interface DockTabDef {
   id: DockTab
@@ -20,76 +20,97 @@ export const DOCK_TABS: DockTabDef[] = [
   { id: 'team', icon: 'users', key: 'e' },
   { id: 'projects', icon: 'rocket', key: 'p' },
   { id: 'growth', icon: 'growth', key: 'b' },
+  { id: 'metrics', icon: 'bars', key: 'g' },
   { id: 'journal', icon: 'book', key: 'k' },
 ]
 
-function useBadges(): Partial<Record<DockTab, number>> {
+type BadgeTone = 'brand' | 'warn'
+
+function useBadges(): Partial<Record<DockTab, { n: number; tone: BadgeTone }>> {
   const leaving = useGameStore((s) => s.state.employees.filter((e) => e.status === 'leaving').length)
   const waiting = useGameStore((s) => s.state.concepts.minimized.length)
-  return { team: leaving, journal: waiting }
+  const fresh = useGameStore((s) => unseenMetrics(s.state.unlockedWidgets, s.ui.seenMetrics).length)
+  return {
+    team: { n: leaving, tone: 'warn' },
+    journal: { n: waiting, tone: 'brand' },
+    metrics: { n: fresh, tone: 'brand' },
+  }
 }
 
-export function Dock({ compact }: { /** Desktop with the panel open and little room: icons only below lg. */ compact?: boolean }) {
+/**
+ * The tab buttons. `bar`: desktop bottom bar, h40, icon + label; labels drop to icons below a 1240px bar
+ * (container query on the bar), the active tab keeps its label. `mobile`: phone row, icon 20 + 10px label, h48.
+ */
+export function DockTabs({ variant }: { variant: 'bar' | 'mobile' }) {
   const active = useGameStore((s) => s.ui.panel?.kind)
   const togglePanel = useGameStore((s) => s.togglePanel)
-  const mobile = useIsMobile()
   const badges = useBadges()
 
-  if (mobile) {
+  if (variant === 'mobile') {
     return (
-      <nav className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur safe-bottom safe-x" aria-label={t('dock.label')}>
-        <div className="flex h-16 items-stretch justify-around">
-          {DOCK_TABS.map((d) => (
+      <div className="ui-scroll flex h-12 min-w-0 items-stretch gap-1 overflow-x-auto" role="tablist" aria-label={t('bottom.tabs')}>
+        {DOCK_TABS.map((d) => {
+          const on = active === d.id
+          return (
             <button
               key={d.id}
               type="button"
+              role="tab"
+              aria-selected={on}
               onClick={() => togglePanel(d.id)}
-              aria-pressed={active === d.id}
-              className={cx('relative flex min-w-11 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold tracking-wide', active === d.id ? 'text-brand-ink' : 'text-ink-2')}
+              className={cx('relative flex min-w-[56px] flex-1 flex-col items-center justify-center gap-0.5 rounded-control text-[10px] font-semibold', on ? 'bg-brand-soft text-brand-ink' : 'text-ink-2')}
             >
-              <span className={cx('grid h-8 w-12 place-items-center rounded-control transition-colors', active === d.id && 'bg-brand text-on-ink')}>
-                <Icon name={d.icon} size={20} />
-              </span>
-              {t(`dock.${d.id}`)}
-              <Badge n={badges[d.id]} />
+              <Icon name={d.icon} size={20} />
+              <span className="whitespace-nowrap leading-none">{t(`dock.${d.id}`)}</span>
+              <Badge b={badges[d.id]} inset />
             </button>
-          ))}
-        </div>
-      </nav>
+          )
+        })}
+      </div>
     )
   }
 
   return (
-    <nav className="pointer-events-auto ui-card flex items-center gap-1 p-1.5" aria-label={t('dock.label')}>
-      {DOCK_TABS.map((d) => (
-        <button
-          key={d.id}
-          type="button"
-          onClick={() => togglePanel(d.id)}
-          aria-pressed={active === d.id}
-          aria-label={t(`dock.${d.id}`)}
-          title={`${t(`dock.${d.id}`)} (${d.key.toUpperCase()})`}
-          className={cx(
-            'relative flex h-11 items-center gap-2 rounded-control text-sm font-semibold tracking-wide transition-colors',
-            compact ? 'px-3 lg:px-4' : 'px-4',
-            active === d.id ? 'bg-brand text-on-ink shadow-[0_4px_12px_-6px_var(--color-brand)]' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
-          )}
-        >
-          <Icon name={d.icon} size={18} />
-          <span className={cx(compact && 'hidden lg:inline')}>{t(`dock.${d.id}`)}</span>
-          <kbd className={cx('hidden rounded-md border px-1 font-ui text-[10.5px] font-semibold', !compact && 'xl:inline', active === d.id ? 'border-on-ink/25 text-on-ink/80' : 'border-border-strong text-ink-2')}>{d.key.toUpperCase()}</kbd>
-          <Badge n={badges[d.id]} />
-        </button>
-      ))}
-    </nav>
+    <div className="flex items-center gap-1" role="tablist" aria-label={t('bottom.tabs')}>
+      {DOCK_TABS.map((d) => {
+        const on = active === d.id
+        const label = t(`dock.${d.id}`)
+        return (
+          <button
+            key={d.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => togglePanel(d.id)}
+            aria-label={label}
+            title={`${label} (${d.key.toUpperCase()})`}
+            className={cx(
+              'relative flex h-10 min-w-10 items-center justify-center gap-2 rounded-control text-[13px] font-semibold transition-colors',
+              on ? 'bg-brand px-3 text-on-ink' : 'px-2.5 text-ink-2 hover:bg-surface-2 hover:text-ink @min-[1240px]:px-3',
+            )}
+          >
+            <Icon name={d.icon} size={18} className="shrink-0" />
+            <span className={cx('whitespace-nowrap', !on && 'hidden @min-[1240px]:inline')}>{label}</span>
+            <Badge b={badges[d.id]} />
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
-function Badge({ n }: { n?: number }) {
-  if (!n) return null
+/** `inset`: inside the button (phone row scrolls sideways, which would clip a badge that sticks out). */
+function Badge({ b, inset }: { b?: { n: number; tone: BadgeTone }; inset?: boolean }) {
+  if (!b?.n) return null
   return (
-    <span className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-negative px-1 text-[10px] font-semibold leading-4 text-on-ink md:-right-1 md:-top-1">
-      {n}
+    <span
+      className={cx(
+        inset ? 'right-[calc(50%-20px)] top-0.5' : '-right-1 -top-1',
+        'tabular absolute grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold leading-4 ring-2 ring-surface',
+        b.tone === 'warn' ? 'bg-energy-ink text-on-ink' : 'bg-brand text-on-ink',
+      )}
+    >
+      {b.n}
     </span>
   )
 }

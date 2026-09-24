@@ -522,7 +522,7 @@ const BASE_TEXT: Record<string, string> = {
   'visitor.ambient': 'Ofise uğradı.',
   'shortcut.pause': 'Duraklat / devam',
   'shortcut.speed': 'Hız 1× / 2× / 4×',
-  'shortcut.tabs': 'Mağaza · Ekip · Projeler · Büyüme · Kazanımlar',
+  'shortcut.tabs': 'Mağaza · Ekip · Projeler · Büyüme · Metrikler · Kazanımlar',
   'shortcut.escape': 'İptal / kapat',
   'shortcut.zoom': 'Yakınlaştır / uzaklaştır',
   'zoom.0': 'Uzak',

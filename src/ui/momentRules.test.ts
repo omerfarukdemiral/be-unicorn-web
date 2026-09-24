@@ -1,7 +1,7 @@
-// The non-blocking HUD layer's rules (docs/CORE_LOOP.md §7 "Popup bütçesi"): ≤ 4 s, one card on phones,
-// one-line receipt on phones and at 4×, a burst merged without dropping the card on screen, the panel each card opens.
+// The moments' rules (docs/CORE_LOOP.md §7 "Popup bütçesi"): ≤ 4 s, a burst merged without dropping the one on
+// screen, the panel each opens. Strip queue / 4× timing: layout/stripRules.test.ts.
 import { describe, expect, it } from 'vitest'
-import { maxShown, mergeMoments, MOMENT_LIFE_MS, MOMENT_QUEUE_MAX, momentPanel, receiptCompact, type MomentKind } from './momentRules'
+import { mergeMoments, MOMENT_LIFE_MS, MOMENT_QUEUE_MAX, momentPanel, type MomentKind } from './momentRules'
 import { runwayTone, ledgerMoney } from './widgets'
 
 const m = (key: number, kind: MomentKind) => ({ key, kind })
@@ -9,15 +9,6 @@ const m = (key: number, kind: MomentKind) => ({ key, kind })
 describe('moment cards', () => {
   it('every card closes by itself within 4 s', () => {
     for (const ms of Object.values(MOMENT_LIFE_MS)) expect(ms).toBeLessThanOrEqual(4000)
-  })
-
-  it('phones show one card and a one-line receipt; desktop two, one-line only at 4×', () => {
-    expect(maxShown(true)).toBe(1)
-    expect(maxShown(false)).toBe(2)
-    expect(receiptCompact(1, true)).toBe(true)
-    expect(receiptCompact(1, false)).toBe(false)
-    expect(receiptCompact(2, false)).toBe(false)
-    expect(receiptCompact(4, false)).toBe(true)
   })
 
   it('a newer receipt / round week replaces the older one in place; others queue', () => {
@@ -37,7 +28,7 @@ describe('moment cards', () => {
   })
 
   it('each card opens its panel (never a pause: panels that pause are only decision / Defter / round offer)', () => {
-    expect(momentPanel('receipt')).toEqual({ kind: 'growth' })
+    expect(momentPanel('receipt')).toEqual({ kind: 'metrics', focus: 'burnBreakdown' })
     expect(momentPanel('release')).toEqual({ kind: 'projects' })
     expect(momentPanel('goal')).toEqual({ kind: 'growth' })
     expect(momentPanel('outcome')).toEqual({ kind: 'growth' })

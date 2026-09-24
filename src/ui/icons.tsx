@@ -67,6 +67,7 @@ const PATHS = {
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   keyboard: <><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M6 12.5h.01M18 12.5h.01M8.5 15h7" /></>,
   camera: <><path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5H8l1.5-2h5L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" /><circle cx="12" cy="13" r="3.5" /></>,
+  pin: <><path d="M9 3.5h6M10 3.5v5.2L6.5 13h11L14 8.7V3.5" /><path d="M12 13v7.5" /></>,
   building: <><path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5M15 9.5h3.5a1 1 0 0 1 1 1v10M3 20.5h18" /><path d="M8 8h1M11 8h1M8 11.5h1M11 11.5h1M8 15h1M11 15h1" /></>,
 } satisfies Record<string, ReactNode>
 

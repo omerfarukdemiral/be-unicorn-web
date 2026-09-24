@@ -1,45 +1,20 @@
-// Small feedback layers: rejected-action toast and placing-mode banner.
-import { useEffect, useState } from 'react'
+// Small feedback: rejected-action error and placing mode. Their text now lives in the notification strip
+// (docs/LAYOUT.md §3: error P2, placing P1) via `errorText` / `usePlacing`.
 import { useGameStore } from '../store/gameStore'
-import { Icon } from './icons'
 import { t } from './i18n'
-import { Button } from './primitives'
 
-const ERROR_MS = 2600
-
-export function ErrorToast() {
-  const err = useGameStore((s) => s.ui.lastError)
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    if (!err) return
-    setVisible(true)
-    const id = window.setTimeout(() => setVisible(false), ERROR_MS)
-    return () => window.clearTimeout(id)
-  }, [err])
-  if (!err || !visible) return null
-  return (
-    <div role="alert" key={err.at} className="pointer-events-none flex animate-pop-in items-center gap-2 rounded-control bg-ink px-3.5 py-2 text-xs font-medium text-on-ink shadow-pop">
-      <Icon name="warning" size={15} className="shrink-0 text-negative" />
-      {t(`error.${err.code}`)}
-    </div>
-  )
+export function errorText(code: string): string {
+  return t(`error.${code}`)
 }
 
-export function PlacingBanner() {
+/** Placing mode for the strip: its line and the cancel action (null when not placing). */
+export function usePlacing(): { text: string; cancel: () => void } | null {
   const placing = useGameStore((s) => s.ui.placing)
   const setPlacing = useGameStore((s) => s.setPlacing)
-  const employees = useGameStore((s) => s.state.employees)
+  const name = useGameStore((s) => {
+    const p = s.ui.placing
+    return p?.kind === 'seat' ? (s.state.employees.find((e) => e.id === p.employeeId)?.name ?? '') : ''
+  })
   if (!placing) return null
-  let text: string
-  if (placing.kind === 'move') text = t('placing.move')
-  else text = t('placing.seat', { name: employees.find((e) => e.id === placing.employeeId)?.name ?? '' })
-  return (
-    <div className="pointer-events-auto flex animate-pop-in items-center gap-2 rounded-control bg-ink py-1 pl-3.5 pr-1 text-xs font-semibold text-on-ink shadow-pop">
-      <Icon name="move" size={15} />
-      <span className="max-w-[60vw] truncate">{text}</span>
-      <Button size="sm" tone="onInk" onClick={() => setPlacing(null)}>
-        {t('common.cancel')}
-      </Button>
-    </div>
-  )
+  return { text: placing.kind === 'move' ? t('placing.move') : t('placing.seat', { name }), cancel: () => setPlacing(null) }
 }

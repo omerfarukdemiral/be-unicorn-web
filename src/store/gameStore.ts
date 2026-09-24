@@ -6,8 +6,9 @@
 // important moment slows the run to 1× (docs/CORE_LOOP.md §3.2).
 import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY, type Action, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
-import { clearSave, readProfile, readSave, writeProfile, writeSave } from './save'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
+import { clearSave, readProfile, readSave, readUiSave, writeProfile, writeSave, writeUiSave } from './save'
+import { addPin, autoPin, removePin } from './metricPins'
 import type { GameStore, Panel, PauseReason, ReplayLog, Selection, UiState } from './types'
 
 export { SAVE_KEY } from './save'
@@ -71,7 +72,7 @@ export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   return false
 }
 
-const initialUi = (): UiState => ({
+const initialUi = (saved = readUiSave()): UiState => ({
   panel: null,
   panelBack: null,
   hoverSlotId: null,
@@ -86,10 +87,38 @@ const initialUi = (): UiState => ({
   decisionExpanded: false,
   slowOnMoments: true,
   slowdownAt: null,
+  pinnedMetrics: saved.pinnedMetrics ?? [],
+  seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
+  pinTouched: saved.pinTouched ?? false,
 })
 
-/** UI fields that survive newGame()/load() (player preferences of this session). */
-const keptUi = (ui: UiState): Pick<UiState, 'zoom' | 'slowOnMoments' | 'generation'> => ({ zoom: ui.zoom, slowOnMoments: ui.slowOnMoments, generation: ui.generation + 1 })
+/** UI fields that survive newGame()/load() (player preferences of this session, top-bar pins included). */
+const keptUi = (ui: UiState): Pick<UiState, 'zoom' | 'slowOnMoments' | 'generation' | 'pinnedMetrics' | 'pinTouched'> => ({
+  zoom: ui.zoom,
+  slowOnMoments: ui.slowOnMoments,
+  generation: ui.generation + 1,
+  pinnedMetrics: ui.pinnedMetrics,
+  pinTouched: ui.pinTouched,
+})
+
+/** Writes the UI profile (pins, seen gauges) to localStorage 'be-unicorn:ui'. */
+function persistUi(ui: UiState): void {
+  writeUiSave({ pinnedMetrics: ui.pinnedMetrics, seenMetrics: ui.seenMetrics, pinTouched: ui.pinTouched })
+}
+
+/**
+ * Automatic pinning (docs/LAYOUT.md §5.2): a gauge unlocked by this step fills a free top-bar slot until the player
+ * pins or unpins by hand. Keeps the old UiState when nothing changed.
+ */
+function withAutoPins(ui: UiState, prev: GameState, next: GameState): UiState {
+  if (ui.pinTouched || next.unlockedWidgets.length === prev.unlockedWidgets.length) return ui
+  const fresh = next.unlockedWidgets.filter((id) => !prev.unlockedWidgets.includes(id))
+  const pins = autoPin(ui.pinnedMetrics, fresh, next.unlockedWidgets)
+  if (pins === ui.pinnedMetrics) return ui
+  const out = { ...ui, pinnedMetrics: pins }
+  persistUi(out)
+  return out
+}
 
 /**
  * A round choice waits for the player: the early window is open (size chooser) or this week's pitch is due
@@ -219,7 +248,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
     const starts = action.type === 'setSpeed' && action.speed > 0 && !get().ui.runStarted
     // A round choice made (size picked, pitch sent) ends the `offer` pause: pause reasons follow the new state.
-    set((s) => ({ state: res.state, ui: withPause(starts ? { ...s.ui, runStarted: true } : s.ui, res.state) }))
+    set((s) => ({ state: res.state, ui: withAutoPins(withPause(starts ? { ...s.ui, runStarted: true } : s.ui, res.state), state, res.state) }))
     retargetEmptiedDetail(action, res.state)
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
@@ -239,7 +268,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const next = step(state, chunks * FIXED_STEP_DAYS)
     if (next === state) return
     // A pitch falling due with the Tur section open pauses right away (`offer`).
-    set((s) => ({ state: next, ui: withPause(s.ui, next) }))
+    set((s) => ({ state: next, ui: withAutoPins(withPause(s.ui, next), state, next) }))
     if (next.gameOver && !state.gameOver) {
       onGameOver(next)
       return
@@ -252,7 +281,10 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const state = pausedStart(freshState(opts))
     writeProfile({ founderXp: state.meta.founderXp, runIndex: state.meta.runIndex })
     resetReplay(state, false)
-    set({ state, ui: { ...initialUi(), ...keptUi(get().ui) } })
+    // A fresh run: every gauge beyond the first three is new again (pins stay, locked until relearned).
+    const ui: UiState = { ...initialUi(), ...keptUi(get().ui), seenMetrics: [...INITIAL_WIDGETS] }
+    set({ state, ui })
+    persistUi(ui)
     writeSave(state)
   },
 
@@ -269,7 +301,20 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const state = pausedStart(saved)
     pendingDays = 0
     resetReplay(state, true)
-    set({ state, ui: { ...initialUi(), ...keptUi(get().ui) } })
+    // Pins and seen gauges come from the UI profile; an old profile without `seenMetrics` counts what the save
+    // already unlocked as seen (no badge storm on continue).
+    const prof = readUiSave()
+    const kept = keptUi(get().ui)
+    set({
+      state,
+      ui: {
+        ...initialUi(prof),
+        ...kept,
+        pinnedMetrics: prof.pinnedMetrics ?? kept.pinnedMetrics,
+        pinTouched: prof.pinTouched ?? kept.pinTouched,
+        seenMetrics: prof.seenMetrics ?? [...state.unlockedWidgets],
+      },
+    })
     return true
   },
 
@@ -327,6 +372,29 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   setDecisionExpanded: (decisionExpanded) =>
     set((s) => (s.ui.decisionExpanded === decisionExpanded ? s : { ui: withPause({ ...s.ui, decisionExpanded }, s.state) })),
   setSlowOnMoments: (slowOnMoments) => set((s) => (s.ui.slowOnMoments === slowOnMoments ? s : { ui: { ...s.ui, slowOnMoments } })),
+  pinMetric(id) {
+    const ui = get().ui
+    const pinnedMetrics = addPin(ui.pinnedMetrics, id)
+    // Already pinned or not pinnable: nothing to do.
+    if (pinnedMetrics.length === ui.pinnedMetrics.length && pinnedMetrics.every((x, i) => x === ui.pinnedMetrics[i])) return
+    const next = { ...ui, pinnedMetrics, pinTouched: true }
+    set({ ui: next })
+    persistUi(next)
+  },
+  unpinMetric(id) {
+    const ui = get().ui
+    const next = { ...ui, pinnedMetrics: removePin(ui.pinnedMetrics, id), pinTouched: true }
+    set({ ui: next })
+    persistUi(next)
+  },
+  markMetricsSeen(ids) {
+    const ui = get().ui
+    const add = [...new Set(ids)].filter((x) => !ui.seenMetrics.includes(x))
+    if (add.length === 0) return
+    const next = { ...ui, seenMetrics: [...ui.seenMetrics, ...add] }
+    set({ ui: next })
+    persistUi(next)
+  },
 }))
 
 /**

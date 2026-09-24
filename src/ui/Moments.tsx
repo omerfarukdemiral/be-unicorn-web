@@ -1,45 +1,32 @@
-// Short, non-blocking moment cards under the HUD (docs/CORE_LOOP.md §4.2, §7 "Popup bütçesi"):
-// month receipt (ay fişi) on payday, release moment (sürüm anı), "Kararın → sonucu", ☆ goal reached, and the round
-// beats: the early window opening and each round week (live offer move + "pick this week's pitch").
-// Each card is clickable (opens the related panel), never pauses time and closes by itself in ≤ 4 s
-// (rules in momentRules.ts: life, how many show, one-line receipt on phones / at 4×, merging a burst).
-import { useEffect, useRef, useState } from 'react'
-import { PRE_REVENUE_MRR } from '../engine/balance'
+// Moments (docs/CORE_LOOP.md §4.2, §7 "Popup bütçesi"; docs/LAYOUT.md §3): month receipt (ay fişi) on payday,
+// release moment (sürüm anı), "Kararın → sonucu", ☆ goal reached, and the round beats (early window, each round week).
+// They are items of the ONE notification strip now: `useMomentSource` turns fresh engine events into moments,
+// `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
 import type { MonthReceipt } from '../engine/types'
 import { GOALS, STAGES } from '../content'
-import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
-import { Icon, type IconName } from './icons'
+import type { IconName } from './icons'
 import { t } from './i18n'
-import { fixed, money, pct } from './format'
+import { fixed, money } from './format'
 import { cx } from './primitives'
-import { soft } from './theme'
 import { effectSummary, optionLabel, releaseName, useFreshEvents } from './loopUi'
-import { maxShown, mergeMoments, MOMENT_LIFE_MS, momentPanel, receiptCompact } from './momentRules'
-import { useIsMobile } from './hooks'
+import { momentPanel } from './momentRules'
 
-type Moment =
-  | { key: number; kind: 'receipt'; receipt: MonthReceipt; compact: boolean }
+export type Moment =
+  | { key: number; kind: 'receipt'; receipt: MonthReceipt }
   | { key: number; kind: 'release'; project: string; level: number; update?: number; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
   | { key: number; kind: 'goal'; text: string }
   | { key: number; kind: 'roundWindow'; stage: string }
   | { key: number; kind: 'roundWeek'; week: number; weeks: number; from: number; to: number; pitch: boolean }
 
-function open(panel: Panel) {
-  useGameStore.getState().openPanel(panel, { root: true })
-}
-
-export function MomentFeed({ className }: { className?: string }) {
-  const mobile = useIsMobile()
-  const shownMax = maxShown(mobile)
-  const [items, setItems] = useState<Moment[]>([])
+/** Calls `onMoments` with the moments hidden in fresh engine events (skips a loaded run's history). */
+export function useMomentSource(onMoments: (add: Moment[]) => void): void {
   useFreshEvents((events, s) => {
     const add: Moment[] = []
     for (const e of events) {
       if (e.kind === 'payday' && s.finance.lastReceipt) {
-        // At 4× paydays come every 15 s, and a phone has little room: the receipt is one line (§4.2, §7).
-        add.push({ key: e.id, kind: 'receipt', receipt: s.finance.lastReceipt, compact: receiptCompact(s.time.speed, mobile) })
+        add.push({ key: e.id, kind: 'receipt', receipt: s.finance.lastReceipt })
       } else if (e.kind === 'release') {
         const r = s.releases?.find((x) => x.id === e.refId)
         if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), users: r.users, mrr: r.mrr })
@@ -56,52 +43,15 @@ export function MomentFeed({ className }: { className?: string }) {
         if (g) add.push({ key: e.id, kind: 'goal', text: g.text })
       }
     }
-    if (add.length) setItems((cur) => mergeMoments(cur, add, shownMax))
+    if (add.length) onMoments(add)
   })
-  const dismiss = (key: number) => setItems((cur) => cur.filter((m) => m.key !== key))
-  const shown = items.slice(0, shownMax)
-  if (!shown.length) return null
-  return (
-    <div className={cx('pointer-events-none flex flex-col items-center gap-1.5', className)} aria-live="polite">
-      {shown.map((m) => (
-        <MomentCard key={m.key} m={m} onDone={() => dismiss(m.key)} />
-      ))}
-    </div>
-  )
 }
 
-/** Auto-closing shell; hovering keeps it open, clicking opens the related panel. */
-function MomentCard({ m, onDone }: { m: Moment; onDone: () => void }) {
-  const [hold, setHold] = useState(false)
-  const done = useRef(onDone)
-  done.current = onDone
-  useEffect(() => {
-    if (hold) return
-    const id = window.setTimeout(() => done.current(), MOMENT_LIFE_MS[m.kind])
-    return () => window.clearTimeout(id)
-  }, [hold, m.kind])
-  const { icon, color, panel } = look(m)
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        open(panel)
-        onDone()
-      }}
-      onMouseEnter={() => setHold(true)}
-      onMouseLeave={() => setHold(false)}
-      className="pointer-events-auto flex max-w-full animate-slide-up items-center gap-2 rounded-card border bg-surface/97 px-2.5 py-1.5 text-left shadow-pop transition-colors hover:bg-surface-2"
-      style={{ borderColor: soft(color, 45) }}
-    >
-      <span className="grid size-7 shrink-0 place-items-center rounded-[8px]" style={{ color, background: soft(color, 16) }}>
-        <Icon name={icon} size={15} />
-      </span>
-      <span className="min-w-0">{body(m)}</span>
-    </button>
-  )
-}
-
-function look(m: Moment): { icon: IconName; color: string; panel: Panel } {
+/**
+ * Icon, identity hue and the panel a moment opens. No red here (docs/LAYOUT.md §4.1): a negative receipt uses the
+ * burn identity hue, a falling round offer the warning (energy) hue.
+ */
+export function momentLook(m: Moment): { icon: IconName; color: string; panel: Panel } {
   const panel = momentPanel(m.kind)
   switch (m.kind) {
     case 'receipt':
@@ -115,7 +65,7 @@ function look(m: Moment): { icon: IconName; color: string; panel: Panel } {
     case 'roundWindow':
       return { icon: 'rocket', color: 'var(--color-brand)', panel }
     case 'roundWeek':
-      return { icon: 'handshake', color: m.to >= m.from ? 'var(--color-positive)' : 'var(--color-negative)', panel }
+      return { icon: 'handshake', color: m.to >= m.from ? 'var(--color-positive)' : 'var(--color-energy)', panel }
   }
 }
 
@@ -123,76 +73,73 @@ const neg = (v: number) => (v > 0.5 ? `−${money(v)}` : money(0))
 const sgn = (v: number) => (v >= 0 ? `+${money(v)}` : `−${money(-v)}`)
 const months = (r: number | null) => (r === null ? t('receipt.infinite') : t('unit.months', { v: fixed(r, 1) }))
 
-function body(m: Moment) {
+/** Plain one-line text of a moment (strip title attribute, screen readers). */
+export function momentText(m: Moment): string {
   switch (m.kind) {
     case 'receipt': {
       const r = m.receipt
-      if (m.compact) {
-        return <span className="tabular block truncate text-xs font-semibold text-ink">{t('receipt.compact', { v: neg(r.paid), n: sgn(r.net) })}</span>
-      }
-      // Only lines that carry money: no "Gelir +$0 · Maaş $0" before the first income / hire.
-      const rows: [string, string, boolean?][] = []
-      if (r.revenue > 0.5) rows.push([t('receipt.revenue'), sgn(r.revenue), true])
-      if (r.salaries > 0.5) rows.push([t('receipt.salaries'), neg(r.salaries)])
-      if (r.rent > 0.5) rows.push([t('receipt.rent'), neg(r.rent)])
-      if ((r.founder ?? 0) > 0.5) rows.push([t('receipt.founder'), neg(r.founder ?? 0)])
-      if (r.infra > 0.5) rows.push([t('receipt.infra'), neg(r.infra)])
-      if (r.ads > 0.5) rows.push([t('receipt.ads'), neg(r.ads)])
+      const runway = r.month > 0 ? t('receipt.runwayMove', { a: months(r.runwayBefore), b: months(r.runwayAfter) }) : months(r.runwayAfter)
+      return t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: runway })
+    }
+    case 'release':
+      return t('strip.release', { project: m.project, level: releaseName(m.level, m.update), u: Math.round(m.users), m: money(m.mrr) })
+    case 'outcome':
+      return t('outcome.line', { option: m.option, effects: m.effects })
+    case 'goal':
+      return t('strip.goal', { v: m.text })
+    case 'roundWindow':
+      return `${t('moment.roundWindow', { stage: m.stage })} · ${t('moment.roundWindowSub')}`
+    case 'roundWeek':
+      return t('strip.roundWeek', { w: m.week, n: m.weeks, a: money(m.from), b: money(m.to) }) + (m.pitch ? ` · ${t('moment.roundWeekSub')}` : '')
+  }
+}
+
+/** One line: main text in ink semibold, the secondary part in ink-2 (everything truncates as one line). */
+export function MomentLine({ m }: { m: Moment }) {
+  const main = 'font-semibold text-ink'
+  const sub = 'text-ink-2'
+  switch (m.kind) {
+    case 'receipt': {
+      const r = m.receipt
+      const runway = r.month > 0 ? t('receipt.runwayMove', { a: months(r.runwayBefore), b: months(r.runwayAfter) }) : months(r.runwayAfter)
       return (
-        <span className="block" title={t('receipt.open')}>
-          <span className="ui-label block leading-none">{t('receipt.title', { m: r.month + 1 })}</span>
-          <span className="tabular mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11.5px] text-ink-2">
-            {rows.map(([k, v, up]) => (
-              <span key={k} className="whitespace-nowrap">
-                {k} <span className={cx('font-semibold', up ? 'text-positive-ink' : 'text-ink')}>{v}</span>
-              </span>
-            ))}
-            <span className="whitespace-nowrap">
-              {t('receipt.net')} <span className={cx('font-bold', r.net >= 0 ? 'text-positive-ink' : 'text-negative-ink')}>{sgn(r.net)}</span>
-            </span>
-            <span className="whitespace-nowrap">
-              {t('receipt.runway')} <span className="font-semibold text-ink">{r.month > 0 ? t('receipt.runwayMove', { a: months(r.runwayBefore), b: months(r.runwayAfter) }) : months(r.runwayAfter)}</span>
-            </span>
-            {/* The multiple prices revenue only from $1K MRR; before that valuation is team + users + launches. */}
-            {r.mrr >= PRE_REVENUE_MRR ? (
-              <span className="whitespace-nowrap">{t('receipt.growth', { v: pct(r.mom, 1), m: fixed(r.multiple, 0) })}</span>
-            ) : (
-              r.mrr > 0 && <span className="whitespace-nowrap">{t('receipt.preRevenue')}</span>
-            )}
+        <span className="tabular">
+          <span className={main}>{t('receipt.title', { m: r.month + 1 })}</span>
+          <span className={sub}>
+            {' · '}
+            {t('strip.paid')} {neg(r.paid)} · {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-ink')}>{sgn(r.net)}</span> · {t('receipt.runway')} {runway}
           </span>
         </span>
       )
     }
     case 'release':
       return (
-        <span className="block">
-          <span className="block truncate text-[13px] font-bold text-ink">{t('release.title', { project: m.project, level: releaseName(m.level, m.update) })}</span>
-          <span className="tabular block text-[11.5px] font-semibold text-positive-ink">{t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}</span>
+        <span className="tabular">
+          <span className={main}>{t('release.title', { project: m.project, level: releaseName(m.level, m.update) })}</span>
+          <span className="font-medium text-positive-ink"> · {t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}</span>
         </span>
       )
     case 'outcome':
       return (
-        <span className="block">
-          <span className="ui-label block leading-none" style={{ color: 'var(--color-kind-decision)' }}>
-            {t('outcome.title')}
-          </span>
-          <span className="font-text mt-0.5 block text-[12px] leading-snug text-ink">{t('outcome.line', { option: m.option, effects: m.effects })}</span>
+        <span>
+          <span className={main}>{t('outcome.title')}</span>
+          <span className={sub}> · {t('outcome.line', { option: m.option, effects: m.effects })}</span>
         </span>
       )
     case 'goal':
-      return <span className="block text-[12.5px] font-semibold text-ink">☆ {t('goals.toast', { v: m.text })}</span>
+      return <span className={main}>{t('strip.goal', { v: m.text })}</span>
     case 'roundWindow':
       return (
-        <span className="block">
-          <span className="block text-[13px] font-bold text-ink">{t('moment.roundWindow', { stage: m.stage })}</span>
-          <span className="font-text block text-[11.5px] text-ink-2">{t('moment.roundWindowSub')}</span>
+        <span>
+          <span className={main}>{t('moment.roundWindow', { stage: m.stage })}</span>
+          <span className={sub}> · {t('moment.roundWindowSub')}</span>
         </span>
       )
     case 'roundWeek':
       return (
-        <span className="block">
-          <span className="tabular block text-[12.5px] font-semibold text-ink">{t('moment.roundWeek', { w: m.week, n: m.weeks, a: money(m.from), b: money(m.to) })}</span>
-          {m.pitch && <span className="font-text block text-[11.5px] text-brand-ink">{t('moment.roundWeekSub')}</span>}
+        <span className="tabular">
+          <span className={main}>{t('strip.roundWeek', { w: m.week, n: m.weeks, a: money(m.from), b: money(m.to) })}</span>
+          {m.pitch && <span className="text-brand-ink"> · {t('moment.roundWeekSub')}</span>}
         </span>
       )
   }

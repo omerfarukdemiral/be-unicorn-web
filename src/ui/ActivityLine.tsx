@@ -1,13 +1,11 @@
-// Bottom-left activity line: newest ActivityEntry rendered from ACTIVITY_TEXT; tap to expand history.
+// Activity text (ACTIVITY_TEXT) + the history list shown in the notification strip popover (docs/LAYOUT.md §3).
+// The newest entry is announced by the strip itself (stripRules.STRIP_ACTIVITY).
 import { useShallow } from 'zustand/react/shallow'
 import { FOUNDER_ACTIONS, type ActivityEntry } from '../engine/types'
 import { ACTIVITY_TEXT, FURNITURE, GOALS, STAGES, UI_TEXT } from '../content'
 import { useGameStore } from '../store/gameStore'
-import { Icon } from './icons'
 import { fill, t } from './i18n'
 import { money, num } from './format'
-import { cx } from './primitives'
-import { useExclusiveExpander } from './hooks'
 
 /** Turns raw engine params (ids, numbers) into display strings. */
 export function activityText(entry: ActivityEntry): string {
@@ -35,37 +33,19 @@ function formatParam(key: string, v: string | number): string | number {
   return v
 }
 
-export function ActivityLine() {
+/** Last `n` entries, newest first (strip popover "Son olaylar"). */
+export function ActivityHistory({ n = 8 }: { n?: number }) {
   const activity = useGameStore(useShallow((s) => s.state.activity))
-  // History list is part of the one-thing-open rule: opening a panel closes it and vice versa.
-  const [open, setOpen] = useExclusiveExpander()
-  const last = activity[activity.length - 1]
-  if (!last) return null
-  const history = activity.slice(-8).reverse()
+  const history = activity.slice(-n).reverse()
+  if (!history.length) return <p className="px-2 py-1.5 text-xs text-ink-2">{t('strip.noRecent')}</p>
   return (
-    <div className="pointer-events-auto flex w-full max-w-[min(420px,100%)] flex-col items-start gap-1">
-      {open && (
-        <ul className="ui-card ui-scroll max-h-56 w-full animate-slide-up divide-y divide-border px-1 py-1 text-xs">
-          {history.map((e) => (
-            <li key={e.id} className="flex gap-2.5 px-2 py-1.5">
-              <span className="ui-label tabular w-12 shrink-0 pt-px">{t('activity.day', { d: Math.floor(e.day) + 1 })}</span>
-              <span className="font-text leading-snug text-ink">{activityText(e)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="ui-card flex min-h-10 max-w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink transition-colors hover:bg-surface-2 max-md:min-h-11"
-      >
-        <span className={cx('size-1.5 shrink-0 rounded-full bg-brand', 'animate-pulse')} />
-        <span key={last.id} className="font-text min-w-0 animate-fade-in truncate">
-          {activityText(last)}
-        </span>
-        <Icon name={open ? 'chevronDown' : 'chevronUp'} size={14} className="shrink-0 text-ink-3" />
-      </button>
-    </div>
+    <ul className="flex flex-col">
+      {history.map((e) => (
+        <li key={e.id} className="flex gap-2 px-2 py-1.5 text-xs">
+          <span className="ui-label tabular w-12 shrink-0 pt-px">{t('activity.day', { d: Math.floor(e.day) + 1 })}</span>
+          <span className="font-text min-w-0 leading-snug text-ink">{activityText(e)}</span>
+        </li>
+      ))}
+    </ul>
   )
 }

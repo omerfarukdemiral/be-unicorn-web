@@ -10,10 +10,13 @@ import { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_
 import { UI_TEXT as BASE_UI_TEXT } from './strings'
 import { TIME_TEXT } from './timeText'
 import { LOOP_TEXT } from './loopText'
+import { TOP_BAR_TEXT } from './topBarText'
+import { BOTTOM_BAR_TEXT } from './bottomBarText'
+import { METRICS_TEXT } from './metricsText'
 import { GOALS, goalsOfStage } from './goals'
 
 /** strings.ts + feature tables (time flow, core loop). One flat key → text dictionary. */
-const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT }
+const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT }
 
 export * from './types'
 export { STAGES, CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }

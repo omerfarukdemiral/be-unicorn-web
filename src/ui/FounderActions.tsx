@@ -1,4 +1,7 @@
-// Active founder actions (PLAN §4.4): energy bar, cooldown rings, stage locks.
+// Active founder actions (PLAN §4.4): energy, cooldown rings, stage locks, saturation "½".
+// The logic lives here (`useFounderActions`); the bottom bar draws it (layout/FounderBar.tsx, docs/LAYOUT.md §1):
+// labelled chips on desktop (icon + short label), icons on phones, a locked action is only a 40px lock.
+// Colours (docs/LAYOUT.md §4.1): low energy is a WARNING (energy / energy-ink), never red.
 import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { founderActionError } from '../engine/founder'
@@ -10,15 +13,32 @@ import { t } from './i18n'
 import { Bar, cx, Ring } from './primitives'
 import { money } from './format'
 import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone, soft } from './theme'
-import { useIsMobile } from './hooks'
 
 /** "+3–6", or "+1" when both ends are the same (never "+1–1"). */
 function range(a: number, b: number, f: (v: number) => string = String): string {
   return a === b ? `+${f(a)}` : `+${f(a)}–${f(b)}`
 }
 
-export function FounderActions() {
-  const mobile = useIsMobile()
+export const LOW_ENERGY = 20
+
+export interface FounderActionView {
+  kind: FounderActionKind
+  locked: boolean
+  disabled: boolean
+  running: boolean
+  /** 0–1 of the running action done. */
+  runFrac: number
+  /** 0–1 of the cooldown left. */
+  cdFrac: number
+  saturated: boolean
+  /** Long label (tooltip, aria): the action + why it is unavailable or what it returns. */
+  label: string
+  /** Short visible hover tip. */
+  tip: string
+  run: () => void
+}
+
+export function useFounderActions(): { energy: number; low: boolean; actions: FounderActionView[] } {
   const f = useGameStore(
     useShallow((s) => ({
       energy: s.state.founder.energy,
@@ -69,108 +89,116 @@ export function FounderActions() {
   }
 
   const busy = !!f.current && f.current.endDay > f.day
-  const lowEnergy = f.energy < 20
+  const actions = FOUNDER_ACTIONS.map((kind): FounderActionView => {
+    const unlockStage = founderActionStage(kind)
+    const locked = f.stage < unlockStage
+    const cdEnd = f.cooldowns[kind]
+    let cdFrac = 0
+    if (cdEnd !== undefined && cdEnd > f.day) {
+      const rec = cdStart.current[kind]
+      if (!rec || rec.end !== cdEnd) cdStart.current[kind] = { start: f.day, end: cdEnd }
+      const r = cdStart.current[kind]!
+      cdFrac = r.end > r.start ? (r.end - f.day) / (r.end - r.start) : 0
+    }
+    const running = f.current?.kind === kind && busy
+    const runFrac = running && f.current ? (f.day - f.current.startDay) / Math.max(0.01, f.current.endDay - f.current.startDay) : 0
+    const err = errors[kind]
+    const disabled = locked || f.over || cdFrac > 0 || (busy && !running) || (!running && err !== null)
+    const action = t(`founder.${kind}`)
+    const label = locked
+      ? t('founder.lockedAt', { action, stage: STAGES[unlockStage]?.name ?? '' })
+      : cdFrac > 0 && cdEnd !== undefined
+        ? t('founder.cooldown', { action, d: Math.max(1, Math.ceil(cdEnd - f.day)) })
+        : err === 'noEnergy'
+          ? t('founder.noEnergy', { action })
+          : err === 'notFound'
+            ? t('founder.noProject', { action })
+            : kind === 'findUsers' && findText
+              ? `${action}: ${findText}`
+              : kind === 'salesCall' && salesText
+                ? `${action}: ${salesText}`
+                : kind === 'talkToUsers' && allDone
+                  ? `${action}: ${t('founder.talkToUsers.update')}`
+                  : `${action}: ${t(`founder.${kind}.desc`)}`
+    const tip = locked ? label : kind === 'findUsers' && findText ? findText : kind === 'salesCall' && salesText ? salesText : action
+    const saturated = !locked && ((kind === 'findUsers' && findSaturated) || (kind === 'salesCall' && salesSaturated))
+    return { kind, locked, disabled, running, runFrac, cdFrac, saturated, label, tip, run: () => run(kind) }
+  })
+  return { energy: f.energy, low: f.energy < LOW_ENERGY, actions }
+}
 
+/**
+ * One action. `chip`: h40 icon + short label (desktop bottom bar); `icon`: 44 round icon (phones, landscape);
+ * a locked action is always only a lock icon (40 / 44), no label. `tipAlign` keeps the first tips on screen.
+ */
+export function FounderActionButton({ a, variant, tipAlign = 'center' }: { a: FounderActionView; variant: 'chip' | 'icon'; tipAlign?: 'left' | 'center' }) {
+  const hue = FOUNDER_COLOR[a.kind]
+  const tinted = a.running || !a.disabled
+  const chip = variant === 'chip' && !a.locked
+  const size = variant === 'chip' ? 40 : 44
   return (
-    <div className={cx('pointer-events-auto ui-card flex flex-col gap-1.5', mobile ? 'p-1.5' : 'p-2')}>
-      <div className="flex items-center gap-2 px-1">
-        <Icon name="bolt" size={14} className={cx('shrink-0', lowEnergy ? 'text-negative' : 'text-energy')} fill="currentColor" />
-        <div className="flex-1" title={t('founder.energy')}>
-          <Bar value={Math.max(0, Math.min(100, f.energy)) / 100} height={5} color={lowEnergy ? 'var(--color-negative)' : 'var(--color-energy)'} />
+    <button
+      type="button"
+      onClick={a.run}
+      disabled={a.disabled}
+      aria-label={a.label}
+      title={variant === 'icon' ? a.label : undefined}
+      className={cx(
+        'group relative inline-flex shrink-0 items-center justify-center border transition-colors',
+        chip ? 'gap-1.5 rounded-control pl-2.5 pr-3' : 'rounded-full',
+        a.running ? 'border-transparent' : 'bg-transparent',
+        // Unavailable: dashed neutral frame + faded icon, clearly apart from the tinted available actions.
+        !a.running && (a.disabled ? 'border-dashed border-border-strong text-ink-3' : 'hover:brightness-95 active:scale-[0.97]'),
+      )}
+      style={{
+        height: size,
+        ...(chip ? null : { width: size }),
+        ...(tinted ? { color: iconTone(hue), background: soft(hue, a.running ? 20 : 12), borderColor: a.running ? 'transparent' : soft(hue, 45) } : null),
+      }}
+    >
+      {a.cdFrac > 0 && !a.locked && !chip && <Ring value={a.cdFrac} size={size} tone={soft(hue, 70)} />}
+      {a.running && !chip && <Ring value={a.runFrac} size={size} stroke={2.5} tone={hue} />}
+      <Icon name={a.locked ? 'lock' : FOUNDER_ICON[a.kind]} size={variant === 'chip' ? 18 : 20} className={cx(a.disabled && !a.running && 'opacity-60')} />
+      {chip && <span className={cx('whitespace-nowrap text-[13px] font-semibold', a.disabled && !a.running ? 'text-ink-2' : 'text-ink')}>{t(`founder.short.${a.kind}`)}</span>}
+      {chip && (a.cdFrac > 0 || a.running) && (
+        // Chip form: the cooldown / progress is a 2px line along the bottom edge instead of a ring.
+        <span aria-hidden="true" className="absolute inset-x-2 bottom-[3px] h-[2px] overflow-hidden rounded-full" style={{ background: soft(hue, 22) }}>
+          <span className="block h-full rounded-full" style={{ width: `${Math.round((a.running ? a.runFrac : 1 - a.cdFrac) * 100)}%`, background: hue }} />
+        </span>
+      )}
+      {a.saturated && (
+        // Saturated: a small amber "½" so the diminishing return is visible before the click.
+        <span aria-hidden="true" className="tabular absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-energy-ink px-0.5 text-[9px] font-bold leading-none text-on-ink">
+          ½
+        </span>
+      )}
+      {variant === 'chip' && (
+        <span
+          role="tooltip"
+          className={cx(
+            'pointer-events-none absolute bottom-[calc(100%+8px)] z-10 hidden max-w-[320px] whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[11px] font-semibold text-on-ink shadow-pop group-hover:block group-focus-visible:block',
+            tipAlign === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2',
+          )}
+        >
+          {a.tip}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/** Energy: bolt + bar + number. Low (< 20) = warning: amber number + warning icon, no red (§4.1). */
+export function EnergyMeter({ energy, low, compact }: { energy: number; low: boolean; compact?: boolean }) {
+  const v = Math.round(Math.max(0, Math.min(100, energy)))
+  return (
+    <div className={cx('flex shrink-0 items-center gap-1.5', compact ? 'w-auto' : 'w-[104px]')} title={low ? t('founder.energyLow') : t('founder.energyValue', { v })} aria-label={t('founder.energyValue', { v })}>
+      <Icon name={low ? 'warning' : 'bolt'} size={16} className={cx('shrink-0', low ? 'text-energy-ink' : 'text-energy')} fill={low ? 'none' : 'currentColor'} />
+      {!compact && (
+        <div className="min-w-0 flex-1">
+          <Bar value={v / 100} height={6} color="var(--color-energy)" />
         </div>
-        <span className={cx('tabular min-w-[2ch] text-right text-[11px] font-semibold', lowEnergy ? 'text-negative-ink' : 'text-energy-ink')}>{Math.round(f.energy)}</span>
-      </div>
-      <div className="flex items-center gap-1">
-        {FOUNDER_ACTIONS.map((kind, index) => {
-          const unlockStage = founderActionStage(kind)
-          const locked = f.stage < unlockStage
-          const cdEnd = f.cooldowns[kind]
-          let cdFrac = 0
-          if (cdEnd !== undefined && cdEnd > f.day) {
-            const rec = cdStart.current[kind]
-            if (!rec || rec.end !== cdEnd) cdStart.current[kind] = { start: f.day, end: cdEnd }
-            const r = cdStart.current[kind]!
-            cdFrac = r.end > r.start ? (r.end - f.day) / (r.end - r.start) : 0
-          }
-          const running = f.current?.kind === kind && busy
-          const runFrac = running && f.current ? (f.day - f.current.startDay) / Math.max(0.01, f.current.endDay - f.current.startDay) : 0
-          const err = errors[kind]
-          const disabled = locked || f.over || cdFrac > 0 || (busy && !running) || (!running && err !== null)
-          const action = t(`founder.${kind}`)
-          const label = locked
-            ? t('founder.lockedAt', { action, stage: STAGES[unlockStage]?.name ?? '' })
-            : cdFrac > 0 && cdEnd !== undefined
-              ? t('founder.cooldown', { action, d: Math.max(1, Math.ceil(cdEnd - f.day)) })
-              : err === 'noEnergy'
-                ? t('founder.noEnergy', { action })
-                : err === 'notFound'
-                  ? t('founder.noProject', { action })
-                  : kind === 'findUsers' && findText
-                    ? `${action}: ${findText}`
-                    : kind === 'salesCall' && salesText
-                      ? `${action}: ${salesText}`
-                      : kind === 'talkToUsers' && allDone
-                        ? `${action}: ${t('founder.talkToUsers.update')}`
-                        : `${action}: ${t(`founder.${kind}.desc`)}`
-          const tip = locked ? action : kind === 'findUsers' && findText ? findText : kind === 'salesCall' && salesText ? salesText : action
-          const saturated = (kind === 'findUsers' && findSaturated) || (kind === 'salesCall' && salesSaturated)
-          const size = mobile ? 44 : 48
-          const hue = FOUNDER_COLOR[kind]
-          // Available / running: the action's own hue (icon + light tint + frame). Unavailable: neutral dashed.
-          const tinted = running || !disabled
-          const button = (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => run(kind)}
-              disabled={disabled}
-              title={label}
-              aria-label={label}
-              className={cx(
-                'group relative grid shrink-0 place-items-center rounded-full border transition-colors',
-                running ? 'border-transparent' : 'bg-transparent',
-                // Disabled: dashed neutral frame + faded icon, clearly apart from the tinted available actions.
-                !running && (disabled ? 'border-dashed border-border-strong text-ink-2 [&>svg:last-child]:opacity-40' : 'hover:brightness-95 active:scale-95'),
-              )}
-              style={{
-                width: size,
-                height: size,
-                ...(tinted ? { color: iconTone(hue), background: soft(hue, running ? 20 : 12), borderColor: running ? 'transparent' : soft(hue, 45) } : null),
-              }}
-            >
-              {cdFrac > 0 && !locked && <Ring value={cdFrac} size={size} tone={soft(hue, 70)} />}
-              {running && <Ring value={runFrac} size={size} stroke={2.5} tone={hue} />}
-              <Icon name={locked ? 'lock' : FOUNDER_ICON[kind]} size={mobile ? 18 : 20} />
-              {saturated && !locked && (
-                // Saturated: a small amber "½" so the diminishing return is visible before the click.
-                <span aria-hidden="true" className="tabular absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-energy-ink px-0.5 text-[9px] font-bold leading-none text-on-ink">
-                  ½
-                </span>
-              )}
-              {!mobile && (
-                // The first buttons sit at the screen's left edge: their tip grows rightwards, never off-screen.
-                <span
-                  className={cx(
-                    'pointer-events-none absolute -top-8 hidden whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10.5px] font-semibold tracking-wide text-on-ink shadow-pop group-hover:block',
-                    index < 2 ? 'left-0' : 'left-1/2 -translate-x-1/2',
-                  )}
-                >
-                  {tip}
-                </span>
-              )}
-            </button>
-          )
-          // Touch has no hover/title: a short visible label under each icon.
-          return mobile ? (
-            <div key={kind} className="flex w-[46px] flex-col items-center gap-0.5">
-              {button}
-              <span className={cx('w-full truncate text-center text-[10px] font-semibold uppercase leading-none tracking-[0.02em]', disabled ? 'text-ink-2' : 'text-ink')}>{t(`founder.short.${kind}`)}</span>
-            </div>
-          ) : (
-            button
-          )
-        })}
-      </div>
+      )}
+      <span className={cx('tabular min-w-[2ch] text-right text-[13px] font-semibold', low ? 'font-bold text-energy-ink' : 'text-ink')}>{v}</span>
     </div>
   )
 }

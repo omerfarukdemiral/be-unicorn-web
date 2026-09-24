@@ -1,6 +1,6 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
-import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameState, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
+import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameState, HudWidget, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -9,7 +9,7 @@ export type Selection =
   | { kind: 'visitor'; id: VisitorId }
   | { kind: 'founder' }
 
-export type DockTab = 'shop' | 'team' | 'projects' | 'growth' | 'journal'
+export type DockTab = 'shop' | 'team' | 'projects' | 'growth' | 'metrics' | 'journal'
 
 /**
  * The single right panel (bottom sheet on phones). Dock tabs, scene selections, Defter cards,
@@ -22,6 +22,8 @@ export type Panel =
   | { kind: 'projects' }
   /** `section: 'round'` scrolls to the funding round block. */
   | { kind: 'growth'; section?: 'round' }
+  /** Metrikler (docs/LAYOUT.md §5): every unlocked secondary gauge. `focus` scrolls to that card and highlights it. Never pauses. */
+  | { kind: 'metrics'; focus?: HudWidget }
   /** `conceptId`: that Defter card is shown on top of the shelf. */
   | { kind: 'journal'; conceptId?: ConceptId }
   | { kind: 'detail'; selection: Selection }
@@ -84,6 +86,15 @@ export interface UiState {
   slowOnMoments: boolean
   /** performance.now() of the last automatic 4× → 1× slowdown (UI shows a short note), null = none yet. */
   slowdownAt: number | null
+  /**
+   * Gauges pinned to the top bar (docs/LAYOUT.md §5.2): at most PIN_MAX, oldest first. A pin whose gauge is locked
+   * (e.g. a new run) is not shown but keeps its place. Persisted in localStorage 'be-unicorn:ui'.
+   */
+  pinnedMetrics: HudWidget[]
+  /** Gauges already seen in Metrikler; the other unlocked, pinnable ones count as "new" (Dock badge, "Yeni" tag). */
+  seenMetrics: HudWidget[]
+  /** The player pinned or unpinned by hand at least once: automatic pinning of new gauges stops. */
+  pinTouched: boolean
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
@@ -130,4 +141,10 @@ export interface GameStore {
   setDecisionExpanded(expanded: boolean): void
   /** Settings: slow 4× down to 1× on important moments. */
   setSlowOnMoments(on: boolean): void
+  /** Pins a gauge to the top bar. Already pinned = no-op; with PIN_MAX pinned the OLDEST (index 0) leaves. Sets pinTouched. */
+  pinMetric(id: HudWidget): void
+  /** Removes a pin. Sets pinTouched. */
+  unpinMetric(id: HudWidget): void
+  /** Metrikler showed these gauges: they stop counting as new. */
+  markMetricsSeen(ids: readonly HudWidget[]): void
 }

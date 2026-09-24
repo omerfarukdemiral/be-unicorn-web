@@ -11,7 +11,7 @@ import { useModalQueue } from '../modalQueue'
 const SHORTCUTS: [string, string][] = [
   ['Space', 'shortcut.pause'],
   ['1 / 2 / 3', 'shortcut.speed'],
-  ['M · E · P · B · K', 'shortcut.tabs'],
+  ['M · E · P · B · G · K', 'shortcut.tabs'],
   ['Esc', 'shortcut.escape'],
   ['+ / −', 'shortcut.zoom'],
 ]

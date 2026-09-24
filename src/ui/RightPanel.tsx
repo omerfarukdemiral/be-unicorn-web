@@ -1,7 +1,8 @@
-// The single panel: Mağaza, Ekip, Projeler, Büyüme, Defter, scene details, decisions and settings all open
-// here and replace each other (store.ui.panel). Desktop = fixed right column, the office stays visible in
-// the middle; phones = one bottom sheet above the dock bar.
-import { useCallback, useRef, type ReactNode } from 'react'
+// The single panel: Mağaza, Ekip, Projeler, Büyüme, Metrikler, Kazanımlar, scene details, decisions and settings all
+// open here and replace each other (store.ui.panel). Desktop = right column between the top bar and the bottom bar
+// (top 72, bottom 72, 400px / 360px below 1280: docs/LAYOUT.md §1.2); phones = one bottom sheet 8px above the bottom
+// bar's tab row. The element carries data-scene-right / data-scene-sheet: layout/useSceneInset measures it.
+import { type ReactNode } from 'react'
 import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
 import type { IconName } from './icons'
@@ -10,18 +11,16 @@ import { cx, IconBadge, IconButton } from './primitives'
 import { useIsMobile } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
+import { usePanelWidth } from './layout/useSceneInset'
+import { BAR_H, EDGE, GAP, MOBILE_BOTTOM_TABS_H } from './layout/tokens'
 import { ShopPanel } from './panels/ShopPanel'
 import { TeamPanel } from './panels/TeamPanel'
 import { ProjectsPanel } from './panels/ProjectsPanel'
 import { GrowthPanel } from './panels/GrowthPanel'
 import { JournalPanel } from './panels/JournalPanel'
+import { MetricsPanel } from './panels/MetricsPanel'
 import { DecisionPanel } from './panels/DecisionPanel'
 import { SettingsPanel } from './panels/SettingsPanel'
-
-/** Desktop panel width (px). GameUI keeps the dock / toasts left of it. */
-export const PANEL_W = 400
-/** Panel width + its right gutter + a gap: where centered bottom UI must stop. */
-export const PANEL_RESERVE = PANEL_W + 24
 
 function panelMeta(p: Panel): { icon: IconName; title: string } {
   switch (p.kind) {
@@ -31,6 +30,8 @@ function panelMeta(p: Panel): { icon: IconName; title: string } {
       return { icon: 'gear', title: t('settings.title') }
     case 'detail':
       return { icon: 'search', title: '' }
+    case 'metrics':
+      return { icon: 'bars', title: t('dock.metrics') }
     default:
       return { icon: DOCK_TABS.find((d) => d.id === p.kind)?.icon ?? 'bag', title: t(`dock.${p.kind}`) }
   }
@@ -41,46 +42,6 @@ function panelKey(p: Panel): string {
   if (p.kind === 'detail') return `detail:${p.selection.kind}:${'id' in p.selection ? p.selection.id : ''}`
   if (p.kind === 'decision') return `decision:${p.cardId}`
   return p.kind
-}
-
-/**
- * Callback ref for the panel element: reports the screen area it covers (store.ui.sceneInset) so the camera
- * frames the office in the visible rest — left of the desktop panel, above the phone sheet and below the HUD.
- */
-function useSceneInsetReporter(mobile: boolean): (el: HTMLElement | null) => void {
-  const cleanup = useRef<(() => void) | null>(null)
-  return useCallback(
-    (el: HTMLElement | null) => {
-      cleanup.current?.()
-      cleanup.current = null
-      const setInset = useGameStore.getState().setSceneInset
-      if (!el) {
-        setInset({ top: 0, right: 0, bottom: 0 })
-        return
-      }
-      const measure = () => {
-        const r = el.getBoundingClientRect()
-        if (mobile) {
-          const hud = document.querySelector('[data-scene-top]')?.getBoundingClientRect()
-          setInset({ top: Math.round(hud?.bottom ?? 0), right: 0, bottom: Math.round(window.innerHeight - r.top) })
-        } else {
-          setInset({ top: 0, right: Math.round(window.innerWidth - r.left), bottom: 0 })
-        }
-      }
-      measure()
-      const ro = new ResizeObserver(measure)
-      ro.observe(el)
-      window.addEventListener('resize', measure)
-      // The sheet slides in: measure again once the enter animation has settled.
-      const late = window.setTimeout(measure, 350)
-      cleanup.current = () => {
-        ro.disconnect()
-        window.removeEventListener('resize', measure)
-        window.clearTimeout(late)
-      }
-    },
-    [mobile],
-  )
 }
 
 function PanelBody({ panel }: { panel: Panel }) {
@@ -95,6 +56,8 @@ function PanelBody({ panel }: { panel: Panel }) {
       return <GrowthPanel section={panel.section} />
     case 'journal':
       return <JournalPanel conceptId={panel.conceptId} />
+    case 'metrics':
+      return <MetricsPanel focus={panel.focus} />
     case 'detail':
       return <DetailBody selection={panel.selection} />
     case 'decision':
@@ -110,7 +73,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   const closePanel = useGameStore((s) => s.closePanel)
   const goBack = useGameStore((s) => s.panelGoBack)
   const mobile = useIsMobile()
-  const insetRef = useSceneInsetReporter(mobile)
+  const width = usePanelWidth()
   if (!panel) return null
 
   const meta = panelMeta(panel)
@@ -149,11 +112,14 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   )
 
   if (mobile) {
+    // Above the bottom bar's tab row (the action row hides while the sheet is open; a landscape phone keeps its
+    // one-row bar at 52), 8px apart, EDGE from the sides: the same card family as the bars.
     return (
       <section
-        ref={insetRef}
+        data-scene-sheet=""
         aria-label={meta.title || t('panel.label')}
-        className="pointer-events-auto fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex max-h-[52vh] animate-slide-up flex-col rounded-t-[var(--radius-card)] border-t border-border bg-surface shadow-[var(--shadow-pop)] landscape:max-h-[72vh]"
+        className="ui-card pointer-events-auto absolute z-20 flex max-h-[52vh] animate-slide-up flex-col overflow-hidden shadow-[var(--shadow-pop)] landscape:max-h-[72vh]"
+        style={{ left: EDGE, right: EDGE, bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${MOBILE_BOTTOM_TABS_H + GAP}px)` }}
       >
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border-strong" />
         {head}
@@ -163,10 +129,15 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   }
   return (
     <aside
-      ref={insetRef}
+      data-scene-right=""
       aria-label={meta.title || t('panel.label')}
-      className="pointer-events-auto ui-card absolute bottom-3 right-3 top-[76px] z-20 flex max-w-[calc(100vw-1.5rem)] animate-slide-left flex-col overflow-hidden"
-      style={{ width: PANEL_W }}
+      className="pointer-events-auto ui-card absolute z-20 flex max-w-[calc(100vw-16px)] animate-slide-left flex-col overflow-hidden"
+      style={{
+        width,
+        right: EDGE,
+        top: EDGE + BAR_H + GAP,
+        bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${BAR_H + GAP}px)`,
+      }}
     >
       {head}
       {body}

@@ -1,31 +1,45 @@
-// HUD widget registry (PLAN §2 "Kullan"): each unlocked HudWidget maps to a small chip.
-// Widgets only display engine numbers; no formulas beyond presentation (shares, 1 − churn).
-// Look (docs/DESIGN.md): neutral chip on a warm card; each gauge owns a hue (WIDGET_COLOR) used on its
-// icon (on a ~12% tile) and on its thin bar / sparkline / stacked ramp. Values stay ink (AA); only
-// warnings turn a number red.
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+// Gauge registry (PLAN §2 "Kullan", docs/LAYOUT.md §5): each unlocked HudWidget maps to one card. The same component
+// draws the Metrikler card (`variant="panel"`) and the top-bar pin (`variant="bar"`, h40, no bars). The four fixed
+// gauges (Kasa, Runway, Kullanıcı, Moral) are drawn by the top bar itself (layout/TopMetrics.tsx). Widgets only display engine numbers; money goes through cashFlow() (one definition, §2.3):
+// Yakıt = the month's total cost, Kâr tahmini = Gelir − Yakıt, Kasa shows the daily net.
+// Look (docs/DESIGN.md): neutral chip on a warm card; each gauge owns a hue (WIDGET_COLOR) used on its icon (on a
+// ~12% tile) and on its thin bar / sparkline / stacked ramp. Values stay ink (AA). Red only for real danger
+// (LAYOUT §4.1: usable cash < 0, runway < 3, morale < 28); other thresholds are amber (energy / energy-ink).
+import type { ComponentType, ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { HudWidget } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
+import { canonicalMetric, effectivePins, MERGED_INTO, PINNABLE } from '../store/metricPins'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { compact, fixed, money, num, pct, signedMoney } from './format'
-import { Bar, cx, Dot } from './primitives'
+import { cx, Dot } from './primitives'
 import { iconTone, soft, WIDGET_COLOR } from './theme'
-import { useTween } from './time'
-import { effectiveSpeed } from '../store/gameStore'
-import { useFreshEvents } from './loopUi'
+import { cashFlow } from './cashflow'
 
-export type WidgetTier = 'primary' | 'secondary' | 'hidden'
+/** 'panel' = Metrikler card (default), 'bar' = top-bar pin (h40, value only). */
+export type WidgetVariant = 'panel' | 'bar'
+/** Metrikler group; 'top' = the fixed top-bar gauges (Kasa, Runway, Kullanıcı, Moral), never listed in Metrikler. */
+export type MetricGroup = 'money' | 'growth' | 'team' | 'path'
+
+export interface WidgetProps {
+  variant?: WidgetVariant
+}
 
 export interface WidgetDef {
   id: HudWidget
   icon: IconName
   /** Gauge hue (CSS colour): icon, icon tile and bar. */
   color: string
-  tier: WidgetTier
-  /** Renders the chip, or null when nothing to show right now. */
-  Component: ComponentType<{ compact?: boolean }>
+  /** i18n key (hud.*) of the gauge name: strip announcement, pinned chip, Metrikler card. */
+  labelKey: string
+  group: MetricGroup | 'top' | 'hidden'
+  /** May be pinned to the top bar (mirrors src/store/metricPins.ts PINNABLE, checked by widgets.test.ts). */
+  pinnable: boolean
+  /** Folded into another card (churn → retention, equity → capTable). */
+  mergedInto?: HudWidget
+  /** Renders the card, or null when nothing to show right now. */
+  Component: ComponentType<WidgetProps>
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +56,7 @@ export function WidgetChip({
   warn,
   children,
   title,
-  compact: isCompact,
+  variant,
   className,
 }: {
   icon: IconName
@@ -51,52 +65,49 @@ export function WidgetChip({
   label: string
   value: ReactNode
   sub?: ReactNode
-  /** Warning state: a tiny red mark next to the label (no fills). */
+  /** Danger (LAYOUT §4.1 only): a tiny red mark next to the label. */
   alert?: boolean
-  /** Early warning (e.g. morale drifting into the tired band): a hollow red ring, quieter than `alert`. */
+  /** Threshold warning (LTV:CAC < 3, churn > %8, tired morale…): a tiny amber mark. */
   warn?: boolean
   children?: ReactNode
   title?: string
-  compact?: boolean
+  variant?: WidgetVariant
   className?: string
 }) {
+  if (variant === 'bar') {
+    // Top-bar pin: icon tile + label over value, one line each, 40px tall. No sub, no bars (the card has them).
+    return (
+      <div className={cx('flex h-10 min-w-0 items-center gap-2 rounded-control px-2', className)} title={title ?? label}>
+        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px]" style={{ color: iconTone(color), background: soft(color) }}>
+          <Icon name={icon} size={14} />
+        </span>
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1">
+            <span className="ui-label truncate text-[10px] leading-3">{label}</span>
+            <StatusMark alert={alert} warn={warn} size={5} />
+          </div>
+          <div className="tabular mt-0.5 truncate text-sm font-semibold leading-4 text-ink">{value}</div>
+        </div>
+      </div>
+    )
+  }
   return (
-    <div
-      className={cx('flex min-w-0 items-start rounded-control', isCompact ? 'gap-1.5 px-1.5 py-1' : 'gap-2 px-2 py-1.5', className)}
-      title={title ?? label}
-    >
-      <span
-        aria-hidden="true"
-        className={cx('grid shrink-0 place-items-center rounded-[7px]', isCompact ? 'mt-px size-5' : 'size-7')}
-        style={{ color: iconTone(color), background: soft(color) }}
-      >
-        <Icon name={icon} size={isCompact ? 12 : 15} />
+    <div className={cx('flex min-w-0 items-start gap-2 rounded-control px-2 py-1.5', className)} title={title ?? label}>
+      <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-[7px]" style={{ color: iconTone(color), background: soft(color) }}>
+        <Icon name={icon} size={15} />
       </span>
       <div className="min-w-0 flex-1">
-        {!isCompact && (
-          // Label never truncates (a cut label loses its meaning): tighter tracking, wraps to 2 lines if needed.
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="ui-label line-clamp-2 leading-[14px] tracking-[0.04em]">{label}</span>
-            <StatusMark alert={alert} warn={warn} size={6} />
-          </div>
-        )}
-        {isCompact ? (
-          // Phones: value on its own line, sub (e.g. monthly net) below it.
-          <>
-            <div className="tabular flex min-w-0 items-center gap-1 text-sm font-semibold leading-tight text-ink">
-              <span className="min-w-0 truncate">{value}</span>
-              <StatusMark alert={alert} warn={warn} size={5} />
-            </div>
-            {sub && <div className="tabular truncate text-[10px] font-medium leading-tight text-ink-2">{sub}</div>}
-          </>
-        ) : (
-          // Values stay short (number + unit); the sub wraps under them when the column is narrow.
-          // Nothing is ellipsised: touch screens have no tooltip to recover a cut value.
-          <div className="tabular mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[15px] font-semibold leading-tight text-ink">
-            <span className="max-w-full break-words">{value}</span>
-            {sub && <span className="max-w-full break-words text-[11px] font-medium text-ink-2">{sub}</span>}
-          </div>
-        )}
+        {/* Label never truncates (a cut label loses its meaning): tighter tracking, wraps to 2 lines if needed. */}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="ui-label line-clamp-2 leading-[14px] tracking-[0.04em]">{label}</span>
+          <StatusMark alert={alert} warn={warn} size={6} />
+        </div>
+        {/* Values stay short (number + unit); the sub wraps under them when the column is narrow.
+            Nothing is ellipsised: touch screens have no tooltip to recover a cut value. */}
+        <div className="tabular mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[15px] font-semibold leading-tight text-ink">
+          <span className="max-w-full break-words">{value}</span>
+          {sub && <span className="max-w-full break-words text-[11px] font-medium text-ink-2">{sub}</span>}
+        </div>
         {children}
       </div>
     </div>
@@ -105,17 +116,19 @@ export function WidgetChip({
 
 function StatusMark({ alert, warn, size }: { alert?: boolean; warn?: boolean; size: number }) {
   if (alert) return <Dot color="var(--color-negative)" size={size} />
-  if (warn) return <span aria-hidden="true" className="inline-block shrink-0 rounded-full border-[1.5px] border-negative" style={{ width: size, height: size }} />
+  if (warn) return <Dot color="var(--color-energy)" size={size} />
   return null
 }
 
-/** Stacked share bar ramp: one gauge hue in four strengths (100 / 70 / 45 / 25% over the surface). */
-function ramp(color: string): [string, string, string, string] {
+/** Stacked share bar ramp: one gauge hue in five strengths (100 / 75 / 55 / 38 / 22% over the surface). */
+function ramp(color: string): [string, string, string, string, string] {
   const at = (p: number) => `color-mix(in oklab, ${color} ${p}%, var(--color-surface))`
-  return [color, at(70), at(45), at(25)]
+  return [color, at(75), at(55), at(38), at(22)]
 }
 
-function StackBar({ parts }: { parts: { value: number; color: string; label: string }[] }) {
+type Part = { value: number; color: string; label: string }
+
+function StackBar({ parts }: { parts: Part[] }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0)
   return (
     <div className="mt-1.5 flex h-1 w-full gap-px overflow-hidden rounded-full bg-border">
@@ -125,6 +138,22 @@ function StackBar({ parts }: { parts: { value: number; color: string; label: str
             <div key={p.label} title={`${p.label}: ${compact(p.value)}`} style={{ width: `${(Math.max(0, p.value) / total) * 100}%`, background: p.color }} />
           ) : null,
         )}
+    </div>
+  )
+}
+
+/** Panel cards: the stacked bar's parts spelled out (touch screens have no tooltip). */
+function Legend({ parts, format }: { parts: Part[]; format: (n: number) => string }) {
+  const shown = parts.filter((p) => p.value > 0.5)
+  if (shown.length === 0) return null
+  return (
+    <div className="tabular mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10.5px] font-medium text-ink-2">
+      {shown.map((p) => (
+        <span key={p.label} className="inline-flex items-center gap-1">
+          <Dot color={p.color} size={6} />
+          {p.label} {format(p.value)}
+        </span>
+      ))}
     </div>
   )
 }
@@ -154,6 +183,11 @@ function Pie({ fraction, color }: { fraction: number; color: string }) {
   )
 }
 
+/** Is this gauge unlocked in the current run (merged cards read their sources separately). */
+function useUnlocked(id: HudWidget): boolean {
+  return useGameStore((s) => s.state.unlockedWidgets.includes(id))
+}
+
 // ---------------------------------------------------------------------------
 // Widgets
 // ---------------------------------------------------------------------------
@@ -177,7 +211,7 @@ export function ledgerMoney(n: number): string {
   return `${sign}$${body}`
 }
 
-/** Months of runway under which the Kasa chip pulses red. */
+/** Months of runway under which Runway turns red (the one danger band, LAYOUT §4.1). */
 const RUNWAY_CRITICAL = 3
 
 export type RunwayTone = 'calm' | 'amber' | 'orange' | 'red'
@@ -190,271 +224,140 @@ export function runwayTone(runway: number | null): RunwayTone {
   return 'red'
 }
 
-const RUNWAY_TONE_COLOR: Record<RunwayTone, string | undefined> = {
-  calm: undefined,
-  amber: 'var(--color-lemon-600)',
-  orange: 'var(--color-peach-600)',
-  red: 'var(--color-negative-ink)',
+/** Yakıt: the month's total cost, founder living cost included. Revenue is NOT subtracted (that is Kâr tahmini). */
+function BurnWidget({ variant }: WidgetProps) {
+  const b = useGameStore(useShallow((s) => ({ burn: cashFlow(s.state).burn, ...s.state.finance.burnBreakdown })))
+  const RAMP = ramp(WIDGET_COLOR.burnBreakdown)
+  const parts: Part[] = [
+    { value: b.salaries, color: RAMP[0], label: t('burn.salaries') },
+    { value: b.rent, color: RAMP[1], label: t('burn.rent') },
+    { value: b.founder ?? 0, color: RAMP[2], label: t('burn.founder') },
+    { value: b.infra, color: RAMP[3], label: t('burn.infra') },
+    { value: b.ads, color: RAMP[4], label: t('burn.ads') },
+  ]
+  const panel = (variant ?? 'panel') === 'panel'
+  return (
+    <WidgetChip variant={variant} color={WIDGET_COLOR.burnBreakdown} icon="flame" label={t('hud.burn')} title={t('hud.burnTitle')} value={t('hud.perMonthPlain', { v: money(b.burn) })} sub={panel ? t('hud.burnSub') : undefined}>
+      <StackBar parts={parts} />
+      {panel && <Legend parts={parts} format={money} />}
+    </WidgetChip>
+  )
 }
 
-/**
- * Kasa: the headline is the money you can still use (cash − what payday already owes), so it falls every day by
- * that day's costs and rises by that day's revenue (review fix: the real cash rose while the pill said "melting").
- * On payday (the 1st) the owed lump really leaves the bank: the value shakes, flashes red and drops a big "−$X"
- * (docs/CORE_LOOP.md §5 "Maaş günü"). The line under it says what is set aside and how much is in the bank.
- */
-function CashWidget({ compact: c }: { compact?: boolean }) {
-  const { cash, net, owed, debt, runway, day, flowing } = useGameStore(
+/** Tutunma (+ churn once its concept is learned): the same number seen from both sides, one card. */
+function RetentionWidget({ variant }: WidgetProps) {
+  const churn = useGameStore((s) => s.state.stats.churn)
+  const churnKnown = useUnlocked('churn')
+  const high = churnKnown && churn > 0.08
+  return (
+    <WidgetChip
+      variant={variant}
+      color={WIDGET_COLOR.retention}
+      icon="magnet"
+      label={t('hud.retention')}
+      warn={high}
+      value={pct(1 - churn, 1)}
+      sub={churnKnown ? <span className={high ? 'text-energy-ink' : undefined}>{t('hud.churnInline', { v: pct(churn, 1) })}</span> : t('hud.monthly')}
+    />
+  )
+}
+
+/** Kâr tahmini: Gelir − Yakıt = net per month (the only place the monthly net is shown). */
+function ProfitWidget({ variant }: WidgetProps) {
+  const { hist, mrr, burn, net } = useGameStore(
     useShallow((s) => {
-      const l = s.state.finance.ledger
-      return {
-        cash: s.state.stats.cash,
-        net: s.state.finance.net,
-        owed: l ? l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0) : 0,
-        debt: s.state.finance.debt,
-        runway: s.state.finance.runway,
-        day: Math.floor(s.state.time.day),
-        flowing: effectiveSpeed(s) > 0,
-      }
+      const f = cashFlow(s.state)
+      return { hist: s.state.finance.mrrHistory, mrr: f.mrr, burn: f.burn, net: f.netMonth }
     }),
   )
-  const available = cash - owed
-  const shown = useTween(available)
-  const perDay = net / 30
-  const tone = runwayTone(runway)
-  const critical = available < 0 || tone === 'red'
-  const flowTone = perDay >= 0 ? 'text-positive-ink' : 'text-negative-ink'
-  const toPayday = 30 - (day % 30)
-
-  // Floating deltas: the day's revenue (small, green) and payday's lump (big, red). Each fades on its own.
-  type Drop = { id: number; text: string; short?: string; up: boolean; big?: boolean }
-  const [drops, setDrops] = useState<Drop[]>([])
-  const pushDrop = (d: Drop, ms: number) => {
-    setDrops((cur) => [...cur.slice(-2), d])
-    // No cleanup: at 4× the next day lands before this one has faded (a late setState after unmount is a no-op).
-    window.setTimeout(() => setDrops((cur) => cur.filter((x) => x.id !== d.id)), ms)
-  }
-  const lastDay = useRef(day)
-  useEffect(() => {
-    if (day === lastDay.current) return
-    const fresh = day > lastDay.current && flowing
-    lastDay.current = day
-    // The day's net flow out of the usable money: red "−$50" while burning, green "+$120" once revenue wins.
-    const flow = net / 30
-    if (!fresh || Math.abs(flow) < 0.5) return
-    pushDrop({ id: day, text: flow >= 0 ? signedMoney(flow) : `−${money(-flow)}`, up: flow >= 0 }, 1200)
-  }, [day]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [payFlash, setPayFlash] = useState(0)
-  useFreshEvents((events) => {
-    for (const e of events) {
-      if (e.kind !== 'payday' || !(e.value !== undefined && e.value > 0.5)) continue
-      setPayFlash(e.id)
-      pushDrop({ id: -e.id, text: t('cash.paid', { v: money(e.value) }), short: `−${money(e.value)}`, up: false, big: true }, 1800)
-    }
-  })
-
+  const panel = (variant ?? 'panel') === 'panel'
   return (
     <WidgetChip
-      compact={c}
-      color={WIDGET_COLOR.cash}
-      icon="cash"
-      label={t('hud.cash')}
-      alert={critical}
-      className={cx('relative', critical && 'animate-danger-pulse')}
-      value={
-        // Drops float in the chip's top-right corner (the chip is `relative`), clear of the value and its sub line.
-        <span className="inline-block">
-          <span key={payFlash} className={cx(shown < 0 && 'text-negative-ink', payFlash > 0 && 'inline-block animate-payday')} title={t('cash.availableTitle')}>
-            {ledgerMoney(shown)}
-          </span>
-          {drops.map((d) => (
-            <span
-              key={d.id}
-              aria-hidden="true"
-              className={cx(
-                'pointer-events-none absolute whitespace-nowrap font-bold',
-                // Phones: a small figure at the chip's bottom-right, clear of the value.
-                c ? 'bottom-0.5 right-1' : d.big ? 'right-2 top-1.5' : 'right-2 top-2',
-                d.big ? cx('animate-payday-drop', c ? 'text-[11px]' : 'text-[15px]') : cx('animate-cash-rise', c ? 'text-[10px]' : 'text-[11px]'),
-                d.up ? 'text-positive-ink' : 'text-negative-ink',
-              )}
-            >
-              {c && d.short ? d.short : d.text}
-            </span>
-          ))}
-        </span>
-      }
-      sub={
-        c ? (
-          <span className={flowTone}>{t('time.perDay', { v: signedMoney(perDay) })}</span>
-        ) : (
-          <span className={flowTone}>{t('hud.perMonth', { v: signedMoney(net) })}</span>
-        )
-      }
-      title={debt > 0 ? t('hud.debtTitle', { v: money(debt) }) : t('cash.availableTitle')}
-    >
-      {!c && (
-        <span className="mt-1 flex flex-wrap items-center gap-1">
-          <span
-            className={cx('tabular inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold', flowTone)}
-            style={{ background: soft(perDay >= 0 ? 'var(--color-positive)' : 'var(--color-negative)', 12) }}
-          >
-            <Icon name="arrowUp" size={11} className={perDay >= 0 ? undefined : 'rotate-180'} />
-            {t('time.perDay', { v: signedMoney(perDay) })}
-          </span>
-          {owed > 0.5 && (
-            <span className="tabular text-[10.5px] font-medium text-ink-2" title={t('cash.paydayTitle')}>
-              {t('cash.owed', { d: toPayday, v: money(owed), c: money(cash) })}
-            </span>
-          )}
-          {tone !== 'calm' && runway !== null && (
-            <span className="tabular text-[10.5px] font-semibold" style={{ color: RUNWAY_TONE_COLOR[tone] }}>
-              {t('cash.runwayShort', { v: fixed(runway, 1) })}
-            </span>
-          )}
-        </span>
-      )}
-    </WidgetChip>
-  )
-}
-
-function UsersWidget({ compact: c }: { compact?: boolean }) {
-  const users = useGameStore((s) => s.state.stats.users)
-  const overload = useGameStore((s) => s.state.derived.overload)
-  return (
-    <WidgetChip
-      compact={c}
-      color={WIDGET_COLOR.users}
-      icon="users"
-      label={t('hud.users')}
-      alert={overload > 0}
-      value={num(users)}
-      sub={overload > 0 ? t('hud.overload') : undefined}
-    />
-  )
-}
-
-function MoraleWidget({ compact: c }: { compact?: boolean }) {
-  const morale = useGameStore((s) => s.state.stats.morale)
-  const critical = morale < 28
-  // 28–50 = the tired band: an early, quieter mark before it turns critical.
-  const tired = !critical && morale < 50
-  return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.morale} icon="heart" label={t('hud.morale')} alert={critical} warn={tired} value={<span className={critical ? 'text-negative-ink' : undefined}>{Math.round(morale)}</span>}>
-      {!c && <Bar className="mt-1.5" height={4} value={Math.max(0, Math.min(100, morale)) / 100} color={critical ? 'var(--color-negative)' : WIDGET_COLOR.morale} />}
-    </WidgetChip>
-  )
-}
-
-function RunwayWidget({ compact: c }: { compact?: boolean }) {
-  const runway = useGameStore((s) => s.state.finance.runway)
-  // Bands (docs/CORE_LOOP.md §7): > 12 neutral, 6–12 amber, 3–6 orange, < 3 red with the alert mark.
-  const tone = runwayTone(runway)
-  return (
-    <WidgetChip
-      compact={c}
-      color={WIDGET_COLOR.runway}
-      icon="hourglass"
-      label={t('hud.runway')}
-      alert={tone === 'red'}
-      warn={tone === 'orange'}
-      value={runway === null ? '∞' : <span style={{ color: RUNWAY_TONE_COLOR[tone] }}>{t('unit.months', { v: fixed(runway, 1) })}</span>}
-      sub={runway === null ? t('hud.profitable') : undefined}
-    />
-  )
-}
-
-function BurnWidget({ compact: c }: { compact?: boolean }) {
-  const b = useGameStore(useShallow((s) => ({ burn: s.state.finance.burn, ...s.state.finance.burnBreakdown })))
-  const RAMP = ramp(WIDGET_COLOR.burnBreakdown)
-  return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.burnBreakdown} icon="flame" label={t('hud.burn')} value={t('hud.perMonthPlain', { v: money(b.burn) })}>
-      <StackBar
-        parts={[
-          { value: b.salaries, color: RAMP[0], label: t('burn.salaries') },
-          { value: b.rent, color: RAMP[1], label: t('burn.rent') },
-          { value: b.infra, color: RAMP[2], label: t('burn.infra') },
-          { value: b.ads, color: RAMP[3], label: t('burn.ads') },
-        ]}
-      />
-    </WidgetChip>
-  )
-}
-
-function RetentionWidget({ compact: c }: { compact?: boolean }) {
-  const churn = useGameStore((s) => s.state.stats.churn)
-  return <WidgetChip compact={c} color={WIDGET_COLOR.retention} icon="magnet" label={t('hud.retention')} value={pct(1 - churn, 1)} sub={t('hud.monthly')} />
-}
-
-function ProfitWidget({ compact: c }: { compact?: boolean }) {
-  const { hist, burn, net } = useGameStore(useShallow((s) => ({ hist: s.state.finance.mrrHistory, burn: s.state.finance.burn, net: s.state.finance.net })))
-  return (
-    <WidgetChip
-      compact={c}
+      variant={variant}
       color={WIDGET_COLOR.profitProjection}
       icon="trend"
       label={t('hud.profitProjection')}
-      value={net >= 0 ? t('hud.profitable') : money(-net)}
-      sub={net >= 0 ? undefined : t('hud.gapSub')}
+      title={t('hud.profitTitle')}
+      value={<span className={net >= 0 ? 'text-positive-ink' : undefined}>{t('hud.netPerMonth', { v: signedMoney(net) })}</span>}
+      sub={panel ? t('hud.profitFormula', { mrr: money(mrr), burn: money(burn) }) : net >= 0 ? t('hud.profitable') : undefined}
     >
-      {!c && <Spark values={hist} line={burn} color={WIDGET_COLOR.profitProjection} />}
+      {panel && <Spark values={hist} line={burn} color={WIDGET_COLOR.profitProjection} />}
     </WidgetChip>
   )
 }
 
-function CapTableWidget({ compact: c }: { compact?: boolean }) {
+/** Cap table (+ founder control once `equity` is learned): one card for the founder's stake. */
+function CapTableWidget({ variant }: WidgetProps) {
   const equity = useGameStore((s) => s.state.stats.equity)
-  return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.capTable} icon="pie" label={t('hud.capTable')} value={<span className="inline-flex items-center gap-1.5"><Pie fraction={equity} color={WIDGET_COLOR.capTable} />{pct(equity)}</span>} sub={t('hud.yours')} />
-  )
-}
-
-function RoundTimerWidget({ compact: c }: { compact?: boolean }) {
-  const round = useGameStore(useShallow((s) => (s.state.round?.active ? { left: s.state.round.weeksLeft, total: s.state.round.weeksTotal } : null)))
-  if (!round) return <WidgetChip compact={c} color={WIDGET_COLOR.roundTimer} icon="timer" label={t('hud.roundTimer')} value={<span className="text-ink-2">{t('hud.noRound')}</span>} />
-  return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.roundTimer} icon="timer" label={t('hud.roundTimer')} value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })}>
-      {!c && <Bar className="mt-1.5" height={4} value={round.total > 0 ? 1 - round.left / round.total : 0} color={WIDGET_COLOR.roundTimer} />}
-    </WidgetChip>
-  )
-}
-
-function ChurnWidget({ compact: c }: { compact?: boolean }) {
-  const churn = useGameStore((s) => s.state.stats.churn)
-  const high = churn > 0.08
-  return <WidgetChip compact={c} color={WIDGET_COLOR.churn} icon="leak" label={t('hud.churn')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{pct(churn, 1)}</span>} sub={t('hud.monthly')} />
-}
-
-function ArpuWidget({ compact: c }: { compact?: boolean }) {
-  const arpu = useGameStore((s) => s.state.stats.arpu)
-  return <WidgetChip compact={c} color={WIDGET_COLOR.arpu} icon="coin" label={t('hud.arpu')} value={`$${fixed(arpu, 2)}`} sub={t('hud.perUser')} />
-}
-
-function ReputationWidget({ compact: c }: { compact?: boolean }) {
-  const rep = useGameStore((s) => s.state.stats.reputation)
-  return <WidgetChip compact={c} color={WIDGET_COLOR.reputation} icon="megaphone" label={t('hud.reputation')} value={Math.round(rep)} sub="/100" />
-}
-
-/** Founder control (cap-table-health): exact stake and whether the founder still holds a majority. */
-function EquityWidget({ compact: c }: { compact?: boolean }) {
-  const equity = useGameStore((s) => s.state.stats.equity)
+  const controlKnown = useUnlocked('equity')
   const majority = equity >= 0.5
   return (
     <WidgetChip
-      compact={c}
-      color={WIDGET_COLOR.equity}
-      icon="key"
-      label={t('hud.founderStake')}
-      alert={!majority}
-      value={pct(equity, 1)}
-      sub={majority ? t('hud.control') : t('hud.controlShared')}
+      variant={variant}
+      color={WIDGET_COLOR.capTable}
+      icon="pie"
+      label={t('hud.capTable')}
+      warn={controlKnown && !majority}
+      value={
+        <span className="inline-flex items-center gap-1.5">
+          <Pie fraction={equity} color={WIDGET_COLOR.capTable} />
+          {pct(equity, controlKnown ? 1 : 0)}
+        </span>
+      }
+      sub={controlKnown ? <span className={majority ? undefined : 'text-energy-ink'}>{majority ? t('hud.control') : t('hud.controlShared')}</span> : t('hud.yours')}
     />
   )
 }
 
-/** Moral haritası (morale-compounds): how many people sit in each morale band; the office floor tints to match. */
-function MoraleMapWidget({ compact: c }: { compact?: boolean }) {
+/** Tur: its home is the top bar + Büyüme › Tur. The Metrikler card only links there (no number twice). */
+function RoundTimerWidget({ variant }: WidgetProps) {
+  const round = useGameStore(useShallow((s) => (s.state.round?.active ? { left: s.state.round.weeksLeft, total: s.state.round.weeksTotal } : null)))
+  const openPanel = useGameStore((s) => s.openPanel)
+  if ((variant ?? 'panel') === 'panel') {
+    return (
+      <WidgetChip
+        color={WIDGET_COLOR.roundTimer}
+        icon="timer"
+        label={t('hud.roundTimer')}
+        value={
+          <button type="button" onClick={() => openPanel({ kind: 'growth', section: 'round' })} className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-brand-ink hover:underline">
+            {t('metrics.round.link')}
+            <Icon name="chevronRight" size={14} />
+          </button>
+        }
+      />
+    )
+  }
+  if (!round) return <WidgetChip variant={variant} color={WIDGET_COLOR.roundTimer} icon="timer" label={t('hud.roundTimer')} value={<span className="text-ink-2">{t('hud.noRound')}</span>} />
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.roundTimer} icon="timer" label={t('hud.roundTimer')} value={t('unit.weeksLeft', { v: fixed(Math.max(0, round.left), 0) })} />
+}
+
+/** Legacy HUD only: Metrikler shows churn on the Tutunma card. */
+function ChurnWidget({ variant }: WidgetProps) {
+  const churn = useGameStore((s) => s.state.stats.churn)
+  const high = churn > 0.08
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.churn} icon="leak" label={t('hud.churn')} warn={high} value={<span className={high ? 'text-energy-ink' : undefined}>{pct(churn, 1)}</span>} sub={t('hud.monthly')} />
+}
+
+function ArpuWidget({ variant }: WidgetProps) {
+  const arpu = useGameStore((s) => s.state.stats.arpu)
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.arpu} icon="coin" label={t('hud.arpu')} value={`$${fixed(arpu, 2)}`} sub={t('hud.perUser')} />
+}
+
+function ReputationWidget({ variant }: WidgetProps) {
+  const rep = useGameStore((s) => s.state.stats.reputation)
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.reputation} icon="megaphone" label={t('hud.reputation')} value={Math.round(rep)} sub="/100" />
+}
+
+/** Legacy HUD only: Metrikler shows founder control on the Cap table card. */
+function EquityWidget({ variant }: WidgetProps) {
+  const equity = useGameStore((s) => s.state.stats.equity)
+  const majority = equity >= 0.5
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.equity} icon="key" label={t('hud.founderStake')} warn={!majority} value={pct(equity, 1)} sub={majority ? t('hud.control') : t('hud.controlShared')} />
+}
+
+/** Ekip morali (morale-compounds): how many people sit in each morale band; the office floor tints to match. */
+function MoraleMapWidget({ variant }: WidgetProps) {
   const bands = useGameStore(
     useShallow((s) => {
       let low = 0
@@ -469,11 +372,11 @@ function MoraleMapWidget({ compact: c }: { compact?: boolean }) {
     }),
   )
   return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.moraleHeatmap} icon="grid" label={t('hud.moraleMap')} alert={bands.low > 0} value={`${bands.low}/${bands.mid}/${bands.high}`} sub={t('hud.moraleMapSub')} title={t('hud.moraleMapValue', bands)}>
-      {!c && (
+    <WidgetChip variant={variant} color={WIDGET_COLOR.moraleHeatmap} icon="grid" label={t('hud.moraleMap')} alert={bands.low > 0} value={`${bands.low}/${bands.mid}/${bands.high}`} sub={t('hud.moraleMapSub')} title={t('hud.moraleMapValue', bands)}>
+      {variant !== 'bar' && (
         <StackBar
           parts={[
-            // Burnout band reads red; tired = faded morale hue; fine = full morale hue.
+            // Burnout (< 28) is the danger band and reads red; tired = faded morale hue; fine = full morale hue.
             { value: bands.low, color: 'var(--color-negative)', label: t('status.burnout') },
             { value: bands.mid, color: ramp(WIDGET_COLOR.moraleHeatmap)[2], label: t('status.tired') },
             { value: bands.high, color: WIDGET_COLOR.moraleHeatmap, label: t('status.working') },
@@ -484,70 +387,71 @@ function MoraleMapWidget({ compact: c }: { compact?: boolean }) {
   )
 }
 
-function LtvCacWidget({ compact: c }: { compact?: boolean }) {
+function LtvCacWidget({ variant }: WidgetProps) {
   const r = useGameStore((s) => s.state.derived.ltvCac)
   const bad = r !== null && r < 3
   return (
     <WidgetChip
-      compact={c}
+      variant={variant}
       color={WIDGET_COLOR.ltvCac}
       icon="scale"
       label={t('hud.ltvCac')}
-      alert={bad}
-      value={r === null ? <span className="text-ink-2">—</span> : <span className={bad ? 'text-negative-ink' : 'text-positive-ink'}>{`${fixed(r, 1)}×`}</span>}
+      warn={bad}
+      value={r === null ? <span className="text-ink-2">—</span> : <span className={bad ? 'text-energy-ink' : 'text-positive-ink'}>{`${fixed(r, 1)}×`}</span>}
       sub={r !== null ? (bad ? t('hud.ltvLow') : t('hud.ltvOk')) : undefined}
     />
   )
 }
 
-function ChannelsWidget({ compact: c }: { compact?: boolean }) {
+function ChannelsWidget({ variant }: WidgetProps) {
   const ch = useGameStore(useShallow((s) => s.state.derived.channels))
   const total = ch.organic + ch.paid + ch.manual + ch.enterprise
   const RAMP = ramp(WIDGET_COLOR.channelBreakdown)
+  const parts: Part[] = [
+    { value: ch.organic, color: RAMP[0], label: t('channel.organic') },
+    { value: ch.paid, color: RAMP[1], label: t('channel.paid') },
+    { value: ch.manual, color: RAMP[2], label: t('channel.manual') },
+    { value: ch.enterprise, color: RAMP[3], label: t('channel.enterprise') },
+  ]
+  const panel = (variant ?? 'panel') === 'panel'
   return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.channelBreakdown} icon="branch" label={t('hud.channels')} value={t('hud.perMonthPlain', { v: `+${num(total)}` })}>
-      <StackBar
-        parts={[
-          { value: ch.organic, color: RAMP[0], label: t('channel.organic') },
-          { value: ch.paid, color: RAMP[1], label: t('channel.paid') },
-          { value: ch.manual, color: RAMP[2], label: t('channel.manual') },
-          { value: ch.enterprise, color: RAMP[3], label: t('channel.enterprise') },
-        ]}
-      />
+    <WidgetChip variant={variant} color={WIDGET_COLOR.channelBreakdown} icon="branch" label={t('hud.channels')} value={t('hud.perMonthPlain', { v: `+${num(total)}` })}>
+      <StackBar parts={parts} />
+      {panel && <Legend parts={parts} format={(n) => `+${num(n)}`} />}
     </WidgetChip>
   )
 }
 
-function DebtWidget({ compact: c }: { compact?: boolean }) {
+function DebtWidget({ variant }: WidgetProps) {
   const debt = useGameStore((s) => s.state.techDebt)
   const high = debt > 50
-  return <WidgetChip compact={c} color={WIDGET_COLOR.debtCounter} icon="bug" label={t('hud.techDebt')} alert={high} value={<span className={high ? 'text-negative-ink' : undefined}>{fixed(debt, 0)}</span>} />
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.debtCounter} icon="bug" label={t('hud.techDebt')} warn={high} value={<span className={high ? 'text-energy-ink' : undefined}>{fixed(debt, 0)}</span>} sub="/100" />
 }
 
-function CoordinationWidget({ compact: c }: { compact?: boolean }) {
+function CoordinationWidget({ variant }: WidgetProps) {
   const coord = useGameStore((s) => s.state.derived.coordination)
-  if (coord >= 0.999) return <WidgetChip compact={c} color={WIDGET_COLOR.coordinationWarning} icon="network" label={t('hud.coordination')} value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
-  return <WidgetChip compact={c} color={WIDGET_COLOR.coordinationWarning} icon="network" label={t('hud.coordination')} alert value={<span className="text-negative-ink">{`−${pct(1 - coord)}`}</span>} sub={t('hud.output')} />
+  if (coord >= 0.999) return <WidgetChip variant={variant} color={WIDGET_COLOR.coordinationWarning} icon="network" label={t('hud.coordination')} value={t('hud.coordinationOk')} sub={t('hud.coordinationOkSub')} />
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.coordinationWarning} icon="network" label={t('hud.coordination')} warn value={<span className="text-energy-ink">{`−${pct(1 - coord)}`}</span>} sub={t('hud.output')} />
 }
 
-function CultureWidget({ compact: c }: { compact?: boolean }) {
+function CultureWidget({ variant }: WidgetProps) {
   const team = useGameStore((s) => s.state.derived.teamSize)
-  return <WidgetChip compact={c} color={WIDGET_COLOR.cultureBadge} icon="flag" label={t('hud.culture')} value={t('hud.cultureValue', { n: team })} />
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.cultureBadge} icon="flag" label={t('hud.culture')} value={t('hud.cultureValue', { n: team })} />
 }
 
-function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
+function RevenueDistWidget({ variant }: WidgetProps) {
   const { mrr, customers } = useGameStore(useShallow((s) => ({ mrr: s.state.finance.mrr, customers: s.state.finance.enterpriseCustomers })))
   const top = customers.reduce((a, x) => Math.max(a, x.mrr), 0)
   const share = mrr > 0 ? top / mrr : 0
   const concentrated = share > 0.3
   const RAMP = ramp(WIDGET_COLOR.revenueDistribution)
   return (
-    <WidgetChip compact={c} color={WIDGET_COLOR.revenueDistribution} icon="bars" label={t('hud.revenueDist')} alert={concentrated} value={pct(share)} sub={t('hud.topCustomerSub')}>
-      {!c && (
+    <WidgetChip variant={variant} color={WIDGET_COLOR.revenueDistribution} icon="bars" label={t('hud.revenueDist')} warn={concentrated} value={<span className={concentrated ? 'text-energy-ink' : undefined}>{pct(share)}</span>} sub={t('hud.topCustomerSub')}>
+      {variant !== 'bar' && (
         <StackBar
           parts={[
             ...customers.map((cu, i) => ({ value: cu.mrr, color: i % 2 ? RAMP[1] : RAMP[0], label: cu.name })),
-            { value: Math.max(0, mrr - customers.reduce((a, x) => a + x.mrr, 0)), color: RAMP[3], label: t('hud.selfServe') },
+            { value: Math.max(0, mrr - customers.reduce((a, x) => a + x.mrr, 0)), color: RAMP[4], label: t('hud.selfServe') },
           ]}
         />
       )}
@@ -555,36 +459,91 @@ function RevenueDistWidget({ compact: c }: { compact?: boolean }) {
   )
 }
 
-function ArchetypeWidget({ compact: c }: { compact?: boolean }) {
+function ArchetypeWidget({ variant }: WidgetProps) {
   const a = useGameStore((s) => s.state.archetype)
-  if (!a) return <WidgetChip compact={c} color={WIDGET_COLOR.archetypeBadge} icon="compass" label={t('hud.archetype')} value={<span className="text-ink-2">{t('hud.archetypeUnknown')}</span>} />
-  return <WidgetChip compact={c} color={WIDGET_COLOR.archetypeBadge} icon="compass" label={t('hud.archetype')} value={t(`archetype.${a}`)} />
+  if (!a) return <WidgetChip variant={variant} color={WIDGET_COLOR.archetypeBadge} icon="compass" label={t('hud.archetype')} value={<span className="text-ink-2">{t('hud.archetypeUnknown')}</span>} />
+  return <WidgetChip variant={variant} color={WIDGET_COLOR.archetypeBadge} icon="compass" label={t('hud.archetype')} value={t(`archetype.${a}`)} />
 }
 
 const Nothing = () => null
 
-export const WIDGETS: Record<HudWidget, WidgetDef> = {
-  cash: { id: 'cash', color: WIDGET_COLOR.cash, icon: 'cash', tier: 'primary', Component: CashWidget },
-  users: { id: 'users', color: WIDGET_COLOR.users, icon: 'users', tier: 'primary', Component: UsersWidget },
-  morale: { id: 'morale', color: WIDGET_COLOR.morale, icon: 'heart', tier: 'primary', Component: MoraleWidget },
-  runway: { id: 'runway', color: WIDGET_COLOR.runway, icon: 'hourglass', tier: 'secondary', Component: RunwayWidget },
-  burnBreakdown: { id: 'burnBreakdown', color: WIDGET_COLOR.burnBreakdown, icon: 'flame', tier: 'secondary', Component: BurnWidget },
-  retention: { id: 'retention', color: WIDGET_COLOR.retention, icon: 'magnet', tier: 'secondary', Component: RetentionWidget },
-  profitProjection: { id: 'profitProjection', color: WIDGET_COLOR.profitProjection, icon: 'trend', tier: 'secondary', Component: ProfitWidget },
-  capTable: { id: 'capTable', color: WIDGET_COLOR.capTable, icon: 'pie', tier: 'secondary', Component: CapTableWidget },
-  roundTimer: { id: 'roundTimer', color: WIDGET_COLOR.roundTimer, icon: 'timer', tier: 'secondary', Component: RoundTimerWidget },
-  // Shown in the Team panel instead of the HUD.
-  candidateQuality: { id: 'candidateQuality', color: WIDGET_COLOR.candidateQuality, icon: 'star', tier: 'hidden', Component: Nothing },
-  moraleHeatmap: { id: 'moraleHeatmap', color: WIDGET_COLOR.moraleHeatmap, icon: 'grid', tier: 'secondary', Component: MoraleMapWidget },
-  churn: { id: 'churn', color: WIDGET_COLOR.churn, icon: 'leak', tier: 'secondary', Component: ChurnWidget },
-  arpu: { id: 'arpu', color: WIDGET_COLOR.arpu, icon: 'coin', tier: 'secondary', Component: ArpuWidget },
-  reputation: { id: 'reputation', color: WIDGET_COLOR.reputation, icon: 'megaphone', tier: 'secondary', Component: ReputationWidget },
-  equity: { id: 'equity', color: WIDGET_COLOR.equity, icon: 'key', tier: 'secondary', Component: EquityWidget },
-  ltvCac: { id: 'ltvCac', color: WIDGET_COLOR.ltvCac, icon: 'scale', tier: 'secondary', Component: LtvCacWidget },
-  channelBreakdown: { id: 'channelBreakdown', color: WIDGET_COLOR.channelBreakdown, icon: 'branch', tier: 'secondary', Component: ChannelsWidget },
-  debtCounter: { id: 'debtCounter', color: WIDGET_COLOR.debtCounter, icon: 'bug', tier: 'secondary', Component: DebtWidget },
-  coordinationWarning: { id: 'coordinationWarning', color: WIDGET_COLOR.coordinationWarning, icon: 'network', tier: 'secondary', Component: CoordinationWidget },
-  cultureBadge: { id: 'cultureBadge', color: WIDGET_COLOR.cultureBadge, icon: 'flag', tier: 'secondary', Component: CultureWidget },
-  revenueDistribution: { id: 'revenueDistribution', color: WIDGET_COLOR.revenueDistribution, icon: 'bars', tier: 'secondary', Component: RevenueDistWidget },
-  archetypeBadge: { id: 'archetypeBadge', color: WIDGET_COLOR.archetypeBadge, icon: 'compass', tier: 'secondary', Component: ArchetypeWidget },
+type Def = Omit<WidgetDef, 'id' | 'color' | 'pinnable' | 'mergedInto'>
+
+/** Registry rows; pinnable / mergedInto come from the store's rules (src/store/metricPins.ts), colour from theme. */
+const DEFS: Record<HudWidget, Def> = {
+  cash: { icon: 'cash', labelKey: 'hud.cash', group: 'top', Component: Nothing },
+  users: { icon: 'users', labelKey: 'hud.users', group: 'top', Component: Nothing },
+  morale: { icon: 'heart', labelKey: 'hud.morale', group: 'top', Component: Nothing },
+  runway: { icon: 'hourglass', labelKey: 'hud.runway', group: 'top', Component: Nothing },
+  burnBreakdown: { icon: 'flame', labelKey: 'hud.burn', group: 'money', Component: BurnWidget },
+  profitProjection: { icon: 'trend', labelKey: 'hud.profitProjection', group: 'money', Component: ProfitWidget },
+  capTable: { icon: 'pie', labelKey: 'hud.capTable', group: 'money', Component: CapTableWidget },
+  equity: { icon: 'key', labelKey: 'hud.founderStake', group: 'money', Component: EquityWidget },
+  revenueDistribution: { icon: 'bars', labelKey: 'hud.revenueDist', group: 'money', Component: RevenueDistWidget },
+  retention: { icon: 'magnet', labelKey: 'hud.retention', group: 'growth', Component: RetentionWidget },
+  churn: { icon: 'leak', labelKey: 'hud.churn', group: 'growth', Component: ChurnWidget },
+  arpu: { icon: 'coin', labelKey: 'hud.arpu', group: 'growth', Component: ArpuWidget },
+  ltvCac: { icon: 'scale', labelKey: 'hud.ltvCac', group: 'growth', Component: LtvCacWidget },
+  channelBreakdown: { icon: 'branch', labelKey: 'hud.channels', group: 'growth', Component: ChannelsWidget },
+  reputation: { icon: 'megaphone', labelKey: 'hud.reputation', group: 'growth', Component: ReputationWidget },
+  moraleHeatmap: { icon: 'grid', labelKey: 'hud.moraleMap', group: 'team', Component: MoraleMapWidget },
+  coordinationWarning: { icon: 'network', labelKey: 'hud.coordination', group: 'team', Component: CoordinationWidget },
+  cultureBadge: { icon: 'flag', labelKey: 'hud.culture', group: 'team', Component: CultureWidget },
+  debtCounter: { icon: 'bug', labelKey: 'hud.techDebt', group: 'team', Component: DebtWidget },
+  roundTimer: { icon: 'timer', labelKey: 'hud.roundTimer', group: 'path', Component: RoundTimerWidget },
+  archetypeBadge: { icon: 'compass', labelKey: 'hud.archetype', group: 'path', Component: ArchetypeWidget },
+  // Shown in the Team panel instead.
+  candidateQuality: { icon: 'star', labelKey: 'widget.candidateQuality', group: 'hidden', Component: Nothing },
+}
+
+export const WIDGETS: Record<HudWidget, WidgetDef> = Object.fromEntries(
+  (Object.keys(DEFS) as HudWidget[]).map((id) => [id, { ...DEFS[id], id, color: WIDGET_COLOR[id], pinnable: PINNABLE.has(id), mergedInto: MERGED_INTO[id] }]),
+) as Record<HudWidget, WidgetDef>
+
+/** Metrikler order: groups, then the order of DEFS inside a group. */
+export const METRIC_GROUPS: readonly MetricGroup[] = ['money', 'growth', 'team', 'path']
+
+/** Cards listed in Metrikler (merged gauges and top-bar gauges excluded), in display order. */
+export const METRIC_CARDS: readonly HudWidget[] = METRIC_GROUPS.flatMap((g) => (Object.keys(DEFS) as HudWidget[]).filter((id) => DEFS[id].group === g && !MERGED_INTO[id]))
+
+// ---------------------------------------------------------------------------
+// Top-bar pins
+// ---------------------------------------------------------------------------
+
+/**
+ * Which of the pinned gauges the top bar can draw at this width: the NEWEST `visible` ones (the player's latest
+ * choice wins the room). Metrikler draws the value of every other pin itself (docs/LAYOUT.md §5.1, no duplicates).
+ */
+export function visiblePins(pins: readonly HudWidget[], visible: number): HudWidget[] {
+  return visible <= 0 ? [] : pins.slice(-visible)
+}
+
+/** Pins of this run whose card is unlocked, oldest first (store.ui.pinnedMetrics ∩ unlocked). */
+export function usePinnedMetrics(): HudWidget[] {
+  return useGameStore(useShallow((s) => effectivePins(s.ui.pinnedMetrics, s.state.unlockedWidgets)))
+}
+
+/**
+ * One pinned gauge in the top bar: the registry card in its `bar` variant (h40), a button that opens the card in
+ * Metrikler. Draws nothing for an unknown, unpinnable or locked gauge.
+ */
+export function PinnedMetric({ id, className }: { id: HudWidget; className?: string }) {
+  const card = canonicalMetric(id)
+  const def = WIDGETS[card]
+  const unlocked = useGameStore((s) => [card, ...(Object.keys(MERGED_INTO) as HudWidget[]).filter((x) => MERGED_INTO[x] === card)].some((x) => s.state.unlockedWidgets.includes(x)))
+  const openPanel = useGameStore((s) => s.openPanel)
+  if (!def?.pinnable || !unlocked) return null
+  const W = def.Component
+  const label = t(def.labelKey)
+  return (
+    <button
+      type="button"
+      data-pinned-metric={card}
+      onClick={() => openPanel({ kind: 'metrics', focus: card }, { root: true })}
+      aria-label={t('metrics.openTitle', { label })}
+      className={cx('block min-w-0 max-w-[152px] rounded-control text-left transition-colors hover:bg-surface-2', className)}
+    >
+      <W variant="bar" />
+    </button>
+  )
 }

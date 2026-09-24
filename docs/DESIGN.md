@@ -100,22 +100,39 @@ so this is the identifier there). `energy` is a fill only.
 
 ### Time state — `--color-speed-*`
 
-Frames and fills only (text on them stays ink, AA). The HUD stage/time card gets a **2px** border in the
-state colour (+ a soft 3px halo), the active speed segment a ~22% fill with a 2px inset ring, the month ring
-around the date the same hue. Colour follows the speed time *actually* runs at: any pause (player or focus
-pause for a decision / Defter card / modal) is red; the player's chosen speed keeps a dashed frame meanwhile.
+Frames and fills only (text on them stays ink, AA). The speed colour lives in **two places only**
+(docs/LAYOUT.md §4.2): the speed control's active segment (~22% fill + 2px inset ring, top bar section C) and
+the thin viewport frame (`ScreenFrame`, 3px desktop / 2px phone). The stage section, the month ring next to the
+date and the date itself stay **neutral** (`ink-2`); there is no running dot and no "DURAKLATILDI" pill.
+Colour follows the speed time *actually* runs at.
+
+**Pausing is not danger.** Any pause (the player's own or a focus pause for a decision / Kazanımlar card /
+round offer / modal) is neutral grey and **dashed**: `speed-pause` = `ink-3`. A focus pause adds a faint inner
+band in the chosen speed's colour (where time returns to) and the chosen segment gets a dashed frame. The time
+status label ("Duraklatıldı", "Karar · 2×", "Zaman akıyor", "Önemli an · 1×") sits next to the segments
+(≥1440; in the segment tooltips below that). Colour is never the only signal: solid vs dashed + the label.
 
 | Token | Value | State |
 |---|---|---|
-| `speed-pause` | `#E0483E` | Duraklatıldı (also "DURAKLATILDI" pill tint, text `negative-ink`) |
+| `speed-pause` | `#9B978F` (= `ink-3`) | Duraklatıldı / odak duraklaması (frame dashed, label `ink-2`) |
 | `speed-1` | `#D6A100` | 1× (yellow) |
 | `speed-2` | `#EE7A14` | 2× (orange) |
 | `speed-4` | `#1F9D63` | 4× (green) |
 
-This is the one place a 2px border is allowed (see Shape). Motion: `animate-day-tick` (date pops each day),
-`animate-heartbeat` (running dot, faster at higher speeds), `animate-cash-rise` (daily Kasa delta),
-`animate-danger-pulse` (runway < 3 ay), `animate-attention` (new decision bubble), `animate-cta-glow` (Başlat).
-A still world fades the scene slightly (desaturate + vignette, `PauseVeil`).
+The frame is the one place a border above 1px is allowed (see Shape). Motion: `animate-day-tick` (date pops
+each day), `animate-frame-beat` (frame glow once per game day while flowing), `animate-cash-rise` (daily Kasa
+delta, `ink-2` / `positive-ink`), `animate-payday-drop` (payday lump, bold ink: rhythm, not danger),
+`animate-danger-pulse` (runway < 3 ay only), `animate-attention` (new decision bubble), `animate-cta-glow`
+(Başlat). A still world fades the scene slightly (desaturate + vignette, `PauseVeil`).
+
+### One red rule
+
+`negative` / `negative-ink` mean **"this can end the run"** and nothing else (docs/LAYOUT.md §4.1): Runway < 3 ay
+(value + dot + pulse), usable Kasa < 0 / bankruptcy countdown / missed payroll (Kasa value + strip P0), Moral < 28
+(value + dot; the burnout band in Ekip morali). Everything that used to be red and is not danger is now
+**warning** (`energy` mark + `energy-ink` number: low energy, LTV:CAC < 3, churn > %8, tech debt, coordination,
+revenue concentration, founder stake < %50, error icon, leaving-employee badge) or neutral (pause, daily burn,
+payday lump, receipt net, the stage section). Counter badges on the tabs are `brand`.
 
 ### Status, kinds, departments
 
@@ -141,7 +158,7 @@ Opacity modifiers work (`bg-brand/15`, `bg-g-morale/45`). Inline / dynamic hue: 
 | `--shadow-card` | very light 2-layer | `shadow-card` — floating HUD cards, bubbles |
 | `--shadow-pop` | light drop | `shadow-pop` — modals, bottom sheet, toasts |
 
-Borders are always **1px** (exception: the time-state frame, 2px, see Time state). Brand CTAs may carry a soft brand glow (`shadow-[0_4px_12px_-4px_var(--color-brand)]`).
+Borders are always **1px** (exception: the viewport time frame, 2–3px, see Time state). Brand CTAs may carry a soft brand glow (`shadow-[0_4px_12px_-4px_var(--color-brand)]`).
 
 ### Helper classes (index.css)
 
@@ -189,7 +206,7 @@ card. No 800+.
 8. **Locked / disabled stays neutral** (dashed `border-strong`, `ink-3`), so colour always means "live".
 9. Light shadows, hairline borders, generous whitespace; one surface level per stack (don't nest cards).
 10. **A metric keeps its hue everywhere.** Panels showing a HUD metric use the same `WIDGET_COLOR` tile
-    (`<Stat icon color>`) and the same warning rule (e.g. LTV:CAC < 3 red in HUD and Büyüme). Project
+    (`<Stat icon color>`) and the same warning rule (e.g. LTV:CAC < 3 amber in Metrikler and Büyüme). Project
     maturity bars use the category hue (`CATEGORY_COLOR`).
 11. **One brand CTA per list.** A blocked state is never a primary button: e.g. Mağaza with no room shows
     one "Boş yer yok — N. halkayı aç" banner with a single primary button above the list; items show a
@@ -275,14 +292,14 @@ Shared files — **foundation lane only**: `src/index.css`, `src/ui/theme.ts`, `
 
 | Lane | Files |
 |---|---|
-| **A — HUD** | `src/ui/Hud.tsx`, `src/ui/widgets.tsx`, `src/ui/FounderActions.tsx`, `src/ui/ActivityLine.tsx`, `src/ui/Feedback.tsx`, `src/ui/icons.tsx` |
-| **B — Panel** | `src/ui/RightPanel.tsx`, `src/ui/Dock.tsx`, `src/ui/DetailPanel.tsx`, `src/ui/panels/*` **except** `SettingsPanel.tsx` |
+| **A — Bars & strip** (docs/LAYOUT.md) | `src/ui/layout/*` (TopBar, StageSection, TopMetrics, SpeedControl, ViewControls, BottomBar, FounderBar, NotificationStrip, stripRules, tokens, useSceneInset), `src/ui/widgets.tsx`, `src/ui/FounderActions.tsx`, `src/ui/ActivityLine.tsx`, `src/ui/Feedback.tsx`, `src/ui/Horizon.tsx`, `src/ui/Moments.tsx`, `src/ui/NextStepChip.tsx`, `src/ui/icons.tsx` |
+| **B — Panel** | `src/ui/RightPanel.tsx`, `src/ui/Dock.tsx` (tab defs + tab buttons of the bottom bar), `src/ui/DetailPanel.tsx`, `src/ui/panels/*` (Metrikler included) **except** `SettingsPanel.tsx` |
 | **C — Bubbles & overlays** | `src/ui/bubbles/*`, `src/ui/NotebookCard.tsx`, `src/ui/ModalHost.tsx`, `src/ui/overlays/*`, `src/App.tsx` (start screen), `src/render/WorldBubbles.tsx` (`DefaultBubble`) |
 
 Unassigned for now (other session has pending changes, or out of scope): `src/ui/panels/SettingsPanel.tsx`
 (legacy `bg-cream-*`, `bg-mint-600` toggle, `rounded-full` segmented controls), `src/main.tsx`,
 `src/ui/hooks.ts`, `src/audio/**`, `src/render/{layout,walker,constants,Office,Npc,Character,nav}`,
-`src/ui/GameUI.tsx` (1 ref), `src/ui/dev/playground.tsx` (dev only).
+`src/ui/GameUI.tsx` (mounts TopBar + RightPanel + BottomStack), `src/ui/dev/playground.tsx` (dev only).
 
 3D scene: see §0. Still hardcoded in files owned by another session (move to `palette.ts` when free):
 locked-ring overlay `#2D2B36` @ 0.55 in `Office.tsx` (should use `StagePalette.locked` at ~0.3), office

@@ -84,9 +84,11 @@
   --color-energy: #f2a11f;        /* founder energy bar (fill only) */
   --color-energy-ink: #a45f00;    /* energy number (4.8:1 on surface) */
 
-  /* --- Time state (speed control border + active segment, month ring). Frames/fills only: the text on
-         them stays ink (AA). Pause = red (stopped), 1× = yellow, 2× = orange, 4× = green (flowing fast). --- */
-  --color-speed-pause: #e0483e;
+  /* --- Time state: ONLY the speed control's active segment and the thin screen frame (docs/LAYOUT.md §4.2).
+         Frames/fills only: the text on them stays ink (AA). Pause = neutral grey (dashed frame), 1× = yellow,
+         2× = orange, 4× = green (flowing fast). --- */
+  /* Pause is not danger (docs/LAYOUT.md §4.2): neutral ink-3 grey + a dashed frame; red is kept for real danger. */
+  --color-speed-pause: #9b978f;
   --color-speed-1: #d6a100;
   --color-speed-2: #ee7a14;
   --color-speed-4: #1f9d63;
@@ -156,7 +158,6 @@
   --animate-heartbeat: heartbeat 1s ease-in-out infinite;
   --animate-cta-glow: cta-glow 1.8s ease-in-out infinite;
   --animate-frame-beat: frame-beat 700ms ease-out both;
-  --animate-payday: payday-shake 600ms ease-in-out both;
   --animate-payday-drop: payday-drop 1800ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 
   @keyframes pop-in {
@@ -182,13 +183,7 @@
   }
   /* A new day: the date pops once. */
   /* Screen frame: a faint glow runs along the viewport edge once per game day while time flows. */
-  /* Payday: the Kasa value shakes and flashes red once (docs/CORE_LOOP.md §7 "Para"). */
-  @keyframes payday-shake {
-    0%, 100% { transform: none; color: inherit; }
-    10%, 50% { transform: translateX(-2px); color: var(--color-negative-ink); }
-    30%, 70% { transform: translateX(2px); color: var(--color-negative-ink); }
-    90% { transform: translateX(-1px); }
-  }
+  /* Payday: the paid lump drops off Kasa in bold ink (rhythm, not danger: docs/LAYOUT.md §4.1). */
   @keyframes payday-drop {
     0% { opacity: 0; transform: translateY(-6px) scale(1.25); }
     15% { opacity: 1; transform: translateY(0) scale(1.1); }

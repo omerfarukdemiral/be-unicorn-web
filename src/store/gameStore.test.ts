@@ -1,8 +1,10 @@
 // Integration: store ⇄ engine ⇄ content. M2/M3 chain: hire → desk → sit & work → project → users; 10 min in the garage.
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { FURNITURE } from '../content'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, SECONDS_PER_DAY } from '../engine/types'
-import type { GameEvent, GameState } from '../engine/types'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CONCEPTS, FURNITURE } from '../content'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY } from '../engine/types'
+import type { GameEvent, GameState, HudWidget } from '../engine/types'
+import { autoPin, effectivePins, PIN_MAX, unseenMetrics } from './metricPins'
+import { readUiSave, UI_KEY } from './save'
 import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, hasImportantMoment, offerWaiting, panelSelection, pauseReasonsOf, PAYDAY_SLOW_RUNWAY_MONTHS, useGameStore } from './gameStore'
 
 const store = () => useGameStore.getState()
@@ -586,5 +588,133 @@ describe('review fixes (store side)', () => {
     store().openOverlay({ kind: 'victory' })
     store().closeOverlay()
     expect(store().state.time.speed).toBe(2)
+  })
+})
+
+describe('Metrikler: top-bar pins (docs/LAYOUT.md §5.2)', () => {
+  /** In-memory localStorage (node has none): the UI profile round-trips through it. */
+  function memoryStorage(): Storage {
+    const m = new Map<string, string>()
+    return {
+      get length() {
+        return m.size
+      },
+      clear: () => m.clear(),
+      getItem: (k) => m.get(k) ?? null,
+      key: (i) => [...m.keys()][i] ?? null,
+      removeItem: (k) => void m.delete(k),
+      setItem: (k, v) => void m.set(k, String(v)),
+    }
+  }
+
+  /** Learns the concept that opens `widget` (triggers it first, then opens its card like the player would). */
+  function learnWidget(widget: HudWidget) {
+    const c = CONCEPTS.find((x) => x.unlocks === widget || (Array.isArray(x.unlocks) && x.unlocks.includes(widget)))
+    if (!c) throw new Error(`no concept unlocks ${widget}`)
+    useGameStore.setState((st) => ({ state: { ...st.state, concepts: { ...st.state.concepts, triggered: [...st.state.concepts.triggered, c.id] } } }))
+    expect(store().dispatch({ type: 'openConcept', conceptId: c.id }).ok).toBe(true)
+    expect(store().state.unlockedWidgets).toContain(widget)
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    useGameStore.setState((st) => ({ ui: { ...st.ui, pinnedMetrics: [], pinTouched: false, seenMetrics: [] } }))
+    store().newGame({ seed: 11, founderXp: 0, runIndex: 0 })
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('pins at most two; the third evicts the oldest; pinning by hand sets pinTouched', () => {
+    store().pinMetric('burnBreakdown')
+    store().pinMetric('profitProjection')
+    expect(store().ui.pinnedMetrics).toEqual(['burnBreakdown', 'profitProjection'])
+    expect(store().ui.pinTouched).toBe(true)
+    store().pinMetric('arpu')
+    expect(store().ui.pinnedMetrics).toEqual(['profitProjection', 'arpu'])
+    // Already pinned: no-op (order kept).
+    store().pinMetric('profitProjection')
+    expect(store().ui.pinnedMetrics).toEqual(['profitProjection', 'arpu'])
+    store().unpinMetric('profitProjection')
+    expect(store().ui.pinnedMetrics).toEqual(['arpu'])
+    expect(PIN_MAX).toBe(2)
+  })
+
+  it('top-bar gauges and badges cannot be pinned; a merged gauge pins its card', () => {
+    store().pinMetric('runway')
+    store().pinMetric('cash')
+    store().pinMetric('cultureBadge')
+    store().pinMetric('roundTimer')
+    expect(store().ui.pinnedMetrics).toEqual([])
+    expect(store().ui.pinTouched).toBe(false)
+    store().pinMetric('churn')
+    store().pinMetric('equity')
+    expect(store().ui.pinnedMetrics).toEqual(['retention', 'capTable'])
+  })
+
+  it('a newly learned gauge fills a free slot automatically until the player pins by hand', () => {
+    learnWidget('runway') // top-bar gauge: never auto-pinned
+    expect(store().ui.pinnedMetrics).toEqual([])
+    learnWidget('burnBreakdown')
+    expect(store().ui.pinnedMetrics).toEqual(['burnBreakdown'])
+    learnWidget('retention')
+    expect(store().ui.pinnedMetrics).toEqual(['burnBreakdown', 'retention'])
+    // Slots full: a third one waits in Metrikler.
+    learnWidget('profitProjection')
+    expect(store().ui.pinnedMetrics).toEqual(['burnBreakdown', 'retention'])
+    // Hand-picked from now on: freeing a slot does not refill it.
+    store().unpinMetric('retention')
+    learnWidget('arpu')
+    expect(store().ui.pinnedMetrics).toEqual(['burnBreakdown'])
+  })
+
+  it('new gauges count as unseen until Metrikler marks them seen', () => {
+    expect(unseenMetrics(store().state.unlockedWidgets, store().ui.seenMetrics)).toEqual([])
+    learnWidget('burnBreakdown')
+    learnWidget('churn') // shown on the Tutunma card
+    expect(unseenMetrics(store().state.unlockedWidgets, store().ui.seenMetrics).sort()).toEqual(['burnBreakdown', 'retention'])
+    store().markMetricsSeen(['burnBreakdown', 'churn'])
+    expect(unseenMetrics(store().state.unlockedWidgets, store().ui.seenMetrics)).toEqual([])
+  })
+
+  it('pins persist in be-unicorn:ui and survive a new game (locked pins keep their place, invisible)', () => {
+    learnWidget('burnBreakdown')
+    store().pinMetric('ltvCac')
+    expect(JSON.parse(localStorage.getItem(UI_KEY) ?? '{}')).toMatchObject({ v: 1, pinnedMetrics: ['burnBreakdown', 'ltvCac'], pinTouched: true })
+    store().newGame({ seed: 12, founderXp: 0, runIndex: 1 })
+    expect(store().ui.pinnedMetrics).toEqual(['burnBreakdown', 'ltvCac'])
+    expect(store().ui.pinTouched).toBe(true)
+    // A new run: nothing is unlocked yet, so nothing is drawn; every gauge is new again.
+    expect(effectivePins(store().ui.pinnedMetrics, store().state.unlockedWidgets)).toEqual([])
+    expect(store().ui.seenMetrics).toEqual([...INITIAL_WIDGETS])
+    // Reload: the profile is read back, unknown ids are dropped.
+    localStorage.setItem(UI_KEY, JSON.stringify({ v: 1, pinnedMetrics: ['arpu', 'nope'], seenMetrics: ['cash'], pinTouched: false }))
+    expect(readUiSave()).toEqual({ pinnedMetrics: ['arpu'], seenMetrics: ['cash'], pinTouched: false })
+  })
+
+  it('continue (load) takes the pins from the profile; an old profile without seenMetrics counts the save as seen', () => {
+    learnWidget('burnBreakdown')
+    store().save()
+    localStorage.setItem(UI_KEY, JSON.stringify({ v: 1, pinnedMetrics: ['profitProjection'], pinTouched: true }))
+    expect(store().load()).toBe(true)
+    expect(store().ui.pinnedMetrics).toEqual(['profitProjection'])
+    expect(store().ui.pinTouched).toBe(true)
+    expect(store().ui.seenMetrics).toEqual(store().state.unlockedWidgets)
+    expect(unseenMetrics(store().state.unlockedWidgets, store().ui.seenMetrics)).toEqual([])
+  })
+
+  it('auto-pin replaces a pin that is locked in this run instead of growing past PIN_MAX', () => {
+    expect(autoPin(['arpu', 'ltvCac'], ['burnBreakdown'], ['cash', 'burnBreakdown'])).toEqual(['ltvCac', 'burnBreakdown'])
+    expect(autoPin(['arpu', 'ltvCac'], ['burnBreakdown'], ['cash', 'arpu', 'ltvCac', 'burnBreakdown'])).toEqual(['arpu', 'ltvCac'])
+  })
+
+  it('Metrikler is a plain tab: it never pauses', () => {
+    store().togglePanel('metrics')
+    expect(store().ui.panel).toEqual({ kind: 'metrics' })
+    expect(store().ui.pauseReasons).toEqual([])
+    store().openPanel({ kind: 'metrics', focus: 'burnBreakdown' }, { root: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    store().togglePanel('metrics')
+    expect(store().ui.panel).toBeNull()
   })
 })

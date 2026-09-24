@@ -43,7 +43,8 @@ export interface QueueItem {
  * Adds fresh transient items to the queue (index 0 = the one on screen or next to show).
  * - receipt / roundWeek replace the older one of their kind in place (momentRules MERGE_KINDS);
  * - a P0 item and an error jump the queue (to the front; the displaced item waits, its time stopped);
- * - at 4× no more than 2 of a kind wait; over the limit the oldest WAITING item goes, never the front one.
+ * - at 4× no more than 2 of a kind wait; over the limit the oldest WAITING item goes, never the front one —
+ *   activity first, then a new-metric note, and a moment (receipt, release, outcome…) only when nothing else is left.
  */
 export function enqueue<T extends QueueItem>(cur: readonly T[], add: readonly T[], opts: { fast?: boolean } = {}): T[] {
   let out = [...cur]
@@ -64,11 +65,21 @@ export function enqueue<T extends QueueItem>(cur: readonly T[], add: readonly T[
         else continue
       }
     }
-    out = mergeMoments(out, [item], 1)
+    out = mergeMoments(out, [item], Number.POSITIVE_INFINITY)
   }
   const limit = 1 + STRIP_QUEUE_MAX
-  while (out.length > limit) out.splice(1, 1)
+  while (out.length > limit) out.splice(evictIndex(out), 1)
   return out
+}
+
+/** Eviction order over the cap: oldest waiting activity, then new-metric note, then the oldest waiting item. */
+const EVICT_ORDER: readonly TransientKind[] = ['activity', 'newMetric']
+function evictIndex(out: readonly QueueItem[]): number {
+  for (const kind of EVICT_ORDER) {
+    const i = out.findIndex((x, idx) => idx > 0 && x.kind === kind)
+    if (i > 0) return i
+  }
+  return 1
 }
 
 function isMergeKind(kind: TransientKind): boolean {
@@ -119,7 +130,3 @@ export function nextStepShown(p: { hasStep: boolean; startCall: boolean; stepId?
   return true
 }
 
-/** Days until a horizon item, "bugün" under half a day. */
-export function daysUntil(day: number, now: number): number {
-  return Math.max(0, Math.round(day - now))
-}

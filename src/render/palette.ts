@@ -98,7 +98,7 @@ export function stagePalette(stage: StageIndex | number): StagePalette {
 export const DEPT_COLORS: Record<Dept, string> = {
   eng: '#3f7fe8',
   product: '#9a5cf0',
-  marketing: '#f0605a',
+  marketing: '#d9529b',
   sales: '#f5a81c',
   ops: '#14a98f',
 }

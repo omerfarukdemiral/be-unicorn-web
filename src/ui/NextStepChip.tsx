@@ -54,18 +54,21 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
   const dispatch = useGameStore((s) => s.dispatch)
   // Touch screens have no Space key: the hint lives only on keyboards.
   const touch = useIsMobile()
+  const openKind = useGameStore((s) => s.ui.panel?.kind)
   const step = v.step
   if (!step || v.over) return null
   const go: StepGo | 'start' = v.needsStart ? 'start' : stepGo(step)
   const text = v.needsStart ? t(touch || compact ? 'step.startTouch' : 'step.start') : v.text
   const onClick = () => (v.needsStart ? dispatch({ type: 'setSpeed', speed: 1 }) : followStep(step))
   const progress = step.progress
+  const there = go !== 'start' && go !== 'act' && openKind === go
 
   // Borderless row for the strip: [n] "Sıradaki adım 6/8 · text" [Yap ›]. The strip draws the surface.
   return (
     <button type="button" onClick={onClick} title={`${t('step.label')} · ${text}`} className={cx('group flex h-full w-full min-w-0 items-center gap-2 text-left', className)}>
-      <span className="tabular grid size-6 shrink-0 place-items-center rounded-[7px] bg-brand-soft text-[11px] font-bold text-brand-ink" aria-hidden="true">
-        {step.index}
+      {/* An icon, not the step number: a bare number here would sit next to the top bar's round figures. */}
+      <span className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-brand-soft text-brand-ink" aria-hidden="true">
+        <Icon name="flag" size={14} />
       </span>
       <span className="flex min-w-0 flex-1 items-baseline gap-2">
         {!compact && <span className="tabular shrink-0 text-[12px] font-medium text-ink-2">{t('strip.step', { i: step.index, n: step.total })}</span>}
@@ -73,11 +76,14 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
           {text}
         </span>
       </span>
-      <span className={cx('inline-flex h-7 shrink-0 items-center gap-1 rounded-[8px] bg-brand-soft px-2 text-[12px] font-semibold text-brand-ink transition-colors group-hover:bg-brand group-hover:text-on-ink')}>
-        <Icon name={GO_ICON[go]} size={14} />
-        {!compact && t(`step.go.${go}`)}
-        <Icon name="chevronRight" size={12} />
-      </span>
+      {/* No "Büyüme ›" while Büyüme is already the open panel: the call would point at what is on screen. */}
+      {!there && (
+        <span className={cx('inline-flex h-7 shrink-0 items-center gap-1 rounded-[8px] bg-brand-soft px-2 text-[12px] font-semibold text-brand-ink transition-colors group-hover:bg-brand group-hover:text-on-ink')}>
+          <Icon name={GO_ICON[go]} size={14} />
+          {!compact && t(`step.go.${go}`)}
+          <Icon name="chevronRight" size={12} />
+        </span>
+      )}
       {progress !== undefined && (
         <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[2px] bg-brand/12">
           <span className="block h-full bg-brand transition-[width] duration-700" style={{ width: `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%` }} />

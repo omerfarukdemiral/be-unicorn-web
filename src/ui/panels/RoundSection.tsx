@@ -231,7 +231,8 @@ function ActiveRound(p: {
             <div className="tabular text-[11px] text-ink-2">{t('round.projected', { v: money(p.projected) })}</div>
           )}
         </div>
-        {p.lastMove && (
+        {/* Only a real change: "$613K → $613K" says nothing. The week count lives in the progress row alone. */}
+        {p.lastMove && Math.round(p.lastMove.from) !== Math.round(p.lastMove.to) && (
           <span
             className={cx('tabular inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold', up ? 'bg-positive/15 text-positive-ink' : 'bg-negative/15 text-negative-ink')}
           >

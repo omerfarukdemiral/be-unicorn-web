@@ -87,7 +87,7 @@ function HireView() {
       </div>
       <div className="flex items-center justify-between gap-2 text-[11px] text-ink-2">
         <span className={cx('inline-flex items-center gap-1', freeDesks === 0 && 'font-semibold text-ink')}>
-          {freeDesks === 0 ? <Dot color="var(--color-negative)" size={6} /> : <Icon name="desk" size={14} />}
+          {freeDesks === 0 ? <Dot color="var(--color-energy)" size={6} /> : <Icon name="desk" size={14} />}
           {freeDesks > 0 ? t('team.freeDesks', { n: freeDesks }) : emptySlots > 0 ? t('team.needDeskItem') : t('team.noSlot')}
         </span>
         <Button size="sm" tone="ghost" icon="refresh" onClick={() => dispatch({ type: 'refreshCandidates' })}>

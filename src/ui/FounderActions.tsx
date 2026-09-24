@@ -1,6 +1,6 @@
 // Active founder actions (PLAN §4.4): energy, cooldown rings, stage locks, saturation "½".
 // The logic lives here (`useFounderActions`); the bottom bar draws it (layout/FounderBar.tsx, docs/LAYOUT.md §1):
-// labelled chips on desktop (icon + short label), icons on phones, a locked action is only a 40px lock.
+// labelled chips on desktop (icon + short label), icons on phones; one neutral shape, the hue only on the icon.
 // Colours (docs/LAYOUT.md §4.1): low energy is a WARNING (energy / energy-ink), never red.
 import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -12,7 +12,7 @@ import { Icon } from './icons'
 import { t } from './i18n'
 import { Bar, cx, Ring } from './primitives'
 import { money } from './format'
-import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone, soft } from './theme'
+import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone } from './theme'
 
 /** "+3–6", or "+1" when both ends are the same (never "+1–1"). */
 function range(a: number, b: number, f: (v: number) => string = String): string {
@@ -128,42 +128,45 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
 }
 
 /**
- * One action. `chip`: h40 icon + short label (desktop bottom bar); `icon`: 44 round icon (phones, landscape);
- * a locked action is always only a lock icon (40 / 44), no label. `tipAlign` keeps the first tips on screen.
+ * One action. `chip`: h40 icon + short label (desktop bottom bar); `icon`: 44 round icon (phones, landscape).
+ * One neutral family (docs/DESIGN.md: neutral surfaces + indicator colour): every action, available or not, is the
+ * same surface-2 shape; the action's hue is only on its icon. Running / cooldown = one 2px line along the bottom
+ * edge (chip) or a ring (icon); a locked action keeps the same shape with a lock icon. `tipAlign` keeps tips on screen.
  */
 export function FounderActionButton({ a, variant, tipAlign = 'center' }: { a: FounderActionView; variant: 'chip' | 'icon'; tipAlign?: 'left' | 'center' }) {
   const hue = FOUNDER_COLOR[a.kind]
-  const tinted = a.running || !a.disabled
-  const chip = variant === 'chip' && !a.locked
-  const size = variant === 'chip' ? 40 : 44
+  const chip = variant === 'chip'
+  const size = chip ? 40 : 44
+  const idle = a.disabled && !a.running
+  const frac = a.running ? a.runFrac : a.cdFrac > 0 && !a.locked ? 1 - a.cdFrac : null
   return (
     <button
       type="button"
       onClick={a.run}
       disabled={a.disabled}
       aria-label={a.label}
-      title={variant === 'icon' ? a.label : undefined}
+      title={chip ? undefined : a.label}
       className={cx(
-        'group relative inline-flex shrink-0 items-center justify-center border transition-colors',
+        'group relative inline-flex shrink-0 items-center justify-center border border-border bg-surface-2 transition-colors',
         chip ? 'gap-1.5 rounded-control pl-2.5 pr-3' : 'rounded-full',
-        a.running ? 'border-transparent' : 'bg-transparent',
-        // Unavailable: dashed neutral frame + faded icon, clearly apart from the tinted available actions.
-        !a.running && (a.disabled ? 'border-dashed border-border-strong text-ink-3' : 'hover:brightness-95 active:scale-[0.97]'),
+        a.running && 'border-border-strong',
+        !a.disabled && 'hover:border-border-strong hover:bg-surface active:scale-[0.97]',
+        idle && 'bg-transparent',
       )}
-      style={{
-        height: size,
-        ...(chip ? null : { width: size }),
-        ...(tinted ? { color: iconTone(hue), background: soft(hue, a.running ? 20 : 12), borderColor: a.running ? 'transparent' : soft(hue, 45) } : null),
-      }}
+      style={{ height: size, ...(chip ? null : { width: size }) }}
     >
-      {a.cdFrac > 0 && !a.locked && !chip && <Ring value={a.cdFrac} size={size} tone={soft(hue, 70)} />}
-      {a.running && !chip && <Ring value={a.runFrac} size={size} stroke={2.5} tone={hue} />}
-      <Icon name={a.locked ? 'lock' : FOUNDER_ICON[a.kind]} size={variant === 'chip' ? 18 : 20} className={cx(a.disabled && !a.running && 'opacity-60')} />
-      {chip && <span className={cx('whitespace-nowrap text-[13px] font-semibold', a.disabled && !a.running ? 'text-ink-2' : 'text-ink')}>{t(`founder.short.${a.kind}`)}</span>}
-      {chip && (a.cdFrac > 0 || a.running) && (
-        // Chip form: the cooldown / progress is a 2px line along the bottom edge instead of a ring.
-        <span aria-hidden="true" className="absolute inset-x-2 bottom-[3px] h-[2px] overflow-hidden rounded-full" style={{ background: soft(hue, 22) }}>
-          <span className="block h-full rounded-full" style={{ width: `${Math.round((a.running ? a.runFrac : 1 - a.cdFrac) * 100)}%`, background: hue }} />
+      {!chip && frac !== null && <Ring value={a.running ? a.runFrac : a.cdFrac} size={size} stroke={2} tone={a.running ? hue : 'var(--color-ink-3)'} />}
+      <Icon
+        name={a.locked ? 'lock' : FOUNDER_ICON[a.kind]}
+        size={chip ? 18 : 20}
+        className={cx('shrink-0', idle && 'text-ink-3')}
+        style={idle ? undefined : { color: iconTone(hue) }}
+      />
+      {chip && <span className={cx('whitespace-nowrap text-[13px] font-semibold', idle ? 'text-ink-3' : 'text-ink')}>{t(`founder.short.${a.kind}`)}</span>}
+      {chip && frac !== null && (
+        // The one progress treatment on chips: a 2px line along the bottom edge (running in the hue, cooldown in ink).
+        <span aria-hidden="true" className="absolute inset-x-2 bottom-[3px] h-[2px] overflow-hidden rounded-full bg-border">
+          <span className="block h-full rounded-full" style={{ width: `${Math.round(frac * 100)}%`, background: a.running ? hue : 'var(--color-ink-3)' }} />
         </span>
       )}
       {a.saturated && (
@@ -172,7 +175,7 @@ export function FounderActionButton({ a, variant, tipAlign = 'center' }: { a: Fo
           ½
         </span>
       )}
-      {variant === 'chip' && (
+      {chip && (
         <span
           role="tooltip"
           className={cx(

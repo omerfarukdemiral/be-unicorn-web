@@ -71,11 +71,13 @@ function RoundSlot({ variant }: { variant: StageVariant }) {
         aria-label={title}
         className={cx(
           'tabular inline-flex shrink-0 items-center gap-1 rounded-md bg-brand-soft text-[11px] font-semibold text-brand-ink transition-colors hover:bg-brand/20',
-          variant === 'mobile' ? 'h-8 px-1.5' : 'h-6 px-2',
+          // Phones: a 44px target (the row is h44); desktop: a small h24 chip.
+          variant === 'mobile' ? 'h-11 px-2' : 'h-6 px-2',
         )}
       >
         <Icon name="timer" size={12} />
-        {variant === 'mobile' ? t('top.roundShort', { v: left }) : t('top.round', { w: week, t: total })}
+        {/* Same meaning everywhere: weeks DONE of the total ("3/11"), never a bare countdown number. */}
+        {variant === 'mobile' ? t('top.roundShort', { w: week, t: total }) : t('top.round', { w: week, t: total })}
       </button>
     )
   }
@@ -86,7 +88,10 @@ function RoundSlot({ variant }: { variant: StageVariant }) {
       onClick={openRound}
       title={t('top.roundStart')}
       aria-label={t('top.roundStart')}
-      className="inline-flex h-8 shrink-0 animate-pop-in items-center gap-1 rounded-control bg-brand px-2 text-xs font-semibold tracking-wide text-on-ink transition-colors hover:bg-brand-hover"
+      className={cx(
+        'inline-flex shrink-0 animate-pop-in items-center gap-1 rounded-control bg-brand px-2 text-xs font-semibold tracking-wide text-on-ink transition-colors hover:bg-brand-hover',
+        variant === 'mobile' ? 'h-11' : 'h-8',
+      )}
     >
       <Icon name="rocket" size={14} />
       {variant === 'wide' ? t('top.roundStart') : t('top.roundStartShort')}

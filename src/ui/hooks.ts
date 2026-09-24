@@ -3,8 +3,12 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 import { useGameStore } from '../store/gameStore'
 
-/** Narrow screens, plus phones in landscape (short + touch), get the compact layout. */
-const MOBILE_QUERY = '(max-width: 767px), (pointer: coarse) and (max-height: 500px)'
+/**
+ * Narrow screens (phones AND the 768–1023 band: tablets in portrait, narrow windows) plus phones in landscape
+ * (short + touch) get the compact layout. Below 1024 the one-row desktop bars do not fit (stage + 4 gauges + speed
+ * + view controls ≈ 840px), so the tablet band takes the phone bars and the bottom sheet.
+ */
+const MOBILE_QUERY = '(max-width: 1023px), (pointer: coarse) and (max-height: 500px)'
 
 function subscribeMq(cb: () => void): () => void {
   if (typeof window === 'undefined' || !window.matchMedia) return () => {}
@@ -13,13 +17,48 @@ function subscribeMq(cb: () => void): () => void {
   return () => mq.removeEventListener('change', cb)
 }
 
-/** True below 768px or on a landscape phone (DECISIONS #3 mobile layout). */
+/** True below 1024px or on a landscape phone (DECISIONS #3 mobile layout). */
 export function useIsMobile(): boolean {
   return useSyncExternalStore(
     subscribeMq,
     () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(MOBILE_QUERY).matches : false),
     () => false,
   )
+}
+
+/**
+ * The ONE layout mode every bar, the panel and the scene inset agree on (never decide "landscape" locally):
+ * - desktop:   one-row top bar, one-row bottom bar, right-hand panel;
+ * - portrait:  two-row top bar, two-row bottom bar, bottom sheet;
+ * - landscape: compact (mobile) and short (≤ 500px tall, wider than tall): one-row bars (h52), side panel.
+ */
+export type LayoutMode = 'desktop' | 'portrait' | 'landscape'
+
+/** Height at or under which a wider-than-tall compact screen counts as landscape. */
+export const LANDSCAPE_MAX_H = 500
+
+export function layoutModeOf(mobile: boolean, w: number, h: number): LayoutMode {
+  if (!mobile) return 'desktop'
+  return w > h && h <= LANDSCAPE_MAX_H ? 'landscape' : 'portrait'
+}
+
+function subscribeLayout(cb: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  window.addEventListener('resize', cb)
+  const unMq = subscribeMq(cb)
+  return () => {
+    window.removeEventListener('resize', cb)
+    unMq()
+  }
+}
+
+function layoutSnapshot(): LayoutMode {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'desktop'
+  return layoutModeOf(window.matchMedia(MOBILE_QUERY).matches, window.innerWidth, window.innerHeight)
+}
+
+export function useLayoutMode(): LayoutMode {
+  return useSyncExternalStore(subscribeLayout, layoutSnapshot, () => 'desktop')
 }
 
 /** Re-renders every `ms` real milliseconds while `active`. Returns performance.now(). */

@@ -1,5 +1,6 @@
 // Bottom bar, left part (docs/LAYOUT.md §1.2): founder energy + the founder actions.
-// Desktop: energy (bolt, bar, number) + labelled chips (icon + short label, h40); a locked action is a 40px lock.
+// Desktop: energy (bolt, bar, number) + labelled chips (icon + short label, h40), all one neutral shape (locked:
+// the same chip with a lock icon); the action hue is only on the icon.
 // Phone / landscape phone: energy number + round 44px icons (label in aria + title; long-press shows the title).
 import { t } from '../i18n'
 import { cx } from '../primitives'

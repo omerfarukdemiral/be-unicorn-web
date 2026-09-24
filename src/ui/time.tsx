@@ -50,7 +50,7 @@ export function useTimeStatus(): TimeStatus {
 }
 
 /** State colour: neutral grey (speed-pause = ink-3) whenever time is still, otherwise the running speed's colour. */
-export function timeColor(s: Pick<TimeStatus, 'effective'>): string {
+function timeColor(s: Pick<TimeStatus, 'effective'>): string {
   return SPEED_COLOR[s.effective]
 }
 
@@ -116,7 +116,6 @@ export function isFocusHold(hold: TimeHold): hold is PauseReason {
 export function DayClock({ compact }: { compact?: boolean }) {
   const { day, month } = useGameStore(useShallow((s) => ({ day: s.state.time.day, month: s.state.time.month })))
   const flowing = useGameStore((s) => effectiveSpeed(s) > 0)
-  const dayInt = Math.floor(day)
   const dayOfMonth = Math.floor(day % 30) + 1
   const monthFrac = (day % 30) / 30
   const size = 18
@@ -129,7 +128,8 @@ export function DayClock({ compact }: { compact?: boolean }) {
         <circle cx={9} cy={9} r={r} fill="none" stroke="var(--color-border)" strokeWidth={2.5} />
         <circle cx={9} cy={9} r={r} fill="none" stroke="var(--color-ink-2)" strokeWidth={2.5} strokeLinecap="round" strokeDasharray={`${Math.max(0.001, monthFrac) * c} ${c}`} />
       </svg>}
-      <span key={flowing ? dayInt : 'still'} className={cx('tabular inline-block shrink-0 text-[11px] font-semibold text-ink-2', flowing && 'animate-day-tick')}>
+      {/* No per-day motion (at 2×/4× it would never rest): only a new month fades in, opacity alone. */}
+      <span key={flowing ? month : 'still'} className={cx('tabular inline-block shrink-0 text-[11px] font-semibold text-ink-2', flowing && 'animate-fade-in')}>
         {t(compact ? 'top.dateShort' : 'hud.date', { m: month + 1, d: dayOfMonth })}
       </span>
     </span>

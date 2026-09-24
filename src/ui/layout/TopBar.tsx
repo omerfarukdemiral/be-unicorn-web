@@ -5,11 +5,10 @@
 // Contract: `pinned` comes from the caller (Integrate binds ui.pinnedMetrics); this file never reads it.
 import { useSyncExternalStore } from 'react'
 import type { HudWidget } from '../../engine/types'
-import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { cx } from '../primitives'
-import { useIsMobile } from '../hooks'
+import { useLayoutMode } from '../hooks'
 import { PIN_VISIBLE } from './tokens'
 import { StageProgressLine, StageSection } from './StageSection'
 import { CashChip, MoraleChip, RunwayChip, UsersChip, type MetricDensity } from './TopMetrics'
@@ -48,12 +47,13 @@ export interface TopBarProps {
 }
 
 export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
-  const mobile = useIsMobile()
-  const { w, h } = useViewport()
+  const mode = useLayoutMode()
+  const { w } = useViewport()
   // The caller passes the effective pins (usePinnedMetrics: pinned ∩ unlocked); fixed gauges and repeats are skipped.
   const pins = pinned.filter((id, i) => !FIXED.includes(id) && pinned.indexOf(id) === i).slice(-2)
 
-  if (mobile) return w > h ? <LandscapeBar /> : <MobileBar />
+  if (mode === 'landscape') return <LandscapeBar />
+  if (mode === 'portrait') return <MobileBar />
 
   const wide = w >= 1280
   const density: MetricDensity = wide ? 'full' : 'tight'
@@ -110,28 +110,38 @@ export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
   )
 }
 
-/** Phone portrait: row 1 stage · date · round | speed − + ⚙ (44px targets); 2px progress; row 2 the four gauges. */
+/**
+ * Phone / tablet portrait: row 1 stage · date · round | speed ⚙ (44px targets; zoom is pinch + Settings, which frees
+ * the room the stage name and date need at 360–390px); 2px progress; row 2 the four gauges, content-sized cells
+ * spread edge to edge (a long value like "$10.2M" or "999.9K" takes the room a short "∞" leaves).
+ */
 function MobileBar() {
-  const runwayOn = useGameStore((s) => s.state.unlockedWidgets.includes('runway'))
   return (
     <header
       data-scene-top
       aria-label={t('top.label')}
-      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex flex-col px-1 py-[3px]"
+      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex flex-col px-1 py-0.5"
     >
       <div className="flex h-11 min-w-0 items-center gap-1 pl-1.5">
         <StageSection variant="mobile" />
         <SpeedControl compact />
-        <ViewControls size={44} />
+        <ViewControls size={44} showZoom={false} />
       </div>
       <StageProgressLine className="mx-1.5" />
-      <div className={cx('grid h-11 min-w-0 items-center', runwayOn ? 'grid-cols-[1.35fr_1.15fr_0.9fr_1fr]' : 'grid-cols-[1.4fr_1fr_1fr]')}>
-        <CashChip density="mobile" />
-        {runwayOn && <RunwayChip density="mobile" />}
-        <UsersChip density="mobile" />
-        <MoraleChip density="mobile" />
-      </div>
+      <GaugeRow />
     </header>
+  )
+}
+
+/** The four gauges on a compact bar: auto-width cells, spread with equal gaps; an empty Runway slot takes no room. */
+function GaugeRow({ className }: { className?: string }) {
+  return (
+    <div className={cx('flex h-11 min-w-0 items-center justify-between gap-0.5', className)}>
+      <CashChip density="mobile" />
+      <RunwayChip density="mobile" />
+      <UsersChip density="mobile" />
+      <MoraleChip density="mobile" />
+    </div>
   )
 }
 
@@ -146,12 +156,7 @@ function LandscapeBar() {
       <div className="flex min-w-0 max-w-[30%] flex-1 items-center">
         <StageSection variant="mobile" />
       </div>
-      <div className="grid min-w-0 flex-[2] grid-cols-[1.35fr_1.15fr_0.9fr_1fr] items-center">
-        <CashChip density="mobile" />
-        <RunwayChip density="mobile" />
-        <UsersChip density="mobile" />
-        <MoraleChip density="mobile" />
-      </div>
+      <GaugeRow className="flex-[2]" />
       <SpeedControl compact />
       <ViewControls size={44} showZoom={false} />
     </header>

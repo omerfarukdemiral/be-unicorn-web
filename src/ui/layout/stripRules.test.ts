@@ -38,10 +38,19 @@ describe('strip priority', () => {
 describe('strip queue', () => {
   it('shows one item; at most 3 wait, the oldest WAITING one drops, never the one on screen', () => {
     let cur: QueueItem[] = []
-    cur = enqueue(cur, [q(1, 'release'), q(2, 'goal'), q(3, 'outcome'), q(4, 'activity'), q(5, 'newMetric')])
+    cur = enqueue(cur, [q(1, 'release'), q(2, 'goal'), q(3, 'outcome'), q(4, 'receipt'), q(5, 'roundWindow')])
     expect(cur).toHaveLength(1 + STRIP_QUEUE_MAX)
     expect(cur[0]?.key).toBe(1)
     expect(keys(cur)).not.toContain(2)
+  })
+
+  it('activity never pushes a moment out: activity goes first, then new-metric notes', () => {
+    expect(keys(enqueue([q(1, 'goal')], [q(2, 'release'), q(3, 'outcome'), q(4, 'activity'), q(5, 'activity')]))).toEqual([1, 2, 3, 5])
+    expect(keys(enqueue([q(1, 'receipt')], [q(2, 'outcome'), q(3, 'activity'), q(4, 'activity'), q(5, 'activity')]))).toEqual([1, 2, 4, 5])
+    expect(keys(enqueue([q(1, 'receipt')], [q(2, 'newMetric'), q(3, 'release'), q(4, 'outcome'), q(5, 'activity')]))).toEqual([1, 2, 3, 4])
+    expect(keys(enqueue([q(1, 'receipt')], [q(2, 'newMetric'), q(3, 'release'), q(4, 'outcome'), q(5, 'goal')]))).toEqual([1, 3, 4, 5])
+    const burst = enqueue([q(1, 'activity')], [q(2, 'receipt'), q(3, 'release'), q(4, 'outcome'), ...[5, 6, 7, 8].map((k) => q(k, 'activity'))])
+    expect(keys(burst)).toEqual([1, 2, 3, 4])
   })
 
   it('a newer receipt / round week replaces the older one in place', () => {

@@ -2,16 +2,15 @@
 // Each value has ONE home here (docs/LAYOUT.md §2): Kasa shows usable money + the daily NET flow only
 // (monthly net → Metrikler › Kâr tahmini, burn → Metrikler › Yakıt, runway → its own chip).
 // Red only for real danger (§4.1): runway < 3, usable cash < 0 / missed payroll, morale < 28. Other thresholds amber.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { effectiveSpeed, useGameStore } from '../../store/gameStore'
+import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, num, signedMoney } from '../format'
 import { cx } from '../primitives'
 import { iconTone, soft, WIDGET_COLOR } from '../theme'
 import { useTween } from '../time'
-import { useFreshEvents } from '../loopUi'
 import { ledgerMoney, runwayTone } from '../widgets'
 import { cashFlow } from '../cashflow'
 
@@ -70,27 +69,32 @@ export function BarChip({
       >
         <Icon name={icon} size={mobile ? 12 : 14} />
       </span>
-      <div className="min-w-0 flex-1">
+      {/* Every cell has the same fixed rows (label / value on desktop, value / sub on compact bars), so the four
+          values share one baseline whether or not a cell has a sub line or Moral's bar. */}
+      <div className="relative min-w-0 flex-1">
         {density === 'full' ? (
           <>
             {/* The sub (Kasa's daily net) rides on the label line, so the value line stays one short number. */}
-            <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+            <div className="flex h-3 min-w-0 items-center gap-1 whitespace-nowrap">
               <span className="ui-label text-[10px] leading-3">{label}</span>
               <StatusMark mark={mark} />
               {sub && <span className="tabular text-[10.5px] font-medium leading-3 text-ink-2">· {sub}</span>}
             </div>
-            <div className="tabular whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">{value}</div>
+            <div className="tabular h-5 whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">{value}</div>
+            {/* Extras (Moral's bar) hang under the value and take no layout height. */}
+            {children && <div className="absolute inset-x-0 top-full">{children}</div>}
           </>
         ) : (
           <>
-            <div className={cx('tabular flex min-w-0 items-center gap-1 whitespace-nowrap font-semibold text-ink', mobile ? 'text-sm leading-4' : 'text-[15px] leading-5')}>
+            <div className={cx('tabular flex min-w-0 items-center gap-1 whitespace-nowrap font-semibold text-ink', mobile ? 'h-4 text-sm leading-4' : 'h-5 text-[15px] leading-5')}>
               <span className="min-w-0 truncate">{value}</span>
               <StatusMark mark={mark} />
             </div>
-            {sub && <div className={cx('tabular truncate font-medium text-ink-2', mobile ? 'text-[10px] leading-3' : 'text-[11px] leading-3')}>{sub}</div>}
+            <div className={cx('tabular h-3 min-w-0 truncate font-medium text-ink-2', mobile ? 'text-[10px] leading-3' : 'text-[11px] leading-3')}>
+              {sub ?? children}
+            </div>
           </>
         )}
-        {children}
       </div>
     </div>
   )
@@ -100,48 +104,23 @@ export function BarChip({
 // Kasa
 // ---------------------------------------------------------------------------
 
-type Drop = { id: number; text: string; up: boolean; big?: boolean }
-
 /**
- * Kasa: usable money (cash − what payday already owes, tweened) + "net −$270/gün". The day's net floats off the
- * value (ink-2 when negative, green when positive); payday's lump drops big and bold in ink (rhythm, not danger).
+ * Kasa: usable money (cash − what payday already owes, tweened) + "net −$270/gün" on the sub line. No floating
+ * deltas: the daily net already has its one home in the sub line, and payday's lump is the strip's month receipt.
  * Red only when the usable money is below zero or payroll was missed.
  */
 export function CashChip({ density }: { density: MetricDensity }) {
   const f = useGameStore(useShallow((s) => cashFlow(s.state)))
-  const { debt, missed, negDays, day, flowing } = useGameStore(
+  const { debt, missed, negDays } = useGameStore(
     useShallow((s) => ({
       debt: s.state.finance.debt,
       missed: !!s.state.finance.payrollMissed,
       negDays: s.state.finance.negativeCashDays,
-      day: Math.floor(s.state.time.day),
-      flowing: effectiveSpeed(s) > 0,
     })),
   )
   const shown = useTween(f.usable)
   const danger = f.usable < 0 || missed
   const mobile = density === 'mobile'
-
-  const [drops, setDrops] = useState<Drop[]>([])
-  const pushDrop = (d: Drop, ms: number) => {
-    setDrops((cur) => [...cur.slice(-2), d])
-    // No cleanup: at 4× the next day lands before this one has faded (a late setState after unmount is a no-op).
-    window.setTimeout(() => setDrops((cur) => cur.filter((x) => x.id !== d.id)), ms)
-  }
-  const lastDay = useRef(day)
-  useEffect(() => {
-    if (day === lastDay.current) return
-    const fresh = day > lastDay.current && flowing
-    lastDay.current = day
-    if (!fresh || Math.abs(f.netDay) < 0.5) return
-    pushDrop({ id: day, text: f.netDay >= 0 ? signedMoney(f.netDay) : `−${money(-f.netDay)}`, up: f.netDay >= 0 }, 1200)
-  }, [day]) // eslint-disable-line react-hooks/exhaustive-deps
-  useFreshEvents((events) => {
-    for (const e of events) {
-      if (e.kind !== 'payday' || !(e.value !== undefined && e.value > 0.5)) continue
-      pushDrop({ id: -e.id, text: `−${money(e.value)}`, up: false, big: true }, 1800)
-    }
-  })
 
   const net = f.netDay >= 0 ? signedMoney(f.netDay) : `−${money(-f.netDay)}`
   const title = [
@@ -160,24 +139,7 @@ export function CashChip({ density }: { density: MetricDensity }) {
       label={t('hud.cash')}
       mark={danger ? 'danger' : null}
       title={title}
-      value={
-        <span className={cx('relative inline-block', danger && 'text-negative-ink')}>
-          {ledgerMoney(shown)}
-          {drops.map((d) => (
-            <span
-              key={d.id}
-              aria-hidden="true"
-              className={cx(
-                'pointer-events-none absolute left-full top-0 ml-1 whitespace-nowrap',
-                d.big ? cx('animate-payday-drop font-bold text-ink', mobile ? 'text-[11px]' : 'text-[13px]') : cx('animate-cash-rise font-semibold', mobile ? 'text-[10px]' : 'text-[11px]'),
-                !d.big && (d.up ? 'text-positive-ink' : 'text-ink-2'),
-              )}
-            >
-              {d.text}
-            </span>
-          ))}
-        </span>
-      }
+      value={<span className={danger ? 'text-negative-ink' : undefined}>{ledgerMoney(shown)}</span>}
       sub={<span className={f.netDay > 0 ? 'text-positive-ink' : undefined}>{t(mobile ? 'top.netPerDayShort' : 'top.netPerDay', { v: net })}</span>}
     />
   )
@@ -242,7 +204,7 @@ export function MoraleChip({ density }: { density: MetricDensity }) {
       title={title}
       value={<span className={danger ? 'text-negative-ink' : undefined}>{v}</span>}
     >
-      <div className={cx('h-0.5 overflow-hidden rounded-full', density === 'mobile' ? 'w-full max-w-14' : 'w-14', density === 'full' ? 'mt-0.5' : 'mt-px')} style={{ background: soft(WIDGET_COLOR.morale, 18) }} aria-hidden="true">
+      <div className={cx('h-0.5 overflow-hidden rounded-full', density === 'mobile' ? 'w-full min-w-6 max-w-14' : 'w-14', density === 'full' ? 'mt-px' : 'mt-[5px]')} style={{ background: soft(WIDGET_COLOR.morale, 18) }} aria-hidden="true">
         <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.max(0, Math.min(100, morale))}%`, background: danger ? DANGER : WIDGET_COLOR.morale }} />
       </div>
     </BarChip>

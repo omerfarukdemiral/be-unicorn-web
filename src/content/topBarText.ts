@@ -7,7 +7,7 @@ export const TOP_BAR_TEXT: Record<string, string> = {
   'top.lastStage': 'Son aşama',
   // Round: one small chip in the stage section (the only home of the round clock).
   'top.round': 'Tur {w}/{t} hf',
-  'top.roundShort': '{v}',
+  'top.roundShort': '{w}/{t}',
   'top.roundTitle': 'Tur sürüyor: {v} hafta kaldı. Büyüme › Tur’da takip et.',
   'top.roundStart': 'Tur başlat',
   'top.roundStartShort': 'Tur',
@@ -19,7 +19,6 @@ export const TOP_BAR_TEXT: Record<string, string> = {
   'top.cashTitleNoOwed': 'Kullanılabilir para {v}. Her gün net akış kadar değişir.',
   'top.debt': 'Borç: {v}',
   'top.bankrupt': 'Maaş ödenemedi: iflasa {v} gün',
-  'top.paid': '−{v} maaş günü',
   // Runway: months the usable money lasts at this burn.
   'top.runway': '{v} ay',
   'top.runwayInfinite': '∞',

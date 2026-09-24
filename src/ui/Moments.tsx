@@ -73,13 +73,21 @@ const neg = (v: number) => (v > 0.5 ? `−${money(v)}` : money(0))
 const sgn = (v: number) => (v >= 0 ? `+${money(v)}` : `−${money(-v)}`)
 const months = (r: number | null) => (r === null ? t('receipt.infinite') : t('unit.months', { v: fixed(r, 1) }))
 
+/** The receipt's runway part, or null when it says nothing ("∞ → ∞", "4.2 ay → 4.2 ay", a first month at ∞). */
+export function receiptRunway(r: Pick<MonthReceipt, 'month' | 'runwayBefore' | 'runwayAfter'>): string | null {
+  const a = r.runwayBefore === null ? null : fixed(r.runwayBefore, 1)
+  const b = r.runwayAfter === null ? null : fixed(r.runwayAfter, 1)
+  if (r.month > 0 && a !== b) return t('receipt.runwayMove', { a: months(r.runwayBefore), b: months(r.runwayAfter) })
+  return b === null ? null : months(r.runwayAfter)
+}
+
 /** Plain one-line text of a moment (strip title attribute, screen readers). */
 export function momentText(m: Moment): string {
   switch (m.kind) {
     case 'receipt': {
       const r = m.receipt
-      const runway = r.month > 0 ? t('receipt.runwayMove', { a: months(r.runwayBefore), b: months(r.runwayAfter) }) : months(r.runwayAfter)
-      return t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: runway })
+      const runway = receiptRunway(r)
+      return t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: runway ? ` · ${t('receipt.runway')} ${runway}` : '' })
     }
     case 'release':
       return t('strip.release', { project: m.project, level: releaseName(m.level, m.update), u: Math.round(m.users), m: money(m.mrr) })
@@ -101,13 +109,15 @@ export function MomentLine({ m }: { m: Moment }) {
   switch (m.kind) {
     case 'receipt': {
       const r = m.receipt
-      const runway = r.month > 0 ? t('receipt.runwayMove', { a: months(r.runwayBefore), b: months(r.runwayAfter) }) : months(r.runwayAfter)
+      const runway = receiptRunway(r)
+      // Net first: on a narrow strip the truncation eats the tail (ödenen, runway), never the month's result.
       return (
         <span className="tabular">
           <span className={main}>{t('receipt.title', { m: r.month + 1 })}</span>
           <span className={sub}>
             {' · '}
-            {t('strip.paid')} {neg(r.paid)} · {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-ink')}>{sgn(r.net)}</span> · {t('receipt.runway')} {runway}
+            {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-ink')}>{sgn(r.net)}</span> · {t('strip.paid')} {neg(r.paid)}
+            {runway && ` · ${t('receipt.runway')} ${runway}`}
           </span>
         </span>
       )

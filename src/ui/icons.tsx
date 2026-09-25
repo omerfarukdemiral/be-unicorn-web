@@ -69,6 +69,10 @@ const PATHS = {
   camera: <><path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5H8l1.5-2h5L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" /><circle cx="12" cy="13" r="3.5" /></>,
   pin: <><path d="M9 3.5h6M10 3.5v5.2L6.5 13h11L14 8.7V3.5" /><path d="M12 13v7.5" /></>,
   building: <><path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5M15 9.5h3.5a1 1 0 0 1 1 1v10M3 20.5h18" /><path d="M8 8h1M11 8h1M8 11.5h1M11 11.5h1M8 15h1M11 15h1" /></>,
+  trophy: <><path d="M8 4h8v5a4 4 0 0 1-8 0Z" /><path d="M8 5.5H4.5v1.5A3 3 0 0 0 8 10M16 5.5h3.5v1.5A3 3 0 0 1 16 10M12 13v3.5M8.5 20h7M9.5 20l.5-3.5h4l.5 3.5" /></>,
+  mail: <><rect x="3.5" y="5.5" width="17" height="13" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+  logout: <><path d="M14 4.5H6.5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1H14" /><path d="M10 12h10M16.5 8.5 20 12l-3.5 3.5" /></>,
+  cloud: <path d="M7 18.5a4 4 0 0 1-.6-7.95A5.5 5.5 0 0 1 17 9a4.75 4.75 0 0 1 .5 9.5Z" />,
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS

@@ -531,6 +531,12 @@ const BASE_TEXT: Record<string, string> = {
   'start.xpBonus': 'Başlangıç kasası +%{v}',
   'start.noXp': 'İlk girişim. Batarsan XP kazanırsın.',
   'start.hint': 'Masaüstünde en iyi deneyim. Dokunmatikte de oynanır.',
+  'start.companyLabel': 'Startup adı',
+  'start.companyPlaceholder': 'Örn. {v}',
+  'start.companyRandom': 'Rastgele isim',
+  'start.companyHint': 'Garajın kapısına bu yazılacak.',
+  'start.go': 'Garajı aç',
+  'start.back': 'Vazgeç',
 }
 
 function prefixed<K extends string>(prefix: string, table: Record<K, string | { name: string }>): Record<string, string> {

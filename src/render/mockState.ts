@@ -129,7 +129,7 @@ export function createMockState(stage: StageIndex = 1, seed = 7): GameState {
   const learned: ConceptId[] = ['runway', 'burn', 'dont-scale', 'pmf', 'focus', 'dilution', 'safe', 'churn'].slice(0, 2 + stage * 2) as ConceptId[]
 
   return {
-    meta: { saveVersion: SAVE_VERSION, founderXp: 0, runIndex: 0 },
+    meta: { saveVersion: SAVE_VERSION, founderXp: 0, runIndex: 0 , companyName: 'Helio Studio' },
     rng: { seed, state: seed },
     time: { day: 42, month: 1, speed: 1 },
     stage,

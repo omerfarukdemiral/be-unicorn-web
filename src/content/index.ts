@@ -13,10 +13,11 @@ import { LOOP_TEXT } from './loopText'
 import { TOP_BAR_TEXT } from './topBarText'
 import { BOTTOM_BAR_TEXT } from './bottomBarText'
 import { METRICS_TEXT } from './metricsText'
+import { ONLINE_TEXT } from './onlineText'
 import { GOALS, goalsOfStage } from './goals'
 
 /** strings.ts + feature tables (time flow, core loop). One flat key → text dictionary. */
-const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT }
+const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT }
 
 export * from './types'
 export { STAGES, CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }
@@ -38,6 +39,8 @@ export {
   TOOL_TEXT,
 } from './strings'
 export * from './format'
+export { suggestCompanyName, checkCompanyName, COMPANY_NAME_ISSUE_TEXT, type CompanyNameCheck, type CompanyNameIssue } from './companyName'
+export { ROADMAP_STEPS, type RoadmapStep } from './roadmap'
 
 export const CONTENT: ContentBundle = {
   stages: STAGES,

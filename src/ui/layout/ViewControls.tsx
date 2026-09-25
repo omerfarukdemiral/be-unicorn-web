@@ -5,6 +5,8 @@ import type { ZoomLevel } from '../../store/types'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { IconButton } from '../primitives'
+import { useCloud } from '../../net/cloud'
+import { toggleLeaderboard } from '../shortcuts'
 
 /** Gear → settings in the single panel (again closes it). */
 export function toggleSettings() {
@@ -38,7 +40,29 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
           TR
         </button>
       )}
+      <LeaderboardButton size={size} />
       <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={size} active={settingsOpen} />
     </div>
+  )
+}
+
+/** Trophy → Liderlik (L). Only when the backend answers; a signed-in player sees their rank as a small badge. */
+function LeaderboardButton({ size }: { size: number }) {
+  const online = useCloud((s) => s.backend === 'online')
+  const rank = useCloud((s) => (s.account ? s.rank : null))
+  const open = useGameStore((s) => s.ui.panel?.kind === 'leaderboard')
+  if (!online) return null
+  return (
+    <span className="relative inline-flex shrink-0">
+      <IconButton icon="trophy" label={t('lb.open')} onClick={toggleLeaderboard} size={size} active={open} />
+      {rank !== null && (
+        <span
+          aria-hidden="true"
+          className="tabular pointer-events-none absolute -right-1 -top-1 rounded-full border border-surface bg-ink px-1 text-[9px] font-bold leading-[14px] text-on-ink"
+        >
+          {t('lb.rankBadge', { v: rank })}
+        </span>
+      )}
+    </span>
   )
 }

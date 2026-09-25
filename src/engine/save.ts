@@ -1,5 +1,5 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { SAVE_VERSION, type GameState } from './types'
+import { DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState } from './types'
 
 export interface SaveFile {
   version: number
@@ -16,6 +16,12 @@ const MIGRATIONS: Record<number, Migration> = {
   1: (st) => {
     const finance = st.finance as { negativeCashDays?: number; payrollMissed?: boolean } | undefined
     if (finance && (finance.negativeCashDays ?? 0) > 0) finance.payrollMissed = true
+    return st
+  },
+  // v2 → v3 (online): the run carries a company name. Older runs get the default one.
+  2: (st) => {
+    const meta = st.meta as { companyName?: unknown } | undefined
+    if (meta && (typeof meta.companyName !== 'string' || !meta.companyName.trim())) meta.companyName = DEFAULT_COMPANY_NAME
     return st
   },
 }

@@ -1,9 +1,20 @@
-// Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/G/K panel tabs (G = Metrikler, 'gösterge') (again = close), Esc closes, +/- zoom.
+// Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/G/K panel tabs (G = Metrikler, 'gösterge') (again = close),
+// L Liderlik (again = close), Esc closes, +/- zoom.
 import { useEffect, useRef } from 'react'
 import type { GameSpeed } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import type { DockTab, ZoomLevel } from '../store/types'
 import { isTypingTarget } from './hooks'
+
+/** Liderlik panel (not a dock tab; checked against the dock keys in shortcuts.test.ts). */
+export const LEADERBOARD_KEY = 'l'
+
+/** Trophy / L: opens Liderlik, again closes it. */
+export function toggleLeaderboard(): void {
+  const { ui, openPanel, closePanel } = useGameStore.getState()
+  if (ui.panel?.kind === 'leaderboard') closePanel()
+  else openPanel({ kind: 'leaderboard' }, { root: true })
+}
 
 const SPEED_KEYS: Record<string, GameSpeed> = { '1': 1, '2': 2, '3': 4 }
 
@@ -43,6 +54,10 @@ export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
       const tab = tabKeys[key]
       if (tab) {
         st.togglePanel(tab)
+        return
+      }
+      if (key === LEADERBOARD_KEY) {
+        toggleLeaderboard()
         return
       }
       if (key === '+' || key === '=') st.setZoom(Math.min(2, st.ui.zoom + 1) as ZoomLevel)

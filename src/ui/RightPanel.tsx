@@ -23,6 +23,8 @@ import { JournalPanel } from './panels/JournalPanel'
 import { MetricsPanel } from './panels/MetricsPanel'
 import { DecisionPanel } from './panels/DecisionPanel'
 import { SettingsPanel } from './panels/SettingsPanel'
+import { RoadmapPanel } from './panels/RoadmapPanel'
+import { LeaderboardPanel } from './panels/LeaderboardPanel'
 
 function panelMeta(p: Panel): { icon: IconName; title: string } {
   switch (p.kind) {
@@ -34,6 +36,10 @@ function panelMeta(p: Panel): { icon: IconName; title: string } {
       return { icon: 'search', title: '' }
     case 'metrics':
       return { icon: 'bars', title: t('dock.metrics') }
+    case 'roadmap':
+      return { icon: 'unicorn', title: t('roadmap.title') }
+    case 'leaderboard':
+      return { icon: 'trophy', title: t('lb.title') }
     default:
       return { icon: DOCK_TABS.find((d) => d.id === p.kind)?.icon ?? 'bag', title: t(`dock.${p.kind}`) }
   }
@@ -66,6 +72,10 @@ function PanelBody({ panel }: { panel: Panel }) {
       return <DecisionPanel cardId={panel.cardId} answered={panel.answered} />
     case 'settings':
       return <SettingsPanel />
+    case 'roadmap':
+      return <RoadmapPanel />
+    case 'leaderboard':
+      return <LeaderboardPanel />
   }
 }
 

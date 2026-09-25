@@ -9,3 +9,9 @@ sim/out
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# local env / Vercel link
+.env
+.env.*
+!.env.example
+.vercel

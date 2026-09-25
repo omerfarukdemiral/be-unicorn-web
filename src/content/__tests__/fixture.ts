@@ -5,7 +5,7 @@ const perDept = (v: number): Record<Dept, number> => ({ eng: v, product: v, mark
 
 export function makeState(patch: (s: GameState) => void = () => {}): GameState {
   const s: GameState = {
-    meta: { saveVersion: 1, founderXp: 0, runIndex: 0 },
+    meta: { saveVersion: 1, founderXp: 0, runIndex: 0 , companyName: 'Helio Studio' },
     rng: { seed: 1, state: 1 },
     time: { day: 0, month: 0, speed: 1 },
     stage: 0,

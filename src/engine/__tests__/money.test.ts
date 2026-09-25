@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { createEngine } from '../index'
 import { migrate } from '../save'
+import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
 describe('garage money (S1-b)', () => {
@@ -88,8 +89,27 @@ describe('save v1 → v2', () => {
     delete (v1.finance as { payrollMissed?: boolean }).payrollMissed
     const out = migrate({ version: 1, state: v1 })!
     expect(out.finance.payrollMissed).toBe(true)
-    expect(out.meta.saveVersion).toBe(2)
+    expect(out.meta.saveVersion).toBe(SAVE_VERSION)
     const calm = migrate({ version: 1, state: structuredClone(s) })!
     expect(calm.finance.payrollMissed).toBeFalsy()
+  })
+})
+
+describe('company name (save v3)', () => {
+  it('createGame trims, collapses and caps the name; blank falls back to the default', () => {
+    const api = createEngine(fakeContent())
+    expect(api.createGame({ seed: 1, companyName: '  Helio   Studio ' }).meta.companyName).toBe('Helio Studio')
+    expect(api.createGame({ seed: 1, companyName: ' ' }).meta.companyName).toBe(DEFAULT_COMPANY_NAME)
+    expect(api.createGame({ seed: 1 }).meta.companyName).toBe(DEFAULT_COMPANY_NAME)
+    expect(Array.from(api.createGame({ seed: 1, companyName: 'x'.repeat(50) }).meta.companyName)).toHaveLength(COMPANY_NAME_MAX)
+  })
+
+  it('a v2 save gets the default company name', () => {
+    const api = createEngine(fakeContent())
+    const v2 = structuredClone(api.createGame({ seed: 1 })) as unknown as { meta: Record<string, unknown> }
+    delete v2.meta.companyName
+    const out = migrate({ version: 2, state: v2 })!
+    expect(out.meta.companyName).toBe(DEFAULT_COMPANY_NAME)
+    expect(out.meta.saveVersion).toBe(SAVE_VERSION)
   })
 })

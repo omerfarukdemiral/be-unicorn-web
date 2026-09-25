@@ -229,6 +229,7 @@ function freshState(opts?: Partial<NewGameOptions>): GameState {
     seed: opts?.seed ?? randomSeed(),
     founderXp: opts?.founderXp ?? profile.founderXp,
     runIndex: opts?.runIndex ?? profile.runIndex,
+    companyName: opts?.companyName,
   }
   return createGame(full)
 }

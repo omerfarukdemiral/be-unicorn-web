@@ -5,7 +5,7 @@ import { startCash } from './economy'
 import { buildOffice } from './office'
 import { fillCandidates } from './people'
 import { Rng, createRngState } from './rng'
-import { DEPTS, INITIAL_WIDGETS, SAVE_VERSION, type Dept, type GameState, type NewGameOptions } from './types'
+import { COMPANY_NAME_MAX, COMPANY_NAME_MIN, DEFAULT_COMPANY_NAME, DEPTS, INITIAL_WIDGETS, SAVE_VERSION, type Dept, type GameState, type NewGameOptions } from './types'
 import { stageBaseline, type EngineContent } from './util'
 
 function perDept(v: number): Record<Dept, number> {
@@ -14,10 +14,16 @@ function perDept(v: number): Record<Dept, number> {
   return o
 }
 
+/** Normalizes a company name: trims, collapses whitespace, caps the length; too short → the default. */
+export function cleanCompanyName(raw: string | undefined): string {
+  const v = Array.from((raw ?? '').replace(/\s+/g, ' ').trim()).slice(0, COMPANY_NAME_MAX).join('').trim()
+  return Array.from(v).length >= COMPANY_NAME_MIN ? v : DEFAULT_COMPANY_NAME
+}
+
 export function createGame(opts: NewGameOptions, content: EngineContent): GameState {
   const xp = Math.max(0, opts.founderXp ?? 0)
   const s: GameState = {
-    meta: { saveVersion: SAVE_VERSION, founderXp: xp, runIndex: opts.runIndex ?? 0 },
+    meta: { saveVersion: SAVE_VERSION, founderXp: xp, runIndex: opts.runIndex ?? 0, companyName: cleanCompanyName(opts.companyName) },
     rng: createRngState(opts.seed),
     time: { day: 0, month: 0, speed: 0 }, // starts paused: the player presses Başlat (sim steps directly)
     stage: 0,

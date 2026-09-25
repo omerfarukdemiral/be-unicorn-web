@@ -8,6 +8,21 @@ export const SAVE_KEY = 'be-unicorn:save'
 export const PROFILE_KEY = 'be-unicorn:profile'
 /** UI profile (docs/LAYOUT.md §5.2): top-bar pins survive runs and reloads; the game save never holds UI state. */
 export const UI_KEY = 'be-unicorn:ui'
+/** When the local save was last written and for which account (cloud sync picks the newer of local and cloud). */
+export const SAVE_META_KEY = 'be-unicorn:save-meta'
+
+export interface SaveMeta {
+  /** Date.now() of the last local write. */
+  at: number
+  /** E-mail of the signed-in account that wrote it; null = offline play. */
+  owner: string | null
+}
+
+/** Account the next local writes belong to (set by the cloud layer after sign-in). */
+let saveOwner: string | null = null
+export function setSaveOwner(email: string | null): void {
+  saveOwner = email
+}
 
 export interface UiSave {
   pinnedMetrics: HudWidget[]
@@ -31,7 +46,9 @@ function storage(): Storage | null {
 
 export function writeSave(state: GameState): boolean {
   try {
-    storage()?.setItem(SAVE_KEY, serialize(state))
+    const st = storage()
+    st?.setItem(SAVE_KEY, serialize(state))
+    st?.setItem(SAVE_META_KEY, JSON.stringify({ at: Date.now(), owner: saveOwner } satisfies SaveMeta))
     return true
   } catch {
     return false
@@ -47,9 +64,21 @@ export function readSave(): GameState | null {
   }
 }
 
+export function readSaveMeta(): SaveMeta | null {
+  try {
+    const raw = storage()?.getItem(SAVE_META_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as Partial<SaveMeta>
+    return { at: typeof p.at === 'number' ? p.at : 0, owner: typeof p.owner === 'string' ? p.owner : null }
+  } catch {
+    return null
+  }
+}
+
 export function clearSave(): void {
   try {
     storage()?.removeItem(SAVE_KEY)
+    storage()?.removeItem(SAVE_META_KEY)
   } catch {
     /* ignore */
   }

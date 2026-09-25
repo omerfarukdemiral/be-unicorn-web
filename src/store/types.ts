@@ -30,6 +30,10 @@ export type Panel =
   /** `answered`: option picked, the panel shows the reflection. */
   | { kind: 'decision'; cardId: DecisionCardId; answered?: number }
   | { kind: 'settings' }
+  /** Unicorn yolu: the 7 stages (office, target, round, what opens). Opened from the top-bar stepper. */
+  | { kind: 'roadmap' }
+  /** Liderlik: the live leaderboard (L, top-bar trophy). Polls every 10 s while open. */
+  | { kind: 'leaderboard' }
 
 export type PanelKind = Panel['kind']
 

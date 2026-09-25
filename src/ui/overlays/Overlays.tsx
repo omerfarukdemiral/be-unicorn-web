@@ -83,7 +83,7 @@ function restart() {
   const { state, newGame } = useGameStore.getState()
   const xp = state.meta.founderXp + (state.gameOver?.xpEarned ?? 0)
   useModalQueue.getState().clear()
-  newGame({ seed: Math.floor(Math.random() * 2 ** 31), founderXp: xp, runIndex: state.meta.runIndex + 1 })
+  newGame({ seed: Math.floor(Math.random() * 2 ** 31), founderXp: xp, runIndex: state.meta.runIndex + 1, companyName: state.meta.companyName })
 }
 
 export function PostMortemOverlay() {

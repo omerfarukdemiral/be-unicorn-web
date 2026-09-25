@@ -46,7 +46,7 @@ export function createMockState(): GameState {
   const decision = DECISIONS[0]
   const line = OFFICE_LINES[0]
   return {
-    meta: { saveVersion: SAVE_VERSION, founderXp: 1.5, runIndex: 1 },
+    meta: { saveVersion: SAVE_VERSION, founderXp: 1.5, runIndex: 1 , companyName: 'Helio Studio' },
     rng: { seed: 7, state: 7 },
     time: { day: 74.5, month: 2, speed: 1 },
     stage: 1,

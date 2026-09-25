@@ -1,0 +1,83 @@
+// Keyed Turkish UI text for the online layer: sign-in (e-posta + PIN), cloud save, live leaderboard (Liderlik).
+// Merged into UI_TEXT by the content barrel (index.ts); keys never collide with the other tables.
+// Short, in the game's voice: one sentence to read at a time.
+export const ONLINE_TEXT: Record<string, string> = {
+  // --- sign-in card (start screen) ---
+  'login.title': 'Masana otur',
+  'login.sub': 'E-posta ve 4 haneli PIN. Kaldığın yerden devam edersin.',
+  'login.subNew': 'Yeni şirket: bir PIN seç, adını koy, garajı aç.',
+  'login.email': 'E-posta',
+  'login.emailPlaceholder': 'sen@startup.io',
+  'login.pin': 'PIN',
+  'login.pinNew': 'PIN seç (4 rakam)',
+  'login.pinAgain': 'PIN tekrar',
+  'login.pinMismatch': 'İki PIN aynı değil.',
+  'login.pinShort': 'PIN tam 4 rakam.',
+  'login.emailBad': 'Bu e-posta pek e-postaya benzemiyor.',
+  'login.go': 'Giriş yap',
+  'login.create': 'Şirketi kur',
+  'login.switchNew': 'İlk kez mi geldin? Şirket kur',
+  'login.switchBack': 'Zaten şirketim var',
+  'login.unknown': 'Bu e-postayla şirket yok. Hadi kuralım.',
+  'login.maskNote': 'Liderlikte {v} olarak görünürsün. PIN’in yedeği yok, unutma.',
+  'login.offline': 'Çevrimdışı oyna',
+  'login.offlineNote': 'Kayıt sadece bu cihazda kalır, liderlikte görünmezsin.',
+  'login.busy': 'Bir saniye…',
+  'login.checking': 'Sunucuya bakıyoruz…',
+
+  // --- start screen with an account ---
+  'start.signedAs': '{v}',
+  'start.signOut': 'Çıkış',
+  'start.offlineBadge': 'Çevrimdışı',
+  'start.offlineHint': 'Bulut kapalı. Kayıt bu cihazda.',
+  'start.cloudLoaded': 'Buluttaki kayıt geldi.',
+
+  // --- top bar trophy ---
+  'lb.open': 'Liderlik (L)',
+  'lb.rankBadge': '#{v}',
+
+  // --- Liderlik panel ---
+  'lb.title': 'Liderlik',
+  'lb.you': 'Sen',
+  'lb.yourRank': '#{rank} / {total}',
+  'lb.first': 'Zirvedesin. Aşağıdakiler seni izliyor.',
+  'lb.gapStage': '#{rank} {name}: {n} aşama önde.',
+  'lb.gapValuation': '#{rank} {name}: {v} değerleme farkı.',
+  'lb.gapDays': '#{rank} {name}: {n} gün daha hızlı.',
+  'lb.gapTie': '#{rank} {name} ile başa baş.',
+  'lb.notOnBoard': 'Henüz tabloda değilsin. İlk maaş gününde girersin.',
+  'lb.signedOut': 'Çevrimdışı oynuyorsun. Tabloya girmek için giriş yap.',
+  'lb.offline': 'Sunucuya ulaşılamıyor. Tablo birazdan döner.',
+  'lb.empty': 'Tablo boş. İlk unicorn sen ol.',
+  'lb.updated': '{v} sn önce güncellendi',
+  'lb.updatedNow': 'Az önce güncellendi',
+  'lb.live': 'Canlı',
+  'lb.cash': 'Kasa {v}',
+  'lb.rule': 'Sıra: önce aşama, sonra değerleme. Unicorn’lar arasında en hızlı üstte.',
+  'lb.status.bankrupt': 'Battı',
+  'lb.status.unicorn': 'Unicorn',
+  'lb.submitError': 'Son skor tabloya girmedi: {v}',
+  'lb.more': '…',
+
+  // --- settings: account + cloud ---
+  'account.title': 'Hesap',
+  'account.email': 'E-posta',
+  'account.cloudOk': 'Bulutta · {v}',
+  'account.cloudNever': 'Henüz buluta yazılmadı',
+  'account.cloudSaving': 'Buluta yazılıyor…',
+  'account.cloudOffline': 'Çevrimdışı. İnternet gelince yazılacak.',
+  'account.cloudSignedOut': 'Oturum düştü. Çıkış yapıp tekrar gir.',
+  'account.syncNow': 'Şimdi buluta yaz',
+  'account.signOut': 'Çıkış yap',
+  'account.signOutConfirm': 'Çıkılsın mı? Onayla',
+  'account.offline': 'Çevrimdışı oynuyorsun. Kayıt bu cihazda.',
+  'account.signIn': 'Giriş yap',
+  'account.conflict': 'Başka cihazda daha ileri bir kayıt var ({stage} · {day}. gün).',
+  'account.takeCloud': 'Buluttakini yükle',
+  'account.keepLocal': 'Bu cihazdakini tut',
+  'account.justNow': 'az önce',
+  'account.agoS': '{v} sn önce',
+  'account.agoM': '{v} dk önce',
+
+  'shortcut.leaderboard': 'Liderlik',
+}

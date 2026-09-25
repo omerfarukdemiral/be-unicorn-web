@@ -1,4 +1,4 @@
-// Settings inside the single panel: language, sound, bubbles, zoom, save/load/new game, shortcuts.
+// Settings inside the single panel: account (e-posta, bulut kaydı, çıkış), language, sound, bubbles, zoom, save/load/new game, shortcuts.
 import { useState, type ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import type { ZoomLevel } from '../../store/types'
@@ -7,11 +7,13 @@ import { t } from '../i18n'
 import { Button, cx } from '../primitives'
 import { usePrefs } from '../hooks'
 import { useModalQueue } from '../modalQueue'
+import { AccountSection } from './AccountSection'
 
 const SHORTCUTS: [string, string][] = [
   ['Space', 'shortcut.pause'],
   ['1 / 2 / 3', 'shortcut.speed'],
   ['M · E · P · B · G · K', 'shortcut.tabs'],
+  ['L', 'shortcut.leaderboard'],
   ['Esc', 'shortcut.escape'],
   ['+ / −', 'shortcut.zoom'],
 ]
@@ -32,6 +34,7 @@ export function SettingsPanel() {
 
   return (
       <div className="flex flex-col gap-5">
+        <AccountSection />
 
         <SettingRow icon="globe" label={t('settings.language')}>
           <div className="flex shrink-0 rounded-control bg-surface-2 p-0.5 text-xs font-semibold">
@@ -90,7 +93,7 @@ export function SettingsPanel() {
               if (!confirmNew) return setConfirmNew(true)
               const { state, newGame } = useGameStore.getState()
               useModalQueue.getState().clear()
-              newGame({ seed: Math.floor(Math.random() * 2 ** 31), founderXp: state.meta.founderXp, runIndex: state.meta.runIndex + 1 })
+              newGame({ seed: Math.floor(Math.random() * 2 ** 31), founderXp: state.meta.founderXp, runIndex: state.meta.runIndex + 1, companyName: state.meta.companyName })
             }}
           >
             {confirmNew ? t('settings.newGameConfirm') : t('settings.newGame')}

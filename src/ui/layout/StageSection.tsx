@@ -9,6 +9,7 @@ import { money } from '../format'
 import { cx } from '../primitives'
 import { DayClock } from '../time'
 import { valuationLine } from '../loopUi'
+import { openRoadmap, roadmapTitle, RoadmapStepper } from './RoadmapStepper'
 
 /** Round chip / button → Büyüme panel scrolled to the round block (again closes it, like the dock tabs). */
 export function openRound() {
@@ -31,6 +32,7 @@ function useStage() {
       weeksLeft: st.state.round?.weeksLeft ?? 0,
       weeksTotal: st.state.round?.weeksTotal ?? 0,
       gameOver: !!st.state.gameOver,
+      company: st.state.meta.companyName,
     })),
   )
 }
@@ -42,16 +44,10 @@ function progressTitle(s: ReturnType<typeof useStage>): string {
   return s.parts ? `${head}\n${valuationLine(s.parts)}` : head
 }
 
-/** Thin brand progress line (phones: 2px under row 1, no figures). */
+/** Thin segmented Unicorn-yolu line (phones: 2px under row 1, no figures): one segment per stage step. */
 export function StageProgressLine({ className }: { className?: string }) {
   const s = useStage()
-  if (!STAGES[s.stage + 1]) return null
-  const w = Math.max(0, Math.min(1, s.progress)) * 100
-  return (
-    <div className={cx('h-0.5 overflow-hidden rounded-full bg-brand/15', className)} title={progressTitle(s)} aria-hidden="true">
-      <div className="h-full rounded-full bg-brand transition-[width] duration-700" style={{ width: `${w}%` }} />
-    </div>
-  )
+  return <RoadmapStepper size="line" stage={s.stage} progress={STAGES[s.stage + 1] ? s.progress : 1} className={className} />
 }
 
 function RoundSlot({ variant }: { variant: StageVariant }) {
@@ -108,13 +104,25 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
   const s = useStage()
   const name = STAGES[s.stage]?.name ?? '—'
   const next = STAGES[s.stage + 1]
-  const pctW = Math.max(0, Math.min(1, s.progress)) * 100
 
   const nameEl = (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px] font-semibold tracking-wide text-ink">
+    <button
+      type="button"
+      onClick={openRoadmap}
+      title={roadmapTitle(s.stage)}
+      className={cx(
+        'inline-flex min-w-0 items-center gap-1.5 rounded-md text-[13px] font-semibold tracking-wide text-ink transition-colors hover:text-brand-ink',
+        variant === 'mobile' && 'h-11',
+      )}
+    >
       <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-brand" />
-      <span className="truncate">{name}</span>
-    </span>
+      <span className="shrink-0">{name}</span>
+      {variant !== 'mobile' && s.company && (
+        <span title={t('top.companyTitle', { v: s.company })} className="font-text min-w-0 truncate text-[11px] font-medium tracking-normal text-ink-2">
+          {s.company}
+        </span>
+      )}
+    </button>
   )
 
   if (variant === 'mobile') {
@@ -129,23 +137,20 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
 
   return (
     <div className={cx('flex shrink-0 items-center gap-2', variant === 'wide' ? 'min-w-64' : 'min-w-[216px]')}>
-      <div className="min-w-0 flex-1">
+      {/* wide: the stepper keeps room (≥ 288px column) next to the figures even with the round chip beside it. */}
+      <div className={cx('flex-1', variant === 'wide' ? 'min-w-72' : 'min-w-0')}>
         <div className="flex h-5 min-w-0 items-center gap-2">
           {nameEl}
           <DayClock />
         </div>
-        {next ? (
-          <div className="mt-1 flex items-center gap-2" title={progressTitle(s)}>
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-brand/15">
-              <div className="h-full rounded-full bg-brand transition-[width] duration-700" style={{ width: `${pctW}%` }} />
-            </div>
-            {variant === 'wide' && (
-              <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">{t('top.progress', { v: money(s.valuation), target: money(next.targetValuation ?? 0) })}</span>
-            )}
-          </div>
-        ) : (
-          <div className="mt-1 text-[11px] font-medium text-ink-2">{t('top.lastStage')}</div>
-        )}
+        <div className="mt-1 flex items-center gap-2" title={progressTitle(s)}>
+          <RoadmapStepper stage={s.stage} progress={next ? s.progress : 1} />
+          {variant === 'wide' && (
+            <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
+              {next ? t('top.progress', { v: money(s.valuation), target: money(next.targetValuation ?? 0) }) : t('top.lastStage')}
+            </span>
+          )}
+        </div>
       </div>
       <RoundSlot variant={variant} />
     </div>

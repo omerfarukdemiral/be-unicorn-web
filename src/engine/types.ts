@@ -13,7 +13,12 @@ export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
 export const FIXED_STEP_DAYS = 0.25
 /** Bump when GameState shape changes incompatibly; save.ts migrates. */
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
+
+/** Company name when none was given (and for pre-v3 saves). */
+export const DEFAULT_COMPANY_NAME = 'İsimsiz Startup'
+export const COMPANY_NAME_MIN = 2
+export const COMPANY_NAME_MAX = 32
 
 // ---------------------------------------------------------------------------
 // Enums (string unions + const lists for iteration)
@@ -853,6 +858,8 @@ export interface MetaState {
   /** XP carried into this run (start cash bonus = min(0.4, 0.1 × xp)). */
   founderXp: number
   runIndex: number
+  /** The player's startup name (start screen; shown in the top bar and on the leaderboard). */
+  companyName: string
 }
 
 export interface GameState {
@@ -950,6 +957,8 @@ export interface NewGameOptions {
   seed: number
   founderXp?: number
   runIndex?: number
+  /** Trimmed, collapsed and capped by the engine; blank → DEFAULT_COMPANY_NAME. */
+  companyName?: string
 }
 
 export type ActionErrorCode =

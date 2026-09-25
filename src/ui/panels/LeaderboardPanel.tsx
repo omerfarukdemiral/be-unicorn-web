@@ -70,7 +70,7 @@ export function LeaderboardPanel() {
           {t('lb.live')}
         </span>
         <span className="tabular">{ago === null ? '' : ago < 3 ? t('lb.updatedNow') : t('lb.updated', { v: ago })}</span>
-        {c.board && <span className="tabular ml-auto">{c.board.total}</span>}
+        {c.board && <span className="tabular ml-auto">{t('lb.total', { v: c.board.total })}</span>}
       </div>
       {c.boardError && <p className="font-text text-[11px] text-negative-ink">{c.boardError}</p>}
 
@@ -79,7 +79,14 @@ export function LeaderboardPanel() {
       ) : c.board.rows.length === 0 ? (
         <Empty icon="unicorn" text={t('lb.empty')} />
       ) : (
-        <BoardRows board={c.board} />
+        <>
+          {/* Which number is which: the big one is the valuation, cash is the small "Kasa" on the second line. */}
+          <div className="-mb-1.5 flex items-center justify-between px-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-3">
+            <span className="pl-9">{t('lb.colStartup')}</span>
+            <span>{t('lb.colValuation')}</span>
+          </div>
+          <BoardRows board={c.board} />
+        </>
       )}
       <p className="font-text text-[11px] leading-snug text-ink-3">{t('lb.rule')}</p>
     </div>
@@ -171,7 +178,9 @@ function Row({ row }: { row: LeaderboardRow }) {
           {unicorn && <Icon name="unicorn" size={11} />}
           {stage?.name ?? '—'}
         </Pill>
-        <span className="tabular w-16 shrink-0 text-right text-sm font-bold text-ink">{money(row.valuation)}</span>
+        <span className="tabular w-16 shrink-0 text-right text-sm font-bold text-ink" title={t('lb.valuationTitle', { v: money(row.valuation) })}>
+          {money(row.valuation)}
+        </span>
       </div>
       {/* Who (masked e-mail) · cash on the right; then how long and how big: "7 ay (210 gün) · 18 kişilik ekip". */}
       <div className="font-text mt-1 flex min-w-0 items-center gap-2 pl-9 text-[11px] text-ink-2">

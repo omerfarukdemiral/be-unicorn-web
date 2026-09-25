@@ -1,19 +1,29 @@
 // Live leaderboard. One sorted set `lb` (member = e-mail hash) ordered by stage first, then valuation; among
 // Unicorns fewer game days wins. Visible fields live in `lb:row:{h}`; the per-run plausibility track (what the
-// last accepted submission said, and when) lives in `lb:track:{h}` so a kept Unicorn row never blocks a new run.
+// last accepted submission said, and when the server first saw the run) lives in `lb:track:{h}` so a kept Unicorn
+// row never blocks a new run.
+//
+// Plausibility (no server-side replay yet, see docs/BACKEND.md): a stage needs its earliest believable game day
+// (MIN_DAY_FOR_STAGE, measured on the real engine); a run must first appear in Garaj or Pre-seed; game days may only
+// grow as fast as the fastest speed allows, both since the previous submission and since the run was first seen.
 import type { LeaderboardGap, LeaderboardOk, LeaderboardRow, LeaderboardSubmitOk, RunStatus } from '../../src/net/contract.js'
 import { ApiError, now } from './http.js'
 import type { Kv } from './kv.js'
-import { keys, maskEmail, sanitizeCompanyName, writeUser, type AuthedUser } from './auth.js'
-import { MAX_SPEED, SECONDS_PER_DAY, STAGE_COUNT, STAGE_SLOTS, STAGE_TARGET, UNICORN_STAGE as UNICORN } from '../../src/net/stageRules.js'
+import { acceptCompanyName, keys, maskEmail, writeUser, type AuthedUser } from './auth.js'
+import { MAX_SPEED, MIN_DAY_FOR_STAGE, SECONDS_PER_DAY, STAGE_COUNT, STAGE_SLOTS, STAGE_TARGET, UNICORN_STAGE as UNICORN } from '../../src/net/stageRules.js'
 
 // Plausibility limits (lenient: they stop edited numbers, not good play).
-export const MIN_DAYS_PER_STAGE = 5
 const CLOCK_SLACK = 1.25
 const DAY_SLACK = 3
+/** Extra game days over a whole run (measured from its first sighting). */
+const RUN_SLACK_DAYS = 10
 const FIRST_SUBMIT_GRACE_DAYS = 30
+/** A run the server has not seen yet may start at most here (the client reports from day 0). */
+export const FIRST_SIGHT_MAX_STAGE = 1
 const MAX_DAY = 36_500
-const REPLAY_MAX_BYTES = 256 * 1024
+const REPLAY_MAX_BYTES = 200 * 1024
+/** Company-name changes through submissions within one run: one a day. */
+const RENAME_EVERY_MS = 24 * 3600 * 1000
 const REPLAY_TTL_S = 30 * 24 * 3600
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 100
@@ -37,6 +47,9 @@ interface Track {
   day: number
   valuation: number
   at: number
+  /** Server time and game day when this run was first seen (missing on old tracks: `at` / `day`). */
+  runAt?: number
+  runDay?: number
 }
 
 const trackKey = (h: string) => `lb:track:${h}`
@@ -91,7 +104,7 @@ export function parseSubmission(body: Record<string, unknown>): Submission {
   if (valuation < 0 || valuation > maxValuation(stage)) bad('valuation')
   if (stage === UNICORN && valuation < STAGE_TARGET[UNICORN]! * 0.5) bad('unicornValuation')
   if (cash < -1e9 || cash > Math.max(2_000_000, valuation * 3)) bad('cash')
-  if (stage * MIN_DAYS_PER_STAGE > day + 1) bad('stageTooFast')
+  if (day + 1 < MIN_DAY_FOR_STAGE[stage]!) bad('stageTooFast')
   const rawStatus = body.status
   let status: RunStatus = stage === UNICORN ? 'unicorn' : 'playing'
   if (rawStatus !== undefined) {
@@ -99,7 +112,8 @@ export function parseSubmission(body: Record<string, unknown>): Submission {
     if ((rawStatus === 'unicorn') !== (stage === UNICORN)) bad('status')
     status = rawStatus
   }
-  const companyName = body.companyName === undefined ? null : sanitizeCompanyName(body.companyName)
+  // A name the board may not show (link, swear word, junk) is ignored: the account keeps its current one.
+  const companyName = body.companyName === undefined ? null : acceptCompanyName(body.companyName)
   return { stage, valuation, cash, day, team, runIndex, status, companyName }
 }
 
@@ -111,6 +125,8 @@ function daysPossible(ms: number, extra: number): number {
 /** Checks a submission against the previous one of the same run (or the account age for a run's first). */
 export function checkProgress(s: Submission, prev: Track | null, createdAt: number, t: number): void {
   if (!prev || s.runIndex > prev.runIndex) {
+    // Stages must be seen one by one: a run that shows up already funded was not watched growing.
+    if (s.stage > FIRST_SIGHT_MAX_STAGE) bad('newRunStage')
     if (s.day > daysPossible(t - createdAt, FIRST_SUBMIT_GRACE_DAYS)) bad('dayVsClock')
     return
   }
@@ -119,7 +135,10 @@ export function checkProgress(s: Submission, prev: Track | null, createdAt: numb
   if (s.stage < prev.stage) bad('stageBackwards')
   const dDay = s.day - prev.day
   if (dDay > daysPossible(t - prev.at, DAY_SLACK)) bad('dayVsClock')
-  if ((s.stage - prev.stage) * MIN_DAYS_PER_STAGE > dDay + 1) bad('stageJump')
+  // The whole run too, so the per-submission slack cannot pile up over many small submissions.
+  const runAt = prev.runAt ?? prev.at
+  const runDay = prev.runDay ?? prev.day
+  if (s.day - runDay > daysPossible(t - runAt, RUN_SLACK_DAYS)) bad('dayVsClock')
   const cap = Math.max(prev.valuation, 1_000_000) * 10 ** (1 + dDay / 60)
   if (s.valuation > cap) bad('valuationJump')
 }
@@ -164,11 +183,24 @@ export async function submit(kv: Kv, me: AuthedUser, body: Record<string, unknow
     if (Buffer.byteLength(replayJson, 'utf8') > REPLAY_MAX_BYTES) throw new ApiError(413, 'tooLarge')
   }
 
+  const newRun = !prev || s.runIndex > prev.runIndex
   if (s.companyName && s.companyName !== me.user.companyName) {
-    me.user.companyName = s.companyName
-    await writeUser(kv, h, me.user)
+    // A new run may bring a new name; within a run, one change a day (the board is not a chat).
+    if (newRun || !me.user.renamedAt || t - me.user.renamedAt >= RENAME_EVERY_MS) {
+      me.user.companyName = s.companyName
+      me.user.renamedAt = t
+      await writeUser(kv, h, me.user)
+    }
   }
-  const track: Track = { runIndex: s.runIndex, stage: s.stage, day: s.day, valuation: s.valuation, at: t }
+  const track: Track = {
+    runIndex: s.runIndex,
+    stage: s.stage,
+    day: s.day,
+    valuation: s.valuation,
+    at: t,
+    runAt: newRun ? t : (prev.runAt ?? prev.at),
+    runDay: newRun ? s.day : (prev.runDay ?? prev.day),
+  }
   await kv.set(trackKey(h), JSON.stringify(track))
   // The replay is kept for audit when the stage changes (a full server-side re-simulation is not run here).
   if (replayJson && (!prev || prev.runIndex !== s.runIndex || prev.stage !== s.stage))
@@ -181,7 +213,8 @@ export async function submit(kv: Kv, me: AuthedUser, body: Record<string, unknow
     shown !== null && shown.status === 'unicorn' && shown.runIndex !== s.runIndex && lbScore(shown.stage, shown.valuation, shown.day) >= score
   let rowData: StoredRow
   if (keepShown) {
-    rowData = { ...shown, companyName: me.user.companyName }
+    // The kept Unicorn keeps the name it won with.
+    rowData = shown
   } else {
     rowData = {
       email: me.user.email,

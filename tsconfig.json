@@ -1,4 +1,6 @@
 {
+  "//": "compilerOptions here only matter to tools that extend this file directly, e.g. the Vercel builder compiling api/**: it then emits Node ESM, not its own defaults. tsc -b uses the referenced projects.",
+  "compilerOptions": { "module": "NodeNext", "moduleResolution": "NodeNext", "target": "ES2022", "skipLibCheck": true },
   "files": [],
   "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }, { "path": "./tsconfig.api.json" }, { "path": "./tsconfig.test.json" }]
 }

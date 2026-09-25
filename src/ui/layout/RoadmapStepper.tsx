@@ -27,16 +27,16 @@ export function roadmapTitle(stage: number): string {
 }
 
 /**
- * `size`: 'bar' (desktop top bar, 16px tall nodes) or 'line' (phones: a thin segmented line, no nodes, not a button;
+ * `size`: 'bar' (desktop top bar, 16px tall nodes) or 'line' (phones: a 4px segmented line, no nodes, not a button;
  * the stage name opens the panel there).
  */
 export function RoadmapStepper({ stage, progress, size = 'bar', className }: { stage: number; progress: number; size?: 'bar' | 'line'; className?: string }) {
   const title = roadmapTitle(stage)
   if (size === 'line') {
     return (
-      <div className={cx('flex h-0.5 gap-0.5', className)} title={title} aria-hidden="true">
+      <div className={cx('flex h-1 gap-0.5', className)} title={title} aria-hidden="true">
         {Array.from({ length: STAGE_COUNT - 1 }, (_, i) => (
-          <div key={i} className="h-full flex-1 overflow-hidden rounded-full bg-brand/15">
+          <div key={i} className="h-full flex-1 overflow-hidden rounded-full bg-brand/25">
             <div className="h-full rounded-full bg-brand transition-[width] duration-700" style={{ width: `${linkFill(i, stage, progress) * 100}%` }} />
           </div>
         ))}

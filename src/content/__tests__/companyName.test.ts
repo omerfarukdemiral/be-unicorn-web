@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PROJECT_CATEGORIES } from '../../engine/types'
+import { COMPANY_NAME_MAX, COMPANY_NAME_MIN } from '../../engine/types'
+import * as rules from '../../net/companyRules'
 import { checkCompanyName, suggestCompanyName } from '../companyName'
 import { ROADMAP_STEPS } from '../roadmap'
 import { STAGES } from '../stages'
@@ -7,17 +9,24 @@ import { PROJECT_CATEGORY_TEXT } from '../text'
 import { wordCount } from './fixture'
 
 describe('project category lines', () => {
-  it('every category has a line of ≤ 10 words, all different', () => {
+  it('every category has one sentence of ≤ 10 words, all different', () => {
     const lines = PROJECT_CATEGORIES.map((c) => PROJECT_CATEGORY_TEXT[c].description)
     for (const l of lines) {
       expect(l.length).toBeGreaterThan(0)
       expect(wordCount(l)).toBeLessThanOrEqual(10)
+      // One sentence: the only full stop is the last character.
+      expect(l.slice(0, -1)).not.toMatch(/[.!?]\s/)
     }
     expect(new Set(lines).size).toBe(lines.length)
   })
 })
 
 describe('company name', () => {
+  it('the server copy of the rules matches the engine limits', () => {
+    expect(rules.COMPANY_NAME_MIN).toBe(COMPANY_NAME_MIN)
+    expect(rules.COMPANY_NAME_MAX).toBe(COMPANY_NAME_MAX)
+  })
+
   it('suggestions are valid names', () => {
     let seed = 7
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)

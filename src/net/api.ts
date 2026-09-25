@@ -25,6 +25,8 @@ export interface ApiFailure {
   status: number
   retryAfter?: number
   attemptsLeft?: number
+  /** Which check refused a leaderboard submission (invalidMetrics). */
+  detail?: string
 }
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure
 
@@ -43,6 +45,7 @@ function failure(error: ApiErrorCode, status: number, extra?: Partial<ApiErrorBo
     message: errorMessage(error, extra),
     ...(extra?.retryAfter !== undefined ? { retryAfter: extra.retryAfter } : {}),
     ...(extra?.attemptsLeft !== undefined ? { attemptsLeft: extra.attemptsLeft } : {}),
+    ...(extra?.detail !== undefined ? { detail: extra.detail } : {}),
   }
 }
 
@@ -89,25 +92,42 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<{ res: 
     }
   }
   if (!isJson) return { res: failure('offline', resp.status) }
-  if (resp.ok) return { res: { ok: true, data: body as T } }
   const eb = (body ?? {}) as Partial<ApiErrorBody>
-  const code: ApiErrorCode = typeof eb.error === 'string' ? eb.error : 'server'
+  const code: ApiErrorCode = resp.ok ? 'server' : typeof eb.error === 'string' ? eb.error : 'server'
+  // Any JSON answer from our functions means the backend is there (a failed boot probe is healed by the next call).
+  status = !resp.ok && code === 'notConfigured' ? 'offline' : 'online'
+  if (resp.ok) return { res: { ok: true, data: body as T } }
   if (code === 'unauthorized' && opts.auth) clearSession()
-  if (code === 'notConfigured') status = 'offline'
   return { res: failure(code, resp.status, eb), errorBody: body }
 }
 
 // --- backend status ---------------------------------------------------------------------------------------------
+
+/** Wait before the second health probe when the first one could not reach the server (cold start, network blip). */
+export const PROBE_RETRY_MS = 1500
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+async function probe(): Promise<BackendStatus> {
+  let { res } = await request<{ ok: true }>('/api/health')
+  // Unreachable or a platform error page (timeout, 5xx without our JSON): try once more before going offline.
+  // A plain `vite` dev server answers 200/404 HTML at once: that is offline for sure, no retry.
+  if (!res.ok && res.error === 'offline' && (res.status === 0 || res.status >= 500)) {
+    await sleep(PROBE_RETRY_MS)
+    res = (await request<{ ok: true }>('/api/health')).res
+  }
+  return res.ok ? 'online' : 'offline'
+}
 
 /** 'online' when the functions and Redis answer. Cached after the first probe; `recheck` probes again. */
 export function backendStatus(recheck = false): Promise<BackendStatus> {
   if (import.meta.env?.VITE_OFFLINE === '1') return Promise.resolve('offline')
   if (status && !recheck) return Promise.resolve(status)
   if (probing && !recheck) return probing
-  probing = request<{ ok: true }>('/api/health').then(({ res }) => {
-    status = res.ok ? 'online' : 'offline'
+  probing = probe().then((st) => {
+    status = st
     probing = null
-    return status
+    return st
   })
   return probing
 }
@@ -148,8 +168,9 @@ export async function resumeSession(): Promise<ApiResult<MeOk>> {
   return res
 }
 
-export async function logout(): Promise<void> {
-  if (readSession()) await request('/api/auth/me', { method: 'DELETE', auth: true })
+/** Ends this device's session; `all` ends every session of the account (all devices). */
+export async function logout(opts: { all?: boolean } = {}): Promise<void> {
+  if (readSession()) await request(opts.all ? '/api/auth/me?all=1' : '/api/auth/me', { method: 'DELETE', auth: true })
   clearSession()
 }
 

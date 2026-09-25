@@ -133,7 +133,10 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
     >
       <div>
         <h2 className="text-sm font-semibold tracking-wide text-ink">{t('login.title')}</h2>
-        <p className="font-text mt-0.5 text-xs text-ink-2">{mode === 'login' ? t('login.sub') : t('login.subNew')}</p>
+        {/* One sentence at a time: in "new company" mode the message below replaces the subtitle. */}
+        {!(mode === 'register' && msg) && (
+          <p className="font-text mt-0.5 text-xs text-ink-2">{mode === 'login' ? t('login.sub') : t('login.subNew')}</p>
+        )}
       </div>
 
       <div>
@@ -205,6 +208,7 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
           }}
           issue={nameIssue ?? liveIssue(company)}
           onSubmit={onEnter}
+          quiet
         />
       )}
 

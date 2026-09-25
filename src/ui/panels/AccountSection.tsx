@@ -116,6 +116,20 @@ export function AccountSection() {
         >
           {confirmOut ? t('account.signOutConfirm') : t('account.signOut')}
         </Button>
+        {confirmOut && (
+          <Button
+            size="sm"
+            tone="ghost"
+            disabled={busy}
+            className="col-span-2"
+            onClick={() => {
+              setBusy(true)
+              void signOut({ everywhere: true })
+            }}
+          >
+            {t('account.signOutAll')}
+          </Button>
+        )}
       </div>
     </section>
   )

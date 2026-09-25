@@ -3,7 +3,7 @@
 // Origin differs from its Host is refused.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type { ApiErrorBody, ApiErrorCode } from '../../src/net/contract.js'
-import { getKv, type Kv } from './kv.js'
+import { getKv, pepperMissing, type Kv } from './kv.js'
 
 export interface ApiRequest {
   method: string
@@ -23,7 +23,7 @@ export interface ApiResult {
 export type Handler = (req: ApiRequest, kv: Kv) => Promise<ApiResult>
 
 /** Largest request body accepted anywhere (the save cap is checked separately, on the save string). */
-export const MAX_BODY_BYTES = 800 * 1024
+export const MAX_BODY_BYTES = 400 * 1024
 
 /** Error body extras: the typed fields plus endpoint-specific payloads (the save conflict's `server` copy). */
 export type ErrorExtra = Partial<Omit<ApiErrorBody, 'error'>> & Record<string, unknown>
@@ -116,6 +116,10 @@ export function route(methods: Partial<Record<string, Handler>>): (req: ApiReque
     if (len > MAX_BODY_BYTES) return withBase(fail(413, 'tooLarge'))
     const kv = getKv()
     if (!kv) return withBase(fail(503, 'notConfigured'))
+    if (pepperMissing()) {
+      console.error('[api] PIN_PEPPER is not set (or shorter than 16 chars): the API stays off in production.')
+      return withBase(fail(503, 'notConfigured'))
+    }
     try {
       return withBase(await h(req, kv))
     } catch (e) {

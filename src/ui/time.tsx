@@ -218,10 +218,12 @@ export function StartCall() {
     useShallow((st) => ({
       show: !st.ui.runStarted && st.state.time.speed === 0 && !st.state.gameOver && st.ui.overlay === null,
       stage: st.state.stage,
+      panelOpen: st.ui.panel !== null,
     })),
   )
   const dispatch = useGameStore((st) => st.dispatch)
-  if (!s.show) return null
+  // Phones: an open sheet (Liderlik, Yol haritası…) owns the screen; the top bar's play button still starts time.
+  if (!s.show || (mobile && s.panelOpen)) return null
   const next = STAGES[s.stage + 1]
   const goal = next?.targetValuation ? t('time.startGoal', { stage: STAGES[s.stage]?.name ?? '', v: money(next.targetValuation) }) : null
   return (

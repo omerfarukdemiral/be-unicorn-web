@@ -16,5 +16,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["api", "src/net/contract.ts", "src/net/stageRules.ts"]
+  "include": ["api", "src/net/contract.ts", "src/net/stageRules.ts", "src/net/companyRules.ts"]
 }

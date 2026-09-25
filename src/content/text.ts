@@ -60,11 +60,11 @@ export const DEPT_TEXT: DeptTextTable = {
 // api 9, mobile 10, game / marketplace 12, ai 14 slowest; api + marketplace lean the run toward the platform archetype).
 export const PROJECT_CATEGORY_TEXT: ProjectCategoryTextTable = {
   mobile: { name: 'Mobil', description: 'Cebe girmesi kolay, ana ekranda kalması zor.' },
-  web: { name: 'Web', description: 'En çabuk çıkan ürün. Önce yayınla, sonra cilala.' },
-  ai: { name: 'Yapay Zekâ', description: 'En uzun pişen ürün. Demosu şov, sabrın bol olsun.' },
+  web: { name: 'Web', description: 'En çabuk çıkan ürün: önce yayınla, sonra cilala.' },
+  ai: { name: 'Yapay Zekâ', description: 'En uzun pişen ürün; demosu şov, sabrı bol ister.' },
   api: { name: 'API', description: 'Çabuk biter; müşterin geliştirici, yolun platforma çıkar.' },
-  game: { name: 'Oyun', description: 'Uzun sürer. Eğlenceli değilse kimse ikinci kez açmaz.' },
-  marketplace: { name: 'Pazar Yeri', description: 'İki tarafı birden ikna etmen lazım. Platform işi.' },
+  game: { name: 'Oyun', description: 'Uzun sürer ve eğlenceli değilse kimse ikinci kez açmaz.' },
+  marketplace: { name: 'Pazar Yeri', description: 'İki tarafı birden ikna edersen platform olursun.' },
 }
 
 export const NPC_TEXT: NpcTextTable = {

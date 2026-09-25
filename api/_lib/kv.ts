@@ -96,6 +96,12 @@ class UpstashKv implements Kv {
   }
 }
 
+/** Production refuses to run without a PIN pepper (≥ 16 chars): a leaked Redis alone must not reveal 4-digit PINs.
+ * The API then answers 503 `notConfigured` and the game plays offline until PIN_PEPPER is set. */
+export function pepperMissing(env: Record<string, string | undefined> = process.env): boolean {
+  return env.VERCEL_ENV === 'production' && !(env.PIN_PEPPER && env.PIN_PEPPER.length >= 16)
+}
+
 let override: Kv | null | undefined
 let cached: Kv | null | undefined
 

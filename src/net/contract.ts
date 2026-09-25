@@ -81,7 +81,7 @@ export interface SaveGetOk extends SaveMeta {
 }
 
 export interface SavePutBody {
-  /** engine `serialize(state)` output. ≤ 512 KB. */
+  /** engine `serialize(state)` output. ≤ 160 KB (real saves ~40 KB). */
   data: string
   /** The rev this device last loaded or wrote. A stale rev is refused with 409 `conflict`. */
   baseRev: number
@@ -114,7 +114,7 @@ export interface LeaderboardSubmitBody {
   /** state.meta.runIndex: a new run replaces the previous one on the board (a Unicorn finish is kept until beaten). */
   runIndex: number
   status?: RunStatus
-  /** Optional replay log (store exportReplay()), kept for audit. ≤ 256 KB. */
+  /** Optional replay log (store exportReplay()), kept for audit. ≤ 200 KB. */
   replay?: unknown
 }
 

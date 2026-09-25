@@ -6,7 +6,8 @@ import { ApiError, now } from './http.js'
 import type { Kv } from './kv.js'
 import { keys } from './auth.js'
 
-export const SAVE_MAX_BYTES = 512 * 1024
+// Real saves stay under ~40 KB (sim: 3000-day runs); 4× headroom.
+export const SAVE_MAX_BYTES = 160 * 1024
 const WRITE_LOCK_S = 5
 
 interface StoredSave extends SaveMeta {

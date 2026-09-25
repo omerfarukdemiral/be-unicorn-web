@@ -3,6 +3,8 @@
 export const TOP_BAR_TEXT: Record<string, string> = {
   'top.label': 'Durum çubuğu',
   'top.progress': '{v} / {target}',
+  'top.progressNext': '{v} → {next} {target}',
+  'top.nextShort': '→ {next}',
   'top.progressTitle': '{stage} hedefine ilerleme: {v} / {target} değerleme',
   'top.lastStage': 'Son aşama',
   // Round: one small chip in the stage section (the only home of the round clock).

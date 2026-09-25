@@ -19,7 +19,7 @@ import { Button } from './ui/primitives'
 import { usePrefs } from './ui/hooks'
 import { CompanyNameField, liveIssue, resolveCompanyName } from './ui/start/CompanyNameField'
 import { LoginCard, type AuthKind } from './ui/start/LoginCard'
-import { afterAuth, bootCloud, playOffline, signOut, startCloudSync, useCloud } from './net/cloud'
+import { afterAuth, bootCloud, playOffline, setRunOnScreen, signOut, startCloudSync, useCloud } from './net/cloud'
 import type { AuthOk } from './net/api'
 
 function wantsMock(): boolean {
@@ -247,7 +247,12 @@ export default function App() {
 
   useEffect(() => {
     if (!started || mock) return
-    return startLoop()
+    setRunOnScreen(true)
+    const stop = startLoop()
+    return () => {
+      setRunOnScreen(false)
+      stop()
+    }
   }, [started, mock])
 
   // Cloud save + leaderboard submit/poll while a run is on screen (no-ops without an account).

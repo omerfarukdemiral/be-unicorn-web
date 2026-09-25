@@ -44,7 +44,7 @@ function progressTitle(s: ReturnType<typeof useStage>): string {
   return s.parts ? `${head}\n${valuationLine(s.parts)}` : head
 }
 
-/** Thin segmented Unicorn-yolu line (phones: 2px under row 1, no figures): one segment per stage step. */
+/** Segmented Unicorn-yolu line (phones: 4px under row 1, no figures; the "n/7" chip sits by the stage name): one segment per stage step. */
 export function StageProgressLine({ className }: { className?: string }) {
   const s = useStage()
   return <RoadmapStepper size="line" stage={s.stage} progress={STAGES[s.stage + 1] ? s.progress : 1} className={className} />
@@ -96,9 +96,10 @@ function RoundSlot({ variant }: { variant: StageVariant }) {
 }
 
 /**
- * wide (≥1280, ≥256px, grows so the name is never cut): name · date on row 1, progress bar + "$412K / $1M" on row 2, round slot on the right.
- * narrow (<1280, ≥216px, grows like wide): same without the figures (they are in the tooltip).
- * mobile: one row (name · date · round); TopBar draws StageProgressLine under it.
+ * wide (≥1280, ≥256px, grows so the name is never cut): name · n/7 · date on row 1, stepper + "$412K → Seed $3M" on
+ * row 2, round slot on the right.
+ * narrow (<1280, ≥216px, grows like wide): same, the figures shortened to "→ Seed" (the rest is in the tooltip).
+ * mobile: one row (name · n/7 · date · round); TopBar draws StageProgressLine under it.
  */
 export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
   const s = useStage()
@@ -117,6 +118,10 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
     >
       <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-brand" />
       <span className="shrink-0">{name}</span>
+      {/* Where on the Unicorn yolu: "3/7", always visible (phones too). */}
+      <span className="tabular shrink-0 rounded bg-brand-soft px-1 text-[10px] font-semibold leading-4 tracking-normal text-brand-ink">
+        {t('roadmap.step', { n: s.stage + 1 })}
+      </span>
       {variant !== 'mobile' && s.company && (
         <span title={t('top.companyTitle', { v: s.company })} className="font-text min-w-0 truncate text-[11px] font-medium tracking-normal text-ink-2">
           {s.company}
@@ -145,11 +150,14 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
         </div>
         <div className="mt-1 flex items-center gap-2" title={progressTitle(s)}>
           <RoadmapStepper stage={s.stage} progress={next ? s.progress : 1} />
-          {variant === 'wide' && (
-            <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
-              {next ? t('top.progress', { v: money(s.valuation), target: money(next.targetValuation ?? 0) }) : t('top.lastStage')}
-            </span>
-          )}
+          {/* The next stop by name: "$12K → Pre-seed $500K" (narrow: just "→ Pre-seed"). */}
+          <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
+            {!next
+              ? t('top.lastStage')
+              : variant === 'wide'
+                ? t('top.progressNext', { v: money(s.valuation), next: next.name, target: money(next.targetValuation ?? 0) })
+                : t('top.nextShort', { next: next.name })}
+          </span>
         </div>
       </div>
       <RoundSlot variant={variant} />

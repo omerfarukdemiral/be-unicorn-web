@@ -28,6 +28,7 @@ export function CompanyNameField({
   issue,
   onSubmit,
   autoFocus,
+  quiet,
 }: {
   value: string
   onChange: (v: string) => void
@@ -38,6 +39,8 @@ export function CompanyNameField({
   issue: CompanyNameIssue | null
   onSubmit?: () => void
   autoFocus?: boolean
+  /** No hint line when there is no issue (the sign-in card already has its one sentence). */
+  quiet?: boolean
 }) {
   const id = useId()
   return (
@@ -80,9 +83,11 @@ export function CompanyNameField({
           <Icon name="refresh" size={18} />
         </button>
       </div>
-      <p id={`${id}-hint`} className={cx('font-text mt-1.5 min-h-4 text-[11px]', issue ? 'text-negative-ink' : 'text-ink-2')}>
-        {issue ? COMPANY_NAME_ISSUE_TEXT[issue] : t('start.companyHint')}
-      </p>
+      {(!quiet || issue) && (
+        <p id={`${id}-hint`} className={cx('font-text mt-1.5 min-h-4 text-[11px]', issue ? 'text-negative-ink' : 'text-ink-2')}>
+          {issue ? COMPANY_NAME_ISSUE_TEXT[issue] : t('start.companyHint')}
+        </p>
+      )}
     </div>
   )
 }

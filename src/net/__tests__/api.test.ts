@@ -38,7 +38,15 @@ describe('net/api', () => {
     fetchMock.mockResolvedValueOnce(json(200, { ok: true }))
     expect(await backendStatus(true)).toBe('online')
     fetchMock.mockRejectedValueOnce(new TypeError('network'))
+    fetchMock.mockRejectedValueOnce(new TypeError('network'))
     expect(await backendStatus(true)).toBe('offline')
+  })
+
+  it('an unreachable first probe (cold start, blip) is tried once more before going offline', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('network'))
+    fetchMock.mockResolvedValueOnce(json(200, { ok: true }))
+    expect(await backendStatus(true)).toBe('online')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('register stores the session; errors come back with Turkish messages', async () => {
@@ -93,8 +101,8 @@ describe('net/api', () => {
   })
 
   it('formats leaderboard pieces', () => {
-    expect(runLengthText(210)).toBe('7 ay (210 gün)')
-    expect(runLengthText(12.7)).toBe('12 gün')
+    expect(runLengthText(209.4)).toBe('7 ay (210 gün)')
+    expect(runLengthText(11.7)).toBe('12 gün')
     expect(teamText(18)).toBe('18 kişilik ekip')
     expect(teamText(1)).toBe('Tek kişilik ekip')
   })

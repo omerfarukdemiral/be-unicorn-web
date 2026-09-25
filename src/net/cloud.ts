@@ -5,7 +5,10 @@
 // Cloud save:  every payday, every 30 s and when the page hides (debounced, one write in flight; a failed write
 //              stays dirty and goes out on the next trigger or when the browser comes back online).
 // Submit:      stage change (with the replay for audit), payday, game over and every 60 s.
-// Leaderboard: every 10 s while the Liderlik panel is open, every 60 s otherwise (top-bar rank badge).
+// Leaderboard: every 10 s while the Liderlik panel is open (each refresh sends my standing first, so my row matches
+//              the HUD), every 60 s otherwise (top-bar rank badge).
+// Backend down at start: a stored token is tried anyway; otherwise the backend is probed again every 30 s–2 min
+//              and on the browser's 'online' event, and sign-in / cloud sync pick up when it answers.
 import { create } from 'zustand'
 import { deserialize, serialize } from '../engine'
 import type { GameState } from '../engine/types'
@@ -27,14 +30,15 @@ import {
   type RunStatus,
   type SaveGetOk,
 } from './api'
+import { NET_RUN_REFUSED } from './netText'
 import { patchSession } from './session'
 
 export const CLOUD_SAVE_MS = 30_000
 export const SUBMIT_MS = 60_000
 export const BOARD_OPEN_MS = 10_000
 export const BOARD_IDLE_MS = 60_000
-/** Replays above this are not sent (the server caps them at 256 KB). */
-const REPLAY_MAX_CHARS = 240_000
+/** Replays above this are not sent (the server caps them at 200 KB). */
+const REPLAY_MAX_CHARS = 190_000
 
 export type CloudPhase = 'boot' | 'login' | 'ready'
 export type SyncState = 'idle' | 'saving' | 'offline' | 'conflict' | 'signedOut'
@@ -91,12 +95,28 @@ const setCloud = (p: Partial<CloudState>) => useCloud.setState(p)
 
 // --- sign-in / which save -----------------------------------------------------------------------------------------
 
+/** Set by the App while a run is on screen (a recovered backend must not swap the save under a running game). */
+let runOnScreen = false
+export function setRunOnScreen(on: boolean): void {
+  runOnScreen = on
+}
+
 /** App start: backend up? token on this device? → ready (with the cloud save pulled) or the sign-in card. */
 export async function bootCloud(): Promise<void> {
-  const status = await backendStatus()
+  let status = await backendStatus()
+  // The health probe can fail on a cold start or a blip; a stored token gets its own chance before going offline.
+  if (status === 'offline' && currentSession()) {
+    const me = await resumeSession()
+    if (me.ok) {
+      setCloud({ backend: 'online' })
+      return adoptAccount({ email: me.data.email, companyName: me.data.companyName })
+    }
+    if (me.error === 'unauthorized') status = await backendStatus(true)
+  }
   if (status === 'offline') {
     setSaveOwner(null)
     setCloud({ backend: 'offline', phase: 'ready' })
+    watchBackend()
     return
   }
   setCloud({ backend: 'online' })
@@ -118,6 +138,58 @@ export async function bootCloud(): Promise<void> {
   }
   setSaveOwner(s.email)
   setCloud({ account: { email: s.email, companyName: s.companyName }, sync: 'offline', phase: 'ready' })
+}
+
+let watchStop: (() => void) | null = null
+export const REPROBE_MIN_MS = 30_000
+const REPROBE_MAX_MS = 120_000
+
+/** Offline at start: probe again (30 s, doubling to 2 min, and on 'online') until the backend answers. */
+function watchBackend(): void {
+  if (watchStop || typeof window === 'undefined') return
+  let wait = REPROBE_MIN_MS
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const check = async () => {
+    timer = null
+    if ((await backendStatus(true)) === 'online') {
+      watchStop?.()
+      await backendBack()
+      return
+    }
+    wait = Math.min(REPROBE_MAX_MS, wait * 2)
+    timer = setTimeout(check, wait)
+  }
+  const onOnline = () => {
+    if (timer) clearTimeout(timer)
+    void check()
+  }
+  timer = setTimeout(check, wait)
+  window.addEventListener('online', onOnline)
+  watchStop = () => {
+    if (timer) clearTimeout(timer)
+    window.removeEventListener('online', onOnline)
+    watchStop = null
+  }
+}
+
+/** The backend answers again after an offline start. */
+async function backendBack(): Promise<void> {
+  setCloud({ backend: 'online' })
+  if (!currentSession()) {
+    // Still on the start card: offer sign-in. A running offline game just plays on.
+    if (!runOnScreen && !useCloud.getState().account) setCloud({ phase: 'login' })
+    return
+  }
+  const me = await resumeSession()
+  if (!me.ok) {
+    if (me.error === 'unauthorized' && !runOnScreen) setCloud({ phase: 'login' })
+    return
+  }
+  const acc = { email: me.data.email, companyName: me.data.companyName }
+  if (!runOnScreen) return adoptAccount(acc)
+  // Mid-game: keep the run; the cloud sync that now starts settles who is further (409 path).
+  setSaveOwner(acc.email)
+  setCloud({ account: acc, sync: 'idle' })
 }
 
 /** After register / login on the sign-in card. */
@@ -149,8 +221,8 @@ function ahead(a: [number, number], b: [number, number]): boolean {
 
 /**
  * Picks the save to continue: the cloud copy when there is no local one, the local one belongs to another account,
- * the cloud run is newer, or (same run) the cloud was written after the local save. The chosen copy lands in the
- * local slot, so the start screen and store.load() see it.
+ * the cloud run is newer, or (same run) the cloud is further in game days. Game progress decides, never the two
+ * machines' clocks. The chosen copy lands in the local slot, so the start screen and store.load() see it.
  */
 export async function pullCloud(email: string): Promise<void> {
   const r = await getSave()
@@ -163,13 +235,7 @@ export async function pullCloud(email: string): Promise<void> {
   const foreign = !!meta?.owner && meta.owner !== email
   const cloud = r.data.data ? safeDeserialize(r.data.data) : null
   setCloud({ cloudRunIndex: cloud ? cloud.meta.runIndex : -1 })
-  let useCloudCopy = false
-  if (cloud) {
-    if (!local || foreign) useCloudCopy = true
-    else if (cloud.meta.runIndex !== local.meta.runIndex) useCloudCopy = cloud.meta.runIndex > local.meta.runIndex
-    else if (meta && meta.at > 0) useCloudCopy = r.data.updatedAt > meta.at
-    else useCloudCopy = ahead(progressOf(cloud), progressOf(local))
-  }
+  const useCloudCopy = !!cloud && (!local || foreign || ahead(progressOf(cloud), progressOf(local)))
   if (cloud && useCloudCopy) {
     const prof = readProfile()
     const over = cloud.gameOver
@@ -179,13 +245,18 @@ export async function pullCloud(email: string): Promise<void> {
     })
     if (over) clearSave()
     else writeSave(cloud)
-    setCloud({ cloudLoaded: !over })
+    // "Buluttaki kayıt geldi" only when it is not what this device already had.
+    setCloud({ cloudLoaded: !over && (!local || foreign || !sameProgress(cloud, local)) })
     return
   }
   // Another account's progress lives in its own cloud; this device starts clean for the new one.
   if (foreign) clearSave()
   // Offline progress made before signing in now belongs to this account.
   else if (local && !meta?.owner) writeSave(local)
+}
+
+function sameProgress(a: GameState, b: GameState): boolean {
+  return a.meta.runIndex === b.meta.runIndex && Math.floor(a.time.day) === Math.floor(b.time.day)
 }
 
 function safeDeserialize(raw: string): GameState | null {
@@ -196,8 +267,9 @@ function safeDeserialize(raw: string): GameState | null {
   }
 }
 
-/** Ayarlar › Çıkış yap: last cloud write, drop the token, back to the sign-in card (page reload). */
-export async function signOut(): Promise<void> {
+/** Ayarlar › Çıkış yap: last cloud write, drop the token, back to the sign-in card (page reload). `everywhere`
+ * also ends the account's sessions on every other device. */
+export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void> {
   // Only a run on screen is saved (on the start card the store holds a placeholder game, never to be written).
   const playing = stopSync !== null
   stopCloudSync()
@@ -205,7 +277,7 @@ export async function signOut(): Promise<void> {
     useGameStore.getState().save()
     await saveNow()
   }
-  await logout()
+  await logout({ all: opts.everywhere })
   setSaveOwner(null)
   useCloud.setState({ ...initial, phase: 'login', backend: useCloud.getState().backend })
   if (typeof window !== 'undefined') window.location.reload()
@@ -280,6 +352,12 @@ export function keepLocalSave(): Promise<void> {
 // --- leaderboard submit -----------------------------------------------------------------------------------------
 
 let lastSubmitKey = ''
+/** Refused key and how often (a finished run is retried a couple of times: it will never change again). */
+let failedKey = ''
+let failedTimes = 0
+const TERMINAL_RETRIES = 3
+/** A run the board will not take (it first showed up already past Pre-seed, e.g. played offline before sign-in). */
+let refusedRun = -1
 
 function runStatus(s: GameState): RunStatus {
   if (!s.gameOver) return 'playing'
@@ -308,6 +386,7 @@ export async function submitNow(opts: { withReplay?: boolean } = {}): Promise<vo
   const s = store.state
   if (s.time.day < 1) return
   const body = submissionOf(s)
+  if (body.runIndex === refusedRun) return
   const key = `${body.runIndex}:${body.stage}:${Math.floor(body.day)}:${body.status}:${Math.round(body.valuation)}:${Math.round(body.cash)}:${body.team}`
   if (key === lastSubmitKey) return
   if (opts.withReplay) {
@@ -319,7 +398,15 @@ export async function submitNow(opts: { withReplay?: boolean } = {}): Promise<vo
     lastSubmitKey = key
     setCloud({ rank: r.data.rank, submitError: null })
   } else if (r.error !== 'offline' && r.error !== 'rateLimited') {
-    lastSubmitKey = key // a refused standing is not retried until it changes
+    if (r.error === 'invalidMetrics' && r.detail === 'newRunStage') {
+      refusedRun = body.runIndex
+      setCloud({ submitError: NET_RUN_REFUSED })
+      return
+    }
+    failedTimes = failedKey === key ? failedTimes + 1 : 1
+    failedKey = key
+    // A refused standing is not retried until it changes; a finished run never changes, so it gets a few more tries.
+    if (!s.gameOver || failedTimes >= TERMINAL_RETRIES) lastSubmitKey = key
     setCloud({ submitError: r.message })
   }
 }
@@ -430,6 +517,8 @@ function startBoardPolling(): () => void {
     if (typeof document !== 'undefined' && document.hidden) return schedule()
     if (boardOpen() || useCloud.getState().account) {
       lastRun = Date.now()
+      // Liderlik open: my own row should say what the top bar says, so my standing goes up first.
+      if (boardOpen()) await submitNow()
       await refreshBoard()
     }
     schedule()
@@ -464,5 +553,10 @@ export function resetCloudForTests(): void {
   pending = false
   lastSaved = null
   lastSubmitKey = ''
+  failedKey = ''
+  failedTimes = 0
+  refusedRun = -1
+  runOnScreen = false
+  watchStop?.()
   useCloud.setState({ ...initial })
 }

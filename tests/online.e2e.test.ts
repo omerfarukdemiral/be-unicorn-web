@@ -13,6 +13,7 @@ import { handler as submitH } from '../api/leaderboard/submit.js'
 import type { ApiRequest, ApiResult } from '../api/_lib/http.js'
 import { setClockForTests } from '../api/_lib/http.js'
 import { setKvForTests } from '../api/_lib/kv.js'
+import { resetLimitsForTests } from '../api/_lib/auth.js'
 import { MemoryKv } from '../api/_lib/memoryKv.js'
 import { login, register, resetNetForTests } from '../src/net/api'
 import { afterAuth, bootCloud, refreshBoard, resetCloudForTests, saveNow, submitNow, submissionOf, takeCloudSave, useCloud } from '../src/net/cloud'
@@ -88,6 +89,7 @@ beforeEach(() => {
   setClockForTests(() => clock)
   resetNetForTests()
   resetCloudForTests()
+  resetLimitsForTests()
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -149,7 +151,7 @@ describe('online e2e (in-memory Redis)', () => {
     expect(board.gap).toMatchObject({ stages: 0, days: 0 })
     expect(board.gap!.valuation).toBeGreaterThanOrEqual(249_000)
     expect(useCloud.getState().rank).toBe(2)
-    expect(runLengthText(210)).toBe('7 ay (210 gün)')
+    expect(runLengthText(209.4)).toBe('7 ay (210 gün)')
     expect(teamText(18)).toBe('18 kişilik ekip')
 
     // Device A keeps its storage; device B is a fresh browser.
@@ -225,4 +227,47 @@ describe('online e2e (in-memory Redis)', () => {
     await afterAuth(regB.data)
     expect(readSave()).toBeNull()
   })
+
+  it('same run on both sides: game progress picks the save, not the device clock', async () => {
+    await bootCloud()
+    const reg = await register('clock@helio.studio', '1234', 'Saat Labs')
+    if (!reg.ok) throw new Error(reg.message)
+    await afterAuth(reg.data)
+    store().newGame({ seed: 21, companyName: 'Saat Labs', runIndex: 0 })
+    play(40)
+    await saveNow()
+    // This device plays on (its clock far behind the server's), the cloud keeps day ~40.
+    play(20)
+    store().save()
+    const localDay = store().state.time.day
+    const meta = JSON.parse(localStorage.getItem('be-unicorn:save-meta')!)
+    localStorage.setItem('be-unicorn:save-meta', JSON.stringify({ ...meta, at: 1 }))
+    resetNetForTests()
+    resetCloudForTests()
+    await bootCloud()
+    expect(readSave()?.time.day).toBeCloseTo(localDay, 5)
+    expect(useCloud.getState().cloudLoaded).toBe(false)
+    // A plain reload with both copies equal does not claim the cloud copy "arrived".
+    expect(store().load()).toBe(true)
+    await saveNow()
+    resetNetForTests()
+    resetCloudForTests()
+    await bootCloud()
+    expect(useCloud.getState().cloudLoaded).toBe(false)
+  }, 60_000)
+
+  it('a failed health probe at start does not strand a signed-in player offline', async () => {
+    await bootCloud()
+    const reg = await register('cold@helio.studio', '1234', 'Soğuk Start')
+    if (!reg.ok) throw new Error(reg.message)
+    resetNetForTests()
+    resetCloudForTests()
+    // Cold start: /api/health times out (twice), everything else answers.
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes('/api/health')) throw new TypeError('network')
+      return fakeFetch(input, init)
+    }))
+    await bootCloud()
+    expect(useCloud.getState()).toMatchObject({ backend: 'online', phase: 'ready', account: { email: 'cold@helio.studio' } })
+  }, 20_000)
 })

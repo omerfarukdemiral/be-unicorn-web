@@ -40,9 +40,10 @@ export function errorMessage(code: ApiErrorCode, extra?: { retryAfter?: number; 
   return base
 }
 
-/** Leaderboard run length: "7 ay (210 gün)"; under a month just "12 gün". */
+/** Leaderboard run length: "7 ay (210 gün)"; under a month just "12 gün". Counts from 1 like the top bar's date
+ * (raw engine day 209.4 is the 210th day on screen). */
 export function runLengthText(day: number): string {
-  const d = Math.max(0, Math.floor(day))
+  const d = Math.max(0, Math.floor(day)) + 1
   const months = Math.floor(d / 30)
   return months >= 1 ? `${months} ay (${d} gün)` : `${d} gün`
 }
@@ -66,3 +67,6 @@ export function maskEmail(email: string): string {
 export function looksLikeEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
 }
+
+/** A run the board will not take: it first showed up past Pre-seed (e.g. played offline before signing in). */
+export const NET_RUN_REFUSED = 'Bu oyun sıralamaya çevrimdışı başladı. Yeni oyunla gir.'

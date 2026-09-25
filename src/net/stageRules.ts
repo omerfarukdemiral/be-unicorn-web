@@ -11,3 +11,9 @@ export const STAGE_SLOTS: readonly number[] = [4, 10, 18, 30, 44, 60, 60]
 /** engine SECONDS_PER_DAY and the fastest GameSpeed. */
 export const SECONDS_PER_DAY = 2
 export const MAX_SPEED = 4
+/**
+ * Earliest believable game day for each stage (cumulative from day 0). About 65% of the fastest bot run over
+ * 160 simulated runs (sim/: 4 archetypes × 2 decision policies × 20 seeds; fastest days were
+ * 104 / 184 / 318 / 583 / 866 / 1529). Rebalancing the game ⇒ re-measure these.
+ */
+export const MIN_DAY_FOR_STAGE: readonly number[] = [0, 65, 120, 210, 380, 560, 1000]

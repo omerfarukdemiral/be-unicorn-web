@@ -8,7 +8,7 @@ import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readProfile, readSave, readUiSave, writeProfile, writeSave, writeUiSave } from './save'
-import { addPin, autoPin, removePin } from './metricPins'
+import { addPin, autoPin, defaultPins, removePin } from './metricPins'
 import type { GameStore, Panel, PauseReason, ReplayLog, Selection, UiState } from './types'
 
 export { SAVE_KEY } from './save'
@@ -305,16 +305,20 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // already unlocked as seen (no badge storm on continue).
     const prof = readUiSave()
     const kept = keptUi(get().ui)
-    set({
-      state,
-      ui: {
-        ...initialUi(prof),
-        ...kept,
-        pinnedMetrics: prof.pinnedMetrics ?? kept.pinnedMetrics,
-        pinTouched: prof.pinTouched ?? kept.pinTouched,
-        seenMetrics: prof.seenMetrics ?? [...state.unlockedWidgets],
-      },
-    })
+    const pinTouched = prof.pinTouched ?? kept.pinTouched
+    const pins = prof.pinnedMetrics ?? kept.pinnedMetrics
+    // A mid-game save loaded by a player who never picked pins: fill the free slots with the defaults (Yakıt, Kâr
+    // tahmini) so the old HUD's secondary numbers do not simply vanish (auto-pin only reacts to NEW unlocks).
+    const pinnedMetrics = pinTouched ? pins : defaultPins(pins, state.unlockedWidgets)
+    const ui: UiState = {
+      ...initialUi(prof),
+      ...kept,
+      pinnedMetrics,
+      pinTouched,
+      seenMetrics: prof.seenMetrics ?? [...state.unlockedWidgets],
+    }
+    set({ state, ui })
+    if (pinnedMetrics.join() !== pins.join()) persistUi(ui)
     return true
   },
 
@@ -374,7 +378,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   setSlowOnMoments: (slowOnMoments) => set((s) => (s.ui.slowOnMoments === slowOnMoments ? s : { ui: { ...s.ui, slowOnMoments } })),
   pinMetric(id) {
     const ui = get().ui
-    const pinnedMetrics = addPin(ui.pinnedMetrics, id)
+    // Over PIN_MAX a pin locked in this run leaves first (it is invisible), then the oldest.
+    const pinnedMetrics = addPin(ui.pinnedMetrics, id, get().state.unlockedWidgets)
     // Already pinned or not pinnable: nothing to do.
     if (pinnedMetrics.length === ui.pinnedMetrics.length && pinnedMetrics.every((x, i) => x === ui.pinnedMetrics[i])) return
     const next = { ...ui, pinnedMetrics, pinTouched: true }

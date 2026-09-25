@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONCEPTS, FURNITURE } from '../content'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY } from '../engine/types'
 import type { GameEvent, GameState, HudWidget } from '../engine/types'
-import { autoPin, effectivePins, PIN_MAX, unseenMetrics } from './metricPins'
+import { autoPin, effectivePins, PIN_MAX, pinEvictee, unseenMetrics } from './metricPins'
 import { readUiSave, UI_KEY } from './save'
 import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, hasImportantMoment, offerWaiting, panelSelection, pauseReasonsOf, PAYDAY_SLOW_RUNWAY_MONTHS, useGameStore } from './gameStore'
 
@@ -706,6 +706,34 @@ describe('Metrikler: top-bar pins (docs/LAYOUT.md §5.2)', () => {
   it('auto-pin replaces a pin that is locked in this run instead of growing past PIN_MAX', () => {
     expect(autoPin(['arpu', 'ltvCac'], ['burnBreakdown'], ['cash', 'burnBreakdown'])).toEqual(['ltvCac', 'burnBreakdown'])
     expect(autoPin(['arpu', 'ltvCac'], ['burnBreakdown'], ['cash', 'arpu', 'ltvCac', 'burnBreakdown'])).toEqual(['arpu', 'ltvCac'])
+  })
+
+  it('pinning by hand over PIN_MAX drops a pin locked in this run first, not the visible oldest one', () => {
+    learnWidget('retention')
+    // Saved pins from an earlier run: retention (visible now) + arpu (locked in this run, invisible).
+    useGameStore.setState((st) => ({ ui: { ...st.ui, pinnedMetrics: ['retention', 'arpu'], pinTouched: true } }))
+    expect(pinEvictee(store().ui.pinnedMetrics, 'ltvCac', store().state.unlockedWidgets)).toBeNull()
+    store().pinMetric('ltvCac')
+    expect(store().ui.pinnedMetrics).toEqual(['retention', 'ltvCac'])
+    // Both visible now: the next pin names and drops the oldest.
+    learnWidget('ltvCac')
+    expect(pinEvictee(store().ui.pinnedMetrics, 'burnBreakdown', store().state.unlockedWidgets)).toBe('retention')
+    store().pinMetric('burnBreakdown')
+    expect(store().ui.pinnedMetrics).toEqual(['ltvCac', 'burnBreakdown'])
+  })
+
+  it('loading a mid-game save without pin prefs fills the empty slots with the defaults', () => {
+    learnWidget('burnBreakdown')
+    store().save()
+    localStorage.removeItem(UI_KEY)
+    useGameStore.setState((st) => ({ ui: { ...st.ui, pinnedMetrics: [], pinTouched: false } }))
+    expect(store().load()).toBe(true)
+    expect(store().ui.pinnedMetrics[0]).toBe('burnBreakdown')
+    expect(store().ui.pinTouched).toBe(false)
+    // A player who picked pins by hand keeps them as they are.
+    localStorage.setItem(UI_KEY, JSON.stringify({ v: 1, pinnedMetrics: [], pinTouched: true }))
+    expect(store().load()).toBe(true)
+    expect(store().ui.pinnedMetrics).toEqual([])
   })
 
   it('Metrikler is a plain tab: it never pauses', () => {

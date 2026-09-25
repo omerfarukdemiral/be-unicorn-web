@@ -141,7 +141,7 @@ export interface GameStore {
   setDecisionExpanded(expanded: boolean): void
   /** Settings: slow 4× down to 1× on important moments. */
   setSlowOnMoments(on: boolean): void
-  /** Pins a gauge to the top bar. Already pinned = no-op; with PIN_MAX pinned the OLDEST (index 0) leaves. Sets pinTouched. */
+  /** Pins a gauge to the top bar. Already pinned = no-op; with PIN_MAX pinned one locked in this run leaves first, else the OLDEST. Sets pinTouched. */
   pinMetric(id: HudWidget): void
   /** Removes a pin. Sets pinTouched. */
   unpinMetric(id: HudWidget): void

@@ -8,7 +8,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { CONCEPT_TITLE, CONCEPTS } from '../../content'
 import type { ConceptId, HudWidget } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
-import { metricSources, metricUnlocked, PIN_MAX, unseenMetrics } from '../../store/metricPins'
+import { metricSources, metricUnlocked, PIN_MAX, pinEvictee, unseenMetrics } from '../../store/metricPins'
 import { cashFlow } from '../cashflow'
 import { money } from '../format'
 import { useIsMobile } from '../hooks'
@@ -137,7 +137,9 @@ function MetricRow({ id, pins, onBar, isNew, focused }: { id: HudWidget; pins: r
   const label = t(def.labelKey)
   const concept = conceptOf(id)
   const W = def.Component
-  const pinLabel = pinned ? t('metrics.unpin') : pins.length >= PIN_MAX ? t('metrics.pinReplace', { old: t(WIDGETS[pins[0]!].labelKey) }) : t('metrics.pin')
+  // The hint names the pin the store would really evict (a pin locked in this run goes first, silently).
+  const evictee = useGameStore((s) => (pinned ? null : pinEvictee(s.ui.pinnedMetrics, id, s.state.unlockedWidgets)))
+  const pinLabel = pinned ? t('metrics.unpin') : evictee ? t('metrics.pinReplace', { old: t(WIDGETS[evictee].labelKey) }) : t('metrics.pin')
 
   return (
     <div

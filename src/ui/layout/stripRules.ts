@@ -130,3 +130,24 @@ export function nextStepShown(p: { hasStep: boolean; startCall: boolean; stepId?
   return true
 }
 
+/** True when the strip renders something (a rendered strip is the only thing a pointer can hover). */
+export function stripVisible(slot: StripSlot, sheetOpen: boolean): boolean {
+  return slot !== 'empty' && !(sheetOpen && slot === 'nextStep')
+}
+
+/**
+ * Whether the front item's life clock runs: only while a queue item is on screen, not under a mouse hover, and not
+ * while a full-screen overlay (move scene, post-mortem) covers the strip.
+ */
+export function stripClockRuns(p: { slot: StripSlot; hasFront: boolean; hover: boolean; overlay: boolean }): boolean {
+  return p.slot === 'queue' && p.hasFront && !p.hover && !p.overlay
+}
+
+/**
+ * Hover state after a render: a strip that stops rendering (empty slot, hidden under the phone sheet) gets no
+ * mouseleave, so its hover is cleared here instead of freezing every later item.
+ */
+export function nextHover(hover: boolean, slot: StripSlot, sheetOpen: boolean): boolean {
+  return hover && stripVisible(slot, sheetOpen)
+}
+

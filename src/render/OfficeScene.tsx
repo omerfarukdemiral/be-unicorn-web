@@ -89,7 +89,10 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     const availH = Math.max(size.height - ins.top - ins.bottom, Math.min(size.height, 140))
     const frame = frameBox(layout, zoomLevel)
     const r = Math.max(frame.r, 3)
-    const fit = Math.min(availW / (r * 2.35), availH / (r * 1.75 + 2.6))
+    // A tall free area (portrait phone) is width-bound: trim the side margin (the diamond's width is ~2r) so the
+    // office uses more of the room between the bars instead of floating in beige.
+    const sideFit = availH > availW * 1.2 ? 2.05 : 2.35
+    const fit = Math.min(availW / (r * sideFit), availH / (r * 1.75 + 2.6))
     const want = clamp(fit * ZOOM_FACTORS[zoomLevel], 12, 400)
 
     // Close zoom follows the selection (clamped to the office); otherwise frame the office (frameBox).

@@ -22,7 +22,7 @@ import { errorText, usePlacing } from '../Feedback'
 import { HorizonList, HorizonMini } from '../Horizon'
 import { momentLook, MomentLine, momentText, useMomentSource, type Moment } from '../Moments'
 import { NextStepChip, useNextStep } from '../NextStepChip'
-import { activityShown, enqueue, nextStepShown, pickSlot, stripLifeMs, type TransientKind } from './stripRules'
+import { activityShown, enqueue, nextHover, nextStepShown, pickSlot, stripClockRuns, stripLifeMs, stripVisible, type TransientKind } from './stripRules'
 import { STRIP_H, STRIP_H_MOBILE } from './tokens'
 
 type Item =
@@ -231,11 +231,19 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
   })
   const front = queue[0]
   const slot = pickSlot({ bankrupt: !!bankrupt, placing: !!placing, nextStep: showStep, front })
+  const overlay = useGameStore((s) => s.ui.overlay !== null)
 
-  // Life of the front item: runs only while it is on screen and not hovered; a displaced item keeps its time.
+  // A strip that unmounts under the cursor gets no mouseleave: drop the stale hover (else later items freeze).
+  const hover = nextHover(hold, slot, sheetOpen)
+  useEffect(() => {
+    if (hold && !hover) setHold(false)
+  }, [hold, hover])
+
+  // Life of the front item: runs only while it is on screen, not mouse-hovered and not under a full-screen overlay;
+  // a displaced item keeps its time.
   const left = useRef(new Map<number, number>())
   const bar = useRef<HTMLSpanElement>(null)
-  const running = slot === 'queue' && !!front && !hold
+  const running = stripClockRuns({ slot, hasFront: !!front, hover, overlay })
   useEffect(() => {
     if (!running || !front) return
     const key = front.key
@@ -256,8 +264,7 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, front?.key])
 
-  const hideOnSheet = sheetOpen && slot === 'nextStep'
-  if ((slot === 'empty' || hideOnSheet) && !more) return null
+  if (!stripVisible(slot, sheetOpen) && !more) return null
 
   const h = mobile ? STRIP_H_MOBILE : STRIP_H
   let content: ReactNode = null
@@ -309,7 +316,12 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
   }
 
   return (
-    <div className={cx('pointer-events-auto relative w-full', className)} onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)}>
+    <div
+      className={cx('pointer-events-auto relative w-full', className)}
+      // Mouse only: a tap fires enter without a reliable leave, so touch never holds the clock.
+      onPointerEnter={(e) => e.pointerType === 'mouse' && setHold(true)}
+      onPointerLeave={() => setHold(false)}
+    >
       {more && (
         <div className="ui-card ui-scroll absolute bottom-[calc(100%+8px)] right-0 z-10 max-h-[280px] w-[min(360px,100%)] animate-slide-up overflow-y-auto p-1">
           <p className="ui-label px-2 pb-1 pt-1.5">{t('strip.upcoming')}</p>
@@ -353,7 +365,7 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
           aria-expanded={more}
           aria-label={t('strip.more')}
           title={t('strip.more')}
-          className={cx('grid shrink-0 place-items-center rounded-md text-ink-2 hover:bg-surface-2 hover:text-ink', mobile ? 'size-8' : 'size-8')}
+          className={cx('grid shrink-0 place-items-center rounded-md text-ink-2 hover:bg-surface-2 hover:text-ink', mobile ? 'size-11' : 'size-8')}
         >
           <Icon name={more ? 'chevronDown' : 'chevronUp'} size={16} />
         </button>

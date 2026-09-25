@@ -40,8 +40,9 @@ function useBadges(): Partial<Record<DockTab, { n: number; tone: BadgeTone }>> {
 /**
  * The tab buttons. `bar`: desktop bottom bar, h40, icon + label; labels drop to icons below a 1240px bar
  * (container query on the bar), the active tab keeps its label. `mobile`: phone row, icon 20 + 10px label, h48.
+ * `touch` (landscape phone bar): the `bar` row with 44px targets. The row always keeps to the bar's right end.
  */
-export function DockTabs({ variant }: { variant: 'bar' | 'mobile' }) {
+export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'; touch?: boolean }) {
   const active = useGameStore((s) => s.ui.panel?.kind)
   const togglePanel = useGameStore((s) => s.togglePanel)
   const badges = useBadges()
@@ -71,7 +72,7 @@ export function DockTabs({ variant }: { variant: 'bar' | 'mobile' }) {
   }
 
   return (
-    <div className="flex items-center gap-1" role="tablist" aria-label={t('bottom.tabs')}>
+    <div className="ml-auto flex shrink-0 items-center gap-1" role="tablist" aria-label={t('bottom.tabs')}>
       {DOCK_TABS.map((d) => {
         const on = active === d.id
         const label = t(`dock.${d.id}`)
@@ -85,7 +86,8 @@ export function DockTabs({ variant }: { variant: 'bar' | 'mobile' }) {
             aria-label={label}
             title={`${label} (${d.key.toUpperCase()})`}
             className={cx(
-              'relative flex h-10 min-w-10 items-center justify-center gap-2 rounded-control text-[13px] font-semibold transition-colors',
+              'relative flex items-center justify-center gap-2 rounded-control text-[13px] font-semibold transition-colors',
+              touch ? 'h-11 min-w-11' : 'h-10 min-w-10',
               on ? 'bg-brand px-3 text-on-ink' : 'px-2.5 text-ink-2 hover:bg-surface-2 hover:text-ink @min-[1240px]:px-3',
             )}
           >

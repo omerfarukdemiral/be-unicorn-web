@@ -9,13 +9,16 @@ import { Bar, cx, SectionTitle } from '../primitives'
 import { Icon } from '../icons'
 import { effectSummary, optionLabel, valuationLine } from '../loopUi'
 
+/** Stable empty list: a fresh `[]` inside a useShallow object would change every snapshot (older saves have no goalsDone). */
+const NONE: readonly string[] = []
+
 export function GoalsCard() {
   const g = useGameStore(
     useShallow((s) => ({
       stage: s.state.stage,
       valuation: s.state.finance.valuation,
       progress: s.state.derived.stageProgress,
-      done: s.state.goalsDone ?? [],
+      done: s.state.goalsDone ?? NONE,
       parts: s.state.derived.valuationParts,
     })),
   )

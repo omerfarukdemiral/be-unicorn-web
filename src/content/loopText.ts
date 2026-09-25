@@ -23,7 +23,6 @@ export const LOOP_TEXT: Record<string, string> = {
 
   // Next step chip
   'step.label': 'Sıradaki adım',
-  'step.of': '{i}/{n}',
   'step.start': 'Zamanı başlat (Space)',
   'step.startTouch': 'Zamanı başlat',
   'step.team': 'Ekibi büyüt: kişi başı +{v} değerleme · runway {a} → {b} ay',

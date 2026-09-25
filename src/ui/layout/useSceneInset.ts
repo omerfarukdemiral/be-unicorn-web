@@ -3,15 +3,19 @@
 // Measured from the DOM markers:
 //   [data-scene-top]    top bar                    → top    = bar bottom + GAP
 //   [data-scene-bottom] strip slot + bottom bar    → bottom = vh − min(stack top, sheet top) + GAP
-//   [data-scene-right]  desktop panel <aside>      → right  = vw − panel left + GAP
-//   [data-scene-sheet]  phone sheet <section>      → (bottom, above; the strip floats at `bottom` on top of it)
+//   [data-scene-right]  side panel <aside>         → right  = vw − panel left + GAP  (desktop + landscape phone)
+//   [data-scene-sheet]  portrait sheet <section>   → (bottom, above; the strip floats at `bottom` on top of it)
 import { useEffect, useSyncExternalStore } from 'react'
 import { useGameStore } from '../../store/gameStore'
-import { useIsMobile } from '../hooks'
-import { GAP, PANEL_NARROW_BELOW, PANEL_W, PANEL_W_NARROW } from './tokens'
+import { useLayoutMode, type LayoutMode } from '../hooks'
+import { GAP, PANEL_NARROW_BELOW, PANEL_W, PANEL_W_LANDSCAPE, PANEL_W_NARROW } from './tokens'
 
-/** Desktop panel width at this viewport width: 400, or 360 below 1280. */
-export function panelWidth(vw: number): number {
+/**
+ * Side panel width: desktop 400, or 360 below 1280; landscape phone min(360, 46% of the width), so the scene keeps
+ * more than half the screen. (Portrait uses the full-width bottom sheet instead.)
+ */
+export function panelWidth(vw: number, mode: LayoutMode = 'desktop'): number {
+  if (mode === 'landscape') return Math.min(PANEL_W_LANDSCAPE, Math.round(vw * 0.46))
   return vw < PANEL_NARROW_BELOW ? PANEL_W_NARROW : PANEL_W
 }
 
@@ -20,9 +24,9 @@ function subscribeResize(cb: () => void): () => void {
   return () => window.removeEventListener('resize', cb)
 }
 
-/** Current desktop panel width (re-renders across the 1280 breakpoint). */
-export function usePanelWidth(): number {
-  return useSyncExternalStore(subscribeResize, () => panelWidth(window.innerWidth), () => PANEL_W)
+/** Current side panel width for this layout mode (re-renders across the 1280 breakpoint / on resize). */
+export function usePanelWidth(mode: LayoutMode = 'desktop'): number {
+  return useSyncExternalStore(subscribeResize, () => panelWidth(window.innerWidth, mode), () => PANEL_W)
 }
 
 /**
@@ -64,9 +68,8 @@ function measure(): void {
  */
 export function useSceneInset(): void {
   const panelOpen = useGameStore((s) => s.ui.panel !== null)
-  // Phone ↔ desktop and a phone's rotation swap the bar elements: observe the new ones.
-  const mobile = useIsMobile()
-  const landscape = useSyncExternalStore(subscribeResize, () => window.innerWidth > window.innerHeight, () => true)
+  // Desktop ↔ portrait ↔ landscape swap the bar elements: observe the new ones.
+  const mode = useLayoutMode()
   useEffect(() => {
     let raf = 0
     const schedule = () => {
@@ -87,5 +90,5 @@ export function useSceneInset(): void {
       window.removeEventListener('resize', schedule)
       window.clearTimeout(late)
     }
-  }, [panelOpen, mobile, landscape])
+  }, [panelOpen, mode])
 }

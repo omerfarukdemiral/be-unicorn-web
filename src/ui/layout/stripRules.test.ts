@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   activityShown,
   enqueue,
+  nextHover,
   nextStepShown,
   pickSlot,
   priorityOf,
@@ -11,7 +12,9 @@ import {
   STRIP_ACTIVITY,
   STRIP_LIFE_MS,
   STRIP_QUEUE_MAX,
+  stripClockRuns,
   stripLifeMs,
+  stripVisible,
   type QueueItem,
   type TransientKind,
 } from './stripRules'
@@ -119,5 +122,41 @@ describe('next step (resting item)', () => {
     expect(nextStepShown({ ...base, over: true })).toBe(false)
     expect(nextStepShown({ ...base, sheetOpen: true })).toBe(false)
     expect(nextStepShown({ ...base, hasStep: false })).toBe(false)
+  })
+})
+
+describe('strip queue: mixed kinds over the cap', () => {
+  it('moments and activity mixed: overflow drops waiting activity, then new-metric notes, never a moment first', () => {
+    let out = enqueue([], [q(1, 'receipt'), q(2, 'activity'), q(3, 'release'), q(4, 'newMetric')])
+    expect(keys(out)).toEqual([1, 2, 3, 4])
+    out = enqueue(out, [q(5, 'outcome')])
+    expect(keys(out)).toEqual([1, 3, 4, 5])
+    out = enqueue(out, [q(6, 'activity')])
+    expect(out.filter((x) => x.kind !== 'activity' && x.kind !== 'newMetric').map((x) => x.key)).toEqual([1, 3, 5])
+    expect(out.length).toBe(1 + STRIP_QUEUE_MAX)
+  })
+})
+
+describe('strip clock and hover', () => {
+  it('the life clock runs only for a queue item on screen, not hovered, not under an overlay', () => {
+    const base = { slot: 'queue' as const, hasFront: true, hover: false, overlay: false }
+    expect(stripClockRuns(base)).toBe(true)
+    expect(stripClockRuns({ ...base, hover: true })).toBe(false)
+    expect(stripClockRuns({ ...base, overlay: true })).toBe(false)
+    expect(stripClockRuns({ ...base, hasFront: false })).toBe(false)
+    expect(stripClockRuns({ ...base, slot: 'placing' })).toBe(false)
+  })
+
+  it('a hover left over from a strip that stopped rendering is cleared, so the next item still expires', () => {
+    // Hovered item; it is clicked away and the slot empties (the element unmounts, no mouseleave).
+    expect(nextHover(true, 'queue', false)).toBe(true)
+    expect(stripVisible('empty', false)).toBe(false)
+    const hover = nextHover(true, 'empty', false)
+    expect(hover).toBe(false)
+    // A new item arrives: its clock runs.
+    expect(stripClockRuns({ slot: 'queue', hasFront: true, hover, overlay: false })).toBe(true)
+    // Phone: the resting next step hides under the sheet, which also drops the hover.
+    expect(nextHover(true, 'nextStep', true)).toBe(false)
+    expect(nextHover(true, 'nextStep', false)).toBe(true)
   })
 })

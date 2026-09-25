@@ -48,13 +48,6 @@ export function horizonItemText(h: HorizonItem, days: number, short = false): st
   return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short) })
 }
 
-/** Phone form, the number first: "30g · −$1.5K" (kept for older callers). */
-export function horizonShort(h: HorizonItem, days: number, projectName: (id: string | undefined) => string): string {
-  const when = days < 0.5 ? t('horizon.today') : t('horizon.inDaysShort', { v: Math.max(1, Math.round(days)) })
-  const what = h.kind === 'payday' ? `−${money(h.amount ?? 0)}` : h.kind === 'release' ? releaseName(h.level ?? 1, h.update) : horizonLabel(h, projectName)
-  return `${when} · ${what}`
-}
-
 function useHorizon() {
   return useGameStore(
     useShallow((s) => ({

@@ -49,13 +49,35 @@ export function effectivePins(pins: readonly HudWidget[], unlocked: readonly Hud
   return pins.filter((id) => metricUnlocked(id, unlocked))
 }
 
-/** Adds `id` as the newest pin; with PIN_MAX pins the oldest leaves. Unknown / unpinnable ids change nothing. */
-export function addPin(pins: readonly HudWidget[], raw: HudWidget): HudWidget[] {
+/**
+ * Adds `id` as the newest pin; over PIN_MAX a pin locked in this run (kept from an earlier run, invisible now) leaves
+ * first, then the oldest one. Unknown / unpinnable ids change nothing. Without `unlocked` every pin counts as visible.
+ */
+export function addPin(pins: readonly HudWidget[], raw: HudWidget, unlocked?: readonly HudWidget[]): HudWidget[] {
   const id = canonicalMetric(raw)
   if (!PINNABLE.has(id) || pins.includes(id)) return [...pins]
-  const next = [...pins, id]
-  while (next.length > PIN_MAX) next.shift()
+  let next = [...pins, id]
+  while (next.length > PIN_MAX) {
+    const locked = unlocked ? next.findIndex((x) => x !== id && !metricUnlocked(x, unlocked)) : -1
+    next = next.filter((_, i) => i !== (locked >= 0 ? locked : 0))
+  }
   return next
+}
+
+/** The pin that pinning `id` would push out (for the "replaces X" hint), or null when a slot is free. */
+export function pinEvictee(pins: readonly HudWidget[], raw: HudWidget, unlocked: readonly HudWidget[]): HudWidget | null {
+  const next = addPin(pins, raw, unlocked)
+  const gone = pins.find((x) => !next.includes(x))
+  return gone && metricUnlocked(gone, unlocked) ? gone : null
+}
+
+/** First-run defaults for a player who never touched pins (a mid-game save loaded without UI prefs). */
+export const DEFAULT_PINS: readonly HudWidget[] = ['burnBreakdown', 'profitProjection']
+
+/** Fills free slots with the unlocked defaults (then other unlocked pinnable cards), until PIN_MAX are visible. */
+export function defaultPins(pins: readonly HudWidget[], unlocked: readonly HudWidget[]): HudWidget[] {
+  const order = [...DEFAULT_PINS, ...[...PINNABLE].filter((x) => !DEFAULT_PINS.includes(x))]
+  return autoPin([...pins], order.filter((x) => metricUnlocked(x, unlocked)), unlocked)
 }
 
 export function removePin(pins: readonly HudWidget[], raw: HudWidget): HudWidget[] {

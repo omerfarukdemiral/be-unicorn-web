@@ -132,7 +132,7 @@ Bu aksiyonlar ölü süreyi öldürür. Hepsi kısa cooldown'lıdır ve bir kavr
 
 | Aksiyon | Açıldığı aşama | Etki | Hissettirdiği kavram |
 |---|---|---|---|
-| **Elle kullanıcı bul** | Garaj | 1 gün sürer, +3–6 sadık kullanıcı gelir (düşük churn) | Ölçeklenmeyen şeyler yap |
+| **Elle kullanıcı bul** | Garaj | 1 gün sürer, +3–6 sadık kullanıcı gelir (düşük churn) | Kapı kapı dolaşmak |
 | **Kullanıcıyla konuş** | Garaj | Seçili projenin olgunluğuna +bonus | Ürün-pazar uyumu |
 | **Ekibi motive et** | Pre-seed | Kısa süreli +moral, kurucunun enerjisi düşer | Kurucu burnout |
 | **Yatırımcıyla kahve** | Pre-seed | Tur sürecini kısaltır | Tur zaman alır |
@@ -262,53 +262,53 @@ Repodaki 20 Defter dersi ve yaklaşık 45 ipucu birleştirildi, tekrarlar çıka
 #### Garaj
 | id | Tetik | Balon | Kural | Açar |
 |---|---|---|---|---|
-| `runway` | 10. gün | "Bu parayla kaç ay dayanırız, hiç hesapladın mı?" | Runway 6 ayın altına inmeden hareket et. | Runway sayacı |
-| `burn` | İlk işe alımdan sonraki ay | "Her yeni kişi aylık yakıtı artırıyor, fark ettin mi?" | Yaktığın her doların sana ne kazandırdığını sor. | Gider kırılımı |
-| `dont-scale` | İlk kez "Elle kullanıcı bul" | "İlk kullanıcılar tek tek kazanılır, reklamla değil." | İlk 10 kullanıcıyı tanı, adını bil. | — |
-| `pmf` | Olgunluk < 0.4 ve churn > %8 | "Geliyorlar ama kalmıyorlar, ürün henüz tutmuyor." | Kalıcılık gelmeden büyümeye para dökme. | Tutunma göstergesi |
-| `focus` | Garajda 2. proje açılınca | "İki işi yarım yapmak, bir işi bitirmekten yavaş." | Erken aşamada tek şeyi mükemmel yap. | — |
-| `default-alive` | İlk kez MRR > 0 | "Yatırım almasak bu gidişle kâra geçer miyiz?" | Default-alive olan masada pazarlık eder. | Kâr projeksiyon çizgisi |
+| `runway` | 10. gün | "Bu parayla kaç ay dayanırız, hiç hesapladın mı?" | İşe alım yapmadan önce runway'in kaç aya ineceğine bak. | Runway sayacı |
+| `burn` | İlk işe alımdan sonraki ay | "Geçen ay bu kadar para yakmıyorduk. Ne değişti?" | Yeni masrafı onaylamadan önce burn'e ekle, sonra karar ver. | Gider kırılımı |
+| `dont-scale` | İlk kez "Elle kullanıcı bul" | "Reklamı boş ver. Kullanıcıların bu ürünü neden açıyor, biliyor musun?" | Bu hafta bir kullanıcınla oturup konuş. | — |
+| `pmf` | Olgunluk < 0.4 ve churn > %8 | "Denedim, fena değil ama bir daha açmadım açıkçası." | Kullanıcıların her ay %8'den fazlası gidiyorsa reklam açma. | Tutunma göstergesi |
+| `focus` | Garajda 2. proje açılınca | "Yeni projeye mi geçiyoruz abi? Öbürü ne olacak?" | Birini bitirmeden yeni proje açma. | — |
+| `default-alive` | İlk kez MRR > 0 | "Yatırımcı hiç gelmese, bu gidişle kâra geçer misin?" | Farkı zamanında kapatamayacaksan gideri kıs ya da yatırım ara. | Kâr projeksiyon çizgisi |
 
 #### Pre-seed
 | id | Tetik | Balon | Kural | Açar |
 |---|---|---|---|---|
-| `dilution` | İlk yatırım teklifi | "Para güzel ama o yüzde bir daha geri gelmez." | Her tur hisseni eritir, sonraki turun fiyat çapasıdır. | Cap table pastası |
-| `safe` | Melek yatırımcı kartı | "Değerlemeyi şimdi değil sonraki turda konuşuruz diyor." | SAFE dilution'ı erteler, ortadan kaldırmaz. | — |
-| `fundraise-time` | İlk tur başlatılınca | "Tur haftalar sürer, kasa beklemez." | Runway yarıya inmeden tur başlat. | Tur süresi göstergesi |
-| `hire-bar` | 3. işe alım | "Hızlı almak kolay, yanlış kişiyi çıkarmak zor." | Yavaş işe al, sorun varsa hızlı karar ver. | Aday kalite göstergesi |
-| `morale-compounds` | İlk kez moral < 50 | "Ekip yorgun, bu hız kendini yiyor." | Moral bileşik getiridir, düşüşü de öyle. | Ofis moral ısı haritası |
+| `dilution` | İlk yatırım teklifi | "Parayı getiririm, karşılığında şirketinden biraz isterim. Adil, değil mi?" | Turu imzalamadan önce elinde yüzde kaç kalacağına bak. | Cap table pastası |
+| `safe` | Melek yatırımcı kartı | "Parayı bugün vereyim, fiyatı sonraki turda konuşuruz. Anlaştık mı?" | SAFE imzalamadan önce hissenden ne kadar gideceğini hesapla. | — |
+| `fundraise-time` | İlk tur başlatılınca | "Tur başladı. Para gelene kadar kasa dayanır mı, baktın mı?" | Kasan en az 6 ay yetiyorken turu başlat. | Tur süresi göstergesi |
+| `hire-bar` | 3. işe alım | "Ekip büyüyor abi. Hepsi gerçekten iyi mi, yoksa acele mi ettik?" | Emin değilsen alma. Yanlış aldıysan hemen çıkar. | Aday kalite göstergesi |
+| `morale-compounds` | İlk kez moral < 50 | "Ekip bitik abi, bu tempoyla daha ne kadar gideriz?" | Moral 50'nin altındaysa ekibin yükünü hafiflet, kasayı eksiye düşürme. | Ofis moral ısı haritası |
 
 #### Seed
 | id | Tetik | Balon | Kural | Açar |
 |---|---|---|---|---|
-| `churn` | users > 300 ve churn > %5 | "Her ay giden kullanıcılar sessizce büyümeyi yiyor." | Yeni kullanıcıdan önce gideni durdur. | Churn göstergesi |
-| `pricing` | ARPU düşük, users > 500 | "Ürün değerli ama fiyatı korkarak koymuşuz." | Fiyat, yarattığın değeri yakalamaktır. | Fiyat ayarı |
-| `feature-vs-product` | Yeni proje açılırken | "Bu ayrı bir ürün mü, mevcut ürüne özellik mi?" | Özelliği ürün diye satma, ürünü özelliğe hapsetme. | — |
-| `premature-scaling` | ekip ≥ 6 ve users < 300 | "Kalabalıklaştık ama kimse ne yapacağını bilmiyor." | Talep kanıtlanmadan ekip büyütme. | Koordinasyon uyarısı |
+| `churn` | users > 300 ve churn > %5 | "Bir ay kullandım, sonra bıraktım. Neden diye soran olmadı." | Yeni kullanıcı aramadan önce gidenin neden gittiğini sor. | Churn göstergesi |
+| `pricing` | ARPU düşük, users > 500 | "Bu fiyata mı? Açıkçası iki katını da verirdim." | Fiyatı küçük adımla artır, bir ay churn'e bak. | Fiyat ayarı |
+| `feature-vs-product` | Yeni proje açılırken | "Yeni proje mi açtın? Elimizdekine eklesek olmaz mıydı?" | Yeni proje açmadan önce kimin kullanacağını tek cümleyle yaz. | — |
+| `premature-scaling` | ekip ≥ 6 ve users < 300 | "Masalar doldu, maaşlar arttı, kullanıcı hâlâ bir avuç, abi." | Kullanıcı artmıyorsa yeni kişiyi alma. | Koordinasyon uyarısı |
 
 #### Series A
 | id | Tetik | Balon | Kural | Açar |
 |---|---|---|---|---|
-| `ltv-cac` | Reklam bütçesi ilk kez açılınca | "Bir kullanıcıyı kaça alıyoruz, bize kaç kazandırıyor?" | LTV:CAC 3'ün altındaysa reklam para yakar. | LTV:CAC paneli |
-| `organic-vs-paid` | Reklam payı > %70 | "Reklamı kesersek büyüme de duruyor mu?" | Organik taban olmadan reklam bağımlılık yapar. | Kanal kırılımı |
-| `tech-debt` | 3. crunch veya aceleci proje kararı | "Hızlı yazdık, şimdi her şey yavaşlıyor." | Teknik borç faizle birikir. | Borç sayacı |
-| `ten-x-myth` | Yıldız çalışan kartı | "Tek bir dahi, sistemin yerini tutmaz." | Sistem kahramana muhtaçsa sistem kırıktır. | — |
-| `culture-freezes` | Ekip 15 | "İlk 20 kişide kültür donar." | Değerleri ekip küçükken yaz. | Kültür rozeti |
+| `ltv-cac` | Reklam bütçesi ilk kez açılınca | "Her kullanıcıya reklam parası saydık. Gidene kadar bunu çıkarır mı?" | Oran 1'in altındaysa reklamı kes, 3'ün altındaysa kıs. | LTV:CAC paneli |
+| `organic-vs-paid` | Reklam payı > %70 | "Reklamı bir hafta kapatsan kaç kişi yine gelir?" | Pazarlamacı al, reklam payını 10'da 7'nin altına çek. | Kanal kırılımı |
+| `tech-debt` | 3. crunch veya aceleci proje kararı | "Aceleyle yazdığımız kod şimdi her işte ayağıma dolanıyor." | Borç 5 puanı geçince ilk temizlik teklifine evet de. | Borç sayacı |
+| `ten-x-myth` | Yıldız çalışan kartı | "Yıldızımız yarın giderse bu işi başka bilen var mı?" | Karşı teklif verme, işini bir ekip arkadaşına öğrettir. | — |
+| `culture-freezes` | Ekip 15 | "Kalabalıklaştık abi, yeni gelenler bizi taklit ediyor." | Moral 60'ın altındaysa yükü dağıt, değerleri ekiple yaz. | Kültür rozeti |
 
 #### Series B–C
 | id | Tetik | Balon | Kural | Açar |
 |---|---|---|---|---|
-| `concentration` | Tek müşteri > MRR'ın %30'u | "Bu müşteri giderse gelirin üçte biri gider." | Tek müşteri, tek kanal, tek tedarikçi görünmez tasmadır. | Gelir dağılımı |
-| `compliance` | Kurumsal satış açılınca | "Büyük müşteri önce güvenlik belgesi soruyor." | Uyum sıkıcıdır ama kurumsal kapının anahtarıdır. | — |
-| `trough` | MoM büyüme 2 ay boyunca < %2 | "Heyecan bitti, sonuç henüz yok." | Hayal kırıklığı vadisi normaldir, pusula verindir. | — |
-| `cap-table-health` | Kurucu hissesi < %35 | "Kontrol kimde, hiç baktın mı?" | Bugünkü %1 yarının pazarlık gücüdür. | — |
-| `no-single-path` | Arketip tespit edilince | "Senin yolun belli oldu, tek doğru yol bu değil." | Dört farklı patikadan unicorn çıkar. | Arketip rozeti |
+| `concentration` | Tek müşteri > MRR'ın %30'u | "En büyük müşterinin sözleşmesi bittiği gün gelir bir kalemde düşer." | Kurumsal müşteri ekle, en büyüğünün payını %30'un altına indir. | Gelir dağılımı |
+| `compliance` | Kurumsal satış açılınca | "Verilerim nerede duruyor? Belgeyi görmeden imza atmam." | Veri denetimi gelince danışman tut, evrakı tamamla. | — |
+| `trough` | MoM büyüme 2 ay boyunca < %2 | "İki aydır grafik dümdüz. Şimdi neyi değiştireceksin?" | Bu ay tek bir şeyi değiştir, ay sonunda sayıya bak. | — |
+| `cap-table-health` | Kurucu hissesi < %35 | "Şirketin kaçta kaçı hâlâ senin, en son ne zaman baktın?" | Turda 18 ay yetecek kadar para al, fazlasını payınla ödersin. | — |
+| `no-single-path` | Arketip tespit edilince | "Tarzın belli oldu. Rakibin başka yoldan gidiyor, sence kim yanlış?" | Rakibi kopyalamadan önce kendi kasana ve büyümene bak. | Arketip rozeti |
 
 #### Her aşamada
 | id | Tetik | Balon | Kural |
 |---|---|---|---|
-| `founder-burnout` | Kurucu enerjisi 5 gün boyunca < %20 | "Sen tükenirsen şirket de tükenir." | Dinlenmek görevdir. |
-| `failure-is-data` | İflas | "Bu bir veri noktası, kimlik değil." | İyi post-mortem suçlu değil kör nokta arar. |
+| `founder-burnout` | Kurucu enerjisi 5 gün boyunca < %20 | "Hiç durmadın. Bir gün de biz bakalım şirkete." | Enerjin %20'ye yaklaşınca bir gün izin al. |
+| `failure-is-data` | İflas | "Kapandı. Otur bakalım, neyi farklı yapardın?" | Suçlu arama, sebebi bul. Yeni şirkete onu bilerek başla. |
 
 ### 6.3 Karar kartları
 

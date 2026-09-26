@@ -15,3 +15,8 @@ sim/out
 .env.*
 !.env.example
 .vercel
+
+# Vercel/Upstash agent skills (local tooling)
+.agents/
+.claude/
+skills-lock.json

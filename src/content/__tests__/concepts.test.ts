@@ -9,7 +9,7 @@ import planMd from '../../../docs/PLAN.md?raw'
 const PLAN_BUBBLES: Record<string, string> = {
   runway: 'Bu parayla kaç ay dayanırız, hiç hesapladın mı?',
   burn: 'Geçen ay bu kadar para yakmıyorduk. Ne değişti?',
-  'dont-scale': 'Reklamı boş ver. Kullanıcıların bu ürünü neden açıyor, biliyor musun?',
+  'dont-scale': 'Onları tek tek kendin buldun. Neden geldiklerini sordun mu?',
   pmf: 'Denedim, fena değil ama bir daha açmadım açıkçası.',
   focus: 'Yeni projeye mi geçiyoruz abi? Öbürü ne olacak?',
   'default-alive': 'Yatırımcı hiç gelmese, bu gidişle kâra geçer misin?',

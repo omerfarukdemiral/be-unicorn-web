@@ -264,7 +264,7 @@ Repodaki 20 Defter dersi ve yaklaşık 45 ipucu birleştirildi, tekrarlar çıka
 |---|---|---|---|---|
 | `runway` | 10. gün | "Bu parayla kaç ay dayanırız, hiç hesapladın mı?" | İşe alım yapmadan önce runway'in kaç aya ineceğine bak. | Runway sayacı |
 | `burn` | İlk işe alımdan sonraki ay | "Geçen ay bu kadar para yakmıyorduk. Ne değişti?" | Yeni masrafı onaylamadan önce burn'e ekle, sonra karar ver. | Gider kırılımı |
-| `dont-scale` | İlk kez "Elle kullanıcı bul" | "Reklamı boş ver. Kullanıcıların bu ürünü neden açıyor, biliyor musun?" | Bu hafta bir kullanıcınla oturup konuş. | — |
+| `dont-scale` | İlk kez "Elle kullanıcı bul" | "Onları tek tek kendin buldun. Neden geldiklerini sordun mu?" | Bu hafta bir kullanıcınla oturup konuş. | — |
 | `pmf` | Olgunluk < 0.4 ve churn > %8 | "Denedim, fena değil ama bir daha açmadım açıkçası." | Kullanıcıların her ay %8'den fazlası gidiyorsa reklam açma. | Tutunma göstergesi |
 | `focus` | Garajda 2. proje açılınca | "Yeni projeye mi geçiyoruz abi? Öbürü ne olacak?" | Birini bitirmeden yeni proje açma. | — |
 | `default-alive` | İlk kez MRR > 0 | "Yatırımcı hiç gelmese, bu gidişle kâra geçer misin?" | Farkı zamanında kapatamayacaksan gideri kıs ya da yatırım ara. | Kâr projeksiyon çizgisi |
@@ -293,7 +293,7 @@ Repodaki 20 Defter dersi ve yaklaşık 45 ipucu birleştirildi, tekrarlar çıka
 | `organic-vs-paid` | Reklam payı > %70 | "Reklamı bir hafta kapatsan kaç kişi yine gelir?" | Pazarlamacı al, reklam payını 10'da 7'nin altına çek. | Kanal kırılımı |
 | `tech-debt` | 3. crunch veya aceleci proje kararı | "Aceleyle yazdığımız kod şimdi her işte ayağıma dolanıyor." | Borç 5 puanı geçince ilk temizlik teklifine evet de. | Borç sayacı |
 | `ten-x-myth` | Yıldız çalışan kartı | "Yıldızımız yarın giderse bu işi başka bilen var mı?" | Karşı teklif verme, işini bir ekip arkadaşına öğrettir. | — |
-| `culture-freezes` | Ekip 15 | "Kalabalıklaştık abi, yeni gelenler bizi taklit ediyor." | Moral 60'ın altındaysa yükü dağıt, değerleri ekiple yaz. | Kültür rozeti |
+| `culture-freezes` | Ekip 15 | "Kalabalıklaştık abi, yeni gelenler bizi taklit ediyor." | Moral 60'ın altındaysa yeni kişi almadan önce ekibi toparla. | Kültür rozeti |
 
 #### Series B–C
 | id | Tetik | Balon | Kural | Açar |
@@ -301,7 +301,7 @@ Repodaki 20 Defter dersi ve yaklaşık 45 ipucu birleştirildi, tekrarlar çıka
 | `concentration` | Tek müşteri > MRR'ın %30'u | "En büyük müşterinin sözleşmesi bittiği gün gelir bir kalemde düşer." | Kurumsal müşteri ekle, en büyüğünün payını %30'un altına indir. | Gelir dağılımı |
 | `compliance` | Kurumsal satış açılınca | "Verilerim nerede duruyor? Belgeyi görmeden imza atmam." | Veri denetimi gelince danışman tut, evrakı tamamla. | — |
 | `trough` | MoM büyüme 2 ay boyunca < %2 | "İki aydır grafik dümdüz. Şimdi neyi değiştireceksin?" | Bu ay tek bir şeyi değiştir, ay sonunda sayıya bak. | — |
-| `cap-table-health` | Kurucu hissesi < %35 | "Şirketin kaçta kaçı hâlâ senin, en son ne zaman baktın?" | Turda 18 ay yetecek kadar para al, fazlasını payınla ödersin. | — |
+| `cap-table-health` | Kurucu hissesi < %35 | "Şirketin kaçta kaçı hâlâ senin, en son ne zaman baktın?" | Turda 18 aylık para al, fazlası için hisse verme. | — |
 | `no-single-path` | Arketip tespit edilince | "Tarzın belli oldu. Rakibin başka yoldan gidiyor, sence kim yanlış?" | Rakibi kopyalamadan önce kendi kasana ve büyümene bak. | Arketip rozeti |
 
 #### Her aşamada

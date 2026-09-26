@@ -79,9 +79,9 @@ export const CONCEPTS: readonly Concept[] = [
     stage: 0,
     trigger: (s) => count(s, 'manualFinds') >= 1,
     speaker: 'mentor',
-    bubble: 'Reklamı boş ver. Kullanıcıların bu ürünü neden açıyor, biliyor musun?',
+    bubble: 'Onları tek tek kendin buldun. Neden geldiklerini sordun mu?',
     card: {
-      what: 'Kapı kapı dolaşmak yavaş iş, ama kullanıcının derdini ilk ağızdan duyarsın.',
+      what: 'Kullanıcıyı elle, tek tek bulmak yavaş. Ama neden geldiğini kendi ağzından duyarsın.',
       where: (s) => {
         const finds = count(s, 'manualFinds')
         const talks = count(s, 'userTalks')
@@ -103,7 +103,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'customer',
     bubble: 'Denedim, fena değil ama bir daha açmadım açıkçası.',
     card: {
-      what: 'Gelenler bırakmayıp kalıyorsa ürün tutmuş demektir. Buna ürün-pazar uyumu diyoruz.',
+      what: 'Gelen kalmıyorsa ürün daha tutmamış. Tuttuğu güne ürün-pazar uyumu diyoruz.',
       where: (s) =>
         `Ürün ${formatPercent(s.derived.avgMaturity)} hazır. Her ay kullanıcılarının ${formatPercent(s.stats.churn)} kadarı bırakıp gidiyor.`,
       rule: "Kullanıcıların her ay %8'den fazlası gidiyorsa reklam açma.",
@@ -139,7 +139,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'Yatırımcı hiç gelmese, bu gidişle kâra geçer misin?',
     card: {
-      what: 'Kasa bitmeden kâra yetişiyorsan kendi paranla ayakta kalırsın. Buna default-alive diyorlar.',
+      what: 'Kasa bitmeden kâra yetişiyorsan yatırımcı gelmese de yaşarsın. Buna default-alive diyoruz.',
       where: (s) => {
         const flow = `Ayda ${formatMoney(s.finance.mrr)} geliyor, ${formatMoney(s.finance.burn)} gidiyor.`
         if (s.finance.net >= 0) return `${flow} Kasa erimiyor, zaten kârdasın.`
@@ -290,7 +290,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'customer',
     bubble: 'Bu fiyata mı? Açıkçası iki katını da verirdim.',
     card: {
-      what: 'Fiyatı hiç artırmadın, oysa Aylin gibiler fazlasını vermeye hazır. O farkı istemenin adı fiyatlama.',
+      what: 'Sen hâlâ ilk günkü fiyattasın. Ürünün ettiği parayı istemeye fiyatlama diyoruz.',
       where: (s) =>
         `Kullanıcı başına ayda ${formatMoney(s.stats.arpu)} alıyorsun. Fiyatı %5 artırsan kâğıt üstünde kasaya ayda ${formatMoney(s.stats.users * s.stats.arpu * 0.05)} daha girer.`,
       rule: "Fiyatı küçük adımla artır, bir ay churn'e bak.",
@@ -439,7 +439,7 @@ export const CONCEPTS: readonly Concept[] = [
         const mood = m >= 60 ? 'rahat' : m >= 40 ? 'gergin' : 'yorgun'
         return `Ekip ${s.derived.teamSize} kişi, moral ${m}. Yeni gelenler de bu ${mood} havaya ayak uyduruyor.`
       },
-      rule: "Moral 60'ın altındaysa yükü dağıt, değerleri ekiple yaz.",
+      rule: "Moral 60'ın altındaysa yeni kişi almadan önce ekibi toparla.",
     },
     unlocks: 'cultureBadge',
     shelfColor: '#E39AAE',
@@ -482,7 +482,7 @@ export const CONCEPTS: readonly Concept[] = [
         if (list.length > 0) {
           const total = list.reduce((t, c) => t + c.mrr, 0)
           const head = `${list.length} kurumsal müşterin ayda ${formatMoney(total)} getiriyor.`
-          return seen ? `${head} Veri denetimini de gördün.` : `${head} Veri denetimi henüz gelmedi.`
+          return seen ? `${head} Veri denetimi de bir kez kapını çaldı.` : `${head} Veri denetimi henüz gelmedi.`
         }
         return s.unlockedTools.includes('enterpriseSales')
           ? `Kurumsal satış açıldı, ilk büyük müşterin henüz yok. Şimdilik aylık gelirin ${formatMoney(s.finance.mrr)}.`
@@ -517,7 +517,7 @@ export const CONCEPTS: readonly Concept[] = [
     card: {
       what: 'Kimin elinde ne kadar hisse olduğunu gösteren tabloya cap table, yani ortaklık tablosu diyoruz.',
       where: (s) => `Kurucu payın ${formatPercent(s.stats.equity)}. Kalan ${formatPercent(1 - s.stats.equity)} artık başkalarında.`,
-      rule: 'Turda 18 ay yetecek kadar para al, fazlasını payınla ödersin.',
+      rule: 'Turda 18 aylık para al, fazlası için hisse verme.',
     },
     unlocks: 'equity',
     shelfColor: '#7B93F5',

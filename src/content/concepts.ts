@@ -44,7 +44,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'accountant',
     bubble: 'Bu parayla kaç ay dayanırız, hiç hesapladın mı?',
     card: {
-      what: 'Kasanın bu gidişle kaç ay yettiğine runway diyoruz.',
+      what: 'Kasan bu gidişle kaç ay yeter? O sayının adı runway.',
       where: (s) => {
         if (s.finance.runway === null) return `Gelirin gideri karşılıyor, kasa erimiyor. Kasanda ${formatMoney(s.stats.cash)} duruyor.`
         if (s.finance.runway < 0.5) return `Kasa ayda ${formatMoney(-s.finance.net)} eriyor ve bitmek üzere.`
@@ -66,7 +66,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'accountant',
     bubble: 'Geçen ay bu kadar para yakmıyorduk. Ne değişti?',
     card: {
-      what: 'Maaşa, kiraya, reklama her ay yaktığın paranın hepsine burn diyoruz.',
+      what: 'Maaş, kira, reklam: her ay kasadan çıkan paranın toplamı burn.',
       where: (s) =>
         `Ayda ${formatMoney(s.finance.burn)} yakıyorsun, bunun ${formatMoney(s.finance.burnBreakdown.salaries)} kadarı maaşlara gidiyor.`,
       rule: "Yeni masrafı onaylamadan önce burn'e ekle, sonra karar ver.",
@@ -103,7 +103,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'customer',
     bubble: 'Denedim, fena değil ama bir daha açmadım açıkçası.',
     card: {
-      what: 'Gelen kalmıyorsa ürün daha tutmamış. Tuttuğu güne ürün-pazar uyumu diyoruz.',
+      what: 'Gelen kalmıyorsa ürün daha tutmamış. Tuttuğu gün ürün-pazar uyumunu bulmuş olursun.',
       where: (s) =>
         `Ürün ${formatPercent(s.derived.avgMaturity)} hazır. Her ay kullanıcılarının ${formatPercent(s.stats.churn)} kadarı bırakıp gidiyor.`,
       rule: "Kullanıcıların her ay %8'den fazlası gidiyorsa reklam açma.",
@@ -118,7 +118,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'cofounder',
     bubble: 'Yeni projeye mi geçiyoruz abi? Öbürü ne olacak?',
     card: {
-      what: 'Ekibi iki projeye bölersen ikisi de yavaşlar. Birini bitirip ötekine geçmeye odak diyoruz.',
+      what: 'Ekibi iki projeye bölersen ikisi de yavaşlar. Birini bitirmeden ötekine geçme: odak bu.',
       where: (s) => {
         const active = s.projects.filter((p) => p.maturity < 1).length
         const slow = Math.round((1 - parallelProjectSpeed(active, s.stage)) * 100)
@@ -139,7 +139,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'Yatırımcı hiç gelmese, bu gidişle kâra geçer misin?',
     card: {
-      what: 'Kasa bitmeden kâra yetişiyorsan yatırımcı gelmese de yaşarsın. Buna default-alive diyoruz.',
+      what: 'Kasa bitmeden kâra yetişiyorsan yatırımcı gelmese de yaşarsın: default-alive.',
       where: (s) => {
         const flow = `Ayda ${formatMoney(s.finance.mrr)} geliyor, ${formatMoney(s.finance.burn)} gidiyor.`
         if (s.finance.net >= 0) return `${flow} Kasa erimiyor, zaten kârdasın.`
@@ -161,7 +161,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'investor',
     bubble: 'Parayı getiririm, karşılığında şirketinden biraz isterim. Adil, değil mi?',
     card: {
-      what: 'Yatırımcıya hisse verdikçe pastadaki dilimin küçülür. Buna dilution, yani hisse sulanması deniyor.',
+      what: 'Yatırımcıya hisse verdikçe pastadaki dilimin küçülür. Dilution, yani hisse sulanması.',
       where: (s) =>
         s.round?.active
           ? `Bu turda şirketin ${formatPercent(s.round.offer.equity)} kadarını veriyorsun. Teklif böyle kapanırsa elinde ${formatPercent(s.stats.equity * (1 - s.round.offer.equity))} kalır.`
@@ -178,7 +178,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'investor',
     bubble: 'Parayı bugün vereyim, fiyatı sonraki turda konuşuruz. Anlaştık mı?',
     card: {
-      what: 'Bugün parayı alırsın, karşılığında kaç hisse vereceğin sonra belli olur. Buna SAFE deniyor.',
+      what: 'Parayı bugün alırsın, kaç hisse vereceğin sonraki turda belli olur. Anlaşmanın adı SAFE.',
       where: (s) => {
         const pct = formatPercent(s.stats.equity)
         if (s.decisions.pending.some((p) => p.sourceCardId === 'angel-1')) {
@@ -274,7 +274,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'customer',
     bubble: 'Bir ay kullandım, sonra bıraktım. Neden diye soran olmadı.',
     card: {
-      what: 'Aylin gibi her ay sessizce gidenlerin oranına churn diyoruz.',
+      what: 'Aylin gibi her ay sessizce gidenlerin oranı: churn.',
       where: (s) =>
         `${formatNumber(s.stats.users)} kullanıcından her ay yaklaşık ${formatNumber(Math.max(1, Math.round(s.stats.users * s.stats.churn)))} kişi gidiyor. Churn'ün ${formatPercent(s.stats.churn)}.`,
       rule: 'Yeni kullanıcı aramadan önce gidenin neden gittiğini sor.',
@@ -290,7 +290,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'customer',
     bubble: 'Bu fiyata mı? Açıkçası iki katını da verirdim.',
     card: {
-      what: 'Sen hâlâ ilk günkü fiyattasın. Ürünün ettiği parayı istemeye fiyatlama diyoruz.',
+      what: 'Sen hâlâ ilk günkü fiyattasın; ürünün ise artık daha fazlasını ediyor.',
       where: (s) =>
         `Kullanıcı başına ayda ${formatMoney(s.stats.arpu)} alıyorsun. Fiyatı %5 artırsan kâğıt üstünde kasaya ayda ${formatMoney(s.stats.users * s.stats.arpu * 0.05)} daha girer.`,
       rule: "Fiyatı küçük adımla artır, bir ay churn'e bak.",
@@ -365,7 +365,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'Reklamı bir hafta kapatsan kaç kişi yine gelir?',
     card: {
-      what: 'Kendiliğinden ya da tavsiyeyle gelene organik diyoruz. Reklamla gelenin her birine para ödüyorsun.',
+      what: 'Kendiliğinden ya da tavsiyeyle gelen organik. Reklamla gelenin her birine ayrı para ödüyorsun.',
       where: (s) => {
         const c = s.derived.channels
         const free = c.organic + c.manual
@@ -433,7 +433,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'cofounder',
     bubble: 'Kalabalıklaştık abi, yeni gelenler bizi taklit ediyor.',
     card: {
-      what: 'İlk günkü alışkanlıklarımız herkese bulaşıyor. Buna kültür diyoruz, bir oturdu mu zor sökülüyor.',
+      what: 'İlk günkü alışkanlıklarımız herkese bulaşıyor. Kültür dediğin bu; bir oturdu mu zor sökülür.',
       where: (s) => {
         const m = Math.round(s.stats.morale)
         const mood = m >= 60 ? 'rahat' : m >= 40 ? 'gergin' : 'yorgun'
@@ -453,7 +453,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'accountant',
     bubble: 'En büyük müşterinin sözleşmesi bittiği gün gelir bir kalemde düşer.',
     card: {
-      what: 'Gelirinin büyük kısmı tek müşteriye bağlıysa buna yoğunlaşma riski diyoruz.',
+      what: 'Gelirinin büyük kısmı tek müşteriye bağlıysa, o gidince şirket sarsılır.',
       where: (s) => {
         const list = s.finance.enterpriseCustomers
         if (list.length === 0 || s.finance.mrr <= 0) return `Şu an aylık gelirin ${formatMoney(s.finance.mrr)}, tek müşteriye bağlı değil.`
@@ -475,7 +475,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'customer',
     bubble: 'Verilerim nerede duruyor? Belgeyi görmeden imza atmam.',
     card: {
-      what: 'Büyük müşterinin imzadan önce istediği KVKK ve güvenlik belgelerine uyum evrakı diyoruz.',
+      what: 'Büyük müşteri imzadan önce KVKK ve güvenlik belgesi ister. Hepsi uyum evrakı.',
       where: (s) => {
         const list = s.finance.enterpriseCustomers
         const seen = cardSeen(s, 'gdpr-audit')
@@ -499,7 +499,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'İki aydır grafik dümdüz. Şimdi neyi değiştireceksin?',
     card: {
-      what: 'Büyümen yerinde sayıyorsa buna durgunluk çukuru diyoruz.',
+      what: 'Büyüme yerinde sayıyor, heyecan da geçti. Durgunluk çukuru tam burası.',
       where: (s) =>
         count(s, 'lowGrowthMonths') >= 2
           ? `${count(s, 'lowGrowthMonths')} aydır aylık büyümen %2'yi geçmiyor. Son ay ${formatPercent(s.derived.momGrowth)} ile kapandı.`
@@ -515,7 +515,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'Şirketin kaçta kaçı hâlâ senin, en son ne zaman baktın?',
     card: {
-      what: 'Kimin elinde ne kadar hisse olduğunu gösteren tabloya cap table, yani ortaklık tablosu diyoruz.',
+      what: 'Kimin elinde ne kadar hisse var? Bunu gösteren tablo cap table, ortaklık tablosu.',
       where: (s) => `Kurucu payın ${formatPercent(s.stats.equity)}. Kalan ${formatPercent(1 - s.stats.equity)} artık başkalarında.`,
       rule: 'Turda 18 aylık para al, fazlası için hisse verme.',
     },
@@ -529,7 +529,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'Tarzın belli oldu. Rakibin başka yoldan gidiyor, sence kim yanlış?',
     card: {
-      what: 'Şirketini büyütme biçimine kurucu tarzı diyoruz. Tek doğru tarz yok.',
+      what: 'Şirketi nasıl büyüttüğün, senin kurucu tarzın. Tek doğru tarz yok.',
       where: (s) => {
         if (s.archetype === undefined) return `Tarzın henüz belli değil, ${s.projects.length} projen var.`
         const name = ARCHETYPE_TEXT[s.archetype].name
@@ -579,7 +579,7 @@ export const CONCEPTS: readonly Concept[] = [
     speaker: 'mentor',
     bubble: 'Kapandı. Otur bakalım, neyi farklı yapardın?',
     card: {
-      what: 'Her şey bitince oturup neden öyle bittiğine bakıyoruz. Buna post-mortem diyoruz: şirketin otopsisi.',
+      what: 'Bitince oturup neden öyle bittiğine bakarsın: post-mortem, şirketin otopsisi.',
       where: (s) => {
         const go = s.gameOver
         const n = s.concepts.learned.length

@@ -1,6 +1,7 @@
 // UI-side visual constants (render keeps its own palette.ts; UI may not import render).
 import type { Dept, EmployeeStatus, FounderActionKind, HudWidget, SlotType, StageIndex } from '../engine/types'
 import { STAGES } from '../content'
+import type { PanelKind } from '../store/types'
 import type { IconName } from './icons'
 
 /** CSS colour at a low opacity: the ~12% tint behind coloured icons, dept chips and brand-soft rows. */
@@ -148,6 +149,28 @@ export function moraleTone(m: number): string {
   if (m < 40) return 'bg-g-morale/45'
   return 'bg-g-morale'
 }
+
+/**
+ * Panel kind stripe (3px on top of the RightPanel head + its 20px icon; docs/GAMEPLAY_V2.md §10.3). Identity only,
+ * never a warning. Decision (orange) and Mağaza (teal) sit far apart on the wheel; no stripe reuses the running-speed
+ * green (--color-speed-run), so the time signal stays the only green frame.
+ */
+export const PANEL_COLOR: Record<PanelKind, string> = {
+  shop: 'var(--color-g-retention)',
+  team: 'var(--color-g-morale)',
+  projects: 'var(--color-dept-product)',
+  growth: 'var(--color-g-users)',
+  metrics: 'var(--color-g-sky)',
+  journal: 'var(--color-kind-concept)',
+  detail: 'var(--color-ink-3)',
+  decision: 'var(--color-kind-decision)',
+  settings: 'var(--color-ink-3)',
+  roadmap: 'var(--color-brand)',
+  leaderboard: 'var(--color-g-indigo)',
+}
+
+/** Runway (months) under which a number turns red: the one danger band (docs/LAYOUT.md §4.1). */
+export const RUNWAY_DANGER_MONTHS = 3
 
 /** Text colour for a signed number (positive/negative only on numbers). */
 export function deltaTone(n: number): string {

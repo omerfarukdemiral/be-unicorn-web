@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { findUsersPreview } from '../founder'
 import { createEngine } from '../index'
-import { diligenceFactor, lockedPrice, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { diligenceFactor, diligenceNow, lockedPrice, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
 import type { DiligenceItem, GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
@@ -13,7 +13,7 @@ const api = createEngine(fakeContent())
 /** Recompute derived numbers without advancing time. */
 const refresh = (s: GameState): GameState => api.applyAction(s, { type: 'setSpeed', speed: 0 }).state
 
-/** Garage with one engineer and a launched MVP: pre-revenue valuation = 60K + 200K + users × 150. */
+/** Garage with one engineer and a launched MVP: pre-revenue valuation = 150K + users × 400 (no releases on record). */
 function launched(users: number, seed = 1): GameState {
   let s = api.createGame({ seed })
   s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
@@ -31,7 +31,7 @@ const target = B.STAGE_TARGET_VALUATION[1]!
 const withBurn = (s: GameState, b: number): GameState => ({ ...s, finance: { ...s.finance, burn: b, burnBreakdown: { salaries: b, rent: 0, infra: 0, ads: 0, founder: 0 } } })
 
 /** Users that put the garage valuation at `v`. */
-const usersFor = (v: number) => Math.ceil((v - B.VAL_PER_TEAM - B.VAL_PER_LAUNCHED) / B.VAL_PER_USER)
+const usersFor = (v: number) => Math.ceil((v - B.VAL_PER_LAUNCHED) / B.VAL_PER_USER)
 
 const dd = (met: boolean[]): DiligenceItem[] => met.map((m, i) => ({ id: (['runway', 'growth', 'morale'] as const)[i]!, target: 1, value: 1, met: m }))
 
@@ -155,10 +155,23 @@ describe('live offer: clamp and due diligence', () => {
   it('the round carries the investor’s checklist with live values', () => {
     const s = api.applyAction(launched(usersFor(450_000)), { type: 'startRound' }).state
     const ids = s.round!.diligence!.map((d) => d.id)
-    expect(ids).toEqual(['runway', 'growth', 'morale'])
+    expect(ids).toEqual(['runway', 'growth', 'morale', 'burn'])
     const morale = s.round!.diligence!.find((d) => d.id === 'morale')!
     expect(morale.target).toBe(B.DILIGENCE_MORALE)
     expect(morale.met).toBe(true)
+    // Garage / Pre-seed: the burn multiple is not asked (99), so no growth yet does not fail it.
+    const burn = s.round!.diligence!.find((d) => d.id === 'burn')!
+    expect(burn.target).toBe(99)
+    expect(burn.met).toBe(true)
+  })
+
+  it('from Seed the investor asks for a burn multiple ≤ 3 (GAMEPLAY V2 §4.1)', () => {
+    const seed = launched(usersFor(450_000))
+    const at = (bm: number) => diligenceNow({ ...seed, stage: 2, derived: { ...seed.derived, burnMultiple: bm } }).find((d) => d.id === 'burn')!
+    expect(at(2).target).toBe(3)
+    expect(at(2).met).toBe(true)
+    expect(at(3.5).met).toBe(false)
+    expect(B.DILIGENCE_BM).toEqual([99, 99, 3, 2.5, 2, 1.5, 1.5])
   })
 })
 

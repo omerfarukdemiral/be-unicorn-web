@@ -170,19 +170,66 @@ export function approachMorale(current: number, target: number, dtDays: number):
 
 // §5.8 Valuation --------------------------------------------------------------
 
-/** gelir öncesi: 60K × ekip + 150 × users + 200K × yayındakiProje. */
-export function valuationPreRevenue(team: number, users: number, launchedProjects: number): number {
-  return B.VAL_PER_TEAM * team + B.VAL_PER_USER * users + B.VAL_PER_LAUNCHED * launchedProjects
+/** gelir öncesi (GAMEPLAY V2 §4.1): 150K × yayındakiProje + 400 × users + 15K × min(5, sürüm). Head count is not traction. */
+export function valuationPreRevenue(users: number, launchedProjects: number, releases: number): number {
+  return B.VAL_PER_LAUNCHED * launchedProjects + B.VAL_PER_USER * users + B.VAL_PER_RELEASE * Math.min(B.VAL_RELEASE_MAX, Math.max(0, releases))
 }
 
-/** çarpan = clamp(4, tavan, 6 + 150 × aylıkBüyüme); tavan = MULTIPLE_MAX, or the stage's MULTIPLE_MAX_BY_STAGE (Faz 3). */
-export function valuationMultiple(momGrowth: number, cap: number = B.MULTIPLE_MAX): number {
-  return clamp(B.MULTIPLE_MIN, Math.max(B.MULTIPLE_MIN, cap), B.MULTIPLE_BASE + B.MULTIPLE_GROWTH * momGrowth)
+/** The stage's multiple floor (zero growth) and ceiling (MULTIPLE_MAX_BY_STAGE). */
+export function multipleMin(stage: number): number {
+  return B.MULTIPLE_MIN_BY_STAGE[Math.min(B.MULTIPLE_MIN_BY_STAGE.length - 1, Math.max(0, stage))]!
 }
 
-/** The stage's multiple ceiling: 30 → 25 → 20 → 15 → 12 → 10. */
 export function multipleCap(stage: number): number {
   return B.MULTIPLE_MAX_BY_STAGE[stage] ?? B.MULTIPLE_MAX
+}
+
+/** 0–1: the 3-month MoM against GROWTH_FULL_K × the stage's diligence ask (1 = the ceiling is earned). */
+export function growthScore(momAvg: number, stage: number): number {
+  const ask = B.DILIGENCE_MOM[Math.min(B.DILIGENCE_MOM.length - 1, Math.max(0, stage))]!
+  return clamp(0, 1, momAvg / (B.GROWTH_FULL_K * ask))
+}
+
+/** Series A on: 1 − 0.1 per burn-multiple point above the diligence ask, at most 3 points. Seed and before: 1. */
+export function bmPenalty(burnMultiple: number, stage: number): number {
+  if (stage < B.BM_PENALTY_MIN_STAGE) return 1
+  const ask = B.DILIGENCE_BM[Math.min(B.DILIGENCE_BM.length - 1, stage)]!
+  return 1 - B.BM_PENALTY_PER_POINT * Math.min(B.BM_PENALTY_MAX_POINTS, Math.max(0, burnMultiple - ask))
+}
+
+/** Series A on: more than IDLE_CASH_MONTHS of gross burn in the bank, and no round closed in IDLE_GRACE_DAYS → 0.9. */
+export function idlePenalty(stage: number, cash: number, grossBurn: number, day: number, lastRoundCloseDay: number): number {
+  const idle = stage >= B.IDLE_PENALTY_MIN_STAGE && cash > B.IDLE_CASH_MONTHS * grossBurn && day - lastRoundCloseDay > B.IDLE_GRACE_DAYS
+  return idle ? B.IDLE_PENALTY : 1
+}
+
+/**
+ * çarpan = (MIN[aşama] + (MAX − MIN) × growthScore) × cezalar (GAMEPLAY V2 §4.1). `penalty` is
+ * bmPenalty × idlePenalty × boardPenalty; zero growth gives MIN at every stage.
+ */
+export function valuationMultiple(momAvg: number, stage: number, penalty = 1): number {
+  const min = multipleMin(stage)
+  return (min + (Math.max(min, multipleCap(stage)) - min) * growthScore(momAvg, stage)) * penalty
+}
+
+/**
+ * Burn multiple: Σ positive net burn of the last BURN_MULTIPLE_MONTHS month ends / max(1, (mrr[n] − mrr[n−3]) × 12).
+ * Net ≥ 0 every month → 0; capped at BURN_MULTIPLE_MAX.
+ */
+export function burnMultiple(netHist: readonly number[], mrrHist: readonly number[], months: number = B.BURN_MULTIPLE_MONTHS): number {
+  let burned = 0
+  for (let i = Math.max(0, netHist.length - months); i < netHist.length; i++) burned += Math.max(0, -netHist[i]!)
+  if (burned <= 0) return 0
+  const n = mrrHist.length - 1
+  // Growth over the same window the burn covers (an old save's netHistory starts short while mrrHistory is full).
+  const span = Math.min(months, netHist.length)
+  const gained = n >= 0 ? (mrrHist[n]! - (mrrHist[n - span] ?? 0)) * 12 : 0
+  return Math.min(B.BURN_MULTIPLE_MAX, burned / Math.max(1, gained))
+}
+
+/** Rule of 40 (display only): annualised 3-month MoM % + net margin %. */
+export function ruleOf40(momAvg: number, mrrValue: number, net: number): number {
+  return momAvg * 12 * 100 + (mrrValue > 0 ? (net / mrrValue) * 100 : 0)
 }
 
 /**
@@ -210,15 +257,16 @@ export function revenueBlend(mrrValue: number): number {
 }
 
 /**
- * PLAN piecewise valuation (+ pre-revenue floor for continuity, see balance). Below PRE_REVENUE_MRR the revenue part
- * blends in (× MRR / $1K), so crossing $1K no longer jumps valuation (review fix: 296K → 375K in one day).
+ * Piecewise valuation: below PRE_REVENUE_MRR the revenue part blends in (× MRR / $1K), so crossing $1K does not jump
+ * (review fix: 296K → 375K in one day). The pre-revenue floor holds only up to PRE_REVENUE_FLOOR_MAX_STAGE; from
+ * Seed it fades out as revenue blends in, so a company at $1K+ MRR is worth its revenue multiple alone (GAMEPLAY V2 §4.1).
  */
-export function valuation(mrrValue: number, momGrowth: number, team: number, users: number, launched: number, cap: number = B.MULTIPLE_MAX): number {
-  const pre = valuationPreRevenue(team, users, launched)
+export function valuation(mrrValue: number, multiple: number, pre: number, stage: number): number {
   const blend = revenueBlend(mrrValue)
   if (blend <= 0) return pre
-  const post = valuationPostRevenue(mrrValue, valuationMultiple(momGrowth, cap)) * blend
-  if (!B.VALUATION_KEEP_PRE_REVENUE_FLOOR && blend >= 1) return post
+  const post = valuationPostRevenue(mrrValue, multiple) * blend
+  // Past the floor stage the floor fades out with the blend (pre × (1 − blend)): no cliff at $1K MRR, no floor above it.
+  if (!B.VALUATION_KEEP_PRE_REVENUE_FLOOR || stage > B.PRE_REVENUE_FLOOR_MAX_STAGE) return post + pre * (1 - blend)
   return Math.max(pre, post)
 }
 

@@ -100,3 +100,4 @@ Her kartı yayına almadan önce şunlara bak:
 - `where(s)` yalnızca mevcut GameState alanlarını ve `format.ts` yardımcılarını (`formatMoney`, `formatMonths`, `formatNumber`, `formatPercent`, `formatRatio`) kullanır. `formatMonths(null)` "sonsuz" döndürür, cümle buna göre kurulur ("runway sonsuz" yerine "kasa erimiyor").
 - Başlıklar `src/content/strings.ts` → `CONCEPT_TITLE`. Konuşmacı adları `src/content/text.ts` → `NPC_TEXT`. Arketip adları `ARCHETYPE_TEXT`.
 - id, trigger, unlocks, shelfColor değişmez.
+- GAMEPLAY V2 B1 metinleri (`src/content/loopText.ts`): `step.traction` ("Kullanıcı ve sürüm topla · {v} / {t}", eski `step.team` / `step.teamPlain` silindi), `round.dd.burn` ("Burn çarpanı ≤ {t}", hedef tek ondalıkla yazılır: 2.5), `val.pre` / `val.post` / `val.postBlend` (değerleme formülü satırları). Kısa, tek cümle; formül satırı ders anlatmaz, rakamı açar.

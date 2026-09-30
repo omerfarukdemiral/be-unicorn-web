@@ -1,5 +1,5 @@
-// Small UI hooks: responsive breakpoint, real-time ticker, persisted UI prefs.
-import { useEffect, useState, useSyncExternalStore } from 'react'
+// Small UI hooks: responsive breakpoint, real-time ticker, number tween, persisted UI prefs.
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 import { useGameStore } from '../store/gameStore'
 
@@ -70,6 +70,35 @@ export function useNow(ms: number, active = true): number {
     return () => window.clearInterval(id)
   }, [ms, active])
   return now
+}
+
+/**
+ * Eases a number toward its target (300–600 ms, docs/GAMEPLAY_V2.md §10.1 D6): gauges count up/down instead of
+ * jumping per engine chunk. Non-finite targets are shown as they are.
+ */
+export function useTween(target: number, ms = 450): number {
+  const [shown, setShown] = useState(target)
+  const from = useRef(target)
+  const cur = useRef(target)
+  useEffect(() => {
+    if (!Number.isFinite(target)) {
+      setShown(target)
+      return
+    }
+    from.current = cur.current
+    const start = performance.now()
+    let raf = 0
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / ms)
+      const e = 1 - (1 - k) ** 3
+      cur.current = from.current + (target - from.current) * e
+      setShown(cur.current)
+      if (k < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, ms])
+  return shown
 }
 
 // ---------------------------------------------------------------------------

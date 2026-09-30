@@ -1,15 +1,19 @@
 // Speed control (top bar, section C): ⏸ 1× 2× 4× + the time status label. With the thin ScreenFrame this is
-// the ONLY place the speed colour appears (docs/LAYOUT.md §4.2). Pause is neutral (ink-3, dashed), never red.
+// the ONLY place the speed colour appears (docs/LAYOUT.md §4.2). Paused = calm red, running = green; the speeds
+// differ by icon (▶ / ▶▶ / ▶▶▶) and fill density, never by hue (docs/GAMEPLAY_V2.md §13).
 import { useEffect, useRef, useState } from 'react'
 import type { GameSpeed } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
-import { Icon } from '../icons'
+import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx } from '../primitives'
 import { soft } from '../theme'
-import { FLOW_LABEL_MS, holdLabel, isFocusHold, SPEED_COLOR, useRecentSlowdown, useTimeStatus, type TimeStatus } from '../time'
+import { FLOW_LABEL_MS, holdLabel, isFocusHold, SPEED_COLOR, SPEED_FILL, useRecentSlowdown, useTimeStatus, type TimeStatus } from '../time'
 
 const SPEEDS: GameSpeed[] = [0, 1, 2, 4]
+
+/** Running speed icon: one, two or three triangles. */
+const SPEED_ICON: Record<Exclude<GameSpeed, 0>, IconName> = { 1: 'play', 2: 'play2', 4: 'play3' }
 
 function setSpeed(speed: GameSpeed) {
   useGameStore.getState().dispatch({ type: 'setSpeed', speed })
@@ -49,7 +53,8 @@ function useStatusLabel(time: TimeStatus): { text: string; title: string; tone: 
 
 /**
  * Desktop: segmented ⏸ 1× 2× 4×. The active segment is the speed time really runs at (a focus pause lights
- * the neutral pause segment; the player's chosen speed keeps a dashed frame in its colour meanwhile).
+ * the red pause segment; the player's chosen speed keeps a dashed green frame meanwhile). Every active segment
+ * gets the same treatment: its colour at SPEED_FILL density + a 2px inset ring.
  * Phone (`compact`): one 44px button cycling pause → 1× → 2× → 4×.
  */
 export function SpeedControl({ compact, showLabel = true }: { compact?: boolean; showLabel?: boolean }) {
@@ -77,9 +82,9 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
         aria-label={t('top.speedCycle', { v: now, next })}
         title={label?.title ?? t('top.speedCycle', { v: now, next })}
         className="tabular flex h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border-2 px-1.5 text-xs font-bold text-ink transition-[border-color,background-color] duration-300 disabled:opacity-40"
-        style={still ? { borderColor: 'var(--color-speed-pause)', borderStyle: 'dashed', background: 'var(--color-surface-2)' } : { borderColor: c, background: soft(c, 18) }}
+        style={{ borderColor: c, borderStyle: still ? 'dashed' : 'solid', background: soft(c, SPEED_FILL[effective]) }}
       >
-        <Icon name={still ? 'pause' : 'play'} size={14} />
+        <Icon name={effective === 0 ? 'pause' : SPEED_ICON[effective]} size={effective === 4 ? 16 : 14} fill={still ? undefined : 'currentColor'} />
         {!still && `${effective}×`}
       </button>
     )
@@ -105,15 +110,11 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
         {SPEEDS.map((v) => {
           const active = effective === v
           const c = SPEED_COLOR[v]
-          const style =
-            active && v === 0
-              ? // Still: neutral segment with an ink-3 ring (pause is not danger).
-                { background: 'var(--color-surface)', boxShadow: 'inset 0 0 0 1.5px var(--color-speed-pause)' }
-              : active
-                ? { background: soft(c, 22), boxShadow: `inset 0 0 0 2px ${c}` }
-                : held && chosen === v
-                  ? { outline: `1.5px dashed ${c}`, outlineOffset: -3 }
-                  : undefined
+          const style = active
+            ? { background: soft(c, SPEED_FILL[v]), boxShadow: `inset 0 0 0 2px ${c}` }
+            : held && chosen === v
+              ? { outline: `1.5px dashed ${c}`, outlineOffset: -3 }
+              : undefined
           return (
             <button
               key={v}
@@ -124,12 +125,20 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
               aria-label={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pause')) : t('speed.hint', { v })}
               title={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pauseHint')) : t('speed.hint', { v })}
               className={cx(
-                'tabular flex h-9 w-9 items-center justify-center rounded-[8px] text-xs font-semibold transition-[background-color,box-shadow,color] duration-300 disabled:opacity-40',
+                'tabular flex h-9 w-9 flex-col items-center justify-center rounded-[8px] text-xs font-semibold leading-none transition-[background-color,box-shadow,color] duration-300 disabled:opacity-40',
                 active ? 'text-ink' : 'text-ink-2 hover:bg-surface hover:text-ink',
               )}
               style={style}
             >
-              {v === 0 ? <Icon name={playerPaused ? 'play' : 'pause'} size={14} /> : `${v}×`}
+              {v === 0 ? (
+                <Icon name={playerPaused ? 'play' : 'pause'} size={14} />
+              ) : (
+                <>
+                  {/* ▶ / ▶▶ / ▶▶▶ over the 1× / 2× / 4× text: the speed reads without the (shared) green. */}
+                  <Icon name={SPEED_ICON[v]} size={v === 4 ? 14 : 12} fill="currentColor" />
+                  <span className="text-[10px]">{`${v}×`}</span>
+                </>
+              )}
             </button>
           )
         })}

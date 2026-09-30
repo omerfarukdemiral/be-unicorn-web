@@ -85,13 +85,11 @@
   --color-energy-ink: #a45f00;    /* energy number (4.8:1 on surface) */
 
   /* --- Time state: ONLY the speed control's active segment and the thin screen frame (docs/LAYOUT.md §4.2).
-         Frames/fills only: the text on them stays ink (AA). Pause = neutral grey (dashed frame), 1× = yellow,
-         2× = orange, 4× = green (flowing fast). --- */
-  /* Pause is not danger (docs/LAYOUT.md §4.2): neutral ink-3 grey + a dashed frame; red is kept for real danger. */
-  --color-speed-pause: #9b978f;
-  --color-speed-1: #d6a100;
-  --color-speed-2: #ee7a14;
-  --color-speed-4: #1f9d63;
+         Frames/fills only: the text on them stays ink (AA). Paused = calm red + a DASHED frame, running = green
+         (1×/2×/4× alike; the icon ▶/▶▶/▶▶▶ and the fill density tell them apart). The pause red is a separate,
+         less saturated token than --color-negative: waiting, not danger (docs/DESIGN.md "One red rule"). --- */
+  --color-speed-pause: #c94a3f;
+  --color-speed-run: #1f9d63;
 
   /* --- Bubble kind marks --- */
   --color-kind-decision: #e8790f; /* karar */
@@ -140,15 +138,21 @@
   --font-sans: "Oxanium Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* --- Shape --- */
-  --radius-card: 14px;
+  --radius-card: 10px;
   --radius-control: 10px;
   --shadow-card: 0 1px 2px rgb(31 29 36 / 0.05), 0 4px 12px -6px rgb(31 29 36 / 0.10);
   --shadow-pop: 0 12px 32px -12px rgb(31 29 36 / 0.22), 0 2px 6px -2px rgb(31 29 36 / 0.08);
+  /* The right panel / sheet: a tight contact shadow + a soft lift (opaque surface, no blur). */
+  --shadow-panel: 0 1px 2px rgb(31 29 36 / 0.08), 0 14px 32px -14px rgb(31 29 36 / 0.28);
 
   --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   --animate-fade-in: fade-in 200ms ease-out both;
   --animate-slide-up: slide-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  --animate-slide-left: slide-left 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  /* HUD grammar motion (docs/GAMEPLAY_V2.md §10.1 D6): panel rise, one-shot gauge pop, guidance breath, number tick. */
+  --animate-rise: rise 180ms ease-out both;
+  --animate-pop-once: pop-once 320ms ease-out;
+  --animate-breathe: breathe 1.6s ease-in-out infinite;
+  --animate-count: count 300ms ease-out;
   --animate-ambient: ambient 3s ease-in-out both;
   --animate-wiggle: wiggle 1.6s ease-in-out infinite;
   --animate-danger-pulse: danger-pulse 1.6s ease-in-out infinite;
@@ -169,8 +173,24 @@
     from { opacity: 0; transform: translateY(24px); }
     to { opacity: 1; transform: none; }
   }
-  @keyframes slide-left {
-    from { opacity: 0; transform: translateX(24px); }
+  /* A panel opens: short rise + scale 0.96 → 1. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+  /* A gauge whose number just moved: one short swell. */
+  @keyframes pop-once {
+    0%, 100% { transform: none; }
+    40% { transform: scale(1.12); }
+  }
+  /* The one object the player should look at next (Dock icon, slot): slow breath, never a flash. */
+  @keyframes breathe {
+    0%, 100% { transform: none; }
+    50% { transform: scale(1.07); }
+  }
+  /* A number ticks to a new value. */
+  @keyframes count {
+    from { opacity: 0.35; transform: translateY(3px); }
     to { opacity: 1; transform: none; }
   }
   @keyframes ambient {
@@ -270,14 +290,12 @@ canvas {
     color: var(--color-ink-2);
   }
 
-  /* Shared card surface: flat, 1px hairline, soft shadow. */
+  /* Shared card surface: flat, opaque, 1px hairline, soft shadow (no blur: a HUD plate, not frosted glass). */
   .ui-card {
-    background: color-mix(in oklab, var(--color-surface) 96%, transparent);
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
   }
 }
 
@@ -341,10 +359,14 @@ input[type="range"].ui-range::-moz-range-thumb {
   box-shadow: 0 0 0 2px var(--color-surface);
 }
 
+/* Reduced motion: no keyframes at all (every animation lands on its resting state) and near-instant transitions.
+   The screen frame's day glow would otherwise rest at full strength: hide it. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
+    animation: none !important;
     transition-duration: 1ms !important;
+  }
+  .animate-frame-beat {
+    opacity: 0;
   }
 }

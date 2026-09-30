@@ -91,15 +91,26 @@ export function pitchOption(s: GameState, pitch: RoundPitch): PitchOption {
   }
 }
 
-/** The investor's due-diligence list with today's values (runway ≥ 3 months, MoM ≥ stage ask, morale ≥ 50). */
+/** Burn multiple the investor accepts at the current stage (99 before Seed: not asked). */
+export function burnAsk(s: GameState): number {
+  return B.DILIGENCE_BM[s.stage] ?? B.DILIGENCE_BM[B.DILIGENCE_BM.length - 1]!
+}
+
+/**
+ * The investor's due-diligence list with today's values (runway ≥ 3 months, MoM ≥ stage ask, morale ≥ 50,
+ * burn multiple ≤ stage ask).
+ */
 export function diligenceNow(s: GameState): DiligenceItem[] {
   const runway = s.finance.runway
   const mom = investorGrowth(s)
   const ask = growthAsk(s)
+  const bm = s.derived.burnMultiple ?? 0
+  const bmAsk = burnAsk(s)
   return [
     { id: 'runway', target: B.DILIGENCE_RUNWAY_MONTHS, value: runway ?? B.DILIGENCE_RUNWAY_MONTHS, met: runway === null || runway >= B.DILIGENCE_RUNWAY_MONTHS },
     { id: 'growth', target: ask, value: mom, met: mom >= ask },
     { id: 'morale', target: B.DILIGENCE_MORALE, value: s.stats.morale, met: s.stats.morale >= B.DILIGENCE_MORALE },
+    { id: 'burn', target: bmAsk, value: bm, met: bm <= bmAsk },
   ]
 }
 
@@ -341,6 +352,7 @@ export function closeRound(s: GameState, _content: EngineContent): void {
   s.stats.reputation = clamp(0, 100, s.stats.reputation + B.ROUND_CLOSE_REPUTATION)
   unlockWidget(s, 'reputation')
   incCounter(s, 'roundsClosed')
+  s.finance.lastRoundCloseDay = s.time.day
   for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay = Math.min(v.leaveDay, s.time.day)
   pushActivity(s, 'roundClosed', { amount: Math.round(r.offer.amount), equity: r.offer.equity })
   pushEvent(s, { kind: 'roundClosed', value: r.offer.amount })

@@ -81,9 +81,12 @@ function onClick(e: MouseEvent): void {
   const el = (e.target as Element | null)?.closest?.(TAPPABLE) as HTMLButtonElement | null
   if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return
   if (pendingTap) window.clearTimeout(pendingTap)
+  // A button may name its own press cue (primitives Button: commit tone sets data-cue="confirm").
+  const own = el.dataset?.cue
+  const id: CueId = own === 'confirm' ? 'confirm' : 'tap'
   pendingTap = window.setTimeout(() => {
     pendingTap = 0
-    playCue('tap')
+    playCue(id)
   }, 30)
 }
 

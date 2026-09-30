@@ -58,6 +58,7 @@ export function payday(s: GameState, content: EngineContent): void {
     runwayAfter: s.finance.runway,
     mom: s.derived.momGrowth,
     multiple: s.derived.valuationMultiple,
+    burnMultiple: s.derived.burnMultiple,
     mrr: s.finance.mrr,
     users: s.stats.users,
     team: s.employees.length,

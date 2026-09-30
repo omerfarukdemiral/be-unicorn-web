@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { CONTENT, GOALS } from '../../content/index'
 import * as B from '../balance'
-import { valuation } from '../economy'
+import { valuation, valuationMultiple, valuationPreRevenue } from '../economy'
 import { createEngine } from '../index'
 import { recomputeDerived } from '../derive'
 import type { GameState } from '../types'
@@ -124,7 +124,7 @@ describe('money before the product (review #10)', () => {
   })
 
   it('valuation has no jump at $1K MRR: the revenue formula blends in', () => {
-    const at = (mrr: number) => valuation(mrr, 0.5, 5, 300, 1, 30)
+    const at = (mrr: number) => valuation(mrr, valuationMultiple(0.5, 0), valuationPreRevenue(300, 1, 2), 0)
     const below = at(B.PRE_REVENUE_MRR - 1)
     const above = at(B.PRE_REVENUE_MRR + 1)
     expect(Math.abs(above - below) / below).toBeLessThan(0.02)
@@ -154,7 +154,7 @@ describe('weekly pitch: an average impression that never saturates (review #4, #
   it('a pitch still moves the offer when price × diligence is at its ceiling; a skipped week counts as zero', () => {
     let s = withProject(0.3)
     const target = B.STAGE_TARGET_VALUATION[1]!
-    s = refresh({ ...s, stats: { ...s.stats, users: Math.ceil((target * 1.2 - 2 * B.VAL_PER_TEAM) / B.VAL_PER_USER), morale: 80 } })
+    s = refresh({ ...s, stats: { ...s.stats, users: Math.ceil((target * 1.2) / B.VAL_PER_USER), morale: 80 } })
     s = api.applyAction(s, { type: 'startRound' }).state
     s = { ...s, round: { ...s.round!, weeksTotal: 12, weeksLeft: 12 } }
     s = api.step(s, 7)

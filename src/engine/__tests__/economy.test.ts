@@ -106,27 +106,53 @@ describe('§5.7 morale', () => {
 })
 
 describe('§5.8 valuation', () => {
-  it('pre-revenue', () => {
-    expect(E.valuationPreRevenue(3, 100, 1)).toBe(3 * B.VAL_PER_TEAM + 100 * B.VAL_PER_USER + B.VAL_PER_LAUNCHED)
+  it('pre-revenue prices traction, not head count (GAMEPLAY V2 §4.1)', () => {
+    expect(E.valuationPreRevenue(100, 1, 3)).toBe(B.VAL_PER_LAUNCHED + 100 * B.VAL_PER_USER + 3 * B.VAL_PER_RELEASE)
+    // Releases count up to 5; the Pre-seed window (300K) opens at 1 launch + 5 releases + ~190 users.
+    expect(E.valuationPreRevenue(0, 0, 9)).toBe(B.VAL_RELEASE_MAX * B.VAL_PER_RELEASE)
+    expect(E.valuationPreRevenue(190, 1, 5)).toBeGreaterThanOrEqual(0.6 * 500_000)
   })
-  it('multiple = clamp(MIN, MAX, BASE + GROWTH × mom)', () => {
-    expect(E.valuationMultiple(0)).toBe(B.MULTIPLE_BASE)
-    expect(E.valuationMultiple(0.05)).toBeCloseTo(B.MULTIPLE_BASE + B.MULTIPLE_GROWTH * 0.05)
-    expect(E.valuationMultiple(1)).toBe(B.MULTIPLE_MAX)
-    expect(E.valuationMultiple(-0.5)).toBe(B.MULTIPLE_MIN)
-  })
-  it('pins the Faz 3 multiple: clamp(4, cap(stage), 5 + 100 × 3-month MoM) (DECISIONS #12 → #17)', () => {
-    expect(B.MULTIPLE_BASE).toBe(5)
-    expect(B.MULTIPLE_GROWTH).toBe(100)
-    expect(E.valuationMultiple(0)).toBe(5)
-    expect(E.valuationMultiple(0.05)).toBeCloseTo(10)
-    expect(E.valuationMultiple(0.1)).toBeCloseTo(15)
-    expect(E.valuationMultiple(0.3)).toBe(30)
-    expect(E.valuationMultiple(-0.1)).toBe(4)
-    // Stage ceiling: the same growth buys a smaller multiple in a bigger company.
-    expect(E.valuationMultiple(0.2, E.multipleCap(4))).toBe(B.MULTIPLE_MAX_BY_STAGE[4])
+  it('zero growth gives MIN[stage] at every stage; GROWTH_FULL_K (≤ 2) × the diligence MoM gives MAX', () => {
+    for (let st = 0; st <= 6; st++) {
+      expect(E.valuationMultiple(0, st)).toBe(B.MULTIPLE_MIN_BY_STAGE[st])
+      expect(E.valuationMultiple(-0.2, st)).toBe(B.MULTIPLE_MIN_BY_STAGE[st])
+      expect(E.valuationMultiple(B.GROWTH_FULL_K * B.DILIGENCE_MOM[st]!, st)).toBeCloseTo(B.MULTIPLE_MAX_BY_STAGE[st]!, 9)
+      expect(E.valuationMultiple(2 * B.DILIGENCE_MOM[st]!, st)).toBeCloseTo(B.MULTIPLE_MAX_BY_STAGE[st]!, 9)
+      expect(E.valuationMultiple(1, st)).toBeCloseTo(B.MULTIPLE_MAX_BY_STAGE[st]!, 9)
+    }
+    // Halfway: MIN + half the span (Series B: 2 + 5 × 0.5).
+    expect(E.valuationMultiple((B.GROWTH_FULL_K * B.DILIGENCE_MOM[4]!) / 2, 4)).toBeCloseTo(4.5, 9)
+    expect(B.GROWTH_FULL_K).toBeLessThanOrEqual(2)
+    expect(B.MULTIPLE_MAX_BY_STAGE).toEqual([30, 30, 15, 10, 7, 5.15, 5.15])
     expect(E.multipleCap(5)).toBeLessThan(E.multipleCap(2))
     expect(E.multipleCap(99)).toBe(B.MULTIPLE_MAX)
+    // Penalties multiply the whole multiple.
+    expect(E.valuationMultiple(0, 3, 0.9)).toBeCloseTo(B.MULTIPLE_MIN_BY_STAGE[3]! * 0.9, 9)
+  })
+  it('burn multiple = 3 months of net burn / (MRR gained × 12); not burning = 0, no growth = capped', () => {
+    // Burned 30K over 3 months while MRR grew 10K → 20K: 30K / 120K = 0.25.
+    expect(E.burnMultiple([-10_000, -10_000, -10_000], [10_000, 12_000, 15_000, 20_000])).toBeCloseTo(0.25, 9)
+    // Profitable months do not count as burn; only the last 3 months are read.
+    expect(E.burnMultiple([-99_000, 5_000, -6_000, 1_000], [0, 10_000, 12_000, 15_000, 11_000])).toBeCloseTo(6_000 / 12_000, 9)
+    expect(E.burnMultiple([1_000, 2_000, 3_000], [1, 2, 3, 4])).toBe(0)
+    expect(E.burnMultiple([], [])).toBe(0)
+    // Short net history (old save): growth is read over the same 1 month the burn covers.
+    expect(E.burnMultiple([-12_000], [0, 5_000, 9_000, 10_000])).toBeCloseTo(12_000 / 12_000, 9)
+    expect(E.burnMultiple([-50_000, -50_000, -50_000], [20_000, 20_000, 20_000, 20_000])).toBe(B.BURN_MULTIPLE_MAX)
+  })
+  it('bmPenalty only from Series A, at most 3 points; the idle-cash penalty spares a fresh round', () => {
+    expect(E.bmPenalty(20, 2)).toBe(1)
+    expect(E.bmPenalty(B.DILIGENCE_BM[3]!, 3)).toBe(1)
+    // Series A, BM 5 vs ask 2.5: 2.5 points → 0.75.
+    expect(E.bmPenalty(5, 3)).toBeCloseTo(0.75, 9)
+    // Bounded: 3 points at most → 0.7.
+    expect(E.bmPenalty(50, 3)).toBeCloseTo(1 - B.BM_PENALTY_PER_POINT * B.BM_PENALTY_MAX_POINTS, 9)
+    const burn = 100_000
+    const rich = B.IDLE_CASH_MONTHS * burn + 1
+    expect(E.idlePenalty(3, rich, burn, 1_100, 1_000)).toBe(1)
+    expect(E.idlePenalty(3, rich, burn, 1_000 + B.IDLE_GRACE_DAYS + 1, 1_000)).toBe(B.IDLE_PENALTY)
+    expect(E.idlePenalty(2, rich, burn, 5_000, 1_000)).toBe(1)
+    expect(E.idlePenalty(3, B.IDLE_CASH_MONTHS * burn, burn, 5_000, -Infinity)).toBe(1)
   })
   it('the multiple prices the average MoM of the last 3 months, not one lucky month', () => {
     expect(E.averageMom([100, 110, 121, 133.1])).toBeCloseTo(0.1)
@@ -143,9 +169,20 @@ describe('§5.8 valuation', () => {
     expect(E.founderLiving(99)).toBe(B.FOUNDER_LIVING_COST[B.FOUNDER_LIVING_COST.length - 1])
     expect(E.burn(1000, 500, 20, 100, 1200)).toBe(2820)
   })
-  it('post-revenue = MRR × 12 × multiple; growth is priced', () => {
+  it('post-revenue = MRR × 12 × multiple; growth is priced; the pre-revenue floor holds only up to Pre-seed', () => {
     expect(E.valuationPostRevenue(10_000, 10)).toBe(1_200_000)
-    expect(E.valuation(50_000, 0.1, 0, 0, 0)).toBeGreaterThan(E.valuation(50_000, 0, 0, 0, 0))
+    expect(E.valuation(50_000, E.valuationMultiple(0.1, 2), 0, 2)).toBeGreaterThan(E.valuation(50_000, E.valuationMultiple(0, 2), 0, 2))
+    expect(E.valuation(2_000, 4, 1_000_000, 1)).toBe(1_000_000)
+    expect(E.valuation(2_000, 3, 1_000_000, 2)).toBe(2_000 * 12 * 3)
+  })
+  it('from Seed the floor fades with the blend: no cliff at $1K MRR (review fix)', () => {
+    const pre = 1_575_000
+    const at999 = E.valuation(999, 3, pre, 2)
+    const at1000 = E.valuation(1_000, 3, pre, 2)
+    expect(at1000).toBe(1_000 * 12 * 3)
+    expect(at999 - at1000).toBeLessThan(pre * 0.01)
+    expect(E.valuation(500, 3, pre, 2)).toBeCloseTo(pre * 0.5 + 500 * 12 * 3 * 0.5, 6)
+    expect(E.valuation(0, 3, pre, 2)).toBe(pre)
   })
   it('MoM growth', () => {
     expect(E.momGrowth(100, 120)).toBeCloseTo(0.2)

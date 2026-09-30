@@ -18,11 +18,14 @@ const PITCH_ICON: Record<RoundPitch, IconName> = { metrics: 'bars', story: 'chat
 function ddValue(d: DiligenceItem): string {
   if (d.id === 'runway') return t('unit.months', { v: fixed(d.value, 1) })
   if (d.id === 'growth') return pct(d.value, 1)
+  // Burn multiple: capped at 99 = no net-new ARR yet, shown as a dash.
+  if (d.id === 'burn') return d.value >= 99 ? '—' : fixed(d.value, 1)
   return fixed(d.value, 0)
 }
 
 function ddTarget(d: DiligenceItem): string {
   if (d.id === 'growth') return pct(d.target, 0)
+  if (d.id === 'burn') return fixed(d.target, 1)
   return fixed(d.target, 0)
 }
 

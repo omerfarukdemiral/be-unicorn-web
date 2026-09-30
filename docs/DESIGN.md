@@ -106,18 +106,18 @@ the thin viewport frame (`ScreenFrame`, 3px desktop / 2px phone). The stage sect
 date and the date itself stay **neutral** (`ink-2`); there is no running dot and no "DURAKLATILDI" pill.
 Colour follows the speed time *actually* runs at.
 
-**Pausing is not danger.** Any pause (the player's own or a focus pause for a decision / Kazanımlar card /
-round offer / modal) is neutral grey and **dashed**: `speed-pause` = `ink-3`. A focus pause adds a faint inner
-band in the chosen speed's colour (where time returns to) and the chosen segment gets a dashed frame. The time
-status label ("Duraklatıldı", "Karar · 2×", "Zaman akıyor", "Önemli an · 1×") sits next to the segments
-(≥1440; in the segment tooltips below that). Colour is never the only signal: solid vs dashed + the label.
+**Paused = red, running = green** (docs/GAMEPLAY_V2.md §13; replaces DECISIONS #13/#14's grey/yellow/orange/green).
+Any pause (the player's own or a focus pause for a decision / Kazanımlar card / round offer / modal) is the calm
+pause red and **dashed**. 1×, 2× and 4× share one green: the speed segments tell them apart by icon (▶ / ▶▶ / ▶▶▶
+over `1×/2×/4×`) and fill density (18 / 24 / 32%). A focus pause adds a faint inner band in the chosen speed's
+colour (where time returns to) and the chosen segment gets a dashed frame. The time status label ("Duraklatıldı",
+"Karar · 2×", "Zaman akıyor", "Önemli an · 1×") sits next to the segments (≥1440; in the segment tooltips below
+that). Colour is never the only signal: solid vs dashed, ⏸ vs ▶ and the label carry the same state.
 
 | Token | Value | State |
 |---|---|---|
-| `speed-pause` | `#9B978F` (= `ink-3`) | Duraklatıldı / odak duraklaması (frame dashed, label `ink-2`) |
-| `speed-1` | `#D6A100` | 1× (yellow) |
-| `speed-2` | `#EE7A14` | 2× (orange) |
-| `speed-4` | `#1F9D63` | 4× (green) |
+| `speed-pause` | `#C94A3F` | Duraklatıldı / odak duraklaması (frame **dashed**, ⏸ segment, label `ink-2`) |
+| `speed-run` | `#1F9D63` (= `positive`) | 1× / 2× / 4× (frame solid; segment ▶ / ▶▶ / ▶▶▶) |
 
 The frame is the one place a border above 1px is allowed (see Shape). Motion: `animate-day-tick` (date pops
 each day), `animate-frame-beat` (frame glow once per game day while flowing), `animate-cash-rise` (daily Kasa
@@ -133,6 +133,10 @@ delta, `ink-2` / `positive-ink`), `animate-payday-drop` (payday lump, bold ink: 
 **warning** (`energy` mark + `energy-ink` number: low energy, LTV:CAC < 3, churn > %8, tech debt, coordination,
 revenue concentration, founder stake < %50, error icon, leaving-employee badge) or neutral (pause, daily burn,
 payday lump, receipt net, the stage section). Counter badges on the tabs are `brand`.
+
+**Exception: the speed frame red is not danger.** `speed-pause` is its own, less saturated token (`#C94A3F`, never
+`negative`) and only ever appears as the **dashed** viewport frame + the ⏸ segment: the dashed line and the ⏸ icon
+tell "waiting" apart from "this can end the run". It never colours a number.
 
 ### Status, kinds, departments
 
@@ -152,11 +156,18 @@ Opacity modifiers work (`bg-brand/15`, `bg-g-morale/45`). Inline / dynamic hue: 
 
 | Token | Value | Tailwind |
 |---|---|---|
-| `--radius-card` | 14px | `rounded-card` (cards, panels, sheets, overlays) |
+| `--radius-card` | 10px | `rounded-card` (cards, panels, sheets, overlays) |
 | `--radius-control` | 10px | `rounded-control` (buttons, chips, inputs, stat tiles) |
 | — | 6px | `rounded-md` (pills / tags) |
 | `--shadow-card` | very light 2-layer | `shadow-card` — floating HUD cards, bubbles |
-| `--shadow-pop` | light drop | `shadow-pop` — modals, bottom sheet, toasts |
+| `--shadow-pop` | light drop | `shadow-pop` — modals, toasts |
+| `--shadow-panel` | contact + soft lift, 2-layer | `shadow-[var(--shadow-panel)]` — the right panel / bottom sheet |
+
+Surfaces are **opaque** (no backdrop blur): HUD plates over a lively scene, not frosted glass. The right panel
+carries a 3px kind stripe on top (`theme.ts PANEL_COLOR`), a 20px icon, a 13px uppercase title and its primary
+number on the right (`panelHeadline.ts`). Motion keyframes (all off under `prefers-reduced-motion`):
+`animate-rise` (panel opens, 180 ms, scale 0.96 → 1), `animate-pop-once` (a gauge whose number moved),
+`animate-breathe` (the one object to look at next, 1.6 s), `animate-count` (a number ticks).
 
 Borders are always **1px** (exception: the viewport time frame, 2–3px, see Time state). Brand CTAs may carry a soft brand glow (`shadow-[0_4px_12px_-4px_var(--color-brand)]`).
 
@@ -219,18 +230,20 @@ card. No 800+.
 | Component | Notes |
 |---|---|
 | `Card` | `.ui-card` |
-| `Button` | tones `primary` (brand) / `secondary` (default) / `ghost` / `danger` / `onInk`; `soft` = secondary, `mint` = deprecated primary |
+| `Button` | tones `commit` (brand fill; spends money / equity / a move; `cost` chip, 120 ms press, `data-cue="confirm"`) / `routine` (hairline, small) / `danger` (faint negative hairline, red text) / `ghost` / `onInk`; `primary`/`mint` = deprecated commit, `secondary`/`soft` = deprecated routine at md size |
 | `IconButton` | `rounded-control`; `active` = brand fill |
 | `Bar` | brand fill by default; `tone` = Tailwind class, or `color` = CSS hue (track becomes a 16% tint of it) |
 | `Ring` | brand stroke by default; pass `tone` |
-| `Chip` | active = brand-soft + brand frame + brand-ink text (always; identity hues go in as a `<Dot>` child) |
+| `Chip` | active = brand-soft + brand frame + brand-ink text (always; identity hues go in as a `<Dot>` child); `count` = tabular number after the label; `segment` inside `Segmented` (surface-2 track, active lifts) |
 | `Pill` | hairline tag; `dot` mark; `tint` = light fill of a hue (dept, live) |
 | `Dot` | department / status / kind mark |
 | `IconBadge` | neutral, `filled` faint square, or `color` = `iconTone(color)` icon on ~12% tile |
-| `Stat` | metric row; `icon` + `color` add the metric's gauge tile (same as its HUD chip) |
-| `Label`, `Delta`, `Divider`, `SectionTitle`, `LockedHint`, `Empty`, `QualityStars` (amber) | — |
+| `Stat` | 22px tabular value first, label under it; `icon` + `color` add the metric's gauge tile (same as its HUD chip); `delta`, `tween` + `format` |
+| `CostPreview` | `⌛ 9 → 7 ay` chip (+ `cost`) drawn from the engine's `previewSpend()` result; red only when runway < 3 or the next payday is short |
+| `SectionTitle` | 3px colour stripe (`color`, neutral by default) + uppercase label |
+| `Label`, `Delta`, `Divider`, `LockedHint`, `Empty`, `QualityStars` (amber) | — |
 
-HUD: `WidgetChip` takes `color`; `WIDGETS[id].color` is the registry field. Panel header icon = brand tile.
+HUD: `WidgetChip` takes `color`; `WIDGETS[id].color` is the registry field. Panel header: kind stripe + 20px icon in the kind hue (`PANEL_COLOR`) + primary number.
 Project categories: `CATEGORY_COLOR` in `panels/ProjectsPanel.tsx`.
 
 ## 5. Legacy token migration map (historical)

@@ -25,8 +25,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.label': 'Sıradaki adım',
   'step.start': 'Zamanı başlat (Space)',
   'step.startTouch': 'Zamanı başlat',
-  'step.team': 'Ekibi büyüt: kişi başı +{v} değerleme · runway {a} → {b} ay',
-  'step.teamPlain': 'Ekibi büyüt: kişi başı +{v} değerleme',
+  'step.traction': 'Kullanıcı ve sürüm topla · {v} / {t}',
   'step.idea': 'Bir ürün fikri seç',
   'step.findUsers': 'Elle ilk kullanıcıları bul',
   'step.desk': 'Ekip için önce bir masa al',
@@ -89,8 +88,8 @@ export const LOOP_TEXT: Record<string, string> = {
   'release.banner': 'Yayında! {level}',
 
   // Valuation breakdown (değerleme dökümü)
-  'val.pre': 'Değerleme = ekip {t} × $40K ({tv}) + {u} kullanıcı × $150 ({uv}) + {l} yayında × $100K ({lv})',
-  'val.post': 'Değerleme = MRR {m} × 12 × {x}× (3 aylık büyüme {g}, tavan {c}×)',
+  'val.pre': 'Değerleme = {l} yayında × $150K ({lv}) + {u} kullanıcı × $400 ({uv}) + {r} sürüm × $15K ({rv})',
+  'val.post': 'Değerleme = MRR {m} × 12 × {x}× (3 aylık büyüme {g}, taban {n}×, tavan {c}×)',
   'val.postBlend': 'Değerleme = MRR {m} × 12 × {x}× × {b} (gelir $1K MRR’a kadar kademeli sayılır)',
 
   // Stage goals
@@ -154,6 +153,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'round.dd.runway': 'Runway ≥ {t} ay',
   'round.dd.growth': 'Aylık büyüme (3 ay ort.) ≥ {t}',
   'round.dd.morale': 'Moral ≥ {t}',
+  'round.dd.burn': 'Burn çarpanı ≤ {t}',
   'round.dd.now': 'şu an {v}',
   'round.pitchTitle': 'Bu haftanın pitch’i',
   'round.pitchSub': 'Her hafta bir pitch seç. Seçmezsen hafta izlenime 0 olarak girer.',

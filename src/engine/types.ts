@@ -402,8 +402,8 @@ export interface RoundPitchEntry {
   delta: number
 }
 
-/** Due-diligence checks (docs/CORE_LOOP.md §4.3): runway ≥ months, MoM ≥ fraction, morale ≥ points. */
-export type DiligenceId = 'runway' | 'growth' | 'morale'
+/** Due-diligence checks (docs/CORE_LOOP.md §4.3): runway ≥ months, MoM ≥ fraction, morale ≥ points, burn multiple ≤ ask. */
+export type DiligenceId = 'runway' | 'growth' | 'morale' | 'burn'
 
 export interface DiligenceItem {
   id: DiligenceId
@@ -610,8 +610,10 @@ export interface FinanceState {
   lastReceipt?: MonthReceipt
   /** Month history, oldest first, at most HISTORY_MAX_MONTHS (v4; payday appends, rounded). */
   receipts?: ReceiptEntry[]
-  /** Net (mrr − burn) at each month end (v4; filled by the burn-multiple wave). */
+  /** Net (mrr − burn) at each month end (v4; world.monthEnd appends, same index as mrrHistory from then on). */
   netHistory?: number[]
+  /** Day the last round closed (v4; idle-cash penalty grace). Undefined = none on record. */
+  lastRoundCloseDay?: number
 }
 
 /** Main variables (PLAN §5.1). Per-project maturity lives on Project. */
@@ -654,6 +656,10 @@ export interface DerivedMetrics {
   /** The stage's multiple ceiling (MULTIPLE_MAX_BY_STAGE). */
   multipleCap?: number
   valuationMultiple: number
+  /** Net burn of the last 3 months / MRR gained × 12 (0 = not burning; GAMEPLAY V2 §4.1). */
+  burnMultiple?: number
+  /** Display only: annualised MoM % + net margin %. */
+  ruleOf40?: number
   /** Monthly user inflow by channel (channelBreakdown widget). */
   channels: { organic: number; paid: number; manual: number; enterprise: number }
   /** Valuation / next stage target, 0–1+ (stage progress bar). */
@@ -677,20 +683,24 @@ export interface DerivedMetrics {
 
 /** Valuation breakdown (docs/CORE_LOOP.md §4.3 "çarpan dökümü"): engine computed, the UI only prints it. */
 export interface ValuationBreakdown {
-  /** 'pre': team × $40K + users × $150 + launched × $100K; 'post': MRR × 12 × multiple (blended in below $1K MRR). */
+  /** 'pre': launched × $150K + users × $400 + releases (max 5) × $15K; 'post': MRR × 12 × multiple (blended in below $1K MRR). */
   mode: 'pre' | 'post'
-  team: number
   users: number
   launched: number
+  /** Releases counted (min(VAL_RELEASE_MAX, releaseCount)). */
+  releases: number
   /** Pre-revenue parts in dollars. */
-  teamValue: number
   usersValue: number
   launchedValue: number
+  releasesValue: number
   mrr: number
   multiple: number
-  /** 3-month average MoM the multiple prices, and the stage's ceiling. */
+  /** 3-month average MoM the multiple prices, the stage's floor and ceiling. */
   momAvg: number
+  min: number
   cap: number
+  /** bmPenalty × idlePenalty × boardPenalty (1 = none). */
+  penalty: number
   /** Share of the post-revenue formula counted (mrr / PRE_REVENUE_MRR, max 1). */
   blend: number
   total: number
@@ -720,8 +730,8 @@ export interface FindUsersPreview {
   reasons: ('circle' | 'big')[]
 }
 
-/** Main chain: idea → first users → desk → hire → release → users → team (pre-revenue valuation) → round. */
-export const NEXT_STEP_IDS = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'revenue', 'team', 'round', 'roundWait', 'grow'] as const
+/** Main chain: idea → first users → desk → hire → release → users → traction (pre-revenue valuation) → round. */
+export const NEXT_STEP_IDS = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'revenue', 'traction', 'round', 'roundWait', 'grow'] as const
 export type NextStepId = (typeof NEXT_STEP_IDS)[number]
 
 export interface NextStep {
@@ -735,10 +745,8 @@ export interface NextStep {
   slotId?: SlotId
   /** Target number (users / MRR / valuation). */
   target?: number
-  /** 'team': valuation one more hire adds, and runway (months) today → after that hire. */
+  /** 'traction': valuation one more release adds (0 once VAL_RELEASE_MAX releases count). */
   value?: number
-  runwayNow?: number | null
-  runwayAfter?: number | null
 }
 
 export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady'

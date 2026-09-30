@@ -68,6 +68,7 @@ describe('save v3 → v4', () => {
     const v3 = structuredClone(s) as unknown as { finance: Record<string, unknown>; meta: Record<string, unknown> }
     delete v3.finance.receipts
     delete v3.finance.netHistory
+    delete v3.finance.lastRoundCloseDay
     v3.meta.saveVersion = 3
     v3.finance.mrrHistory = [0, 100.4, 250, 400]
     v3.finance.usersHistory = [0, 10.2, 30, 45]
@@ -78,6 +79,8 @@ describe('save v3 → v4', () => {
     const out = migrate({ version: 3, state: v3Save() })!
     expect(out.meta.saveVersion).toBe(SAVE_VERSION)
     expect(out.finance.netHistory).toEqual([])
+    // No round close on record: the idle-cash grace starts at load.
+    expect(out.finance.lastRoundCloseDay).toBe(out.time.day)
     expect(out.finance.receipts).toEqual([
       { partial: true, month: 0, day: 30, mrr: 0, users: 0, usersDelta: 0 },
       { partial: true, month: 1, day: 60, mrr: 100, users: 10, usersDelta: 10 },

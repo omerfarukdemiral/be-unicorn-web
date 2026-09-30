@@ -14,7 +14,7 @@ import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { compact, fixed, money, num, pct, signedMoney } from './format'
 import { cx, Dot } from './primitives'
-import { iconTone, soft, WIDGET_COLOR } from './theme'
+import { iconTone, RUNWAY_DANGER_MONTHS, soft, WIDGET_COLOR } from './theme'
 import { cashFlow } from './cashflow'
 
 /** 'panel' = Metrikler card (default), 'bar' = top-bar pin (h40, value only). */
@@ -212,7 +212,7 @@ export function ledgerMoney(n: number): string {
 }
 
 /** Months of runway under which Runway turns red (the one danger band, LAYOUT §4.1). */
-const RUNWAY_CRITICAL = 3
+const RUNWAY_CRITICAL = RUNWAY_DANGER_MONTHS
 
 export type RunwayTone = 'calm' | 'amber' | 'orange' | 'red'
 

@@ -33,6 +33,10 @@ const MIGRATIONS: Record<number, Migration> = {
       if (!Array.isArray(finance.receipts)) finance.receipts = partialReceipts(finance.mrrHistory, finance.usersHistory)
       if (!Array.isArray(finance.netHistory)) finance.netHistory = []
     }
+    // Idle-cash grace (§4.1): a v3 save never recorded its last round close, so the 180-day grace starts at load.
+    const time = st.time as { day?: unknown } | undefined
+    const fin = finance as { lastRoundCloseDay?: unknown } | undefined
+    if (fin && typeof fin.lastRoundCloseDay !== 'number' && typeof time?.day === 'number') fin.lastRoundCloseDay = time.day
     return st
   },
 }

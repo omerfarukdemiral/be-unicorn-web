@@ -330,19 +330,24 @@ Kırmızıdan **çıkanlar** (yeni renk):
 
 ### 4.2 Hız rengi
 
-Hız rengi (`--color-speed-1/2/4`) **yalnız iki yerde**: hız kontrolünün aktif segmenti ve ince ekran kenarı (`ScreenFrame`).
-Ay halkası, aşama bölümü, tarih yanındaki nabız noktası hız rengi **taşımaz** (nötr `ink-2`; nabız noktası kalkar,
-çünkü akışı kenar zaten söylüyor).
+Karar (docs/GAMEPLAY_V2.md §13): **duraklı = kırmızı, oynarken = yeşil; 1×/2×/4× aynı yeşil**, ayrım ikon (▶ / ▶▶ / ▶▶▶)
+ve dolgu yoğunluğuyla (%18 / %24 / %32). Eski "gri / sarı / turuncu / yeşil" kodu geçersiz.
+Hız rengi (`--color-speed-pause` `#C94A3F`, `--color-speed-run` `#1F9D63`) **yalnız iki yerde**: hız kontrolünün aktif
+segmenti ve ince ekran kenarı (`ScreenFrame`). Ay halkası, aşama bölümü, tarih yanındaki nabız noktası hız rengi
+**taşımaz** (nötr `ink-2`; nabız noktası kalkar, çünkü akışı kenar zaten söylüyor).
 
 | Durum | Ekran kenarı | Hız kontrolü |
 |---|---|---|
-| Akıyor 1×/2×/4× | 2px (mobil) / 3px düz, hız renginde, günlük hafif parıltı | aktif segment %22 dolgu + 2px iç halka, hız renginde |
-| Oyuncu duraklattı | 2/3px **kesik**, `--color-speed-pause` = **`ink-3` (#9B978F)** | ⏸ segmenti `surface-2` + `ink-3` halka, "▶" gösterir; etiket "Duraklatıldı" (`ink-2`) |
-| Odak duraklaması (karar/kavram/teklif/modal) | kesik `ink-3` + seçili hızın %22'lik iç bandı | ⏸ segmenti aktif (nötr), seçili hız segmentinde kesik çerçeve; etiket "Karar · 2×'e dönecek" |
-| 4× → 1× otomatik yavaşlama | 1× rengi | 3.5 sn "Önemli an · 1×" etiketi |
+| Akıyor 1×/2×/4× | 2px (mobil) / 3px **düz** yeşil, günlük hafif parıltı | aktif segment yeşil dolgu (%18/%24/%32) + 2px iç halka; ▶ / ▶▶ / ▶▶▶ + `1×/2×/4×` |
+| Oyuncu duraklattı | 2/3px **kesik** kırmızı (`speed-pause`) | ⏸ segmenti kırmızı %18 dolgu + 2px iç halka, "▶" gösterir; etiket "Duraklatıldı" (`ink-2`) |
+| Odak duraklaması (karar/kavram/teklif/modal) | kesik kırmızı + seçili hızın %22'lik yeşil iç bandı | ⏸ segmenti aktif (kırmızı), seçili hız segmentinde kesik yeşil çerçeve; etiket "Karar · 2×'e dönecek" |
+| 4× → 1× otomatik yavaşlama | yeşil (değişmez) | 3.5 sn "Önemli an · 1×" etiketi |
 | Oyun bitti | yok | devre dışı |
 
-Duraklatma tehlike değildir: kırmızı değil, gri + kesik (renk tek sinyal değil, düz/kesik ayrımı da taşır).
+Duraklı kırmızısı tehlike kırmızısı değildir: ayrı, daha az doygun token (`--color-negative` değil), yalnız **kesik**
+çizgi ve ⏸ segmentinde görünür, hiçbir sayıyı boyamaz (tek kırmızı kuralının istisnası, `docs/DESIGN.md` › One red
+rule). Renk tek sinyal değildir: düz/kesik, ⏸/▶ ve etiket aynı durumu taşır. Ortadaki `CenterFrame` ekranları
+(istatistik vb.) zamanı durdurmaz; çerçeve onların üstünde kalır, açıkken `PauseVeil` çizilmez.
 `docs/DESIGN.md` › Time state bölümü buna göre güncellendi.
 
 ---
@@ -476,7 +481,7 @@ Yeni: `src/ui/layout/TopBar.tsx`, `StageSection.tsx`, `TopMetrics.tsx` (Cash/Run
 mantığı buraya taşınır: tween, günlük/maaş günü düşüşleri), `SpeedControl.tsx` (Hud'dan taşınır + zaman durumu etiketi),
 `ViewControls.tsx`, `src/content/topBarText.ts` (+ `content/index.ts`'e tek satır spread).
 Değişir: `src/ui/time.tsx` (DayClock nötr halka, nabız noktası kalkar, `TimeStatusPill` SpeedControl'e taşınır ve nötr,
-`ScreenFrame` duraklı = `ink-3` kesik), `src/index.css` **yalnız** `--color-speed-pause: #9b978f` (+ yorum satırı).
+`ScreenFrame` duraklı = kesik; renk kodu sonradan §4.2'deki kırmızı/yeşile geçti), `src/index.css` **yalnız** `--color-speed-pause` (+ yorum satırı).
 Sözleşme: `TopBar({ pinned }: { pinned: HudWidget[] })` — store'daki `pinnedMetrics`'i okumaz (METRICS ile paralel
 derlensin diye); Integrate bağlar. Sabitli çipi `WIDGETS[id].Component` ile `variant="bar"` çizer. Kök `data-scene-top`.
 Dokunmaz: store, `Hud.tsx` (Integrate siler), `widgets.tsx` (yalnız import).

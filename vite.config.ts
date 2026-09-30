@@ -51,7 +51,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), mockApi()],
   build: { chunkSizeWarningLimit: 2000 },
   test: {
-    include: ['src/**/*.test.ts', 'sim/**/*.test.ts', 'api/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'sim/**/*.test.ts', 'api/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',
   },
 })

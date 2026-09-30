@@ -26,6 +26,9 @@ const PATHS = {
   compass: <><circle cx="12" cy="12" r="8.5" /><path d="m15.5 8.5-2 5-5 2 2-5Z" /></>,
   pause: <><rect x="6.5" y="5" width="3.5" height="14" rx="1.2" /><rect x="14" y="5" width="3.5" height="14" rx="1.2" /></>,
   play: <path d="M8 5.5v13l10-6.5Z" />,
+  /** 2× / 4× speed segments: two and three narrower triangles in the play icon's box. */
+  play2: <path d="M4.5 6.5v11l7-5.5ZM12.5 6.5v11l7-5.5Z" />,
+  play3: <path d="M2.5 7.5v9l5.5-4.5ZM9.25 7.5v9l5.5-4.5ZM16 7.5v9l5.5-4.5Z" />,
   zoomIn: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5M10.5 8v5M8 10.5h5" /></>,
   zoomOut: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5M8 10.5h5" /></>,
   sound: <><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>,
@@ -55,6 +58,7 @@ const PATHS = {
   move: <><path d="M12 3v18M3 12h18" /><path d="m9 5.5 3-2.5 3 2.5M9 18.5l3 2.5 3-2.5M5.5 9 3 12l2.5 3M18.5 9l2.5 3-2.5 3" /></>,
   tag: <><path d="M3.5 12.5V4.5a1 1 0 0 1 1-1h8l8 8-9 9Z" /><circle cx="8" cy="8" r="1.5" /></>,
   arrowUp: <path d="M12 19V5M6 11l6-6 6 6" />,
+  arrowRight: <path d="M5 12h14M13 6l6 6-6 6" />,
   desk: <><path d="M3 9.5h18M5 9.5V19M19 9.5V19M14 9.5V15h5" /><rect x="8" y="4" width="6" height="4" rx="1" /></>,
   sofa: <><path d="M5 11V8.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2V11" /><path d="M3.5 17v-5a1.5 1.5 0 0 1 3 0v1.5h11V12a1.5 1.5 0 0 1 3 0v5ZM6 17v2M18 17v2" /></>,
   door: <><path d="M6 20.5V4.5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v16" /><path d="M4 20.5h16M14.5 12.5h.01" /></>,

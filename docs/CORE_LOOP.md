@@ -74,15 +74,18 @@ Be Unicorn'da **zamanın sahibi oyuncudur**. Oyun duraklı açılır, oyuncu oku
 6. **Kart açık bırakmak serbest.** Tek oyunculu, öğretici bir oyunda kartı açık tutup düşünmek meşrudur. Sim, ölü süre metriğinde duraklı süreyi saymaz. Kart panelde "Sonra karar ver" ile küçültülünce zaman akmaya devam eder.
 
 ### 3.3 Hız rengi (kullanıcının 3. maddesi)
+Duraklı = kırmızı, oynarken = yeşil; 1×/2×/4× aynı yeşil, ikon ve dolgu yoğunluğuyla ayrılır (docs/GAMEPLAY_V2.md §13, kodda `time.tsx SPEED_COLOR`).
+
 | Durum | Renk | Token | İkon/etiket |
 |---|---|---|---|
-| Duraklı (elle ya da başlangıç) | Kırmızı `#E0483E` | `--color-speed-pause` | ❚❚ "DURAKLATILDI · Space" |
-| Odak duraklatma | Kırmızı, **kesik çizgi** | aynı | "Karar veriyorsun, zaman durdu" / "Defter açık" + soluk seçili hız ("2×'e dönecek") |
-| 1× | Sarı `#D6A100` | `--color-speed-1` | ▶ |
-| 2× | Turuncu `#EE7A14` | `--color-speed-2` | ▶▶ |
-| 4× | Yeşil `#1F9D63` | `--color-speed-4` | ▶▶▶ |
+| Duraklı (elle ya da başlangıç) | Kırmızı `#C94A3F`, **kesik çizgi** | `--color-speed-pause` | ⏸ "Duraklatıldı" |
+| Odak duraklatma | Kırmızı, **kesik çizgi** + seçili hızın yeşil iç bandı | aynı | "Karar · 2×'e dönecek" |
+| 1× | Yeşil `#1F9D63`, düz | `--color-speed-run` | ▶ `1×` (dolgu %18) |
+| 2× | Yeşil, düz | aynı | ▶▶ `2×` (dolgu %24) |
+| 4× | Yeşil, düz | aynı | ▶▶▶ `4×` (dolgu %32) |
 
-Renk üç yerde görünür: (a) hız kontrolünün aktif segmentinde dolgu ve 2 px kenar, (b) **viewport çevresinde 3 px çerçeve** (mobilde 2 px, `pointer-events: none`, safe-area uyumlu), (c) tarih çipindeki gün halkası. Renk hiçbir zaman tek sinyal değildir: ikon, etiket ve düz/kesik çizgi farkı renk körlüğü için korunur. Runway uyarı renkleri **yalnızca kasa widget'ında** kullanılır, hız rengiyle karışmaz.
+Duraklı kırmızısı `--color-negative`'den ayrı ve daha az doygundur; tehlike değil beklemedir (kesik çizgi + ⏸ ayırır).
+Renk iki yerde görünür: (a) hız kontrolünün aktif segmentinde dolgu ve 2 px kenar, (b) **viewport çevresinde 3 px çerçeve** (mobilde 2 px, `pointer-events: none`, safe-area uyumlu). Tarih çipindeki gün halkası nötrdür (docs/LAYOUT.md §4.2). Renk hiçbir zaman tek sinyal değildir: ikon, etiket ve düz/kesik çizgi farkı renk körlüğü için korunur. Runway uyarı renkleri **yalnızca kasa widget'ında** kullanılır, hız rengiyle karışmaz.
 
 ---
 

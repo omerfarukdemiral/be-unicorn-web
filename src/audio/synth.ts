@@ -3,7 +3,7 @@
 // Safe to import anywhere: without AudioContext (tests, SSR) every call is a no-op.
 
 export type CueId =
-  | 'tap' | 'panelOpen' | 'panelClose' | 'pause' | 'resume' | 'speed'
+  | 'tap' | 'confirm' | 'panelOpen' | 'panelClose' | 'pause' | 'resume' | 'speed'
   | 'start' | 'actionStart' | 'actionDone' | 'projectStarted' | 'projectLaunched'
   | 'hired' | 'left' | 'itemPlaced' | 'itemSold' | 'itemMoved' | 'ringOpened'
   | 'milestone' | 'roundStarted' | 'roundClosed' | 'stageUp'
@@ -137,6 +137,11 @@ const CUES: Record<CueId, () => void> = {
     tone(N.E6, 0, 0.035, { type: 'triangle', gain: 0.035, detune: (Math.random() - 0.5) * 30 })
     noise(0, 0.02, 3200, 0.02)
   },
+  // Commit button (data-cue="confirm"): a firmer two-note tap than the routine one.
+  confirm: () => {
+    tone(N.C5, 0, 0.07, { type: 'triangle', gain: 0.06 })
+    tone(N.G5, 0.045, 0.12, { type: 'triangle', gain: 0.045 })
+  },
   panelOpen: () => tone(N.E5, 0, 0.09, { gain: 0.05, to: N.A5 }),
   panelClose: () => tone(N.A5, 0, 0.08, { gain: 0.04, to: N.E5 }),
   pause: () => tone(N.C5, 0, 0.12, { gain: 0.05, to: N.G4 }),
@@ -197,7 +202,7 @@ const CUES: Record<CueId, () => void> = {
 }
 
 /** Minimum real ms between two plays of the same cue. */
-const COOLDOWN: Partial<Record<CueId, number>> = { tap: 35, visitor: 20_000, conceptQueued: 4000, decisionShown: 4000, speed: 80 }
+const COOLDOWN: Partial<Record<CueId, number>> = { tap: 35, confirm: 60, visitor: 20_000, conceptQueued: 4000, decisionShown: 4000, speed: 80 }
 const lastPlayed = new Map<CueId, number>()
 
 export function playCue(id: CueId): void {

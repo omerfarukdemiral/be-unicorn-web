@@ -1,14 +1,14 @@
 // Time flow made visible: paused start (Başlat call), focus pauses (decision / Defter card / modal),
-// the speed colour code (pause neutral grey + dashed, 1× yellow, 2× orange, 4× green: docs/LAYOUT.md §4.2),
-// the day clock with its (neutral) month ring, the paused veil over the scene and a small number tween for Kasa.
+// the speed colour code (paused = calm red + dashed, running = green at 1×/2×/4×: docs/GAMEPLAY_V2.md §13),
+// the day clock with its (neutral) month ring and the paused veil over the scene.
 // The speed colour lives only in the speed control (layout/SpeedControl.tsx) and the thin ScreenFrame.
 // Effective speed = the player's speed (state.time.speed) unless a store pause reason holds it at 0.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { GameSpeed } from '../engine/types'
 import { STAGES } from '../content'
 import { blockingOverlay, effectiveSpeed, useGameStore } from '../store/gameStore'
-import type { PauseReason } from '../store/types'
+import type { PauseReason, UiState } from '../store/types'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { money } from './format'
@@ -16,13 +16,22 @@ import { cx } from './primitives'
 import { soft } from './theme'
 import { useIsMobile } from './hooks'
 
-/** Border / fill colour of each speed state (docs/DESIGN.md --color-speed-*). */
+/** Number tween: lives in hooks.ts, re-exported for the existing callers. */
+export { useTween } from './hooks'
+
+/**
+ * Border / fill colour of each speed state (docs/DESIGN.md --color-speed-*): paused red, running green. 1×/2×/4× share
+ * the green; the speed control tells them apart by icon (▶/▶▶/▶▶▶) and fill density (SPEED_FILL).
+ */
 export const SPEED_COLOR: Record<GameSpeed, string> = {
   0: 'var(--color-speed-pause)',
-  1: 'var(--color-speed-1)',
-  2: 'var(--color-speed-2)',
-  4: 'var(--color-speed-4)',
+  1: 'var(--color-speed-run)',
+  2: 'var(--color-speed-run)',
+  4: 'var(--color-speed-run)',
 }
+
+/** Fill density (% of the speed colour) of the active speed segment: faster = denser. */
+export const SPEED_FILL: Record<GameSpeed, number> = { 0: 18, 1: 18, 2: 24, 4: 32 }
 
 export type TimeHold = PauseReason | 'start' | 'manual' | null
 
@@ -49,35 +58,9 @@ export function useTimeStatus(): TimeStatus {
   )
 }
 
-/** State colour: neutral grey (speed-pause = ink-3) whenever time is still, otherwise the running speed's colour. */
+/** State colour: pause red whenever time is still, otherwise the running green. */
 function timeColor(s: Pick<TimeStatus, 'effective'>): string {
   return SPEED_COLOR[s.effective]
-}
-
-/** Eases a number toward its target (Kasa counts up/down instead of jumping per engine chunk). */
-export function useTween(target: number, ms = 450): number {
-  const [shown, setShown] = useState(target)
-  const from = useRef(target)
-  const cur = useRef(target)
-  useEffect(() => {
-    if (!Number.isFinite(target)) {
-      setShown(target)
-      return
-    }
-    from.current = cur.current
-    const start = performance.now()
-    let raf = 0
-    const step = (now: number) => {
-      const k = Math.min(1, (now - start) / ms)
-      const e = 1 - (1 - k) ** 3
-      cur.current = from.current + (target - from.current) * e
-      setShown(cur.current)
-      if (k < 1) raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [target, ms])
-  return shown
 }
 
 // ---------------------------------------------------------------------------
@@ -145,11 +128,11 @@ export function holdLabel(hold: TimeHold): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Thin frame around the viewport in the time colour: yellow 1×, orange 2×, green 4× (solid). Any pause is
- * neutral grey (speed-pause = ink-3) and DASHED: pausing is not danger, red is kept for real danger
- * (docs/LAYOUT.md §4). A focus pause (decision / Defter card / modal) adds a faint inner band in the chosen
- * speed's colour (the speed time returns to). While time flows a soft glow runs along it once per game day.
- * Colour is never the only signal: solid vs dashed + the speed control label carry the same state.
+ * Thin frame around the viewport in the time colour: running = green, SOLID (any speed). Any pause is the calm
+ * pause red and DASHED: waiting, not danger (--color-speed-pause is not --color-negative; docs/GAMEPLAY_V2.md §13).
+ * A focus pause (decision / Defter card / modal) adds a faint inner band in the chosen speed's colour (the speed
+ * time returns to). While time flows a soft glow runs along it once per game day. Colour is never the only
+ * signal: solid vs dashed + the speed control's ⏸/▶ icon and label carry the same state.
  */
 export function ScreenFrame() {
   const mobile = useIsMobile()
@@ -191,10 +174,15 @@ export function ScreenFrame() {
 // Scene layers: paused veil + the paused-start call
 // ---------------------------------------------------------------------------
 
+/** The veil shows on a still world with nothing open: a blocking modal brings its own backdrop and a center
+ * screen (stats, Kanun Kitabı, Pazar haritası) sits over the scene itself (docs/GAMEPLAY_V2.md §14.3). */
+export function pauseVeilShown(speed: GameSpeed, gameOver: boolean, ui: Pick<UiState, 'overlay'>): boolean {
+  return speed === 0 && !gameOver && ui.overlay === null
+}
+
 /** Still world: the scene fades a little (desaturated, soft vignette). Below every UI surface. */
 export function PauseVeil() {
-  const { still, overlay } = useGameStore(useShallow((s) => ({ still: effectiveSpeed(s) === 0 && !s.state.gameOver, overlay: blockingOverlay(s.ui) !== null })))
-  const show = still && !overlay // blocking modals bring their own backdrop; a center screen keeps the veil
+  const show = useGameStore((s) => pauseVeilShown(effectiveSpeed(s), !!s.state.gameOver, s.ui))
   return (
     <div
       aria-hidden="true"

@@ -28,6 +28,10 @@ export function checkMilestones(s: GameState): MilestoneId[] {
 export function monthEnd(s: GameState): void {
   s.finance.mrrHistory.push(s.finance.mrr)
   s.finance.usersHistory.push(s.stats.users)
+  // Burn multiple reads the month-end net (GAMEPLAY V2 §4.1); whole dollars keep the save small.
+  ;(s.finance.netHistory ??= []).push(Math.round(s.finance.net))
+  // Old v4 saves past Series A have no close day on record: grace starts from their first month end, not -∞.
+  if (s.stage >= B.IDLE_PENALTY_MIN_STAGE) s.finance.lastRoundCloseDay ??= s.time.day
   const h = s.finance.mrrHistory
   const prev = h[h.length - 2]
   const cur = h[h.length - 1] ?? 0

@@ -15,7 +15,7 @@ import {
 } from './types'
 
 /** Chain order; round / roundWait / grow share the last link. */
-const CHAIN: readonly NextStepId[] = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'team', 'round']
+const CHAIN: readonly NextStepId[] = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'traction', 'round']
 const CHAIN_TOTAL = CHAIN.length
 
 function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = {}): NextStep {
@@ -25,12 +25,6 @@ function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = 
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
 
-/** Monthly salary of the next hire: the cheapest candidate on offer, else an engineer at today's stage. */
-function nextHireSalary(s: GameState): number {
-  const c = s.candidates.reduce((m, x) => Math.min(m, x.salary), Infinity)
-  return Number.isFinite(c) ? c : B.BASE_SALARY.eng * B.SALARY_STAGE_GROWTH ** s.stage
-}
-
 /** Day of a project's last update or 1.0 release (−∞ = none on record). */
 export function lastUpdateDay(s: GameState, projectId: string): number {
   const list = s.releases ?? []
@@ -39,9 +33,9 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
 }
 
 /**
- * First unmet link of: idea → first manual users → desk → hire → release (MVP) → users → team → round.
- * 'team' is the garage / pre-seed valuation link before revenue: valuation there is team × $40K + users × $150 +
- * launched × $100K (economy.valuationPreRevenue), so the chip names the hire and what it costs in runway.
+ * First unmet link of: idea → first manual users → desk → hire → release (MVP) → users → traction → round.
+ * 'traction' is the garage / pre-seed valuation link before revenue: valuation there is launched × $150K + users ×
+ * $400 + releases (max 5) × $15K (economy.valuationPreRevenue, GAMEPLAY V2 §4.1): users and releases, not hires.
  * Links that are done stay done (a later stage never sends the player back to "pick an idea" once a project runs).
  */
 export function nextStep(s: GameState): NextStep {
@@ -63,20 +57,7 @@ export function nextStep(s: GameState): NextStep {
   const target = B.STAGE_TARGET_VALUATION[s.stage + 1] ?? null
   if (s.finance.mrr < B.PRE_REVENUE_MRR && s.stage <= 1 && !s.round?.active && !s.derived.canStartRound && target !== null) {
     const windowAt = target * B.ROUND_EARLY_RATIO
-    const net = s.finance.net
-    const free = s.stats.cash - ledgerCosts(s.finance.ledger ?? { salaries: 0, rent: 0, infra: 0, ads: 0 })
-    const extra: Omit<NextStep, 'id' | 'index' | 'total'> = {
-      progress: clamp01(s.finance.valuation / windowAt),
-      target: windowAt,
-      value: B.VAL_PER_TEAM,
-      runwayNow: s.finance.runway,
-      runwayAfter: runway(free, net - nextHireSalary(s)),
-    }
-    if (!firstFreeDesk(s.office)) {
-      const empty = s.office.slots.find((x) => isFreeDesk(s.office, x) && x.itemId === undefined && x.spanOf === undefined)
-      if (empty) extra.slotId = empty.id
-    }
-    return step('team', extra)
+    return step('traction', { progress: clamp01(s.finance.valuation / windowAt), target: windowAt })
   }
   if (s.round?.active) {
     const r = s.round
@@ -207,7 +188,8 @@ const stageValue = (list: readonly number[], stage: number): number => list[Math
 
 /**
  * Company radar (§14.2), each axis 0–PROFILE_MAX where 1 = what the stage expects: product (average maturity),
- * growth (3-month MoM vs the diligence ask; null before revenue), efficiency (null until burn multiple lands),
+ * growth (3-month MoM vs the diligence ask; null before revenue), efficiency (burn multiple vs the diligence ask;
+ * null before revenue and before Seed, where it is not asked; not burning = full),
  * team (head count), morale (vs the diligence floor), cash (runway months; profitable = full).
  */
 export function companyProfile(s: GameState): CompanyProfile {
@@ -216,19 +198,29 @@ export function companyProfile(s: GameState): CompanyProfile {
   return {
     product: s.projects.length ? profileAxis(s.derived.avgMaturity / stageValue(B.PROFILE_PRODUCT_EXPECT, st)) : null,
     growth: s.finance.mrr >= B.PRE_REVENUE_MRR ? profileAxis((s.derived.momAvg ?? s.derived.momGrowth) / stageValue(B.DILIGENCE_MOM, st)) : null,
-    efficiency: null,
+    efficiency: efficiencyAxis(s),
     team: profileAxis(s.employees.length / stageValue(B.PROFILE_TEAM_EXPECT, st)),
     morale: profileAxis(s.stats.morale / B.DILIGENCE_MORALE),
     cash: rw === null ? B.PROFILE_MAX : profileAxis(rw / B.PROFILE_RUNWAY_MONTHS),
   }
 }
 
+/** The stage asks for a burn multiple (DILIGENCE_BM below the cap: Seed on). */
+const asksBurn = (stage: number): boolean => stageValue(B.DILIGENCE_BM, stage) < B.BURN_MULTIPLE_MAX
+
+/** Efficiency axis: DILIGENCE_BM / burn multiple (1 = at the ask); null while the stage does not ask for it. */
+function efficiencyAxis(s: GameState): number | null {
+  if (s.finance.mrr < B.PRE_REVENUE_MRR || !asksBurn(s.stage)) return null
+  const bm = s.derived.burnMultiple ?? 0
+  return bm <= 0 ? B.PROFILE_MAX : profileAxis(stageValue(B.DILIGENCE_BM, s.stage) / bm)
+}
+
 /** The investor's expectation on the same axes (due diligence): the second polygon of the radar. */
-export function targetProfile(_stage: number): CompanyProfile {
+export function targetProfile(stage: number): CompanyProfile {
   return {
     product: 1,
     growth: 1,
-    efficiency: null,
+    efficiency: asksBurn(stage) ? 1 : null,
     team: 1,
     morale: 1,
     cash: profileAxis(B.DILIGENCE_RUNWAY_MONTHS / B.PROFILE_RUNWAY_MONTHS),

@@ -155,25 +155,58 @@ export const ROUND_CLOSE_REPUTATION = 15
 // Valuation (PLAN §5.8)
 // ---------------------------------------------------------------------------
 export const PRE_REVENUE_MRR = 1_000
-export const VAL_PER_TEAM = 40_000
-export const VAL_PER_USER = 150
-export const VAL_PER_LAUNCHED = 100_000
 /**
- * [DENGE ≠ PLAN 6 + 150 × MoM] Faz 3: clamp(4, cap(stage), 5 + 100 × 3-month MoM) — growth is what investors price,
- * and a flat quarter now costs multiple instead of sitting on the ceiling (DECISIONS #17).
+ * [GAMEPLAY V2 §4.1] Pre-revenue valuation prices traction, not head count: users + launched products + releases
+ * (min(VAL_RELEASE_MAX, releaseCount)). The Pre-seed window (300K) opens at 1 launch + 5 releases + ~190 users.
  */
-export const MULTIPLE_MIN = 4
+export const VAL_PER_USER = 400
+export const VAL_PER_LAUNCHED = 150_000
+export const VAL_PER_RELEASE = 15_000
+export const VAL_RELEASE_MAX = 5
+/**
+ * [GAMEPLAY V2 §4.1] Growth-scaled multiple: MIN[stage] + (MAX − MIN) × growthScore, where growthScore =
+ * clamp(0, 1, momAvg / (GROWTH_FULL_K × DILIGENCE_MOM[stage])). Zero growth really gives MIN at every stage; the
+ * ceiling asks for GROWTH_FULL_K × the stage's diligence MoM. Unicorn TIME is tuned with GROWTH_FULL_K (and
+ * STAGE_TARGET_VALUATION), never with MULTIPLE_MAX_BY_STAGE: a higher ceiling makes the coaster stronger too.
+ */
+export const MULTIPLE_MIN_BY_STAGE: readonly number[] = [4, 4, 3, 2.5, 2, 1.5, 1.5]
 export const MULTIPLE_MAX = 30
-export const MULTIPLE_BASE = 5
-export const MULTIPLE_GROWTH = 100
+/** Placeholder multiple of a new game before its first step (createGame): the Garage floor. */
+export const MULTIPLE_BASE = 4
+/**
+ * [DENGE ≠ GAMEPLAY V2 §4.1 2 → 1] At 2 the good bots stalled in Series C (MoM 1–4% there: 2/48 runs reached Unicorn in 100 min);
+ * at 1 the ceiling asks for the diligence MoM itself and the Unicorn medians land at 60–83 min (sim, 12 seeds).
+ */
+export const GROWTH_FULL_K = 1
 /**
  * [Faz 3] Multiple ceiling by the company's stage (CORE_LOOP §5, S5). [DENGE ≠ CORE_LOOP 30 → 25 → 20 → 15 → 12 → 10]
- * Investors pay less for growth % the bigger the company is; the lower late ceilings stretch Series A–C so the run
- * lands in 60–90 min (sim/REPORT.md). The doc's own values end the run at 38–44 min (4 seeds, DECISIONS #18).
+ * Investors pay less for growth % the bigger the company is. Not a tuning knob (GAMEPLAY V2 §4.2).
  */
 export const MULTIPLE_MAX_BY_STAGE: readonly number[] = [30, 30, 15, 10, 7, 5.15, 5.15]
 /** [Faz 3] The multiple prices the average MoM of the last N months (finance.mrrHistory), not one noisy month. */
 export const MULTIPLE_MOM_MONTHS = 3
+/**
+ * [GAMEPLAY V2 §4.1] Burn multiple = Σ positive net burn of the last BURN_MULTIPLE_MONTHS months / (MRR gained over
+ * them × 12), capped at BURN_MULTIPLE_MAX (no growth at all reads as the cap, not as infinity).
+ */
+export const BURN_MULTIPLE_MONTHS = 3
+export const BURN_MULTIPLE_MAX = 99
+/** From Series A a burn multiple above the diligence ask costs 10% of multiple per point, at most BM_PENALTY_MAX_POINTS. */
+export const BM_PENALTY_MIN_STAGE = 3
+export const BM_PENALTY_PER_POINT = 0.1
+export const BM_PENALTY_MAX_POINTS = 3
+/**
+ * [GAMEPLAY V2 §4.1] Idle cash: from Series A, a company sitting on more than IDLE_CASH_MONTHS of gross burn is
+ * priced × IDLE_PENALTY, except in the IDLE_GRACE_DAYS after a round closed (the big round is not punished at once).
+ */
+export const IDLE_PENALTY_MIN_STAGE = 3
+export const IDLE_CASH_MONTHS = 36
+export const IDLE_GRACE_DAYS = 180
+export const IDLE_PENALTY = 0.9
+/** Board quarter missed (flags.boardCapPenalty, §8.3): multiple × this. */
+export const BOARD_CAP_PENALTY = 0.8
+/** The pre-revenue floor holds only up to this stage (Pre-seed); from Seed valuation is the revenue multiple alone. */
+export const PRE_REVENUE_FLOOR_MAX_STAGE = 1
 /** Continuity fix: once revenue starts, valuation never drops below the pre-revenue formula. */
 export const VALUATION_KEEP_PRE_REVENUE_FLOOR = true
 
@@ -217,6 +250,8 @@ export const DILIGENCE_RUNWAY_MONTHS = 3
 /** MoM growth asked for, by the round's current stage (index = stage). */
 export const DILIGENCE_MOM: readonly number[] = [0.04, 0.06, 0.06, 0.05, 0.04, 0.03, 0.03]
 export const DILIGENCE_MORALE = 50
+/** [GAMEPLAY V2 §4.1] Burn multiple the investor accepts, by stage (99 = not asked before Seed). */
+export const DILIGENCE_BM: readonly number[] = [99, 99, 3, 2.5, 2, 1.5, 1.5]
 /** Pitch "Metrik göster": + when the 3-month MoM meets the diligence ask, − when it does not (the numbers speak). */
 export const PITCH_METRICS_GOOD = 0.05
 export const PITCH_METRICS_BAD = -0.03

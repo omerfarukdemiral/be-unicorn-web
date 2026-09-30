@@ -336,14 +336,33 @@ const uniCount = (runs: BotRun[]) => runs.filter((r) => r.stageDays[6] != null).
 crit('İyi bot iflas', band(goodRuns.filter(failedRun).length, goodRuns.length, 0, 0.05))
 crit('Careless iflas', band(careless.filter(failedRun).length, careless.length, 0.4, 0.6))
 crit('greedyGood iflas', band(v2('greedyGood').filter(failedRun).length, SEEDS, 0.15, 0.3))
-crit('coaster Unicorn', band(uniCount(v2('coaster')), SEEDS, 0, 0), ' (bilgi; nihai hedef E1)')
-crit('idleAfterProfit Unicorn', band(uniCount(v2('idleAfterProfit')), SEEDS, 0, 0), ` · tepe sonrası düşüş medyanı ${pct(median(v2('idleAfterProfit').map((r) => r.valuationDropAfterPeak)) ?? 0, 1)} (hedef ≥ %30, B1’den itibaren)`)
+crit('coaster Unicorn', band(uniCount(v2('coaster')), SEEDS, 0, 0), ' (bilgi; B2 ara, nihai hedef E1)')
+{
+  // B1 (§4.1): the autopilot must not reach Unicorn AND its valuation must fall after the peak (growth stopped).
+  const runs = v2('idleAfterProfit')
+  const drop = median(runs.map((r) => r.valuationDropAfterPeak)) ?? 0
+  const [text, ok] = band(uniCount(runs), SEEDS, 0, 0)
+  line(`- idleAfterProfit Unicorn: ${text} · tepe sonrası düşüş medyanı ${pct(drop, 1)} (hedef ≥ %30): **${yes(ok && drop >= 0.3)}**`)
+}
+{
+  // Good-bot Unicorn time (55–95 min tolerance) and how much longer the coaster takes (B1 info line: ≥ 25%).
+  const good = uniOf(goodRuns)
+  const gm = good === null ? null : toMin(good)
+  line(`- İyi bot Unicorn medyanı: ${fmtMin(good)} (tolerans 55–95 dk): **${yes(gm !== null && gm >= 55 && gm <= 95)}**`)
+  const coaster = v2('coaster')
+  const cDays = coaster.map((r) => r.stageDays[6] ?? DAYS)
+  const cMed = median(cDays)
+  const longer = good !== null && cMed !== null ? cMed / good - 1 : null
+  line(`- coaster Unicorn süresi iyi bottan ≥ %25 uzun (bilgi; ulaşmayan = ${toMin(DAYS).toFixed(0)} dk): ${fmtMin(cMed)} ↔ ${fmtMin(good)} (${longer === null ? '—' : `%${Math.round(longer * 100)}`}): **${yes(longer !== null && longer >= 0.25)}**`)
+}
 crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, carelessBurner.length, 0.4, 1))
 {
-  const tb = uniOf(v2('burner'))
-  const tf = uniOf(v2('frugal'))
+  // Non-arrivals count as DAYS (like the coaster line), so a frugal that never reaches Unicorn still compares.
+  const uniOrDays = (runs: BotRun[]) => median(runs.map((r) => r.stageDays[6] ?? DAYS))
+  const tb = uniOrDays(v2('burner'))
+  const tf = uniOrDays(v2('frugal'))
   const faster = tb !== null && tf !== null ? 1 - tb / tf : null
-  line(`- burner Unicorn’a frugal’dan ≥ %15 hızlı: ${fmtMin(tb)} ↔ ${fmtMin(tf)} (${faster === null ? '—' : `%${Math.round(faster * 100)}`}): **${yes(faster !== null && faster >= 0.15)}**`)
+  line(`- burner Unicorn’a frugal’dan ≥ %15 hızlı (ulaşmayan = ${toMin(DAYS).toFixed(0)} dk): ${fmtMin(tb)} ↔ ${fmtMin(tf)} (${faster === null ? '—' : `%${Math.round(faster * 100)}`}): **${yes(faster !== null && faster >= 0.15)}**`)
 }
 {
   const share = median(goodRuns.map(profitShare)) ?? 0

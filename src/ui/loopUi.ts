@@ -64,14 +64,14 @@ export function releaseLevelName(level: number): string {
 
 /**
  * How valuation is built right now (engine derived.valuationParts), one line:
- * pre-revenue "Ekip 4 × $40K + 300 kullanıcı × $150 + 1 yayında × $100K", else "MRR $22K × 12 × 18× (büyüme %13)".
+ * pre-revenue "1 yayında × $150K + 300 kullanıcı × $400 + 5 sürüm × $15K", else "MRR $22K × 12 × 18× (büyüme %13)".
  */
 export function valuationLine(v: ValuationBreakdown | undefined): string {
   if (!v) return ''
   if (v.mode === 'pre') {
-    return t('val.pre', { t: num(v.team), tv: money(v.teamValue), u: num(v.users), uv: money(v.usersValue), l: num(v.launched), lv: money(v.launchedValue) })
+    return t('val.pre', { l: num(v.launched), lv: money(v.launchedValue), u: num(v.users), uv: money(v.usersValue), r: num(v.releases), rv: money(v.releasesValue) })
   }
-  return t(v.blend < 1 ? 'val.postBlend' : 'val.post', { m: money(v.mrr), x: fixed(v.multiple, 1), g: pct(v.momAvg, 1), c: fixed(v.cap, 0), b: pct(v.blend, 0) })
+  return t(v.blend < 1 ? 'val.postBlend' : 'val.post', { m: money(v.mrr), x: fixed(v.multiple, 1), g: pct(v.momAvg, 1), n: fixed(v.min, 1), c: fixed(v.cap, 0), b: pct(v.blend, 0) })
 }
 
 /** Version name, or "güncelleme N" for an update after 1.0. */
@@ -90,13 +90,9 @@ export function stepText(step: NextStep, s: Pick<GameState, 'stats' | 'finance'>
       return t('step.revenue', { v: money(s.finance.mrr), t: money(step.target ?? 0) })
     case 'grow':
       return t('step.grow', { v: money(s.finance.valuation), t: money(step.target ?? 0) })
-    case 'team': {
-      // Pre-revenue valuation is team × $40K + users × $150 + launches: name the hire and what it costs.
-      const months = (r: number | null | undefined) => (r == null ? '∞' : fixed(r, 1))
-      return step.runwayNow !== undefined && step.runwayAfter !== undefined
-        ? t('step.team', { v: money(step.value ?? 0), a: months(step.runwayNow), b: months(step.runwayAfter) })
-        : t('step.teamPlain', { v: money(step.value ?? 0) })
-    }
+    case 'traction':
+      // Pre-revenue valuation is users + launches + releases: the chip shows the way to the round window.
+      return t('step.traction', { v: money(s.finance.valuation), t: money(step.target ?? 0) })
     default:
       return t(`step.${step.id}`)
   }
@@ -113,10 +109,9 @@ export function stepGo(step: NextStep): StepGo {
       return 'shop'
     case 'hire':
       return 'team'
-    case 'team':
-      return step.slotId ? 'shop' : 'team'
     case 'findUsers':
     case 'users':
+    case 'traction':
       return 'act'
     default:
       return 'growth'

@@ -4,12 +4,17 @@
 // the h52 bars (min(360, 46vw) wide, so the sheet never covers the top bar or pushes the strip off-screen); portrait
 // = one bottom sheet 8px above the bottom bar's tab row. The element carries data-scene-right / data-scene-sheet:
 // layout/useSceneInset measures it.
+// Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 13px uppercase title + the panel's primary number.
 import { type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
-import type { IconName } from './icons'
+import { Icon, type IconName } from './icons'
 import { t } from './i18n'
-import { cx, IconBadge, IconButton } from './primitives'
+import { money, num, pct } from './format'
+import { cx, IconButton } from './primitives'
+import { iconTone, PANEL_COLOR } from './theme'
+import { panelHeadline, type HeadlineValue } from './panelHeadline'
 import { useIsMobile, useLayoutMode } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
@@ -45,6 +50,42 @@ function panelMeta(p: Panel): { icon: IconName; title: string } {
     default:
       return { icon: DOCK_TABS.find((d) => d.id === p.kind)?.icon ?? 'bag', title: t(`dock.${p.kind}`) }
   }
+}
+
+function headlineText(h: HeadlineValue): string {
+  switch (h.unit) {
+    case 'money':
+      return money(h.value)
+    case 'perMonth':
+      return t('hud.netPerMonth', { v: money(h.value) })
+    case 'pct':
+      return pct(h.value)
+    case 'people':
+      return t('unit.people', { v: num(h.value) })
+    case 'count':
+      return h.of === undefined ? num(h.value) : t('journal.count', { n: num(h.value), total: h.of })
+    case 'energy':
+      return t('founder.energyValue', { v: Math.round(h.value) })
+    case 'day':
+      return t('outcome.day', { d: h.value })
+  }
+}
+
+/** The panel's primary number (right of the title). Own subscription: only this ticks with the engine, not the panel. */
+function HeadlineNumber({ panel }: { panel: Panel }) {
+  const h = useGameStore(
+    useShallow((s) => {
+      const x = panelHeadline(s.state, panel)
+      return { main: x ? headlineText(x) : null, sub: x?.sub ? headlineText(x.sub) : null, danger: !!x?.danger }
+    }),
+  )
+  if (!h.main) return null
+  return (
+    <span className="tabular flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
+      <span className={cx('text-[17px] font-bold leading-none', h.danger ? 'text-negative-ink' : 'text-ink')}>{h.main}</span>
+      {h.sub && <span className="text-[12px] font-semibold text-ink-2">· {h.sub}</span>}
+    </span>
+  )
 }
 
 /** Remount key: new content resets local state (filters, confirm buttons); a shop retarget keeps it. */
@@ -92,12 +133,16 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   if (!panel) return null
 
   const meta = panelMeta(panel)
+  const hue = PANEL_COLOR[panel.kind]
+  // Head row 36px on desktop; phones keep 44px touch targets.
   const back = hasBack ? <IconButton icon="chevronLeft" label={t('common.back')} onClick={goBack} size={mobile ? 44 : 36} /> : null
   const close = <IconButton icon="close" label={t('common.close')} onClick={closePanel} size={mobile ? 44 : 36} />
+  // 3px kind stripe along the top edge of the panel (identity hue, never a warning).
+  const stripe = <div aria-hidden="true" className="h-[3px] w-full shrink-0" style={{ background: hue }} />
   let head: ReactNode
   if (panel.kind === 'detail') {
     head = (
-      <div className="flex items-start gap-2 border-b border-border px-3 pb-3 pt-3">
+      <div className="flex items-start gap-2 border-b border-border px-3 pb-2 pt-2">
         {back}
         <div className={cx('shrink-0', mobile ? 'w-16' : 'w-24')}>
           <DetailPreview selection={panel.selection} renderPreview={renderPreview} />
@@ -110,12 +155,13 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
     )
   } else {
     head = (
-      <div className="flex items-center gap-2 border-b border-border px-3 pb-2 pt-3">
+      <div className="flex items-center gap-2 border-b border-border px-2 py-1">
         {back}
-        <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-base font-semibold tracking-wide text-ink">
-          <IconBadge icon={meta.icon} size={28} color="var(--color-brand)" />
+        <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-ink">
+          <Icon name={meta.icon} size={20} className="shrink-0" style={{ color: iconTone(hue) }} />
           <span className="truncate">{meta.title}</span>
         </h2>
+        <HeadlineNumber panel={panel} />
         {close}
       </div>
     )
@@ -133,10 +179,11 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
       <section
         data-scene-sheet=""
         aria-label={meta.title || t('panel.label')}
-        className="ui-card pointer-events-auto absolute z-20 flex max-h-[52vh] animate-slide-up flex-col overflow-hidden shadow-[var(--shadow-pop)]"
+        className="ui-card pointer-events-auto absolute z-20 flex max-h-[52vh] animate-slide-up flex-col overflow-hidden shadow-[var(--shadow-panel)]"
         style={{ left: EDGE, right: EDGE, bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${MOBILE_BOTTOM_TABS_H + GAP}px)` }}
       >
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border-strong" />
+        {stripe}
+        <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-border-strong" />
         {head}
         {body}
       </section>
@@ -147,7 +194,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
     <aside
       data-scene-right=""
       aria-label={meta.title || t('panel.label')}
-      className="pointer-events-auto ui-card absolute z-20 flex max-w-[calc(100vw-16px)] animate-slide-left flex-col overflow-hidden"
+      className="pointer-events-auto ui-card absolute z-20 flex max-w-[calc(100vw-16px)] origin-top-right animate-rise flex-col overflow-hidden shadow-[var(--shadow-panel)]"
       style={{
         width,
         right: EDGE,
@@ -155,6 +202,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
         bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${barH + GAP}px)`,
       }}
     >
+      {stripe}
       {head}
       {body}
     </aside>

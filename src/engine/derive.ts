@@ -139,25 +139,36 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   const hist = s.finance.mrrHistory
   const mom = E.momGrowth(hist[hist.length - 2], hist[hist.length - 1])
-  // The multiple prices the 3-month average growth, capped by stage (CORE_LOOP §5, S5).
+  // GAMEPLAY V2 §4.1: the multiple prices the 3-month average growth against the stage's ask, between the stage's
+  // floor and ceiling, then burn efficiency, idle cash and the board's verdict.
   const momAvg = E.averageMom(hist)
+  const bm = E.burnMultiple(s.finance.netHistory ?? [], hist)
+  // No close day on record (old v4 save): no idle penalty until world.monthEnd stamps one.
+  const penalty =
+    E.bmPenalty(bm, s.stage) *
+    E.idlePenalty(s.stage, s.stats.cash, burn, s.time.day, s.finance.lastRoundCloseDay ?? s.time.day) *
+    (s.flags['boardCapPenalty'] ? B.BOARD_CAP_PENALTY : 1)
   const multCap = E.multipleCap(s.stage)
-  const multiple = E.valuationMultiple(momAvg, multCap)
+  const multiple = E.valuationMultiple(momAvg, s.stage, penalty)
   const launched = s.projects.filter((p) => p.launched).length
-  const valuation = E.valuation(mrr, momAvg, s.employees.length, s.stats.users, launched, multCap)
+  const releases = Math.min(B.VAL_RELEASE_MAX, s.releaseCount ?? 0)
+  const pre = E.valuationPreRevenue(s.stats.users, launched, releases)
+  const valuation = E.valuation(mrr, multiple, pre, s.stage)
   const blend = E.revenueBlend(mrr)
   const valuationParts: ValuationBreakdown = {
-    mode: blend > 0 && E.valuationPostRevenue(mrr, multiple) * blend > E.valuationPreRevenue(s.employees.length, s.stats.users, launched) ? 'post' : 'pre',
-    team: s.employees.length,
+    mode: blend > 0 && valuation !== pre ? 'post' : 'pre',
     users: s.stats.users,
     launched,
-    teamValue: B.VAL_PER_TEAM * s.employees.length,
+    releases,
     usersValue: B.VAL_PER_USER * s.stats.users,
     launchedValue: B.VAL_PER_LAUNCHED * launched,
+    releasesValue: B.VAL_PER_RELEASE * releases,
     mrr,
     multiple,
     momAvg,
+    min: E.multipleMin(s.stage),
     cap: multCap,
+    penalty,
     blend,
     total: valuation,
   }
@@ -196,6 +207,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     momAvg,
     multipleCap: multCap,
     valuationMultiple: multiple,
+    burnMultiple: bm,
+    ruleOf40: E.ruleOf40(momAvg, mrr, net),
     channels: { organic, paid, manual: Math.max(manualNow, manualLast), enterprise: s.finance.enterpriseCustomers.length },
     stageProgress: target ? valuation / target : 1,
     // Early window (docs/CORE_LOOP.md §4.3): the round can start at ROUND_EARLY_RATIO of the target.

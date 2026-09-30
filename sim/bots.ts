@@ -49,7 +49,7 @@ export interface BotConfig {
   price: number
   /** Start a round only when valuation ≥ target × this (or runway is short). The window opens at 0.6. */
   roundEagerness: number
-  /** Round size (12 / 18 / 24 months of runway ↔ equity). */
+  /** Round size (8 / 12 / 16 months of runway ↔ equity). */
   roundSize: RoundSize
   /** Weekly pitch when the numbers are weak ('metrics' is always picked when MoM meets the diligence ask). */
   weakPitch: RoundPitch
@@ -64,23 +64,31 @@ export interface BotConfig {
    * COAST_AD_EVERY_DAYS; 'idle' stops acting altogether (GAMEPLAY V2 §15 autopilot probes).
    */
   afterProfit?: 'coast' | 'idle'
+  /** "Careless burner" (§4.2 kabul d): spends on ads without looking at cash or runway (only the paid peak caps it). */
+  ignoreRunway?: boolean
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
+
+/*
+ * GAMEPLAY V2 §4.3 (B2): CAC now carries spend and market saturation, so the LTV:CAC bars are lower than before
+ * (bootstrap / niche 3 → 2, vcRocket 1.5, platform 2.5 → 1.5), and vcRocket / platform keep two sellers in their growth
+ * mix: with the paid channel saturating, ARPU (sales) is what carries Series C.
+ */
 
 export const BOTS: Record<Archetype, BotConfig> = {
   // Low burn, early revenue, late and few rounds, protects equity.
   bootstrap: {
     kind: 'bootstrap', firstCategory: 'web', extraCategories: [],
     buildMix: { eng: 2, product: 1, marketing: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
-    minRunwayToHire: 5, teamCap: [3, 7, 11, 18, 30, 40, 40], adAggression: 0.25, minLtvCac: 3, price: 1.25,
+    minRunwayToHire: 5, teamCap: [3, 7, 11, 18, 30, 40, 40], adAggression: 0.25, minLtvCac: 2, price: 1.25,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
   },
   // Aggressive hiring, ads, earliest rounds.
   vcRocket: {
     kind: 'vcRocket', firstCategory: 'mobile', extraCategories: ['ai'],
-    buildMix: { eng: 3, product: 1, marketing: 2 }, growMix: { eng: 3, product: 1, marketing: 4, sales: 1, ops: 2 },
+    buildMix: { eng: 3, product: 1, marketing: 2 }, growMix: { eng: 3, product: 1, marketing: 4, sales: 2, ops: 2 },
     minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5, price: 1,
     roundEagerness: 1, roundSize: 'large', weakPitch: 'coinvestor', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
@@ -89,15 +97,15 @@ export const BOTS: Record<Archetype, BotConfig> = {
   niche: {
     kind: 'niche', firstCategory: 'api', extraCategories: [],
     buildMix: { eng: 2, marketing: 1, sales: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
-    minRunwayToHire: 4, teamCap: [4, 8, 11, 18, 28, 36, 36], adAggression: 0.2, minLtvCac: 3, price: 1.5,
+    minRunwayToHire: 4, teamCap: [4, 8, 11, 18, 28, 36, 36], adAggression: 0.2, minLtvCac: 2, price: 1.5,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
   },
   // Many projects, eng/ops heavy.
   platform: {
     kind: 'platform', firstCategory: 'marketplace', extraCategories: ['api', 'web'],
-    buildMix: { eng: 3, product: 1, marketing: 1 }, growMix: { eng: 3, product: 1, marketing: 3, sales: 1, ops: 2 },
-    minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.45, minLtvCac: 2.5, price: 1.1,
+    buildMix: { eng: 3, product: 1, marketing: 1 }, growMix: { eng: 3, product: 1, marketing: 3, sales: 2, ops: 2 },
+    minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.45, minLtvCac: 1.5, price: 1.1,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
   },
@@ -116,7 +124,7 @@ export const V2_BOTS: Record<V2BotKind, BotConfig> = {
   coaster: { ...BOTS.bootstrap, kind: 'coaster', afterProfit: 'coast' },
   idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', afterProfit: 'idle' },
   greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2 },
-  burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5 },
+  burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
 }
 /** Coaster doubles its ad budget this often once profitable. */
@@ -172,6 +180,8 @@ export interface BotRun {
   /** Paydays that were profitable (net ≥ 0). */
   profitPaydays: number
   paydays: number
+  /** profitPaydays / paydays: share of the months spent in profit (autopilot probe, §4.2 kabul b). */
+  profitMonthsShare: number
   loansTaken: number
   loanCalled: number
   roundsFailed: number
@@ -187,9 +197,12 @@ export interface BotRun {
   boardQuarters: { hit: number; missed: number }
   renewals: { offered: number; kept: number }
   refactors: number
+  /** Tech debt on the last payday of each stage (index = stage; null = stage never paid a payday). */
+  techDebtByStage: (number | null)[]
   peakValuation: number
   /** 1 − final / peak valuation (0 = ended at its peak). */
   valuationDropAfterPeak: number
+  /** Market penetration on the last payday of each stage (index = stage; 0 = never reached). */
   penetrationByStage: number[]
   rivalPassedDays: number
   threadSteps: number
@@ -266,6 +279,11 @@ function neededDept(s: GameState, cfg: BotConfig, mem?: Record<string, number>):
   return order
 }
 
+/** Monthly burn without the ad budget: ads can be cut any day, so cash reserves are sized on the fixed costs. */
+function fixedBurn(s: GameState): number {
+  return Math.max(0, s.finance.burn - s.finance.adBudget)
+}
+
 function affordable(s: GameState, reserve: number, price: number): boolean {
   return s.stats.cash > reserve + price
 }
@@ -273,8 +291,8 @@ function affordable(s: GameState, reserve: number, price: number): boolean {
 /** Desks, desk upgrades, common-area auras and rooms. */
 function furnish(c: Ctx, cfg: BotConfig): void {
   const { act, content } = c
-  const reserve = Math.max(5_000, c.s.finance.burn * 3)
-  const rich = Math.max(10_000, c.s.finance.burn * cfg.furnishReserveMonths)
+  const reserve = Math.max(5_000, fixedBurn(c.s) * 3)
+  const rich = Math.max(10_000, fixedBurn(c.s) * cfg.furnishReserveMonths)
   const open = new Set(c.s.office.rings.filter((r) => r.unlocked).map((r) => r.index))
   const avail = (f: FurnitureItem) => f.stageUnlock <= c.s.stage
   const desks = content.furniture.filter((f) => f.slotType === 'desk' && f.size === 1 && avail(f) && !f.effects.deptBonus).sort((a, b) => a.price - b.price)
@@ -339,7 +357,7 @@ function hiring(c: Ctx, cfg: BotConfig): void {
   // The garage is a survival level: the first small team is hired on thin runway (the round is the way out).
   const minRunway = c.s.stage === 0 ? Math.min(cfg.minRunwayToHire, GARAGE_MIN_RUNWAY) : cfg.minRunwayToHire
   if (runway <= minRunway || c.s.employees.length >= cap) return
-  const reserve = Math.max(5_000, c.s.finance.burn * 3)
+  const reserve = Math.max(5_000, fixedBurn(c.s) * 3)
   if (freeDesks(c.s) === 0) {
     const ring = nextLockedRing(c.s.office)
     const cost = c.s.office.rings.find((r) => r.index === ring)?.openCost ?? Infinity
@@ -400,6 +418,8 @@ function founder(c: Ctx, cfg: BotConfig): void {
   const { act } = c
   if (c.s.founder.currentAction) return
   if (c.s.founder.energy < 25) { act({ type: 'founderAction', kind: 'rest' }); return }
+  // GAMEPLAY V2 §4.2: once debt costs a fifth of the speed, a sensible founder takes the month to refactor.
+  if (c.s.techDebt >= REFACTOR_AT_DEBT && act({ type: 'founderAction', kind: 'refactorSprint' })) return
   if (c.s.round?.active && act({ type: 'founderAction', kind: 'investorCoffee' })) return
   if (c.s.stats.morale < 50 && act({ type: 'founderAction', kind: 'motivateTeam' })) return
   // Deals saturate within a month (half, then a quarter): a sensible player stops at half.
@@ -408,6 +428,30 @@ function founder(c: Ctx, cfg: BotConfig): void {
   // A sensible player stops once the circle is used up ("tanıdık çevren tükeniyor").
   if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5) act({ type: 'founderAction', kind: 'findUsers' })
 }
+
+/**
+ * Ad budget hill climb (GAMEPLAY V2 §4.3): steps, the LTV:CAC margin to keep raising, the share of MRR it starts at,
+ * the paid-peak ceiling (× MRR, AD_CAP_BASE + AD_CAP_PER_AGGRESSION × adAggression, at most AD_PEAK_MRR) and the cash
+ * ceiling: profit + cash / AD_CASH_MONTHS (AD_CASH_MONTHS_LAST once no round is left).
+ */
+const AD_STEP_UP = 1.25
+const AD_STEP_DOWN = 0.75
+const AD_RAISE_MARGIN = 1.1
+const AD_START_MRR = 0.25
+const AD_PEAK_MRR = 1.5
+const AD_CAP_BASE = 0.5
+const AD_CAP_PER_AGGRESSION = 2
+const AD_CASH_MONTHS = 8
+const AD_CASH_MONTHS_LAST = 12
+const AD_STOP_RUNWAY = 3
+const AD_MIN_SHARE = 0.02
+
+/**
+ * Tech debt at which the bot runs a refactor sprint: speed × REFACTOR_AT_SPEED (0.8 → debt 10). Tied to the debt
+ * economy the runs really reach (Series C median ≈ 12 without sprints); at 30 no bot ever refactored.
+ */
+const REFACTOR_AT_SPEED = 0.8
+const REFACTOR_AT_DEBT = (1 - REFACTOR_AT_SPEED) / balance.TECH_DEBT_PER_POINT
 
 function growth(c: Ctx, cfg: BotConfig): void {
   const { act } = c
@@ -428,9 +472,25 @@ function growth(c: Ctx, cfg: BotConfig): void {
     // A stalled valuation (no progress for STALL_DAYS) makes the bot accept a thinner LTV/CAC: growth is the way out.
     const stalled = c.mem.progStage === c.s.stage && c.s.time.day - (c.mem.bestDay ?? c.s.time.day) >= STALL_DAYS
     const minLtvCac = cfg.minLtvCac * (stalled ? 0.75 : 1)
-    const ok = (c.s.derived.ltvCac ?? 0) >= minLtvCac && (c.s.finance.runway ?? 99) > 6 && c.s.derived.overload < 1
-    const t = ok ? Math.round(cfg.adAggression * (c.s.finance.mrr + Math.max(0, c.s.stats.cash) / 24)) : 0
-    if (Math.abs(t - c.s.finance.adBudget) > 0.2 * Math.max(1, c.s.finance.adBudget)) act({ type: 'setAdBudget', amount: Math.max(0, t) })
+    // GAMEPLAY V2 §4.3: CAC climbs with spend (super-linear) and with the market, so the budget is a hill to climb:
+    // raise it while LTV:CAC holds above the bar, back off when it drops below. Two ceilings: stay under the paid
+    // peak (ads ≈ 1.9 × MRR), and spend no more than the profit plus cash / N months (longer once no round is left).
+    const ltvCac = c.s.derived.ltvCac ?? 0
+    const ads = c.s.finance.adBudget
+    const mrr = c.s.finance.mrr
+    const lastRound = c.s.stage >= balance.LAST_STAGE - 1
+    const others = c.s.finance.burn - ads
+    const cashCap = Math.max(0, mrr - others) + Math.max(0, c.s.stats.cash) / (lastRound ? AD_CASH_MONTHS_LAST : AD_CASH_MONTHS)
+    const peakCap = Math.min(AD_PEAK_MRR, AD_CAP_BASE + AD_CAP_PER_AGGRESSION * cfg.adAggression) * mrr
+    const cap = cfg.ignoreRunway ? peakCap : Math.min(cashCap, peakCap)
+    let t = ads
+    if ((!cfg.ignoreRunway && (c.s.finance.runway ?? 99) <= AD_STOP_RUNWAY) || c.s.derived.overload >= 1) t = 0
+    else if (ads < 1) t = ltvCac >= minLtvCac ? Math.min(cap, AD_START_MRR * mrr) : 0
+    else if (ltvCac >= minLtvCac * AD_RAISE_MARGIN) t = Math.min(cap, ads * AD_STEP_UP)
+    else if (ltvCac < minLtvCac) t = ads * AD_STEP_DOWN
+    t = Math.min(t, cap)
+    t = t < AD_MIN_SHARE * mrr ? 0 : Math.round(t)
+    if (Math.abs(t - ads) > 0.2 * Math.max(1, ads)) act({ type: 'setAdBudget', amount: Math.max(0, t) })
   }
 }
 
@@ -551,6 +611,8 @@ export function playBot(
   let paydays = 0
   let firstNearDeath: number | null = null
   let peakValuation = 0
+  const techDebtByStage: (number | null)[] = [null, null, null, null, null, null, null]
+  const penetrationByStage = [0, 0, 0, 0, 0, 0, 0]
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -607,6 +669,8 @@ export function playBot(
         paydayRunway.push({ stage: s.stage, runway: rw })
         paydays++
         stageMinRunway[s.stage] = Math.min(stageMinRunway[s.stage] ?? 99, rw)
+        techDebtByStage[s.stage] = s.techDebt
+        penetrationByStage[s.stage] = s.derived.penetration ?? 0
         if (rw < 2) {
           nearDeathPaydays[s.stage] = (nearDeathPaydays[s.stage] ?? 0) + 1
           firstNearDeath ??= s.time.day
@@ -670,6 +734,7 @@ export function playBot(
     profitBeforeB: firstProfitStage !== null && firstProfitStage < 4,
     profitPaydays,
     paydays,
+    profitMonthsShare: paydays ? profitPaydays / paydays : 0,
     loansTaken: 0,
     loanCalled: 0,
     roundsFailed: 0,
@@ -683,10 +748,11 @@ export function playBot(
     rivalsAcquired: 0,
     boardQuarters: { hit: 0, missed: 0 },
     renewals: { offered: 0, kept: 0 },
-    refactors: 0,
+    refactors: s.counters.refactors ?? 0,
+    techDebtByStage,
     peakValuation,
     valuationDropAfterPeak: peakValuation > 0 ? Math.max(0, 1 - s.finance.valuation / peakValuation) : 0,
-    penetrationByStage: [],
+    penetrationByStage,
     rivalPassedDays: 0,
     threadSteps: 0,
     secretsSeen: 0,

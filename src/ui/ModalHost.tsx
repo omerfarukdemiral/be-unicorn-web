@@ -1,12 +1,14 @@
 // Renders store.ui.overlay (max one blocking: move scene, post-mortem, victory), drains the UI queue,
 // turns engine events (stageUp / gameOver / victory) into overlays. An open overlay holds time still through
-// the store's pause reasons ('modal'), never by rewriting the player's speed.
+// the store's pause reasons ('modal'), never by rewriting the player's speed. The center screens (CENTER_KINDS:
+// statistics, Kanun Kitabı, Pazar haritası) render in the CenterFrame and never pause; a blocking modal replaces them.
 // Everything else (Defter cards, decisions, round, settings) opens in the single right panel.
 import { useCallback, useEffect, useRef } from 'react'
 import { useGameStore } from '../store/gameStore'
 import type { Overlay } from '../store/types'
 import { requestOverlay, useModalQueue } from './modalQueue'
 import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
+import { CenterFrame } from './stats/CenterFrame'
 
 function gameOverOverlay(kind: 'bankrupt' | 'teamLost' | 'unicorn'): Overlay {
   return kind === 'unicorn' ? { kind: 'victory' } : { kind: 'postMortem' }
@@ -42,6 +44,11 @@ export function ModalHost() {
       return <PostMortemOverlay />
     case 'victory':
       return <VictoryOverlay />
+    case 'stats':
+      return <CenterFrame kind="stats" tab={overlay.tab} onClose={closeOverlay} />
+    case 'lawbook':
+    case 'market':
+      return <CenterFrame kind={overlay.kind} onClose={closeOverlay} />
   }
 }
 

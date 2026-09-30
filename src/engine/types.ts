@@ -50,8 +50,8 @@ export type GameSpeed = 0 | 1 | 2 | 4
 
 export type EmployeeStatus = 'working' | 'tired' | 'burnout' | 'break' | 'onboarding' | 'leaving'
 
-/** Active founder actions (PLAN §4.4). 'rest' recovers energy. */
-export const FOUNDER_ACTIONS = ['findUsers', 'talkToUsers', 'motivateTeam', 'investorCoffee', 'salesCall', 'rest'] as const
+/** Active founder actions (PLAN §4.4). 'rest' recovers energy; 'refactorSprint' pays tech debt down (GAMEPLAY V2 §4.2). */
+export const FOUNDER_ACTIONS = ['findUsers', 'talkToUsers', 'motivateTeam', 'investorCoffee', 'salesCall', 'rest', 'refactorSprint'] as const
 export type FounderActionKind = (typeof FOUNDER_ACTIONS)[number]
 
 /** Concept ids from PLAN §6.2 (each triggers at most once per run). */
@@ -84,7 +84,7 @@ export type HudWidget = (typeof HUD_WIDGETS)[number]
 export const INITIAL_WIDGETS: readonly HudWidget[] = ['cash', 'users', 'morale']
 
 /** Player tools unlocked by concepts or stages. */
-export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView'] as const
+export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView', 'refactor'] as const
 export type ToolId = (typeof TOOL_IDS)[number]
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ export interface Employee {
   dept: Dept
   /** Hidden-ish quality 0.5–1.5; shown only once 'candidateQuality' widget is unlocked. */
   quality: number
-  /** Monthly salary in $, fixed at hire (stage multiplier applied then; see DECISIONS.md). */
+  /** Monthly salary in $: set at hire (stage multiplier applied then), then a yearly market raise (GAMEPLAY V2 §4.2). */
   salary: number
   status: EmployeeStatus
   statusSinceDay: number
@@ -235,6 +235,8 @@ export interface Employee {
   leaveDay?: number
   /** True for the "star" hire (ten-x-myth card). */
   star?: boolean
+  /** Yearly market raises paid so far (the one source of truth; old saves default lazily to the years served, no back pay). */
+  raises?: number
 }
 
 export interface Candidate {
@@ -679,6 +681,10 @@ export interface DerivedMetrics {
   valuationParts?: ValuationBreakdown
   /** "Satış görüşmesi" return preview (monthly saturation). */
   salesCall?: SalesCallPreview
+  /** Market size the users are measured against (GAMEPLAY V2 §4.3; MARKET_FALLBACK_TAM until markets land). */
+  tam?: number
+  /** users / tam, 0–1: saturates paid and organic reach and lifts churn and CAC. */
+  penetration?: number
 }
 
 /** Valuation breakdown (docs/CORE_LOOP.md §4.3 "çarpan dökümü"): engine computed, the UI only prints it. */
@@ -896,7 +902,7 @@ export interface GameOverState {
 export type CounterKey =
   | 'hires' | 'fires' | 'resignations' | 'manualFinds' | 'userTalks' | 'motivates'
   | 'investorCoffees' | 'salesCalls' | 'crunches' | 'projectsStarted' | 'roundsClosed'
-  | 'peakTeam' | 'lowGrowthMonths' | 'profitMonths'
+  | 'peakTeam' | 'lowGrowthMonths' | 'profitMonths' | 'refactors'
 
 // ---------------------------------------------------------------------------
 // GameState

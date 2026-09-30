@@ -23,6 +23,7 @@ export const FOUNDER_ACTION_TEXT: Record<FounderActionKind, { name: string; desc
   investorCoffee: { name: 'Yatırımcıyla kahve', description: 'Yatırım turunu kısaltır.' },
   salesCall: { name: 'Satış görüşmesi', description: 'Tek bir büyük müşteri kazandırabilir.' },
   rest: { name: 'Dinlen', description: 'Enerjini toplar, şirket kısa süre sensiz döner.' },
+  refactorSprint: { name: 'Refactor sprinti', description: 'Bir ay yavaşlarsın, teknik borç erir.' },
 }
 
 export const ARCHETYPE_TEXT: Record<Archetype, { name: string; description: string }> = {
@@ -62,6 +63,7 @@ export const TOOL_TEXT: Record<ToolId, { name: string; description: string }> = 
   adBudget: { name: 'Reklam bütçesi', description: 'Aylık reklam harcamasını ayarla.' },
   enterpriseSales: { name: 'Kurumsal satış', description: 'Büyük müşterilerle sözleşme yap.' },
   capTableView: { name: 'Cap table', description: 'Şirketin kimde ne kadar olduğunu gör.' },
+  refactor: { name: 'Refactor', description: 'Teknik borcu bir sprintte erit.' },
 }
 
 export const SLOT_TYPE_TEXT: Record<SlotType, { name: string; description: string }> = {
@@ -397,6 +399,8 @@ const BASE_TEXT: Record<string, string> = {
   'founder.short.investorCoffee': 'Kahve',
   'founder.short.salesCall': 'Satış',
   'founder.short.rest': 'Dinlen',
+  'founder.short.refactorSprint': 'Refactor',
+  'founder.refactorSprint.preview': 'Teknik borç −{n}, bir ay yavaş',
 
   // Round
   'round.start': 'Tur başlat',

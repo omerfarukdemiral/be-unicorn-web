@@ -154,6 +154,44 @@ describe('release moments (sürüm anı)', () => {
   })
 })
 
+describe('tech debt (GAMEPLAY V2 §4.2)', () => {
+  const finished = (s: GameState, stage: GameState['stage']): GameState => ({
+    ...s,
+    stage,
+    stats: { ...s.stats, cash: 10_000_000 },
+    projects: s.projects.map((p) => ({ ...p, maturity: 1, launched: true, releaseLevel: 5, updateProgress: B.RELEASE_UPDATE_SIZE })),
+  })
+
+  it('from Series A every shipped update adds TECH_DEBT_PER_UPDATE; before it none', () => {
+    const early = api.step(finished(withTeam(), 2), 0.25)
+    expect(early.releases!.at(-1)!.update).toBe(1)
+    expect(early.techDebt).toBe(0)
+    const late = api.step(finished(withTeam(), B.TECH_DEBT_MIN_STAGE), 0.25)
+    expect(late.releases!.at(-1)!.update).toBe(1)
+    expect(late.techDebt).toBeCloseTo(B.TECH_DEBT_PER_UPDATE, 6)
+  })
+
+  it('each month end the engineers pay TECH_DEBT_AMORT_PER_ENG × eng back, never below 0', () => {
+    let s = { ...withTeam(), techDebt: 10 }
+    const eng = s.employees.filter((e) => e.dept === 'eng').length
+    expect(eng).toBeGreaterThan(0)
+    s = { ...s, stats: { ...s.stats, cash: 10_000_000 } }
+    s = api.step(s, 29.5)
+    expect(s.techDebt).toBe(10)
+    s = api.step(s, 1)
+    expect(s.techDebt).toBeCloseTo(10 - B.TECH_DEBT_AMORT_PER_ENG * eng, 6)
+    const clean = api.step({ ...s, techDebt: 0.01 }, 30)
+    expect(clean.techDebt).toBe(0)
+  })
+
+  it('debt slows the builders: speed × (1 − 0.02 × debt), floor 0.5', () => {
+    const s = withTeam()
+    const rate = (debt: number) => Object.values(api.step({ ...s, techDebt: debt }, 0.01).derived.maturityPerDay!)[0]!
+    expect(rate(10) / rate(0)).toBeCloseTo(1 - 10 * B.TECH_DEBT_PER_POINT, 3)
+    expect(rate(1000) / rate(0)).toBeCloseTo(B.TECH_DEBT_MIN_SPEED, 3)
+  })
+})
+
 describe('next step chain (sıradaki adım)', () => {
   it('garage: idea → first users → desk → hire → launch → users → traction → grow', () => {
     let s = api.createGame({ seed: 1 })

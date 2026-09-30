@@ -61,7 +61,7 @@ export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, numbe
   const active = s.projects.filter((p) => p.maturity < 1)
   const speed =
     E.parallelProjectSpeed(active.length, s.stage) *
-    Math.max(B.TECH_DEBT_MIN_SPEED, 1 - B.TECH_DEBT_PER_POINT * s.techDebt) *
+    E.techDebtSpeed(s.techDebt) *
     (1 + o.fx.maturityBonus)
   const founderProject = s.founder.currentAction ? undefined : (active[0] ?? s.projects[0])
   for (const p of s.projects) {
@@ -115,24 +115,31 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const cap = E.capacity(o.deptCounts.eng, o.fx.capacityMult)
   const over = E.overload(s.stats.users, cap)
 
-  const cacValue = E.cac(s.stage, avgMat) * modifierMult(s, 'cac')
-  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat) * modifierMult(s, 'organic')
-  const paid = E.paidPerMonth(s.finance.adBudget, cacValue)
-  const manualNow = Number(s.flags['manualThisMonth'] ?? 0)
-  const manualLast = Number(s.flags['manualLastMonth'] ?? 0)
-
-  const daysSincePrice = s.finance.priceChangeDay !== undefined ? s.time.day - s.finance.priceChangeDay : null
-  const churn =
-    E.churnPerMonth(o.deptOutput.ops, over, avgMat) * E.priceChurnFactor(s.finance.priceMultiplier, daysSincePrice) * modifierMult(s, 'churn')
   const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat) * modifierMult(s, 'arpu')
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
   const anyLaunched = s.projects.some((p) => p.launched)
   const mrr = anyLaunched ? E.mrr(s.stats.users, arpu, enterpriseMrr) : enterpriseMrr
 
+  // GAMEPLAY V2 §4.3: a finite market (fallback TAM until §8's segments) saturates both channels and lifts churn;
+  // ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
+  const tam = E.marketTam(s.stage)
+  const pen = E.penetration(s.stats.users, tam)
+  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac')
+  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen) * modifierMult(s, 'organic')
+  const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)
+  const manualNow = Number(s.flags['manualThisMonth'] ?? 0)
+  const manualLast = Number(s.flags['manualLastMonth'] ?? 0)
+
+  const daysSincePrice = s.finance.priceChangeDay !== undefined ? s.time.day - s.finance.priceChangeDay : null
+  const churn =
+    E.churnPerMonth(o.deptOutput.ops, over, avgMat, pen, s.techDebt) *
+    E.priceChurnFactor(s.finance.priceMultiplier, daysSincePrice) *
+    modifierMult(s, 'churn')
+
   const salaries = s.employees.reduce((a, e) => a + e.salary, 0)
   const rent = E.rent(s.stage, openExtraRingCount(s.office))
-  const infra = E.infra(s.stats.users, o.fx.infraMult) + o.fx.upkeep
+  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult) + o.fx.upkeep
   const living = E.founderLiving(s.stage)
   const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living)
   const net = mrr - burn
@@ -220,6 +227,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   if (rv) s.derived.round = rv
   s.derived.findUsers = findUsersPreview(s)
   s.derived.salesCall = salesCallPreview(s)
+  s.derived.tam = tam
+  s.derived.penetration = pen
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)

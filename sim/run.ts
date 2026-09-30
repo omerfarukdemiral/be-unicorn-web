@@ -3,7 +3,7 @@
 // Delivery gate (docs/GAMEPLAY_V2.md §3 md.8): npm run sim -- --seeds 12 --quick 1 --days 3000
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
-import { ARCHETYPES, SECONDS_PER_DAY } from '../src/engine/index'
+import { ARCHETYPES, SECONDS_PER_DAY, balance } from '../src/engine/index'
 import { DAYS_10_MIN, DAYS_5_MIN, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
@@ -64,7 +64,7 @@ const careless = runMany('careless')
 /** GAMEPLAY V2 §15 bots always run (quick too): autopilot and difficulty probes. */
 const v2Runs = new Map<V2BotKind, BotRun[]>(V2_BOT_KINDS.map((k) => [k, runMany(k)]))
 /** "Careless burner": the burner plan without looking at runway (§4.2 kabul d). */
-const carelessBurner = runMany('burner', 'best', { minRunwayToHire: 0 })
+const carelessBurner = runMany('burner', 'best', { minRunwayToHire: 0, ignoreRunway: true })
 const policyRuns: [DecisionPolicy, BotRun[]][] = [['best', byArch.get(POLICY_ARCH)!], ['worst', extra(POLICY_ARCH, 'worst')], ['first', extra(POLICY_ARCH, 'first')]]
 /** Round size policy (docs/CORE_LOOP.md §4.3, S5-a): the same bots forced to Küçük / Hedef / Büyük. */
 const SIZE_ARCHS: BotKind[] = ['bootstrap', 'vcRocket']
@@ -204,7 +204,8 @@ line('## İnceleme düzeltmeleri: tur büyüklüğü, tur zamanlaması, teklif, 
 line()
 line('Tur büyüklüğü politikası (aynı seed’ler, bot yalnızca büyüklüğü zorla seçer). Kriter: hiçbir büyüklük hem süre hem hissede baskın değil, ya da süre farkı ≥ %15.')
 line()
-line('| Arketip | Küçük (12 ay) | Hedef (18 ay) | Büyük (24 ay) | Süre farkı | Baskın büyüklük |')
+const RM = balance.ROUND_RUNWAY_MONTHS
+line(`| Arketip | Küçük (${RM.small} ay) | Hedef (${RM.target} ay) | Büyük (${RM.large} ay) | Süre farkı | Baskın büyüklük |`)
 line('|---|---|---|---|---|---|')
 let sizeOk = true
 for (const [a, bySize] of sizeRuns) {
@@ -252,6 +253,20 @@ for (let st = 0; st <= 5; st++) {
   line(`| ${STAGES[st]} | ${rs.length} | ${(median(rs) ?? 0).toFixed(1)} | ${(quantile(rs, 0.9) ?? 0).toFixed(1)} | ${pct(rich, rs.length)} |`)
 }
 line()
+line('Aşama min-runway (GAMEPLAY V2 §15): her koşunun o aşamadaki en düşük maaş günü runway’i (ay, kâr = 99), iyi botlar. Hedef medyan Seed 3–6 / A 4–8 / B 5–9 / C 6–10.')
+line()
+line('| Aşama | Koşu | Min-runway p50 | p90 | Runway < 2 maaş günü (koşu başına medyan) | Penetrasyon (aşama sonu medyan) | Teknik borç (aşama sonu medyan) |')
+line('|---|---|---|---|---|---|---|')
+/** Stage min-runway medians of the good bots (index = stage; null = no run paid a payday there). */
+const stageMinMed: (number | null)[] = []
+for (let st = 0; st <= 5; st++) {
+  const runs = goodRunsAll().filter((r) => r.techDebtByStage[st] !== null)
+  const mins = runs.map((r) => r.stageMinRunway[st] ?? 99)
+  stageMinMed[st] = median(mins)
+  if (!runs.length) continue
+  line(`| ${STAGES[st]} | ${runs.length} | ${(median(mins) ?? 0).toFixed(1)} | ${(quantile(mins, 0.9) ?? 0).toFixed(1)} | ${median(runs.map((r) => r.nearDeathPaydays[st] ?? 0))} | ${pct(median(runs.map((r) => r.penetrationByStage[st] ?? 0)) ?? 0, 1)} | ${(median(runs.map((r) => r.techDebtByStage[st] ?? 0)) ?? 0).toFixed(1)} |`)
+}
+line()
 line('Sürüm anı her aşamada: aşama başına sürüm + güncelleme (koşu başına medyan, iyi botlar).')
 line()
 line(`| Arketip | ${STAGES.slice(0, 6).join(' | ')} |`)
@@ -273,7 +288,7 @@ line('coaster / idleAfterProfit: bootstrap, kâra geçince otopilot. greedyGood:
 line()
 line('| Bot | Unicorn’a ulaşan | Unicorn medyanı | İflas | Kârda maaş günü payı (medyan) | Tepe sonrası değerleme düşüşü (medyan) | Runway < 3 gün payı (medyan) |')
 line('|---|---|---|---|---|---|---|')
-const profitShare = (r: BotRun) => (r.paydays ? r.profitPaydays / r.paydays : 0)
+const profitShare = (r: BotRun) => r.profitMonthsShare
 const v2Rows: [string, BotRun[]][] = [...[...v2Runs].map(([k, runs]) => [k, runs] as [string, BotRun[]]), ['burner (dikkatsiz)', carelessBurner]]
 for (const [name, runs] of v2Rows) {
   const uni = runs.filter((r) => r.stageDays[6] != null).length
@@ -367,6 +382,37 @@ crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, car
 {
   const share = median(goodRuns.map(profitShare)) ?? 0
   line(`- Kârda geçirilen maaş günü payı, iyi botlar (medyan): ${pct(share, 1)} (hedef ≤ %35): **${yes(share <= 0.35)}** · B’den önce kâra geçen koşu ${goodRuns.filter((r) => r.profitBeforeB).length}/${goodRuns.length} (bilgi)`)
+  const boot = median(byArch.get('bootstrap')!.map(profitShare)) ?? 0
+  line(`- Kârda geçirilen maaş günü payı, bootstrap (medyan): ${pct(boot, 1)} (hedef ≤ %50): **${yes(boot <= 0.5)}**`)
+}
+{
+  // GAMEPLAY V2 §4.2 / §15 cash-constraint bands (good bots).
+  const bands: [string, number, number][] = [['Seed', 3, 6], ['Series A', 4, 8], ['Series B', 5, 9], ['Series C', 6, 10]]
+  const cells = bands.map(([name, lo, hi], i) => {
+    const m = stageMinMed[i + 2] ?? null
+    return { text: `${name} ${m === null ? '—' : m.toFixed(1)} (${lo}–${hi})`, ok: m !== null && m >= lo && m <= hi }
+  })
+  line(`- Aşama min-runway medyanı: ${cells.map((c) => c.text).join(' · ')}: **${yes(cells.every((c) => c.ok))}** (${cells.filter((c) => c.ok).length}/4 bantta)`)
+  const below3 = median(goodRuns.map((r) => r.daysRunwayBelow3 / Math.max(1, r.endDay))) ?? 0
+  line(`- Oyun süresinin runway < 3 ay payı, iyi botlar (medyan): ${pct(below3, 1)} (hedef %15–25): **${yes(below3 >= 0.15 && below3 <= 0.25)}**`)
+  const rich = goodRuns.flatMap((r) => r.paydayRunway)
+  const richShare = rich.length ? rich.filter((p) => p.runway > 24).length / rich.length : 0
+  line(`- Maaş günlerinde runway > 24 ay payı, iyi botlar (tüm aşamalar): ${pct(richShare, 1)} (hedef ≤ %30): **${yes(richShare <= 0.3)}**`)
+  const reachedC = goodRuns.filter((r) => r.techDebtByStage[5] !== null)
+  const debtC = median(reachedC.map((r) => r.techDebtByStage[5]!))
+  const speedC = debtC === null ? null : Math.max(balance.TECH_DEBT_MIN_SPEED, 1 - balance.TECH_DEBT_PER_POINT * debtC)
+  line(`- Teknik borç Series C sonu medyanı (iyi botlar, ${reachedC.length} koşu): ${debtC === null ? '—' : debtC.toFixed(1)} (hedef 20–40) · hız çarpanı ${speedC === null ? '—' : speedC.toFixed(2)} (hedef ≥ 0.7): **${yes(debtC !== null && debtC >= 20 && debtC <= 40 && speedC! >= 0.7)}**`)
+  const refactors = median(goodRuns.map((r) => r.refactors)) ?? 0
+  line(`- refactorSprint koşu başına (iyi botlar, medyan): ${refactors} (hedef 3–8): **${yes(refactors >= 3 && refactors <= 8)}**`)
+  const penA = median(goodRuns.filter((r) => r.techDebtByStage[3] !== null).map((r) => r.penetrationByStage[3]!)) ?? 0
+  const penB = median(goodRuns.filter((r) => r.techDebtByStage[4] !== null).map((r) => r.penetrationByStage[4]!)) ?? 0
+  line(`- Penetrasyon aşama sonu A / B (bilgi; MARKET_FALLBACK_TAM, hedef §8.1 ile 0.5–0.9): ${pct(penA, 1)} / ${pct(penB, 1)}`)
+  if (unicornMedians.length) {
+    const mins = unicornMedians.map(toMin)
+    const spread = Math.max(...mins) / Math.min(...mins)
+    const inBand = mins.every((m) => m >= 55 && m <= 95)
+    line(`- Unicorn medyanı (arketip) 55–95 dk ve fark ≤ 1.3×: ${mins.map((m) => m.toFixed(1)).join(' / ')} dk · ${spread.toFixed(2)}×: **${yes(inBand && spread <= 1.3 && unicornMedians.length === 4)}**`)
+  }
 }
 line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${saveMax.toFixed(1)} KB (hedef < 120): **${yes(saveMed < 70 && saveMax < 120)}**`)
 line()

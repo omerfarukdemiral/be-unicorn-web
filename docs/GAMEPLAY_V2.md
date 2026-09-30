@@ -116,6 +116,8 @@ Kabul (sim, iyi botlar): aşama min-runway medyanı Seed 3-6 / A 4-8 / B 5-9 / C
 
 **İki ayrı ayar kolu** (açık soru 3'ün cevabı): önce **zorluk bantları** (min runway, yakın ölüm) — `ROUND_RUNWAY_MONTHS`, `ROUND_AMOUNT_TABLE_MIN`, `ROUND_NEW_BURN_MULT`, `INFRA_MRR_SHARE`, `RAISE_YEARLY` ile; sonra **süre** (55-95 dk toleransı, ikinci öncelik) — `GROWTH_FULL_K` ve `STAGE_TARGET_VALUATION` ile. `MULTIPLE_MAX_BY_STAGE` ayar noktası değildir. Kademeli uygulama (§18): önce altyapı + CAC doygunluğu + tur sabitleri, ölç; sonra zam + koordinasyon + teknik borç, ölç.
 
+> **B2 uygulama notu (dalga 3):** `ROUND_NEW_BURN_MULT` 1.25 → **1**, `INFRA_MRR_SHARE` → **[0, .06, .10, .16, .20, .24, .24]** (zorluk kolu). `GROWTH_FULL_K` 1 → **0.35** (süre kolu). `refactorSprint` cooldown'u ayrı bayrak (`flags.refactorUntil`) değil genel `cooldowns` girişi; borç < 1 iken `notFound`. Bot refactor eşiği techDebt ≥ 30 değil **≥ 10** (hız ×0.8); 30'da hiç tetiklenmiyordu. Eski kayıtta `raises` tembel varsayılanı hizmet yılıdır (`e.raises ??= years`), geriye dönük zam ödenmez. **Açık karar:** kârlı şirket kasa biriktirdiği için min-runway, runway<3 ve runway>24 bantları kollarla tutmadı (ölçüm: Seed 11.6 / A 6.1 / B 6.6 / C 12.4 ay; runway<3 %5; runway>24 %56; bootstrap kârda ay %54); yapısal kasa çıkışı (§6, §8.1 upkeep) ya da bant revizyonu gerekir.
+
 ### 4.3 Ücretli kanal doyar, organik ve churn pazara bağlanır
 
 ```
@@ -131,6 +133,8 @@ churn   = max(CHURN_MIN(0.025), 0.06 × (1 − min(0.6, ops×0.02)) × (1 + over
 arpu    = arpu_base × (1 − Σ rival.share × 0.2)                                    // fiyat baskısı
 ```
 Reklam bütçesi MRR'ye eşitken CAC 2× → "reklamı 2×" içbükey; üs 1.5 sayesinde `paid`in tepesi vardır (ads ≈ 2×MRR'de düşmeye başlar) — lineer taslakta `paid → mrr/cac0` asimptotu ve `MRR_eq = MRR × arpu/(cac0×churn)` C'de 3.4 > 1 olduğundan doygunluğa rağmen sınırsız büyüme kalıyordu. Yine de coaster'ı nihai durduran doygunluk değil, gerçek TAM (§8.1) ve büyüme-ölçekli çarpandır (§4.1); bu yüzden `coaster 0/N` kriteri E1'de kesinleşir (§16). Pazar %70 dolunca reklam fiilen boşa gider ve ufukta `'saturation'` öğesi çıkar. Pazar ve rakip terimleri §8'de tanımlanır; §4 dalgası onlar gelmeden `pen = users / MARKET_FALLBACK_TAM[stage]` (§8.1 tablosunun büyüklükleri) ve `Σshare = 0` ile çalışır.
+
+> **B2 sapması (dalga 3, kullanıcı onayı bekliyor):** `CAC_SPEND_K` 1 → **0.75** (1'de C'de en iyi ücretli büyüme ≈ %3.7/ay churn'ün altında kaldı, 1/24 Unicorn); ücretli tepe hâlâ ≈ 1.92×MRR, "2×MRR'de düşer" korunur. `MARKET_FALLBACK_TAM` §8.1 büyüklüklerinin **×4**'ü (ara değer, E1'e kadar): §8.1 değerleriyle iyi botlar 0/48 Unicorn'a ulaştı (pen 0.7'de kanal gücü ≈ 0.12). E1 `openSegment` öne çekilmezse bu değer açık karardır.
 
 ### 4.4 Harcama önizlemesi (onaylı fikir 6, Into the Breach telegrafı)
 
@@ -257,6 +261,8 @@ Her turda bir yeni kısıt + bir yeni fiil + kasayı harcamaya değer bir yatır
 | `global` | +450K | Series C, fiil | $8M + $150K/ay | `ops ≥ 3` (compliance kavramı) |
 
 Büyüklükler eski taslağın (30K / 300K / 1.5M / ×2 / ×3) yerine **aşama çıkışında pen ≈ 0.7** verecek şekilde türetilir — mevcut sabitlerden aşama çıkış kullanıcıları Seed ≈ 7K, A ≈ 37K, B ≈ 143K, Unicorn ≈ 450K (MRR 16.2M / ARPU ≈ 36); eski TAM'la pen A'da 0.11, B'de 0.43 kalır, doygunluk ve `saturation` hiç çıkmazdı. `content/markets.ts` değerleri şu formülle testte doğrulanır: `Σsize(≤stage) ≈ STAGE_TARGET_VALUATION[stage+1] / (12 × MULTIPLE_MAX_BY_STAGE[stage] × ARPU[stage]) / 0.7 × 1.15` (satış sözleşmeleri kullanıcısız MRR getirir, ×1.15 pay); sabitler değişince `market.test` tabloyu yeniden ister. `MARKET_FALLBACK_TAM[stage]` (B2) aynı kümülatif değerlerdir.
+
+> **B2 notu:** `MARKET_FALLBACK_TAM` şu an bu kümülatif değerlerin ×4'üdür (§4.3 sapma notu); E1 gerçek segmentleri getirince tablo ve ×4 yeniden ölçülür.
 
 Action `{type: 'openSegment', id}` (1 hamle, §7.1); 60 gün rampa (`RAMP_DAYS`, penetrasyona kademeli girer); geri kapatılamaz. `derived.tam`, `derived.penetration`; formüller §4.3. Ufuk `'saturation'` öğesi `pen ≥ 0.7`. **UI:** Pazar haritası `CenterFrame`'de (`Overlay {kind: 'market'}`, `h` kısayolu (harita; `m` Mağaza'nın), zaman akar; §14.3): segment karoları açık/siluet + kilit + aşama pill'i, `pen` halkası "68%", "Aç $250K" commit + `CostPreview`; rakip satırları ve `acquireRival` bedeli aynı ekranda (§8.2). Büyüme panelinde yalnız tek satır özet + "›".
 
@@ -493,7 +499,7 @@ Yeni bot türleri: `coaster` (kâra geçince yalnız `housekeeping` + 90 günde 
 | Krizler arası boşluk / C'de kriz sayısı | 150-300 gün / ≥ 2 | — |
 | `idleAfterProfit` Unicorn (4500 gün) | 0/N; değerleme tepe sonrası ≥ %30 düşer (B1'den itibaren) | — |
 | `coaster` Unicorn (4500 gün) | B1: süresi iyi bottan ≥ %25 uzun (bilgi); B2: 0/N ara; **E1: 0/N nihai** | — |
-| Teknik borç iyi bot C medyanı / hız çarpanı | 20-40 / ≥ 0.7 | — |
+| Teknik borç iyi bot C medyanı / hız çarpanı | 20-40 / ≥ 0.7 — **çelişkili, karar bekliyor**: 0.02/puan ile 20-40 → hız 0.6-0.5; hız ≥ 0.7 borç ≤ 15 demek (ya bant ya `TECH_DEBT_PER_POINT` değişir) | B2: 6.0 / 0.88 |
 | İyi bot Unicorn öncesi `segmentsOpened` / `rivalsAcquired` (medyan) | ≥ 2 / ≥ 1 | — |
 | Penetrasyon A/B | 0.5-0.9 bandı (§8.1 TAM'ıyla) | — |
 | Kurul çeyrek kaçırma B/C | iyi %30-50, coaster ≥ %80 | — |

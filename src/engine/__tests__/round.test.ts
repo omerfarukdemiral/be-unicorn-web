@@ -64,32 +64,32 @@ describe('round window (erken tur penceresi)', () => {
   })
 })
 
-describe('round size (12 / 18 / 24 months ↔ equity)', () => {
+describe('round size (8 / 12 / 16 months ↔ equity)', () => {
   it('more months = more money and more equity; the amount follows the new burn inside the table band', () => {
     const s = launched(usersFor(400_000))
     const sizes = s.derived.round!.sizes!
-    expect(sizes.map((x) => x.months)).toEqual([12, 18, 24])
+    expect(sizes.map((x) => x.months)).toEqual([B.ROUND_RUNWAY_MONTHS.small, B.ROUND_RUNWAY_MONTHS.target, B.ROUND_RUNWAY_MONTHS.large])
     expect(sizes[0]!.equity).toBeLessThan(sizes[1]!.equity)
     expect(sizes[1]!.equity).toBeLessThan(sizes[2]!.equity)
     expect(sizes[1]!.equity).toBeCloseTo(B.ROUND_EQUITY[1]!, 6)
     for (const o of sizes) {
-      expect(o.amount).toBeGreaterThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (o.months / 18) - 1)
-      expect(o.amount).toBeLessThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX * (o.months / 18) + 1)
+      expect(o.amount).toBeGreaterThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (o.months / B.ROUND_RUNWAY_MONTHS.target) - 1)
+      expect(o.amount).toBeLessThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX * (o.months / B.ROUND_RUNWAY_MONTHS.target) + 1)
     }
     // A bigger burn buys a bigger round (until the table cap).
     const low = withBurn(s, 1_000)
     const high = withBurn(s, 6_000)
     expect(roundAmountFor(high, 1, 12)).toBeGreaterThan(roundAmountFor(low, 1, 12))
     // The floor scales with the months asked for: a small round on a small burn brings less than a target one.
-    expect(roundAmountFor(low, 1, 12)).toBe(Math.round(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (12 / 18)))
-    expect(roundAmountFor(low, 1, 18)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN)
-    expect(roundAmountFor(low, 1, 12)).toBeLessThan(roundAmountFor(low, 1, 18))
-    expect(roundAmountFor(low, 1, 18)).toBeLessThan(roundAmountFor(low, 1, 24))
+    expect(roundAmountFor(low, 1, 8)).toBe(Math.round(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (8 / 12)))
+    expect(roundAmountFor(low, 1, 12)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN)
+    expect(roundAmountFor(low, 1, 8)).toBeLessThan(roundAmountFor(low, 1, 12))
+    expect(roundAmountFor(low, 1, 12)).toBeLessThan(roundAmountFor(low, 1, 16))
     // The ceiling scales too: a huge burn still buys Küçük < Hedef < Büyük.
     const huge = withBurn(s, 1e9)
-    expect(roundAmountFor(huge, 1, 18)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
-    expect(roundAmountFor(huge, 1, 12)).toBeLessThan(roundAmountFor(huge, 1, 18))
-    expect(roundAmountFor(huge, 1, 18)).toBeLessThan(roundAmountFor(huge, 1, 24))
+    expect(roundAmountFor(huge, 1, 12)).toBe(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX)
+    expect(roundAmountFor(huge, 1, 8)).toBeLessThan(roundAmountFor(huge, 1, 12))
+    expect(roundAmountFor(huge, 1, 12)).toBeLessThan(roundAmountFor(huge, 1, 16))
   })
 
   it('small burn where burn × months passes the ceiling for every size: amounts still rise with size (review #3)', () => {
@@ -118,7 +118,7 @@ describe('round size (12 / 18 / 24 months ↔ equity)', () => {
     const r = api.applyAction(s, { type: 'startRound', size: 'large' })
     expect(r.ok).toBe(true)
     expect(r.state.round!.size).toBe('large')
-    expect(r.state.round!.months).toBe(24)
+    expect(r.state.round!.months).toBe(B.ROUND_RUNWAY_MONTHS.large)
     expect(r.state.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'large', 0), 6)
     expect(api.applyAction(s, { type: 'startRound', size: 'huge' as never }).error).toBe('invalid')
   })

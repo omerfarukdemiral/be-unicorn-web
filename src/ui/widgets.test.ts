@@ -1,11 +1,14 @@
 // Registry ⇄ store rules: the widget registry (src/ui) and the pin rules (src/store/metricPins.ts, no UI import)
 // must agree on what is pinnable and what is merged (docs/LAYOUT.md §5.2–5.3).
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { UI_TEXT } from '../content'
 import { HUD_WIDGETS } from '../engine/types'
 import { MERGED_INTO, PINNABLE } from '../store/metricPins'
 import { cashFlow } from './cashflow'
+import { Legend, ramp } from './theme'
 import { METRIC_CARDS, visiblePins, WIDGETS } from './widgets'
+import widgetsSrc from './widgets.tsx?raw'
 
 describe('widget registry', () => {
   it('covers every HudWidget, with a label that exists', () => {
@@ -46,5 +49,34 @@ describe('cashFlow: one money vocabulary', () => {
     expect(f.netDay).toBeCloseTo(f.netMonth / 30)
     expect(f.owed).toBe(1_550)
     expect(f.usable).toBe(f.bank - f.owed)
+  })
+})
+
+describe('ramp / Legend live in theme.ts (Metrikler cards and the stats charts share them)', () => {
+  it('widgets.tsx imports them instead of keeping its own copy', () => {
+    expect(widgetsSrc).not.toMatch(/function (ramp|Legend)\b/)
+    expect(widgetsSrc).toMatch(/import \{[^}]*\bLegend\b[^}]*\bramp\b[^}]*\} from '\.\/theme'/)
+  })
+
+  it('ramp: the hue first, then four lighter strengths', () => {
+    const r = ramp('var(--color-g-burn)')
+    expect(r).toHaveLength(5)
+    expect(r[0]).toBe('var(--color-g-burn)')
+    expect(new Set(r).size).toBe(5)
+  })
+
+  it('Legend: one row per part worth showing, crumbs left out', () => {
+    const html = renderToStaticMarkup(
+      Legend({
+        parts: [
+          { label: 'Maaşlar', value: 4_000, color: 'red' },
+          { label: 'Kira', value: 0.2, color: 'blue' },
+        ],
+        format: (n) => `$${n}`,
+      }),
+    )
+    expect(html).toContain('Maaşlar $4000')
+    expect(html).not.toContain('Kira')
+    expect(Legend({ parts: [], format: String })).toBeNull()
   })
 })

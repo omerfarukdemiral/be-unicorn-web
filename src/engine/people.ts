@@ -32,6 +32,22 @@ export function fillCandidates(s: GameState, content: EngineContent, rng: Rng, g
   while (s.candidates.length < candidatePoolSize(s)) s.candidates.push(makeCandidate(s, content, rng))
 }
 
+/**
+ * Yearly market raise (GAMEPLAY V2 §4.2), on payday: someone RAISE_EVERY_DAYS or longer in the company with fewer
+ * raises than full years served gets salary × (1 + RAISE_YEARLY). `raises` is the only source of truth, so the first
+ * payday after a hire never raises and a year pays once. An old save (no `raises`) counts the years already served as
+ * paid: no back pay, the next anniversary raises.
+ */
+export function yearlyRaises(s: GameState): void {
+  for (const e of s.employees) {
+    const years = Math.floor((s.time.day - e.hiredDay + 1e-6) / B.RAISE_EVERY_DAYS)
+    e.raises ??= years
+    if (years < 1 || e.raises >= years) continue
+    e.salary *= 1 + B.RAISE_YEARLY
+    e.raises += 1
+  }
+}
+
 export function refreshCost(s: GameState): number {
   return Math.round(B.REFRESH_COST_BASE * B.SALARY_STAGE_GROWTH ** s.stage)
 }

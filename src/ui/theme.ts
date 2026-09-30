@@ -1,4 +1,5 @@
 // UI-side visual constants (render keeps its own palette.ts; UI may not import render).
+import { createElement, type ReactElement } from 'react'
 import type { Dept, EmployeeStatus, FounderActionKind, HudWidget, SlotType, StageIndex } from '../engine/types'
 import { STAGES } from '../content'
 import type { PanelKind } from '../store/types'
@@ -7,6 +8,36 @@ import type { IconName } from './icons'
 /** CSS colour at a low opacity: the ~12% tint behind coloured icons, dept chips and brand-soft rows. */
 export function soft(color: string, pct = 12): string {
   return `color-mix(in oklab, ${color} ${pct}%, transparent)`
+}
+
+/** Stacked share ramp: one gauge hue in five strengths (100 / 75 / 55 / 38 / 22% over the surface). Charts use it too. */
+export function ramp(color: string): [string, string, string, string, string] {
+  const at = (p: number) => `color-mix(in oklab, ${color} ${p}%, var(--color-surface))`
+  return [color, at(75), at(55), at(38), at(22)]
+}
+
+/** One coloured part of a stacked bar / pie, named for its legend. */
+export type LegendPart = { value: number; color: string; label: string }
+
+/**
+ * A stack's parts spelled out (touch screens have no tooltip): dot + name + value, parts ≤ 0.5 left out.
+ * Plain createElement so the palette module stays a .ts file (Metrikler cards and the stats charts share it).
+ */
+export function Legend({ parts, format, className }: { parts: readonly LegendPart[]; format: (n: number) => string; className?: string }): ReactElement | null {
+  const shown = parts.filter((p) => p.value > 0.5)
+  if (shown.length === 0) return null
+  return createElement(
+    'div',
+    { className: `tabular flex flex-wrap gap-x-2 gap-y-0.5 text-[10.5px] font-medium text-ink-2 ${className ?? 'mt-1'}` },
+    shown.map((p) =>
+      createElement(
+        'span',
+        { key: p.label, className: 'inline-flex items-center gap-1' },
+        createElement('span', { 'aria-hidden': 'true', className: 'inline-block size-1.5 shrink-0 rounded-full', style: { background: p.color } }),
+        `${p.label} ${format(p.value)}`,
+      ),
+    ),
+  )
 }
 
 /**
@@ -79,6 +110,7 @@ export const FOUNDER_COLOR: Record<FounderActionKind, string> = {
   investorCoffee: 'var(--color-g-cash)',
   salesCall: 'var(--color-g-runway)',
   rest: 'var(--color-g-reputation)',
+  refactorSprint: 'var(--color-g-debt)',
 }
 
 /** Status pill text colour (Pill supplies the neutral hairline frame). Red only for bad states. */
@@ -115,6 +147,7 @@ export const FOUNDER_ICON: Record<FounderActionKind, IconName> = {
   investorCoffee: 'coffee',
   salesCall: 'phone',
   rest: 'bed',
+  refactorSprint: 'bug',
 }
 
 /** PLAN §4.4 unlock stages (display gating only; the engine is the authority). */
@@ -125,6 +158,7 @@ export const FOUNDER_ACTION_STAGE: Record<FounderActionKind, StageIndex> = {
   motivateTeam: 1,
   investorCoffee: 1,
   salesCall: 2,
+  refactorSprint: 3,
 }
 
 /** Stage an action unlocks at: content's StageDef.unlockActions if present, else the PLAN table. */

@@ -1,5 +1,5 @@
-// View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, Liderlik,
-// settings. No card of their own: they sit inside the top bar, divided from the speed control by a 1px rule.
+// View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, İstatistik,
+// Liderlik, settings. No card of their own: they sit inside the top bar, divided from the speed control by a 1px rule.
 import { useEffect, useRef } from 'react'
 import { achievementsBadge, useGameStore } from '../../store/gameStore'
 import type { ZoomLevel } from '../../store/types'
@@ -42,6 +42,7 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
         </button>
       )}
       <AchievementsButton size={size} />
+      <StatsButton size={size} />
       <LeaderboardButton size={size} />
       <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={size} active={settingsOpen} />
     </div>
@@ -80,6 +81,13 @@ function AchievementsButton({ size }: { size: number }) {
       )}
     </span>
   )
+}
+
+/** Trend → İstatistik (I): the center statistics screen, again closes it (docs/GAMEPLAY_V2.md §14.5). Time keeps flowing. */
+function StatsButton({ size }: { size: number }) {
+  const open = useGameStore((s) => s.ui.overlay?.kind === 'stats')
+  const toggleCenter = useGameStore((s) => s.toggleCenter)
+  return <IconButton icon="trend" label={t('stats.open')} onClick={() => toggleCenter('stats')} size={size} active={open} />
 }
 
 /** Trophy → Liderlik (L). Only when the backend answers; a signed-in player sees their rank as a small badge. */

@@ -11,11 +11,15 @@ describe('§5.2 production', () => {
   it('person output multiplies all factors', () => {
     expect(E.personOutput(2, 1.15, 50, 1.1)).toBeCloseTo(2 * 1.15 * 1 * 1.1)
   })
-  it('coordination: −3%/person over 6, floor 0.7, meeting room fixes', () => {
-    expect(E.coordination(6, false)).toBe(1)
-    expect(E.coordination(10, false)).toBeCloseTo(0.88)
-    expect(E.coordination(40, false)).toBe(0.7)
-    expect(E.coordination(40, true)).toBe(1)
+  it('coordination: free up to COORDINATION_TEAM_FREE, −PER_PERSON after, floor 0.7; the meeting room only softens it', () => {
+    const free = B.COORDINATION_TEAM_FREE
+    expect(E.coordination(free, false)).toBe(1)
+    expect(E.coordination(free + 4, false)).toBeCloseTo(1 - 4 * B.COORDINATION_PER_PERSON)
+    expect(E.coordination(free + 4, true)).toBeCloseTo(1 - 4 * B.COORDINATION_PER_PERSON * B.COORDINATION_ROOM_FACTOR)
+    expect(E.coordination(200, false)).toBeCloseTo(B.COORDINATION_MIN)
+    // GAMEPLAY V2 §4.2: the room reduces the penalty, it no longer zeroes it.
+    expect(E.coordination(200, true)).toBeLessThan(1)
+    expect(E.coordination(200, true)).toBeGreaterThan(E.coordination(200, false))
   })
 })
 
@@ -55,6 +59,51 @@ describe('§5.4 users', () => {
     expect(E.churnPerMonth(0, 0, 0.5)).toBeCloseTo(0.06)
     expect(E.churnPerMonth(50, 1, 0)).toBeCloseTo(0.06 * 0.4 * 2 * 1.5)
   })
+  it('churn floor CHURN_MIN, then × (1 + 0.5 × pen) × (1 + techDebt / 200) (GAMEPLAY V2 §4.3)', () => {
+    // 30 ops at maturity 1: 0.06 × 0.4 × 0.5 = 0.012 → the floor.
+    expect(E.churnPerMonth(30, 0, 1)).toBeCloseTo(B.CHURN_MIN)
+    expect(E.churnPerMonth(0, 0, 0.5, 0.6)).toBeCloseTo(0.06 * (1 + B.CHURN_SATURATION * 0.6))
+    expect(E.churnPerMonth(0, 0, 0.5, 0, 40)).toBeCloseTo(0.06 * (1 + 40 / B.TECH_DEBT_CHURN_DIV))
+    expect(E.churnPerMonth(30, 0, 1, 0, 40)).toBeCloseTo(B.CHURN_MIN * 1.2)
+  })
+  it('tech debt speed: 1 − 0.02 × debt, floor 0.5', () => {
+    expect(E.techDebtSpeed(0)).toBe(1)
+    expect(E.techDebtSpeed(15)).toBeCloseTo(1 - 15 * B.TECH_DEBT_PER_POINT)
+    expect(E.techDebtSpeed(500)).toBe(B.TECH_DEBT_MIN_SPEED)
+  })
+  it('market: penetration = users / MARKET_FALLBACK_TAM, clamped 0–1', () => {
+    expect(E.marketTam(3)).toBe(B.MARKET_FALLBACK_TAM[3])
+    expect(E.penetration(B.MARKET_FALLBACK_TAM[3]! / 2, E.marketTam(3))).toBeCloseTo(0.5)
+    expect(E.penetration(1e9, E.marketTam(3))).toBe(1)
+    expect(E.penetration(10, 0)).toBe(0)
+  })
+  it('CAC saturates with spend (super-linear) and with the market (1 + 3 × pen²)', () => {
+    const base = E.cac(3, 0.5)
+    const mrr = 200_000
+    expect(E.cac(3, 0.5, mrr, mrr)).toBeCloseTo(base * (1 + B.CAC_SPEND_K))
+    expect(E.cac(3, 0.5, 0, mrr, 0.5)).toBeCloseTo(base * (1 + B.CAC_SATURATION_K * 0.25))
+    // Below the stage floor the spend is measured against the floor, not a tiny MRR.
+    const floor = B.CAC_SPEND_FLOOR[3]!
+    expect(E.cac(3, 0.5, floor, 100)).toBeCloseTo(base * (1 + B.CAC_SPEND_K))
+  })
+  it('paid users peak below 2 × MRR: at 2 × MRR the channel is already past its top and falling', () => {
+    const mrr = 400_000
+    const paid = (x: number) => E.paidPerMonth(x * mrr, E.cac(4, 0.8, x * mrr, mrr))
+    // d/dx [x / (1 + K x^1.5)] = 0 at K x^1.5 = 2.
+    const peak = (2 / B.CAC_SPEND_K) ** (1 / B.CAC_SPEND_EXP)
+    expect(peak).toBeLessThan(2)
+    expect(paid(1)).toBeGreaterThan(paid(0.5))
+    expect(paid(peak)).toBeGreaterThan(paid(peak - 0.1))
+    expect(paid(peak)).toBeGreaterThan(paid(2))
+    expect(paid(2)).toBeGreaterThan(paid(2.2))
+    expect(paid(2.2)).toBeGreaterThan(paid(3))
+  })
+  it('a full market shuts the paid channel and floors organic at 10%', () => {
+    expect(E.paidPerMonth(1000, 10, 0.25)).toBeCloseTo(75)
+    expect(E.paidPerMonth(1000, 10, 1)).toBe(0)
+    expect(E.organicPerMonth(2, 50, 0.5, 0.95)).toBeCloseTo(2 * B.ORGANIC_PER_MARKETING * 0.5 * B.ORGANIC_PEN_FLOOR)
+    expect(E.organicPerMonth(2, 50, 0.5, 0.5)).toBeCloseTo(2 * B.ORGANIC_PER_MARKETING * 0.5 * 0.5)
+  })
 })
 
 describe('§5.5 revenue', () => {
@@ -77,9 +126,13 @@ describe('§5.6 costs', () => {
   it('salary × SALARY_STAGE_GROWTH^stage', () => {
     expect(E.salary(1000, 2)).toBeCloseTo(1000 * B.SALARY_STAGE_GROWTH ** 2)
   })
-  it('infra with server room', () => {
-    expect(E.infra(5000)).toBeCloseTo(50)
-    expect(E.infra(5000, 0.8)).toBeCloseTo(40)
+  it('infra = max(users/1000 × per-1000[stage], MRR × share[stage]) × server room', () => {
+    expect(E.infra(5000, 0, 0)).toBeCloseTo(5 * B.INFRA_PER_1000_BY_STAGE[0]!)
+    expect(E.infra(5000, 0, 0, 0.8)).toBeCloseTo(5 * B.INFRA_PER_1000_BY_STAGE[0]! * 0.8)
+    // Series B: the MRR share wins once revenue per user is high.
+    expect(E.infra(10_000, 1_000_000, 4)).toBeCloseTo(1_000_000 * B.INFRA_MRR_SHARE[4]!)
+    expect(E.infra(10_000, 1_000, 4)).toBeCloseTo(10 * B.INFRA_PER_1000_BY_STAGE[4]!)
+    expect(E.infra(10_000, 1_000_000, 4, 0.8)).toBeCloseTo(1_000_000 * B.INFRA_MRR_SHARE[4]! * 0.8)
   })
   it('burn and runway', () => {
     expect(E.burn(1000, 500, 20, 100)).toBe(1620)

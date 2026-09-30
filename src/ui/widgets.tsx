@@ -14,7 +14,7 @@ import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { compact, fixed, money, num, pct, signedMoney } from './format'
 import { cx, Dot } from './primitives'
-import { iconTone, RUNWAY_DANGER_MONTHS, soft, WIDGET_COLOR } from './theme'
+import { iconTone, Legend, ramp, RUNWAY_DANGER_MONTHS, soft, WIDGET_COLOR, type LegendPart } from './theme'
 import { cashFlow } from './cashflow'
 
 /** 'panel' = Metrikler card (default), 'bar' = top-bar pin (h40, value only). */
@@ -120,13 +120,7 @@ function StatusMark({ alert, warn, size }: { alert?: boolean; warn?: boolean; si
   return null
 }
 
-/** Stacked share bar ramp: one gauge hue in five strengths (100 / 75 / 55 / 38 / 22% over the surface). */
-function ramp(color: string): [string, string, string, string, string] {
-  const at = (p: number) => `color-mix(in oklab, ${color} ${p}%, var(--color-surface))`
-  return [color, at(75), at(55), at(38), at(22)]
-}
-
-type Part = { value: number; color: string; label: string }
+type Part = LegendPart
 
 function StackBar({ parts }: { parts: Part[] }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0)
@@ -138,22 +132,6 @@ function StackBar({ parts }: { parts: Part[] }) {
             <div key={p.label} title={`${p.label}: ${compact(p.value)}`} style={{ width: `${(Math.max(0, p.value) / total) * 100}%`, background: p.color }} />
           ) : null,
         )}
-    </div>
-  )
-}
-
-/** Panel cards: the stacked bar's parts spelled out (touch screens have no tooltip). */
-function Legend({ parts, format }: { parts: Part[]; format: (n: number) => string }) {
-  const shown = parts.filter((p) => p.value > 0.5)
-  if (shown.length === 0) return null
-  return (
-    <div className="tabular mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10.5px] font-medium text-ink-2">
-      {shown.map((p) => (
-        <span key={p.label} className="inline-flex items-center gap-1">
-          <Dot color={p.color} size={6} />
-          {p.label} {format(p.value)}
-        </span>
-      ))}
     </div>
   )
 }

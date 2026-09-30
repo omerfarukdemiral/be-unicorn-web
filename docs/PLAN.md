@@ -301,7 +301,7 @@ Repodaki 20 Defter dersi ve yaklaşık 45 ipucu birleştirildi, tekrarlar çıka
 | `concentration` | Tek müşteri > MRR'ın %30'u | "En büyük müşterinin sözleşmesi bittiği gün gelir bir kalemde düşer." | Kurumsal müşteri ekle, en büyüğünün payını %30'un altına indir. | Gelir dağılımı |
 | `compliance` | Kurumsal satış açılınca | "Verilerim nerede duruyor? Belgeyi görmeden imza atmam." | Veri denetimi gelince danışman tut, evrakı tamamla. | — |
 | `trough` | MoM büyüme 2 ay boyunca < %2 | "İki aydır grafik dümdüz. Şimdi neyi değiştireceksin?" | Bu ay tek bir şeyi değiştir, ay sonunda sayıya bak. | — |
-| `cap-table-health` | Kurucu hissesi < %35 | "Şirketin kaçta kaçı hâlâ senin, en son ne zaman baktın?" | Turda 18 aylık para al, fazlası için hisse verme. | — |
+| `cap-table-health` | Kurucu hissesi < %35 | "Şirketin kaçta kaçı hâlâ senin, en son ne zaman baktın?" | Turda 12 aylık para al, fazlası için hisse verme. | — |
 | `no-single-path` | Arketip tespit edilince | "Tarzın belli oldu. Rakibin başka yoldan gidiyor, sence kim yanlış?" | Rakibi kopyalamadan önce kendi kasana ve büyümene bak. | Arketip rozeti |
 
 #### Her aşamada

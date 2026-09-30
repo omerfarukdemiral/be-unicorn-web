@@ -1,6 +1,6 @@
 // Fundraising rounds (PLAN §5.9, docs/CORE_LOOP.md §4.3 "Tur penceresi"):
 // - the window opens early, at ROUND_EARLY_RATIO of the target valuation ("şimdi mi, biraz daha mı?");
-// - the player picks a size: 12 / 18 / 24 months of runway on the NEW burn ↔ less / more equity;
+// - the player picks a size: 8 / 12 / 16 months (ROUND_RUNWAY_MONTHS) of runway on the NEW burn ↔ less / more equity;
 // - the round runs ROUND_WEEKS_MIN–MAX weeks; every week the live offer moves with the metrics and a pitch is due
 //   (show metrics / tell the story / bring a second investor) until the pitches reach their cap;
 // - offer = amount × (clamp(price × due diligence, floor, ceiling) + pitch bonus), where half the price is locked
@@ -40,8 +40,9 @@ export type RoundAmountBy = 'floor' | 'burn' | 'ceiling'
 
 /**
  * Amount at an offer factor of 1: `months` of the new burn (ROUND_NEW_BURN_MULT × today's round burn), between a
- * floor and a ceiling taken from the stage table. Both bounds scale with the months asked for (table = the 18-month
- * "target" size), so Küçük < Hedef < Büyük always: a smaller round never brings the same money for less equity.
+ * floor and a ceiling taken from the stage table. Both bounds scale with the months asked for (table = the "target"
+ * size, ROUND_RUNWAY_MONTHS.target), so Küçük < Hedef < Büyük always: a smaller round never brings the same money for
+ * less equity. GAMEPLAY V2 §4.2: 8 / 12 / 16 months and a 0.3 floor, so the amount really follows burn × months.
  */
 export function roundAmountParts(s: GameState, target: StageIndex, months: number): { amount: number; by: RoundAmountBy } {
   const table = B.ROUND_AMOUNT[target]

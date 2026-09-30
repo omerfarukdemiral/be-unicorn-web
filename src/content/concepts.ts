@@ -517,7 +517,7 @@ export const CONCEPTS: readonly Concept[] = [
     card: {
       what: 'Kimin elinde ne kadar hisse var? Bunu gösteren tablo cap table, ortaklık tablosu.',
       where: (s) => `Kurucu payın ${formatPercent(s.stats.equity)}. Kalan ${formatPercent(1 - s.stats.equity)} artık başkalarında.`,
-      rule: 'Turda 18 aylık para al, fazlası için hisse verme.',
+      rule: 'Turda 12 aylık para al, fazlası için hisse verme.',
     },
     unlocks: 'equity',
     shelfColor: '#7B93F5',

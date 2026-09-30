@@ -15,10 +15,11 @@ export function personOutput(baseOutput: number, deskQuality: number, morale: nu
   return baseOutput * deskQuality * moraleMultiplier(morale) * adjacencyBonus * quality
 }
 
-/** ekip > 6 ve toplantı odası yok → × (1 − 0.03 × (ekip − 6)), en fazla −%30. */
+/** ekip > 10 → × (1 − 0.015 × (ekip − 10)), en fazla −%30; toplantı odası kaybı yarıya indirir (GAMEPLAY V2 §4.2). */
 export function coordination(teamSize: number, hasMeetingRoom: boolean): number {
-  if (hasMeetingRoom || teamSize <= B.COORDINATION_TEAM_FREE) return 1
-  return Math.max(B.COORDINATION_MIN, 1 - B.COORDINATION_PER_PERSON * (teamSize - B.COORDINATION_TEAM_FREE))
+  if (teamSize <= B.COORDINATION_TEAM_FREE) return 1
+  const loss = Math.min(1 - B.COORDINATION_MIN, B.COORDINATION_PER_PERSON * (teamSize - B.COORDINATION_TEAM_FREE))
+  return 1 - loss * (hasMeetingRoom ? B.COORDINATION_ROOM_FACTOR : 1)
 }
 
 // §5.3 Product ----------------------------------------------------------------
@@ -39,6 +40,11 @@ export function isLaunched(maturity: number): boolean {
   return maturity >= B.MVP_MATURITY
 }
 
+/** hız = max(0.5, 1 − 0.02 × teknikBorç). */
+export function techDebtSpeed(debt: number): number {
+  return Math.max(B.TECH_DEBT_MIN_SPEED, 1 - B.TECH_DEBT_PER_POINT * Math.max(0, debt))
+}
+
 // §5.4 Users ------------------------------------------------------------------
 
 /** kapasite = max(50, müh × 1500). */
@@ -51,24 +57,44 @@ export function overload(users: number, cap: number): number {
   return Math.max(0, users / Math.max(1, cap) - 1)
 }
 
-/** organik/ay = pazarlama × 25 × (0.5 + itibar/100) × ortOlgunluk. */
-export function organicPerMonth(marketing: number, reputation: number, avgMaturity: number): number {
-  return marketing * B.ORGANIC_PER_MARKETING * (0.5 + reputation / 100) * avgMaturity
+/** Market size at a stage (GAMEPLAY V2 §4.3): MARKET_FALLBACK_TAM until the segments of §8 land. */
+export function marketTam(stage: number): number {
+  return B.MARKET_FALLBACK_TAM[Math.min(B.MARKET_FALLBACK_TAM.length - 1, Math.max(0, stage))]!
 }
 
-/** CAC = 8 × 1.3^aşama / kalite, kalite = 0.5 + ortOlgunluk. */
-export function cac(stage: number, avgMaturity: number): number {
-  return (B.CAC_BASE * B.CAC_STAGE_GROWTH ** stage) / (0.5 + avgMaturity)
+/** pen = users / tam, 0–1. */
+export function penetration(users: number, tam: number): number {
+  return tam > 0 ? clamp(0, 1, users / tam) : 0
 }
 
-/** reklam/ay = reklamBütçesi / CAC. */
-export function paidPerMonth(adBudget: number, cacValue: number): number {
-  return cacValue > 0 ? adBudget / cacValue : 0
+/** organik/ay = pazarlama × 42 × (0.5 + itibar/100) × ortOlgunluk × max(0.1, 1 − pen). */
+export function organicPerMonth(marketing: number, reputation: number, avgMaturity: number, pen = 0): number {
+  return marketing * B.ORGANIC_PER_MARKETING * (0.5 + reputation / 100) * avgMaturity * Math.max(B.ORGANIC_PEN_FLOOR, 1 - pen)
 }
 
-/** churn/ay = 0.06 × (1 − min(0.6, ops × 0.02)) × (1 + aşırıYük) × (1.5 − ortOlgunluk). */
-export function churnPerMonth(ops: number, overloadValue: number, avgMaturity: number): number {
-  return B.CHURN_BASE * (1 - Math.min(B.CHURN_OPS_MAX, ops * B.CHURN_OPS_PER)) * (1 + overloadValue) * (1.5 - avgMaturity)
+/**
+ * CAC = 45 × 1.7^aşama / (0.5 + ortOlgunluk) × harcamaDoygunluğu × pazarDoygunluğu (GAMEPLAY V2 §4.3).
+ * harcama = 1 + K × (reklam / max(MRR, taban[aşama]))^1.5: super-linear, so paid users have a peak; pazar = 1 + 3 × pen².
+ */
+export function cac(stage: number, avgMaturity: number, adBudget = 0, mrrValue = 0, pen = 0): number {
+  const base = (B.CAC_BASE * B.CAC_STAGE_GROWTH ** stage) / (0.5 + avgMaturity)
+  const floor = B.CAC_SPEND_FLOOR[Math.min(B.CAC_SPEND_FLOOR.length - 1, Math.max(0, stage))]!
+  const spend = 1 + B.CAC_SPEND_K * (Math.max(0, adBudget) / Math.max(mrrValue, floor)) ** B.CAC_SPEND_EXP
+  return base * spend * (1 + B.CAC_SATURATION_K * pen * pen)
+}
+
+/** reklam/ay = reklamBütçesi / CAC × (1 − pen). */
+export function paidPerMonth(adBudget: number, cacValue: number, pen = 0): number {
+  return cacValue > 0 ? (adBudget / cacValue) * Math.max(0, 1 - pen) : 0
+}
+
+/**
+ * churn/ay = max(0.025, 0.06 × (1 − min(0.6, ops × 0.02)) × (1 + aşırıYük) × (1.5 − ortOlgunluk))
+ * × (1 + 0.5 × pen) × (1 + teknikBorç / 200) (GAMEPLAY V2 §4.3).
+ */
+export function churnPerMonth(ops: number, overloadValue: number, avgMaturity: number, pen = 0, techDebt = 0): number {
+  const base = B.CHURN_BASE * (1 - Math.min(B.CHURN_OPS_MAX, ops * B.CHURN_OPS_PER)) * (1 + overloadValue) * (1.5 - avgMaturity)
+  return Math.max(B.CHURN_MIN, base) * (1 + B.CHURN_SATURATION * pen) * (1 + Math.max(0, techDebt) / B.TECH_DEBT_CHURN_DIV)
 }
 
 /** Price increase → churn × (1 + (fiyatÇarpanı − 1) × 0.8) for one month. */
@@ -107,9 +133,10 @@ export function rent(stage: number, openExtraRings: number): number {
   return (B.OFFICE_BASE_RENT[stage] ?? 0) + openExtraRings * (B.RING_RENT[stage] ?? 0)
 }
 
-/** altyapı = users / 1000 × 10 × (sunucuOdası ? 0.8 : 1). */
-export function infra(users: number, infraMult = 1): number {
-  return (users / 1000) * B.INFRA_PER_1000_USERS * infraMult
+/** altyapı = max(users / 1000 × birim[aşama], MRR × pay[aşama]) × (sunucuOdası ? 0.8 : 1) (GAMEPLAY V2 §4.2). */
+export function infra(users: number, mrrValue: number, stage: number, infraMult = 1): number {
+  const i = Math.min(B.INFRA_PER_1000_BY_STAGE.length - 1, Math.max(0, stage))
+  return Math.max((users / 1000) * B.INFRA_PER_1000_BY_STAGE[i]!, Math.max(0, mrrValue) * B.INFRA_MRR_SHARE[i]!) * infraMult
 }
 
 /** burn = maaşlar + kira + altyapı + reklamBütçesi (+ kurucu yaşam gideri, Faz 3). */

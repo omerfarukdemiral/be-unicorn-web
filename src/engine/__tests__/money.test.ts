@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { createEngine } from '../index'
 import { migrate } from '../save'
-import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION } from '../types'
+import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
 describe('garage money (S1-b)', () => {
@@ -24,6 +24,87 @@ describe('garage money (S1-b)', () => {
     const s = api.step(api.createGame({ seed: 1 }), 1)
     expect(s.derived.multipleCap).toBe(B.MULTIPLE_MAX_BY_STAGE[0])
     expect(s.derived.valuationMultiple).toBeLessThanOrEqual(s.derived.multipleCap!)
+  })
+})
+
+describe('costs scale (GAMEPLAY V2 §4.2)', () => {
+  const api = createEngine(fakeContent())
+  /** A garage with one hire on day 0 and deep pockets (the test is about salaries, not survival). */
+  function hired(): GameState {
+    let s = api.createGame({ seed: 1 })
+    s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
+    s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
+    const c = s.candidates.find((x) => x.dept === 'eng') ?? s.candidates[0]!
+    s = api.applyAction(s, { type: 'hire', candidateId: c.id }).state
+    return { ...s, stats: { ...s.stats, cash: 50_000_000 } }
+  }
+
+  it('yearly raise: none on the first payday, × 1.08 by day 361, not again on day 391', () => {
+    let s = hired()
+    const pay0 = s.employees[0]!.salary
+    s = api.step(s, 30.5)
+    expect(s.employees[0]!.salary).toBe(pay0)
+    s = api.step(s, 361 - s.time.day)
+    expect(s.employees[0]!.salary).toBeCloseTo(pay0 * (1 + B.RAISE_YEARLY), 6)
+    expect(s.employees[0]!.raises).toBe(1)
+    s = api.step(s, 391 - s.time.day)
+    expect(s.employees[0]!.salary).toBeCloseTo(pay0 * (1 + B.RAISE_YEARLY), 6)
+    expect(s.employees[0]!.raises).toBe(1)
+    // The raise shows in the burn right away; the month it was earned in was paid at the old salary.
+    expect(s.finance.burnBreakdown.salaries).toBeCloseTo(pay0 * (1 + B.RAISE_YEARLY), 6)
+  })
+
+  it('an old save (no raises field) counts the years served as paid: no back pay, the next anniversary raises', () => {
+    let s = hired()
+    s = api.step(s, 700)
+    const old = structuredClone(s)
+    const pay = old.employees[0]!.salary
+    delete old.employees[0]!.raises
+    let next = api.step(old, 30)
+    const years = Math.floor((next.time.day - next.employees[0]!.hiredDay) / B.RAISE_EVERY_DAYS)
+    expect(next.employees[0]!.raises).toBe(years)
+    expect(next.employees[0]!.salary).toBeCloseTo(pay, 6)
+    next = api.step(next, (years + 1) * B.RAISE_EVERY_DAYS + 31 - next.time.day)
+    expect(next.employees[0]!.raises).toBe(years + 1)
+    expect(next.employees[0]!.salary).toBeCloseTo(pay * (1 + B.RAISE_YEARLY), 6)
+  })
+
+  it('infra is at least the stage share of MRR (the bill grows with the business)', () => {
+    let s = hired()
+    s = { ...s, stage: 4, stats: { ...s.stats, users: 20_000 }, projects: s.projects.map((p) => ({ ...p, maturity: 1, launched: true, releaseLevel: 5 })) }
+    s = api.step(s, 0.01)
+    const byUsers = (s.stats.users / 1000) * B.INFRA_PER_1000_BY_STAGE[4]!
+    const byMrr = s.finance.mrr * B.INFRA_MRR_SHARE[4]!
+    expect(byMrr).toBeGreaterThan(byUsers)
+    expect(s.finance.burnBreakdown.infra).toBeCloseTo(byMrr, 3)
+  })
+
+  it('churn × (1 + techDebt / 200)', () => {
+    let s = hired()
+    s = { ...s, stats: { ...s.stats, users: 300 }, projects: s.projects.map((p) => ({ ...p, maturity: 0.5, launched: true, releaseLevel: 2 })) }
+    const clean = api.step({ ...s, techDebt: 0 }, 0.01)
+    const debt = api.step({ ...s, techDebt: 40 }, 0.01)
+    expect(debt.stats.churn / clean.stats.churn).toBeCloseTo(1 + 40 / B.TECH_DEBT_CHURN_DIV, 3)
+  })
+
+  it('refactorSprint (Series A on): −(8 + eng) debt, production × 0.7 for 30 days, 90-day cooldown', () => {
+    let s = hired()
+    expect(api.applyAction({ ...s, techDebt: 50 }, { type: 'founderAction', kind: 'refactorSprint' }).error).toBe('notUnlocked')
+    s = { ...s, stage: 3, techDebt: 50 }
+    expect(api.applyAction({ ...s, techDebt: 0 }, { type: 'founderAction', kind: 'refactorSprint' }).error).toBe('notFound')
+    const eng = s.employees.filter((e) => e.dept === 'eng').length
+    const r = api.applyAction(s, { type: 'founderAction', kind: 'refactorSprint' })
+    expect(r.ok).toBe(true)
+    s = api.step(r.state, B.FOUNDER_ACTION_DEFS.refactorSprint.durationDays + 0.5)
+    expect(s.techDebt).toBeCloseTo(50 - (B.REFACTOR_DEBT_BASE + eng), 6)
+    const mod = s.modifiers.find((m) => m.source === 'refactorSprint')!
+    expect(mod.kind).toBe('production')
+    expect(mod.value).toBe(B.REFACTOR_PRODUCTION)
+    expect(mod.untilDay - s.time.day).toBeGreaterThan(B.REFACTOR_DAYS - 1)
+    s = api.step(s, 60)
+    expect(api.applyAction(s, { type: 'founderAction', kind: 'refactorSprint' }).error).toBe('cooldown')
+    s = api.step(s, B.REFACTOR_COOLDOWN_DAYS - 60 + 1)
+    expect(api.applyAction(s, { type: 'founderAction', kind: 'refactorSprint' }).ok).toBe(true)
   })
 })
 

@@ -6,7 +6,7 @@ import * as E from './economy'
 import { evaluateConcepts } from './concepts'
 import { applyDefaultDecision, applyDueEffects, maybeShowDecision } from './decisions'
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
-import { accrueMonth, checkGoals, checkReleases, payday } from './loop'
+import { accrueMonth, amortizeTechDebt, checkGoals, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
 import { completeFounderAction, dailyFounder, expireContracts, regenEnergy } from './founder'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
@@ -108,6 +108,7 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   if (day % DAYS_PER_MONTH === 0) {
     monthEnd(s)
     payday(s, content)
+    amortizeTechDebt(s)
   }
   checkGoals(s, content)
   updateRivalPressure(s)

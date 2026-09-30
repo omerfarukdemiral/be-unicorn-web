@@ -66,6 +66,11 @@ export function expireContracts(s: GameState): void {
   })
 }
 
+/** Tech debt one "Refactor sprinti" pays back: REFACTOR_DEBT_BASE + one point per engineer, at most the debt there is. */
+export function refactorDebtCut(s: GameState): number {
+  return Math.min(Math.max(0, s.techDebt), B.REFACTOR_DEBT_BASE + s.employees.filter((e) => e.dept === 'eng').length)
+}
+
 /** A project the founder can talk to users about: the least mature one (after 1.0 talks feed the next update). */
 function talkTarget(s: GameState, targetId?: string) {
   return s.projects.find((x) => x.id === targetId) ?? s.projects.find((x) => x.maturity < 1) ?? s.projects[0]
@@ -80,6 +85,8 @@ export function founderActionError(s: GameState, kind: FounderActionKind): Actio
   if (cd !== undefined && s.time.day < cd) return 'cooldown'
   if (s.founder.energy < def.energy) return 'noEnergy'
   if (kind === 'talkToUsers' && s.projects.length === 0) return 'notFound'
+  // No debt to pay back: the sprint would only cost the month.
+  if (kind === 'refactorSprint' && s.techDebt < 1) return 'notFound'
   return null
 }
 
@@ -148,6 +155,15 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
       incCounter(s, 'salesCalls')
       pushActivity(s, 'enterpriseWon', { customer: name, value: mrr })
       params.value = mrr
+      break
+    }
+    case 'refactorSprint': {
+      // GAMEPLAY V2 §4.2 sink: the team stops shipping features for a month and pays the debt down.
+      const cut = refactorDebtCut(s)
+      s.techDebt = Math.max(0, s.techDebt - cut)
+      s.modifiers.push({ id: newId(s, 'mod'), kind: 'production', value: B.REFACTOR_PRODUCTION, untilDay: s.time.day + B.REFACTOR_DAYS, source: 'refactorSprint' })
+      incCounter(s, 'refactors')
+      params.value = Math.round(cut)
       break
     }
     case 'rest':

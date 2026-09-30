@@ -28,7 +28,7 @@ export const ROUND_AMOUNT: readonly (number | null)[] = [null, 150_000, 800_000,
 export const STAGE_UNLOCK_TOOLS: Readonly<Partial<Record<number, readonly ToolId[]>>> = {
   1: ['capTableView'],
   // Seed's price control is unlocked by the `pricing` concept (Hisset → Adlandır → Kullan).
-  3: ['adBudget'],
+  3: ['adBudget', 'refactor'],
   4: ['enterpriseSales'],
 }
 export const ROUND_EQUITY: readonly (number | null)[] = [null, 0.1, 0.15, 0.18, 0.15, 0.12, null]
@@ -63,9 +63,14 @@ export const BOOKSHELF_CONCEPT_CAP = 5
 export const BASE_OUTPUT: Readonly<Record<Dept, number>> = { eng: 1, product: 1, marketing: 3, sales: 1, ops: 1 }
 export const ONBOARDING_DAYS = 3
 export const ONBOARDING_OUTPUT = 0.5
-export const COORDINATION_TEAM_FREE = 6
-export const COORDINATION_PER_PERSON = 0.03
+/**
+ * [GAMEPLAY V2 §4.2] Coordination: free up to 10 people, then −1.5%/person down to COORDINATION_MIN. A meeting room
+ * only softens the loss (× COORDINATION_ROOM_FACTOR); it no longer zeroes it.
+ */
+export const COORDINATION_TEAM_FREE = 10
+export const COORDINATION_PER_PERSON = 0.015
 export const COORDINATION_MIN = 0.7
+export const COORDINATION_ROOM_FACTOR = 0.5
 /** Morale points lost per 1.0 of coordination loss (0.3 loss → −15). */
 export const COORDINATION_MORALE_FACTOR = 50
 /** Maturity weights. */
@@ -78,9 +83,22 @@ export const MVP_MATURITY = 0.2
 export const PARALLEL_PENALTY = 0.2
 export const PARALLEL_PENALTY_MAX_STAGE: StageIndex = 2
 export const PARALLEL_MIN_SPEED = 0.2
-/** Tech debt: speed × max(TECH_DEBT_MIN_SPEED, 1 − TECH_DEBT_PER_POINT × debt). */
-export const TECH_DEBT_PER_POINT = 0.05
+/** Tech debt: speed × max(TECH_DEBT_MIN_SPEED, 1 − TECH_DEBT_PER_POINT × debt) (GAMEPLAY V2 §4.2: 0.05 → 0.02). */
+export const TECH_DEBT_PER_POINT = 0.02
 export const TECH_DEBT_MIN_SPEED = 0.5
+/**
+ * [GAMEPLAY V2 §4.2] From Series A every update adds TECH_DEBT_PER_UPDATE (0.4, not 1.5: a stage ships 15–52 updates);
+ * each month end the engineers pay TECH_DEBT_AMORT_PER_ENG × eng back; churn × (1 + debt / TECH_DEBT_CHURN_DIV).
+ */
+export const TECH_DEBT_MIN_STAGE: StageIndex = 3
+export const TECH_DEBT_PER_UPDATE = 0.4
+export const TECH_DEBT_AMORT_PER_ENG = 0.05
+export const TECH_DEBT_CHURN_DIV = 200
+/** "Refactor sprinti" (the debt sink): −(BASE + eng) debt, production × REFACTOR_PRODUCTION for REFACTOR_DAYS, 90-day cooldown. */
+export const REFACTOR_DEBT_BASE = 8
+export const REFACTOR_PRODUCTION = 0.7
+export const REFACTOR_DAYS = 30
+export const REFACTOR_COOLDOWN_DAYS = 90
 /** Maturity per month = output / size; size per category. */
 export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile: 10, web: 8, ai: 14, api: 9, game: 12, marketplace: 12 }
 
@@ -98,7 +116,29 @@ export const CAC_STAGE_GROWTH = 1.7
 export const CHURN_BASE = 0.06
 export const CHURN_OPS_PER = 0.02
 export const CHURN_OPS_MAX = 0.6
+/** [GAMEPLAY V2 §4.3] Churn floor (before the market and debt terms) and the lift of a full market (× (1 + 0.5 × pen)). */
+export const CHURN_MIN = 0.025
+export const CHURN_SATURATION = 0.5
 export const AD_BUDGET_MAX = 50_000_000
+/**
+ * [GAMEPLAY V2 §4.3] Paid channel saturates. CAC × (1 + CAC_SPEND_K × (ads / max(mrr, CAC_SPEND_FLOOR[stage]))^CAC_SPEND_EXP):
+ * super-linear, so paid users PEAK (ads = (2 / K)^(2/3) × MRR ≈ 1.9 × MRR) instead of creeping to an asymptote.
+ * CAC × (1 + CAC_SATURATION_K × pen²) for a full market; paid × (1 − pen), organic × max(ORGANIC_PEN_FLOOR, 1 − pen).
+ * [DENGE ≠ GAMEPLAY V2 §4.3 K 1 → 0.75] At 1 the best paid growth at Series C (0.53 × ARPU / CAC₀ ≈ 3.7%/month) sat
+ * under churn: Series C became a wall (1/24 Unicorn in 100 min, sim). 0.75 keeps the peak below 2 × MRR.
+ */
+export const CAC_SPEND_K = 0.75
+export const CAC_SPEND_EXP = 1.5
+export const CAC_SPEND_FLOOR: readonly number[] = [500, 2_000, 10_000, 50_000, 250_000, 1_000_000, 1_000_000]
+export const CAC_SATURATION_K = 3
+export const ORGANIC_PEN_FLOOR = 0.1
+/**
+ * [GAMEPLAY V2 §4.3, §8.1] Cumulative market size by stage until the segments of §8 land: penetration = users / this.
+ * [DENGE ≠ GAMEPLAY V2 §8.1 × 4: 2K/2K/12K/62K/262K/712K/712K] At the §8.1 sizes (exit pen ≈ 0.7) the channels die
+ * long before the exit ((1 − pen) / (1 + 3 pen²) ≈ 0.12 at 0.7) and users settle where inflow = churn: no good bot got
+ * past Series C (sim). Interim ×4 (exit pen 0.1–0.2); E1 re-derives the real segment sizes with openSegment.
+ */
+export const MARKET_FALLBACK_TAM: readonly number[] = [8_000, 8_000, 48_000, 248_000, 1_048_000, 2_848_000, 2_848_000]
 
 // ---------------------------------------------------------------------------
 // Revenue (PLAN §5.5)
@@ -116,10 +156,19 @@ export const PRICE_CHURN_DAYS = 100_000
 // ---------------------------------------------------------------------------
 // Costs (PLAN §5.6)
 // ---------------------------------------------------------------------------
-/** Garage-level monthly salary; × SALARY_STAGE_GROWTH^stage at hire, then fixed (DECISIONS #5). */
+/** Garage-level monthly salary; × SALARY_STAGE_GROWTH^stage at hire, then a yearly market raise (DECISIONS #5, GAMEPLAY V2 §4.2). */
 export const BASE_SALARY: Readonly<Record<Dept, number>> = { eng: 1_200, product: 1_000, marketing: 900, sales: 900, ops: 800 }
 export const SALARY_STAGE_GROWTH = 1.6
-export const INFRA_PER_1000_USERS = 10
+/** Yearly market raise: every RAISE_EVERY_DAYS since hire, on payday, salary × (1 + RAISE_YEARLY). */
+export const RAISE_YEARLY = 0.08
+export const RAISE_EVERY_DAYS = 360
+/**
+ * [GAMEPLAY V2 §4.2] Infra = max(users / 1000 × INFRA_PER_1000_BY_STAGE, mrr × INFRA_MRR_SHARE) × infraMult:
+ * the bill grows with the business, not only with the head count of the servers.
+ */
+export const INFRA_PER_1000_BY_STAGE: readonly number[] = [10, 10, 15, 25, 40, 60, 60]
+/** [B2 difficulty knob 0.05/0.08/0.12/0.15/0.18 → 0.06/0.10/0.16/0.20/0.24] Profitable runs banked too much cash (sim). */
+export const INFRA_MRR_SHARE: readonly number[] = [0, 0.06, 0.1, 0.16, 0.2, 0.24, 0.24]
 export const SERVER_ROOM_INFRA_MULT = 0.8
 export const SEVERANCE_MONTHS = 0.5
 /**
@@ -176,8 +225,10 @@ export const MULTIPLE_BASE = 4
 /**
  * [DENGE ≠ GAMEPLAY V2 §4.1 2 → 1] At 2 the good bots stalled in Series C (MoM 1–4% there: 2/48 runs reached Unicorn in 100 min);
  * at 1 the ceiling asks for the diligence MoM itself and the Unicorn medians land at 60–83 min (sim, 12 seeds).
+ * [B2 1 → 0.35] With costs and channels saturating (§4.2–4.3) Series C grows 1–2%/month, not 3–5%: the ceiling now asks
+ * for about a third of the diligence MoM (Series C ≈ 1%). The duration knob of §4.2; MULTIPLE_MAX_BY_STAGE untouched.
  */
-export const GROWTH_FULL_K = 1
+export const GROWTH_FULL_K = 0.35
 /**
  * [Faz 3] Multiple ceiling by the company's stage (CORE_LOOP §5, S5). [DENGE ≠ CORE_LOOP 30 → 25 → 20 → 15 → 12 → 10]
  * Investors pay less for growth % the bigger the company is. Not a tuning knob (GAMEPLAY V2 §4.2).
@@ -220,18 +271,23 @@ export const BRIDGE_CARD_ID = 'vc-bridge-loan'
 // Live round window (docs/CORE_LOOP.md §4.3, phase 2) ------------------------
 /** The round can start once valuation ≥ target × this ("şimdi mi, biraz daha mı?"). */
 export const ROUND_EARLY_RATIO = 0.6
-/** Months of runway each size buys (on the new burn). */
-export const ROUND_RUNWAY_MONTHS: Readonly<Record<RoundSize, number>> = { small: 12, target: 18, large: 24 }
+/**
+ * Months of runway each size buys (on the new burn). [GAMEPLAY V2 §4.2: 12/18/24 → 8/12/16] The round is the breath of
+ * the cash constraint: 8–16 months, so the next round is always in sight (DECISIONS #16 revised).
+ */
+export const ROUND_RUNWAY_MONTHS: Readonly<Record<RoundSize, number>> = { small: 8, target: 12, large: 16 }
 /** Equity sold per size, × the stage's ROUND_EQUITY. */
 export const ROUND_SIZE_EQUITY: Readonly<Record<RoundSize, number>> = { small: 0.75, target: 1, large: 1.3 }
 /**
  * "Yeni burn": the burn the company will run after the round (bigger office, the hires the money is for),
  * as a multiple of today's round burn (round.ts roundBurn: ads count at most what last payday paid).
- * Amount = clamp(table × MIN × months/18, table × MAX × months/18, burn × this × months): both bounds follow the
+ * Amount = clamp(table × MIN × k, table × MAX × k, burn × this × months), k = months / target months: both bounds follow the
  * size, so Küçük < Hedef < Büyük always (review fix: at a small burn all three used to clip to the same ceiling).
  */
-export const ROUND_NEW_BURN_MULT = 1.25
-export const ROUND_AMOUNT_TABLE_MIN = 0.5
+/** [B2 difficulty knob 1.25 → 1] With 1.25 the stage min-runway medians sat at Seed 20 / C 24 months (sim). */
+export const ROUND_NEW_BURN_MULT = 1
+/** [GAMEPLAY V2 §4.2 0.5 → 0.3] 76% of rounds closed on the table floor: the amount now really follows burn × months. */
+export const ROUND_AMOUNT_TABLE_MIN = 0.3
 export const ROUND_AMOUNT_TABLE_MAX = 0.7
 /** Price part of the offer: valuation / target, clamped to this range. */
 export const ROUND_OFFER_CLAMP: readonly [number, number] = [0.6, 1.2]
@@ -297,6 +353,7 @@ export const FOUNDER_ACTION_DEFS: Readonly<Record<FounderActionKind, FounderActi
   investorCoffee: { stage: 1, durationDays: 1, energy: 15, cooldownDays: 4 },
   salesCall: { stage: 2, durationDays: 2, energy: 20, cooldownDays: 7 },
   rest: { stage: 0, durationDays: 2, energy: 0, cooldownDays: 0 },
+  refactorSprint: { stage: TECH_DEBT_MIN_STAGE, durationDays: 1, energy: 15, cooldownDays: REFACTOR_COOLDOWN_DAYS },
 }
 export const FIND_USERS_MIN = 3
 export const FIND_USERS_MAX = 6

@@ -1,5 +1,5 @@
 // Funding round block of the Büyüme panel (docs/CORE_LOOP.md §4.3 "Tur penceresi"):
-// before the round: the early window (60% of target), the size choice (12 / 18 / 24 months ↔ equity) and the
+// before the round: the early window (60% of target), the size choice (8 / 12 / 16 months ↔ equity) and the
 // investor's due-diligence list; while it runs: the live offer, the checklist and this week's pitch.
 // Every number comes from state.derived.round / state.round (the engine computes, the panel only shows).
 // Open as {kind:'growth', section:'round'} while a choice waits, it is the `offer` focus pause.

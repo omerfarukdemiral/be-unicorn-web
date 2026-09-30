@@ -4,7 +4,7 @@
 // Colours (docs/LAYOUT.md §4.1): low energy is a WARNING (energy / energy-ink), never red.
 import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { founderActionError } from '../engine/founder'
+import { founderActionError, refactorDebtCut } from '../engine/founder'
 import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind } from '../engine/types'
 import { STAGES } from '../content'
 import { panelSelection, useGameStore } from '../store/gameStore'
@@ -72,6 +72,9 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
       : t('founder.salesCall.preview', { r: range(sales.min, sales.max, money), d: sales.contractDays, n: sales.fullLeft })
     : ''
   const salesSaturated = !!sales && sales.factor < 1
+  // "Refactor sprinti" (GAMEPLAY V2 §4.2): the debt it pays back, from the engine (8 + one per engineer).
+  const refactorCut = useGameStore((s) => Math.round(refactorDebtCut(s.state)))
+  const refactorText = t('founder.refactorSprint.preview', { n: refactorCut })
   // Talking on a finished product feeds the next update (engine founder.ts), not maturity.
   const allDone = useGameStore((s) => s.state.projects.length > 0 && s.state.projects.every((p) => p.maturity >= 1))
   const dispatch = useGameStore((s) => s.dispatch)
@@ -119,8 +122,18 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
                 ? `${action}: ${salesText}`
                 : kind === 'talkToUsers' && allDone
                   ? `${action}: ${t('founder.talkToUsers.update')}`
-                  : `${action}: ${t(`founder.${kind}.desc`)}`
-    const tip = locked ? label : kind === 'findUsers' && findText ? findText : kind === 'salesCall' && salesText ? salesText : action
+                  : kind === 'refactorSprint'
+                    ? `${action}: ${refactorText}`
+                    : `${action}: ${t(`founder.${kind}.desc`)}`
+    const tip = locked
+      ? label
+      : kind === 'findUsers' && findText
+        ? findText
+        : kind === 'salesCall' && salesText
+          ? salesText
+          : kind === 'refactorSprint'
+            ? refactorText
+            : action
     const saturated = !locked && ((kind === 'findUsers' && findSaturated) || (kind === 'salesCall' && salesSaturated))
     return { kind, locked, disabled, running, runFrac, cdFrac, saturated, label, tip, run: () => run(kind) }
   })

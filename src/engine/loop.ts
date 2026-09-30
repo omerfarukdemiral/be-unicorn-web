@@ -4,6 +4,7 @@ import { bringCardNow, isCardEligible } from './decisions'
 import { recomputeDerived } from './derive'
 import { ledgerCosts } from './economy'
 import { lastUpdateDay } from './loopSelectors'
+import { yearlyRaises } from './people'
 import { DAYS_PER_MONTH, type GameState, type MonthLedger, type MonthReceipt, type Project, type ReleaseEntry } from './types'
 import { newId, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 
@@ -41,6 +42,8 @@ export function payday(s: GameState, content: EngineContent): void {
   const prev = s.finance.lastReceipt
   s.stats.cash -= paid
   s.finance.ledger = emptyLedger()
+  // The month is paid at the old salaries; a raise earned today shows on the next receipt.
+  yearlyRaises(s)
   recomputeDerived(s, content)
   s.finance.lastReceipt = {
     month: Math.max(0, Math.round(s.time.day / DAYS_PER_MONTH) - 1),
@@ -70,11 +73,18 @@ export function payday(s: GameState, content: EngineContent): void {
     adBudget: s.finance.adBudget,
     usersDelta: usersDelta(s),
     stage: s.stage,
+    ...(s.derived.penetration !== undefined ? { penetration: s.derived.penetration } : {}),
   }
   pushReceipt(s, s.finance.lastReceipt)
   if (paid > 0.5) pushActivity(s, 'payday', { amount: Math.round(paid) })
   pushEvent(s, { kind: 'payday', value: paid })
   missedPayroll(s, content)
+}
+
+/** Month end: the engineers pay TECH_DEBT_AMORT_PER_ENG × eng of tech debt back (the reason to keep engineers). */
+export function amortizeTechDebt(s: GameState): void {
+  const eng = s.employees.filter((e) => e.dept === 'eng').length
+  s.techDebt = Math.max(0, (s.techDebt ?? 0) - B.TECH_DEBT_AMORT_PER_ENG * eng)
 }
 
 /** Users gained over the month that just closed (monthEnd has already taken this month's snapshot). */
@@ -178,6 +188,8 @@ function ship(s: GameState, content: EngineContent, p: Project, level: number, u
   list.push(entry)
   if (list.length > B.RELEASES_MAX) list.splice(0, list.length - B.RELEASES_MAX)
   s.releaseCount = (s.releaseCount ?? 0) + 1
+  // GAMEPLAY V2 §4.2: from Series A every shipped update leaves a little debt behind (versions before 1.0 do not).
+  if (update !== undefined && s.stage >= B.TECH_DEBT_MIN_STAGE) s.techDebt = (s.techDebt ?? 0) + B.TECH_DEBT_PER_UPDATE
   pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0 })
   pushEvent(s, { kind: 'release', refId: entry.id, value: level })
 }

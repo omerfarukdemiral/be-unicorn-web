@@ -1,6 +1,7 @@
-// Panel tabs: Mağaza · Ekip · Projeler · Büyüme · Metrikler · Kazanımlar. They live in the bottom bar
-// (layout/BottomBar.tsx, docs/LAYOUT.md §1); the tab content opens in the single RightPanel (a tab replaces whatever
-// the panel showed, the same tab again closes it). Badges (§4.1): counters in brand, a leaving employee in warning.
+// Panel tabs: Mağaza · Ekip · Projeler · Büyüme · Metrikler. They live in the bottom bar (layout/BottomBar.tsx,
+// docs/LAYOUT.md §1); the tab content opens in the single RightPanel (a tab replaces whatever the panel showed, the
+// same tab again closes it). Kazanımlar moved to the top-bar book icon (K, docs/GAMEPLAY_V2.md §12).
+// Badges (§4.1): counters in brand, a leaving employee in warning.
 import { useGameStore } from '../store/gameStore'
 import type { DockTab } from '../store/types'
 import { unseenMetrics } from '../store/metricPins'
@@ -21,18 +22,15 @@ export const DOCK_TABS: DockTabDef[] = [
   { id: 'projects', icon: 'rocket', key: 'p' },
   { id: 'growth', icon: 'growth', key: 'b' },
   { id: 'metrics', icon: 'bars', key: 'g' },
-  { id: 'journal', icon: 'book', key: 'k' },
 ]
 
 type BadgeTone = 'brand' | 'warn'
 
 function useBadges(): Partial<Record<DockTab, { n: number; tone: BadgeTone }>> {
   const leaving = useGameStore((s) => s.state.employees.filter((e) => e.status === 'leaving').length)
-  const waiting = useGameStore((s) => s.state.concepts.minimized.length)
   const fresh = useGameStore((s) => unseenMetrics(s.state.unlockedWidgets, s.ui.seenMetrics).length)
   return {
     team: { n: leaving, tone: 'warn' },
-    journal: { n: waiting, tone: 'brand' },
     metrics: { n: fresh, tone: 'brand' },
   }
 }

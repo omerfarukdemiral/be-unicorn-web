@@ -13,7 +13,7 @@ export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
 export const FIXED_STEP_DAYS = 0.25
 /** Bump when GameState shape changes incompatibly; save.ts migrates. */
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 
 /** Company name when none was given (and for pre-v3 saves). */
 export const DEFAULT_COMPANY_NAME = 'İsimsiz Startup'
@@ -525,6 +525,57 @@ export interface MonthReceipt {
   multiple: number
   mrr: number
   users: number
+  // v4 (docs/GAMEPLAY_V2.md §14.2): month-end snapshot for the stats screen. Later waves add deferred / interest /
+  // loanRepay / expansion; burnMultiple and penetration are written once the engine computes them.
+  team?: number
+  morale?: number
+  valuation?: number
+  /** Founder equity fraction. */
+  equity?: number
+  reputation?: number
+  debt?: number
+  adBudget?: number
+  /** Users gained (or lost) over the month. */
+  usersDelta?: number
+  stage?: StageIndex
+  burnMultiple?: number
+  /** users / reachable market (0–1). */
+  penetration?: number
+}
+
+/** A month rebuilt from a pre-v4 save (mrrHistory / usersHistory): only its users and MRR are known. */
+export interface PartialReceipt {
+  partial: true
+  month: number
+  day: number
+  mrr: number
+  users: number
+  usersDelta: number
+}
+
+/** One month of `finance.receipts`: a payday receipt (rounded), or a month rebuilt from an older save. */
+export type ReceiptEntry = MonthReceipt | PartialReceipt
+
+/** Radar axes of the company profile (docs/GAMEPLAY_V2.md §14.2), in drawing order. */
+export const PROFILE_AXES = ['product', 'growth', 'efficiency', 'team', 'morale', 'cash'] as const
+export type ProfileAxis = (typeof PROFILE_AXES)[number]
+/** 0–1.5 per axis (1 = what the stage expects); null = locked or not measurable yet (e.g. before revenue). */
+export type CompanyProfile = Record<ProfileAxis, number | null>
+
+/** Spend preview (docs/GAMEPLAY_V2.md §4.4): runway before / after and the first payday cash runs out. */
+export interface SpendPreview {
+  runwayNow: number | null
+  runwayAfter: number | null
+  /** First payday (game day) that cash − owed goes below zero; null = never (profitable). */
+  deathDay: number | null
+  /** The very next payday cannot be paid. */
+  paydayShort: boolean
+}
+
+/** Cash after each of the next paydays at today's net, and the death day (same core as SpendPreview). */
+export interface CashProjection {
+  points: { day: number; cash: number }[]
+  deathDay: number | null
 }
 
 export interface FinanceState {
@@ -555,8 +606,12 @@ export interface FinanceState {
   debt: number
   /** Costs accrue daily and are paid in one lump on payday (day % 30 === 0, the 1st of the month). */
   ledger?: MonthLedger
-  /** Last payday's receipt. */
+  /** Last payday's receipt (unrounded; the UI reads it). */
   lastReceipt?: MonthReceipt
+  /** Month history, oldest first, at most HISTORY_MAX_MONTHS (v4; payday appends, rounded). */
+  receipts?: ReceiptEntry[]
+  /** Net (mrr − burn) at each month end (v4; filled by the burn-multiple wave). */
+  netHistory?: number[]
 }
 
 /** Main variables (PLAN §5.1). Per-project maturity lives on Project. */

@@ -95,6 +95,28 @@ describe('save v1 → v2', () => {
   })
 })
 
+describe('save chain v1 → v4', () => {
+  it('a v1 save walks every migration and lands on the current version with v4 defaults', () => {
+    const api = createEngine(fakeContent())
+    const v1 = structuredClone(api.step(api.createGame({ seed: 1 }), 65)) as unknown as { meta: Record<string, unknown>; finance: Record<string, unknown> }
+    delete v1.meta.companyName
+    delete v1.finance.receipts
+    delete v1.finance.netHistory
+    const out = migrate({ version: 1, state: v1 })!
+    expect(out.meta.saveVersion).toBe(SAVE_VERSION)
+    expect(out.meta.companyName).toBe(DEFAULT_COMPANY_NAME)
+    expect(out.finance.receipts).toHaveLength(out.finance.mrrHistory.length)
+    expect(out.finance.netHistory).toEqual([])
+    // The engine keeps playing it (lazy ??= defaults for everything the migration did not touch).
+    expect(api.step(out, 30).finance.receipts).toHaveLength(out.finance.mrrHistory.length + 1)
+  })
+
+  it('a save from the future is refused', () => {
+    const api = createEngine(fakeContent())
+    expect(migrate({ version: SAVE_VERSION + 1, state: api.createGame({ seed: 1 }) })).toBeNull()
+  })
+})
+
 describe('company name (save v3)', () => {
   it('createGame trims, collapses and caps the name; blank falls back to the default', () => {
     const api = createEngine(fakeContent())

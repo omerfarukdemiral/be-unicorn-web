@@ -1,9 +1,10 @@
 // Balance simulator (PLAN §8.3, §10): N seeds × 4 archetype bots + careless bots on the real engine and content.
-// Usage: npm run sim -- [--seeds 8] [--days 4500] [--out sim/REPORT.md]
+// Usage: npm run sim -- [--seeds 8] [--days 4500] [--out sim/REPORT.md] [--quick 1]
+// Delivery gate (docs/GAMEPLAY_V2.md §3 md.8): npm run sim -- --seeds 12 --quick 1 --days 3000
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, SECONDS_PER_DAY } from '../src/engine/index'
-import { DAYS_10_MIN, DAYS_5_MIN, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy } from './bots'
+import { DAYS_10_MIN, DAYS_5_MIN, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -51,12 +52,19 @@ const POLICY_ARCH: BotKind = 'bootstrap'
 const t0 = Date.now()
 const byArch = new Map<BotKind, BotRun[]>()
 for (const a of ARCHETYPES) byArch.set(a, runMany(a))
-/** --quick 1: archetypes (+ careless) only, for tuning loops; the extra comparisons reuse the archetype runs. */
+/**
+ * --quick 1: archetypes, careless and the GAMEPLAY V2 bots (§15) only, for tuning loops; the extra comparisons
+ * (idle / random / policy / size / timing) reuse the archetype runs.
+ */
 const QUICK = arg('quick', 0) > 0
 const extra = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}): BotRun[] => (QUICK ? byArch.get(kind === 'idle' || kind === 'random' || kind === 'careless' ? 'bootstrap' : kind)! : runMany(kind, policy, overrides))
 const idle = extra('idle')
 const random = extra('random')
 const careless = runMany('careless')
+/** GAMEPLAY V2 §15 bots always run (quick too): autopilot and difficulty probes. */
+const v2Runs = new Map<V2BotKind, BotRun[]>(V2_BOT_KINDS.map((k) => [k, runMany(k)]))
+/** "Careless burner": the burner plan without looking at runway (§4.2 kabul d). */
+const carelessBurner = runMany('burner', 'best', { minRunwayToHire: 0 })
 const policyRuns: [DecisionPolicy, BotRun[]][] = [['best', byArch.get(POLICY_ARCH)!], ['worst', extra(POLICY_ARCH, 'worst')], ['first', extra(POLICY_ARCH, 'first')]]
 /** Round size policy (docs/CORE_LOOP.md §4.3, S5-a): the same bots forced to Küçük / Hedef / Büyük. */
 const SIZE_ARCHS: BotKind[] = ['bootstrap', 'vcRocket']
@@ -259,6 +267,26 @@ const topShares = goodRunsAll().map((r) => r.topActionShare)
 line(`En sık aksiyonun tüm aksiyonlara payı (iyi botlar): medyan ${pct(median(topShares) ?? 0, 1)}, en kötü ${pct(Math.max(...topShares), 1)} (hedef ≤ %35).`)
 line()
 
+line('## GAMEPLAY V2 botları (docs/GAMEPLAY_V2.md §15)')
+line()
+line('coaster / idleAfterProfit: bootstrap, kâra geçince otopilot. greedyGood: riskli ama akıllı. burner / frugal: aynı plan, farklı yakış. Kârda = maaş gününde net ≥ 0.')
+line()
+line('| Bot | Unicorn’a ulaşan | Unicorn medyanı | İflas | Kârda maaş günü payı (medyan) | Tepe sonrası değerleme düşüşü (medyan) | Runway < 3 gün payı (medyan) |')
+line('|---|---|---|---|---|---|---|')
+const profitShare = (r: BotRun) => (r.paydays ? r.profitPaydays / r.paydays : 0)
+const v2Rows: [string, BotRun[]][] = [...[...v2Runs].map(([k, runs]) => [k, runs] as [string, BotRun[]]), ['burner (dikkatsiz)', carelessBurner]]
+for (const [name, runs] of v2Rows) {
+  const uni = runs.filter((r) => r.stageDays[6] != null).length
+  line(`| ${name} | ${uni}/${runs.length} | ${fmtMin(uniOf(runs))} | ${runs.filter(failedRun).length}/${runs.length} | ${pct(median(runs.map(profitShare)) ?? 0, 1)} | ${pct(median(runs.map((r) => r.valuationDropAfterPeak)) ?? 0, 1)} | ${pct(median(runs.map((r) => r.daysRunwayBelow3 / Math.max(1, r.endDay))) ?? 0, 1)} |`)
+}
+line()
+const allRuns = [...goodRunsAll(), ...careless, ...[...v2Runs.values()].flat(), ...carelessBurner]
+const saveKb = allRuns.map((r) => r.saveBytes / 1024)
+const saveMed = median(saveKb) ?? 0
+const saveMax = Math.max(0, ...saveKb)
+line(`Kayıt boyutu (koşu sonu, ${allRuns.length} koşu): medyan ${saveMed.toFixed(1)} KB · maks ${saveMax.toFixed(1)} KB (bulut sınırı 160 KB).`)
+line()
+
 line('## §9 / §10 kriterleri')
 line()
 const preseedAll = [...byArch.values()].every((runs) => runs.every((r) => r.stageDays[1] !== null))
@@ -291,6 +319,37 @@ line(`- Garaj sonrası her aşamada en az 1 sürüm/güncelleme (medyan, her ark
 const policyEq = policyRuns.map(([, runs]) => median(runs.map((r) => r.equity)) ?? 0)
 const eqSpread = Math.max(...policyEq) - Math.min(...policyEq)
 line(`- Karar politikaları arası Unicorn süresi farkı (en hızlı ↔ en yavaş): %${Math.round(policySpread * 100)} (hedef ≥ %15): **${policySpread >= 0.15 ? 'EVET' : 'HAYIR'}** · kurucu hissesi farkı ${Math.round(eqSpread * 100)} puan`)
+line()
+line('## §15 kriterleri (koşu sayısı · tolerans)')
+line()
+/** "n/N (hedef %lo–%hi → a–b/N)": a rate criterion as run counts, so 12 seeds of noise stays visible. */
+function band(n: number, total: number, lo: number, hi: number): [string, boolean] {
+  const a = Math.ceil(lo * total - 1e-9)
+  const b = Math.floor(hi * total + 1e-9)
+  const range = lo === 0 ? `≤ %${Math.round(hi * 100)} → 0–${b}/${total}` : hi >= 1 ? `≥ %${Math.round(lo * 100)} → ${a}–${total}/${total}` : `%${Math.round(lo * 100)}–${Math.round(hi * 100)} → ${a}–${b}/${total}`
+  return [`${n}/${total} (hedef ${range})`, n >= a && n <= b]
+}
+const yes = (ok: boolean) => (ok ? 'EVET' : 'HAYIR')
+const crit = (label: string, [text, ok]: [string, boolean], note = '') => line(`- ${label}: ${text}: **${yes(ok)}**${note}`)
+const v2 = (k: V2BotKind) => v2Runs.get(k)!
+const uniCount = (runs: BotRun[]) => runs.filter((r) => r.stageDays[6] != null).length
+crit('İyi bot iflas', band(goodRuns.filter(failedRun).length, goodRuns.length, 0, 0.05))
+crit('Careless iflas', band(careless.filter(failedRun).length, careless.length, 0.4, 0.6))
+crit('greedyGood iflas', band(v2('greedyGood').filter(failedRun).length, SEEDS, 0.15, 0.3))
+crit('coaster Unicorn', band(uniCount(v2('coaster')), SEEDS, 0, 0), ' (bilgi; nihai hedef E1)')
+crit('idleAfterProfit Unicorn', band(uniCount(v2('idleAfterProfit')), SEEDS, 0, 0), ` · tepe sonrası düşüş medyanı ${pct(median(v2('idleAfterProfit').map((r) => r.valuationDropAfterPeak)) ?? 0, 1)} (hedef ≥ %30, B1’den itibaren)`)
+crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, carelessBurner.length, 0.4, 1))
+{
+  const tb = uniOf(v2('burner'))
+  const tf = uniOf(v2('frugal'))
+  const faster = tb !== null && tf !== null ? 1 - tb / tf : null
+  line(`- burner Unicorn’a frugal’dan ≥ %15 hızlı: ${fmtMin(tb)} ↔ ${fmtMin(tf)} (${faster === null ? '—' : `%${Math.round(faster * 100)}`}): **${yes(faster !== null && faster >= 0.15)}**`)
+}
+{
+  const share = median(goodRuns.map(profitShare)) ?? 0
+  line(`- Kârda geçirilen maaş günü payı, iyi botlar (medyan): ${pct(share, 1)} (hedef ≤ %35): **${yes(share <= 0.35)}** · B’den önce kâra geçen koşu ${goodRuns.filter((r) => r.profitBeforeB).length}/${goodRuns.length} (bilgi)`)
+}
+line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${saveMax.toFixed(1)} KB (hedef < 120): **${yes(saveMed < 70 && saveMax < 120)}**`)
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)
 

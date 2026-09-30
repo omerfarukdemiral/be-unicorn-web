@@ -43,6 +43,8 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
       enterpriseCustomers: [],
       debt: 0,
       ledger: { revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0 },
+      receipts: [],
+      netHistory: [],
     },
     derived: {
       teamSize: 0,

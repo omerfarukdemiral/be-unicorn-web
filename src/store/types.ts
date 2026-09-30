@@ -37,8 +37,27 @@ export type Panel =
 
 export type PanelKind = Panel['kind']
 
-/** Only truly blocking moments are centered modals (they pause the game). */
-export type Overlay = { kind: 'moveScene' } | { kind: 'postMortem' } | { kind: 'victory' }
+/** Tabs of the center statistics screen (docs/GAMEPLAY_V2.md §14.5). */
+export type StatsTab = 'money' | 'growth' | 'team' | 'profile'
+
+/**
+ * Centered surfaces. Move scene / post-mortem / victory are blocking modals (they pause the game). The center screens
+ * (CENTER_KINDS: statistics, Kanun Kitabı, Pazar haritası) sit in the CenterFrame between the bars and never pause:
+ * time keeps flowing while the player reads (docs/GAMEPLAY_V2.md §14.1).
+ */
+export type Overlay =
+  | { kind: 'moveScene' }
+  | { kind: 'postMortem' }
+  | { kind: 'victory' }
+  | { kind: 'stats'; tab?: StatsTab }
+  | { kind: 'lawbook' }
+  | { kind: 'market' }
+
+export type OverlayKind = Overlay['kind']
+export type CenterKind = 'stats' | 'lawbook' | 'market'
+
+/** Overlays shown in the CenterFrame: no pause, one surface with the panel (opening one closes the other). */
+export const CENTER_KINDS: ReadonlySet<OverlayKind> = new Set<CenterKind>(['stats', 'lawbook', 'market'])
 
 /** Pointer mode on the 3D floor. Buying places automatically (no place mode). */
 export type PlacingMode = { kind: 'move'; fromSlotId: SlotId } | { kind: 'seat'; employeeId: EmployeeId }
@@ -51,10 +70,10 @@ export interface SceneInset {
 }
 
 /**
- * Automatic focus pauses: a blocking modal, an unanswered decision card open in the panel or expanded in
- * the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, or the round offer / weekly
- * pitch open in Büyüme > Tur (`offer`: panel `{kind:'growth', section:'round'}` while a size choice or pitch waits).
- * Shop / team / projects / growth panels never pause; a bubble merely appearing never pauses.
+ * Automatic focus pauses: a blocking modal (never a center screen), an unanswered decision card open in the panel or
+ * expanded in the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, or the round offer /
+ * weekly pitch open in Büyüme > Tur (`offer`: panel `{kind:'growth', section:'round'}` while a size choice or pitch
+ * waits). Shop / team / projects / growth panels never pause; a concept arriving (badge only) never pauses.
  */
 export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer'
 
@@ -99,6 +118,8 @@ export interface UiState {
   seenMetrics: HudWidget[]
   /** The player pinned or unpinned by hand at least once: automatic pinning of new gauges stops. */
   pinTouched: boolean
+  /** Stage goals (☆ ids) already seen in Kazanımlar; the other done ones count on the achievements badge. */
+  seenGoals: string[]
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
@@ -136,8 +157,11 @@ export interface GameStore {
   /** Back to the previous panel content (if any). */
   panelGoBack(): void
   setHoverSlot(slotId: SlotId | null): void
+  /** A center screen (CENTER_KINDS) closes the panel; a blocking modal keeps it under the backdrop. */
   openOverlay(overlay: Overlay): void
   closeOverlay(): void
+  /** Center screen toggle (shortcuts, top-bar icons): opens it, or closes it when it is already open. */
+  toggleCenter(kind: CenterKind): void
   setPlacing(mode: PlacingMode | null): void
   setZoom(zoom: ZoomLevel): void
   setSceneInset(inset: SceneInset): void
@@ -151,4 +175,6 @@ export interface GameStore {
   unpinMetric(id: HudWidget): void
   /** Metrikler showed these gauges: they stop counting as new. */
   markMetricsSeen(ids: readonly HudWidget[]): void
+  /** Kazanımlar was opened: every goal done so far stops counting on the badge. */
+  markGoalsSeen(): void
 }

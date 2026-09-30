@@ -6,7 +6,7 @@ import { ApiError, now } from './http.js'
 import type { Kv } from './kv.js'
 import { keys } from './auth.js'
 
-// Real saves stay under ~40 KB (sim: 3000-day runs); 4× headroom.
+// Real saves stay under ~75 KB (sim: 3000-day runs, v4 month history: median ~58 KB); 2× headroom.
 export const SAVE_MAX_BYTES = 160 * 1024
 const WRITE_LOCK_S = 5
 

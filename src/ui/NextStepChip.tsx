@@ -4,7 +4,7 @@
 // strip hides this item while that card is up (stripRules.nextStepShown).
 import { useShallow } from 'zustand/react/shallow'
 import type { NextStep } from '../engine/types'
-import { useGameStore } from '../store/gameStore'
+import { blockingOverlay, useGameStore } from '../store/gameStore'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
@@ -40,7 +40,7 @@ export function useNextStep(): NextStepView {
         step,
         text: step ? stepText(step, s.state) : '',
         needsStart: paused && step !== undefined && step.id !== 'idea',
-        startCall: paused && !s.state.gameOver && s.ui.overlay === null,
+        startCall: paused && !s.state.gameOver && blockingOverlay(s.ui) === null,
         canStartRound: !!s.state.derived.canStartRound,
         over: !!s.state.gameOver,
       }

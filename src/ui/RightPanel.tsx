@@ -40,6 +40,8 @@ function panelMeta(p: Panel): { icon: IconName; title: string } {
       return { icon: 'unicorn', title: t('roadmap.title') }
     case 'leaderboard':
       return { icon: 'trophy', title: t('lb.title') }
+    case 'journal':
+      return { icon: 'book', title: t('achv.title') }
     default:
       return { icon: DOCK_TABS.find((d) => d.id === p.kind)?.icon ?? 'bag', title: t(`dock.${p.kind}`) }
   }

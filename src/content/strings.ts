@@ -374,7 +374,6 @@ const BASE_TEXT: Record<string, string> = {
   'journal.missing': 'Kart bulunamadı ({id})',
 
   // Bubbles & decisions
-  'bubble.openNotebook': 'Kazanımlara bak',
   'bubble.collapse': 'Küçült',
   'decision.title': 'Karar',
   'decision.gain': 'Kazanç',
@@ -516,7 +515,7 @@ const BASE_TEXT: Record<string, string> = {
   'visitor.ambient': 'Ofise uğradı.',
   'shortcut.pause': 'Duraklat / devam',
   'shortcut.speed': 'Hız 1× / 2× / 4×',
-  'shortcut.tabs': 'Mağaza · Ekip · Projeler · Büyüme · Metrikler · Kazanımlar',
+  'shortcut.tabs': 'Mağaza · Ekip · Projeler · Büyüme · Metrikler',
   'shortcut.escape': 'İptal / kapat',
   'shortcut.zoom': 'Yakınlaştır / uzaklaştır',
   'zoom.0': 'Uzak',

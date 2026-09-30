@@ -4,7 +4,7 @@ import { bringCardNow, isCardEligible } from './decisions'
 import { recomputeDerived } from './derive'
 import { ledgerCosts } from './economy'
 import { lastUpdateDay } from './loopSelectors'
-import { DAYS_PER_MONTH, type GameState, type MonthLedger, type Project, type ReleaseEntry } from './types'
+import { DAYS_PER_MONTH, type GameState, type MonthLedger, type MonthReceipt, type Project, type ReleaseEntry } from './types'
 import { newId, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 
 const emptyLedger = (): MonthLedger => ({ revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0, founder: 0 })
@@ -60,10 +60,73 @@ export function payday(s: GameState, content: EngineContent): void {
     multiple: s.derived.valuationMultiple,
     mrr: s.finance.mrr,
     users: s.stats.users,
+    team: s.employees.length,
+    morale: s.stats.morale,
+    valuation: s.finance.valuation,
+    equity: s.stats.equity,
+    reputation: s.stats.reputation,
+    debt: s.finance.debt,
+    adBudget: s.finance.adBudget,
+    usersDelta: usersDelta(s),
+    stage: s.stage,
   }
+  pushReceipt(s, s.finance.lastReceipt)
   if (paid > 0.5) pushActivity(s, 'payday', { amount: Math.round(paid) })
   pushEvent(s, { kind: 'payday', value: paid })
   missedPayroll(s, content)
+}
+
+/** Users gained over the month that just closed (monthEnd has already taken this month's snapshot). */
+function usersDelta(s: GameState): number {
+  const h = s.finance.usersHistory
+  return s.stats.users - (h.length >= 2 ? h[h.length - 2]! : 0)
+}
+
+const ratio = (v: number): number => {
+  const k = 10 ** B.HISTORY_RATIO_DECIMALS
+  return Math.round(v * k) / k
+}
+const ratioOrNull = (v: number | null): number | null => (v === null ? null : ratio(v))
+
+/**
+ * The only writer of finance.receipts (docs/GAMEPLAY_V2.md §14.2): a rounded copy of the payday receipt, capped at
+ * HISTORY_MAX_MONTHS. Money and users round to whole numbers, ratios to HISTORY_RATIO_DECIMALS (unrounded floats
+ * would triple the save). Zero debt / ad budget are left out.
+ */
+function pushReceipt(s: GameState, r: MonthReceipt): void {
+  const out: MonthReceipt = {
+    month: r.month,
+    day: r.day,
+    revenue: Math.round(r.revenue),
+    salaries: Math.round(r.salaries),
+    rent: Math.round(r.rent),
+    infra: Math.round(r.infra),
+    ads: Math.round(r.ads),
+    founder: Math.round(r.founder ?? 0),
+    paid: Math.round(r.paid),
+    net: Math.round(r.net),
+    cashAfter: Math.round(r.cashAfter),
+    runwayBefore: ratioOrNull(r.runwayBefore),
+    runwayAfter: ratioOrNull(r.runwayAfter),
+    mom: ratio(r.mom),
+    multiple: ratio(r.multiple),
+    mrr: Math.round(r.mrr),
+    users: Math.round(r.users),
+  }
+  if (r.team !== undefined) out.team = r.team
+  if (r.morale !== undefined) out.morale = Math.round(r.morale)
+  if (r.valuation !== undefined) out.valuation = Math.round(r.valuation)
+  if (r.equity !== undefined) out.equity = ratio(r.equity)
+  if (r.reputation !== undefined) out.reputation = Math.round(r.reputation)
+  if (r.debt) out.debt = Math.round(r.debt)
+  if (r.adBudget) out.adBudget = Math.round(r.adBudget)
+  if (r.usersDelta !== undefined) out.usersDelta = Math.round(r.usersDelta)
+  if (r.stage !== undefined) out.stage = r.stage
+  if (r.burnMultiple !== undefined) out.burnMultiple = ratio(r.burnMultiple)
+  if (r.penetration !== undefined) out.penetration = ratio(r.penetration)
+  const list = (s.finance.receipts ??= [])
+  list.push(out)
+  if (list.length > B.HISTORY_MAX_MONTHS) list.splice(0, list.length - B.HISTORY_MAX_MONTHS)
 }
 
 /**

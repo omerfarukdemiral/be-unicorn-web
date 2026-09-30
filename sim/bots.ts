@@ -8,6 +8,7 @@ import {
   createEngine,
   createRngState,
   nextLockedRing,
+  serialize,
   type Action,
   type Archetype,
   type Dept,
@@ -23,8 +24,12 @@ import {
  * 'careless': a bootstrap-style player who ignores runway when hiring, answers cards at random, picks a random round
  * size and never takes the round window early on a stall (docs/CORE_LOOP.md §10 Faz 3 "dikkatsiz bot iflas %10–25").
  * 'random': chaos (random valid-looking actions), only checked for "no bankruptcy before 4 min".
+ * GAMEPLAY V2 §15 (autopilot and difficulty probes, see V2_BOTS): 'coaster', 'idleAfterProfit', 'greedyGood',
+ * 'burner', 'frugal'.
  */
-export type BotKind = Archetype | 'idle' | 'random' | 'careless'
+export type BotKind = Archetype | 'idle' | 'random' | 'careless' | V2BotKind
+export type V2BotKind = 'coaster' | 'idleAfterProfit' | 'greedyGood' | 'burner' | 'frugal'
+export const V2_BOT_KINDS: readonly V2BotKind[] = ['coaster', 'idleAfterProfit', 'greedyGood', 'burner', 'frugal']
 
 export interface BotConfig {
   kind: BotKind
@@ -54,6 +59,11 @@ export interface BotConfig {
   weights: { cash: number; users: number; morale: number; equity: number; reputation: number }
   /** Careless: buys furniture on impulse without looking at the cash (probability per day). */
   impulseBuy?: number
+  /**
+   * Once profitable (net > 0 with revenue): 'coast' only answers bubbles and doubles the ad budget every
+   * COAST_AD_EVERY_DAYS; 'idle' stops acting altogether (GAMEPLAY V2 §15 autopilot probes).
+   */
+  afterProfit?: 'coast' | 'idle'
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -93,6 +103,27 @@ export const BOTS: Record<Archetype, BotConfig> = {
   },
 }
 
+/**
+ * GAMEPLAY V2 §15 bots. All play the real engine through the same routine as the archetypes; what differs is config.
+ * - coaster / idleAfterProfit: bootstrap until the first profitable day, then autopilot (see BotConfig.afterProfit).
+ * - greedyGood: a good policy that takes risks — hires down to 4 months of runway, always the large round.
+ *   // T09 kredi: takes the loan within 3 months of runway once loans exist.
+ *   // T07 kriz hazırlığı: never prepares for a scheduled crisis.
+ * - burner / frugal: the same bootstrap plan on the same seeds; burner spends hard but watches runway (hires down to 3
+ *   months, heavy ads), frugal hires only on a thick cushion. "Careless burner" = burner with minRunwayToHire 0.
+ */
+export const V2_BOTS: Record<V2BotKind, BotConfig> = {
+  coaster: { ...BOTS.bootstrap, kind: 'coaster', afterProfit: 'coast' },
+  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', afterProfit: 'idle' },
+  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2 },
+  burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5 },
+  frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
+}
+/** Coaster doubles its ad budget this often once profitable. */
+const COAST_AD_EVERY_DAYS = 90
+/** First coast bump when no ads ran yet: ×2 of zero would never spend. */
+const COAST_AD_FLOOR = 1_000
+
 export interface BotRun {
   kind: BotKind
   seed: number
@@ -129,6 +160,42 @@ export interface BotRun {
   topActionShare: number
   /** Cards that ran out their 60 days and applied the default. */
   decisionsDefaulted: number
+  // GAMEPLAY V2 §15 measurements. Filled where the engine has the mechanic today; the rest stay at their defaults
+  // until their wave lands (loans T09, crises T07, policies, market, rivals, board, threads).
+  /** Lowest runway (months, 99 = profitable) seen on a payday, per stage. */
+  stageMinRunway: number[]
+  /** Paydays with runway < 2 months, per stage. */
+  nearDeathPaydays: number[]
+  daysRunwayBelow3: number
+  /** First profitable payday came before Series B. */
+  profitBeforeB: boolean
+  /** Paydays that were profitable (net ≥ 0). */
+  profitPaydays: number
+  paydays: number
+  loansTaken: number
+  loanCalled: number
+  roundsFailed: number
+  crisesFired: number
+  crisisNearDeath: number
+  /** Alive ≥ 180 days after the first near-death payday (null = never near death). */
+  survivedNearDeath: boolean | null
+  policiesAdopted: number
+  paydayDeferrals: number
+  movesUsedShare: number
+  segmentsOpened: number
+  rivalsAcquired: number
+  boardQuarters: { hit: number; missed: number }
+  renewals: { offered: number; kept: number }
+  refactors: number
+  peakValuation: number
+  /** 1 − final / peak valuation (0 = ended at its peak). */
+  valuationDropAfterPeak: number
+  penetrationByStage: number[]
+  rivalPassedDays: number
+  threadSteps: number
+  secretsSeen: number
+  /** Serialized save at the end of the run (UTF-8 bytes). */
+  saveBytes: number
 }
 
 /** How the bot answers decision cards: its weighted best (default), its worst, or always the first option. */
@@ -425,7 +492,7 @@ export function playBot(
   policy: DecisionPolicy = 'best',
   overrides: Partial<BotConfig> = {},
 ): BotRun {
-  const base = kind === 'idle' || kind === 'random' ? null : kind === 'careless' ? CARELESS : BOTS[kind]
+  const base = kind === 'idle' || kind === 'random' ? null : kind === 'careless' ? CARELESS : kind in V2_BOTS ? V2_BOTS[kind as V2BotKind] : BOTS[kind as Archetype]
   const cfg = base ? { ...base, ...overrides } : null
   const careless = kind === 'careless'
   const api = createEngine(content)
@@ -474,6 +541,16 @@ export function playBot(
   const paydayRunway: BotRun['paydayRunway'] = []
   const releasesByStage = [0, 0, 0, 0, 0, 0, 0]
   const roundCloses: BotRun['roundCloses'] = []
+  let profitDay: number | null = null
+  let coastBumps = 0
+  const stageMinRunway = [99, 99, 99, 99, 99, 99, 99]
+  const nearDeathPaydays = [0, 0, 0, 0, 0, 0, 0]
+  let daysRunwayBelow3 = 0
+  let firstProfitStage: number | null = null
+  let profitPaydays = 0
+  let paydays = 0
+  let firstNearDeath: number | null = null
+  let peakValuation = 0
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -493,6 +570,14 @@ export function playBot(
         founder(ctx, cfg)
         fundraise(ctx, { ...cfg, roundSize: botRng.pick(['small', 'target', 'large'] as const) }, true)
       }
+    } else if (cfg?.afterProfit && profitDay !== null) {
+      if (cfg.afterProfit === 'coast') {
+        housekeeping(ctx, cfg, undefined, policy)
+        if (s.unlockedTools.includes('adBudget') && s.time.day - profitDay >= COAST_AD_EVERY_DAYS * (coastBumps + 1)) {
+          coastBumps++
+          ctx.act({ type: 'setAdBudget', amount: Math.max(COAST_AD_FLOOR, Math.round(s.finance.adBudget * 2)) })
+        }
+      }
     } else if (cfg) {
       housekeeping(ctx, cfg, undefined, policy)
       furnish(ctx, cfg)
@@ -507,6 +592,9 @@ export function playBot(
     const prev = s.stage
     const before = s
     s = api.step(s, 1)
+    if (profitDay === null && s.finance.mrr > 0 && s.finance.net > 0) profitDay = s.time.day
+    if ((s.finance.runway ?? 99) < 3) daysRunwayBelow3++
+    peakValuation = Math.max(peakValuation, s.finance.valuation)
     for (let st = prev + 1; st <= s.stage; st++) stageDays[st] = Math.round(s.time.day)
     // Dead time inside a round: gap between world beats while the round runs.
     for (const e of s.events) {
@@ -514,7 +602,20 @@ export function playBot(
       if (MOMENT_KINDS.has(e.kind)) moment(e.day)
       if (e.kind === 'payrollMissed') payrollMissed++
       if (e.kind === 'decisionDefaulted') defaulted++
-      if (e.kind === 'payday') paydayRunway.push({ stage: s.stage, runway: Math.min(99, s.finance.lastReceipt?.runwayAfter ?? 99) })
+      if (e.kind === 'payday') {
+        const rw = Math.min(99, s.finance.lastReceipt?.runwayAfter ?? 99)
+        paydayRunway.push({ stage: s.stage, runway: rw })
+        paydays++
+        stageMinRunway[s.stage] = Math.min(stageMinRunway[s.stage] ?? 99, rw)
+        if (rw < 2) {
+          nearDeathPaydays[s.stage] = (nearDeathPaydays[s.stage] ?? 0) + 1
+          firstNearDeath ??= s.time.day
+        }
+        if ((s.finance.lastReceipt?.net ?? -1) >= 0) {
+          profitPaydays++
+          firstProfitStage ??= s.stage
+        }
+      }
       if (e.kind === 'release') releasesByStage[s.stage] = (releasesByStage[s.stage] ?? 0) + 1
       if (e.kind === 'roundClosed' && before.round) {
         const rv = before.derived.round
@@ -540,6 +641,7 @@ export function playBot(
     if (s.time.day <= DAYS_10_MIN) c10 = s.concepts.learned.length
     onDay?.(s)
   }
+  const failed = s.gameOver?.kind === 'bankrupt' || s.gameOver?.kind === 'teamLost'
   return {
     kind,
     seed,
@@ -562,6 +664,33 @@ export function playBot(
     releasesByStage,
     roundCloses,
     topActionShare: topShare(actionCounts),
+    stageMinRunway,
+    nearDeathPaydays,
+    daysRunwayBelow3,
+    profitBeforeB: firstProfitStage !== null && firstProfitStage < 4,
+    profitPaydays,
+    paydays,
+    loansTaken: 0,
+    loanCalled: 0,
+    roundsFailed: 0,
+    crisesFired: 0,
+    crisisNearDeath: 0,
+    survivedNearDeath: firstNearDeath === null ? null : !(failed && s.time.day - firstNearDeath < 180),
+    policiesAdopted: 0,
+    paydayDeferrals: 0,
+    movesUsedShare: 0,
+    segmentsOpened: 0,
+    rivalsAcquired: 0,
+    boardQuarters: { hit: 0, missed: 0 },
+    renewals: { offered: 0, kept: 0 },
+    refactors: 0,
+    peakValuation,
+    valuationDropAfterPeak: peakValuation > 0 ? Math.max(0, 1 - s.finance.valuation / peakValuation) : 0,
+    penetrationByStage: [],
+    rivalPassedDays: 0,
+    threadSteps: 0,
+    secretsSeen: 0,
+    saveBytes: new TextEncoder().encode(serialize(s)).length,
   }
 }
 

@@ -374,3 +374,19 @@ export const NEXT_STEP_USERS = 50
 export const NEXT_STEP_FIRST_USERS = 3
 /** Each ☆ stage goal reached takes this much off the equity sold in the next round (1 point). */
 export const GOAL_STAR_EQUITY_DISCOUNT = 0.01
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §14.2: month history (stats screen) and the company profile radar
+// ---------------------------------------------------------------------------
+/** finance.receipts keeps this many months (rounded ≈ 300–400 B of JSON each; cloud save ≤ 160 KB). */
+export const HISTORY_MAX_MONTHS = 120
+/** Ratio fields of a stored receipt (mom, multiple, runway, equity, …) keep this many decimals. */
+export const HISTORY_RATIO_DECIMALS = 3
+/** Profile axes are capped here (1 = what the stage expects). */
+export const PROFILE_MAX = 1.5
+/** Product axis: average maturity the stage expects (MVP in the garage, 1.0 from Series B). */
+export const PROFILE_PRODUCT_EXPECT: readonly number[] = [0.2, 0.4, 0.6, 0.8, 1, 1, 1]
+/** Team axis: head count the stage expects. */
+export const PROFILE_TEAM_EXPECT: readonly number[] = [2, 5, 9, 16, 26, 36, 36]
+/** Cash axis: months of runway that count as 1 (profitable = PROFILE_MAX). */
+export const PROFILE_RUNWAY_MONTHS = 6

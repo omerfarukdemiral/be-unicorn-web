@@ -1,15 +1,15 @@
 // zustand store: the only bridge between the pure engine and render/ui.
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by the effective speed
 // (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card,
-// round offer / pitch).
-// After each tick: an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS of game time, and at 4× an
-// important moment slows the run to 1× (docs/CORE_LOOP.md §3.2).
+// round offer / pitch; a center screen never holds it).
+// After each tick: a new concept goes straight to the Kazanımlar badge (no scene bubble), an interrupting event closes
+// the center screen, and at 4× an important moment slows the run to 1× (docs/GAMEPLAY_V2.md §3.6, §12).
 import { create } from 'zustand'
 import { applyAction, createGame, step } from '../engine'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readProfile, readSave, readUiSave, writeProfile, writeSave, writeUiSave } from './save'
 import { addPin, autoPin, defaultPins, removePin } from './metricPins'
-import type { GameStore, Panel, PauseReason, ReplayLog, Selection, UiState } from './types'
+import { CENTER_KINDS, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState } from './types'
 
 export { SAVE_KEY } from './save'
 
@@ -19,44 +19,52 @@ const MAX_DAYS_PER_TICK = 4
 const NO_INSET = { top: 0, right: 0, bottom: 0 }
 
 /**
- * An unclicked concept bubble shrinks to an icon after this many GAME days (10 days = 20 s at 1×).
- * Counted in game time, so it never shrinks while time is still (paused, card open).
+ * Cash-tension events the engine does not emit yet (docs/GAMEPLAY_V2.md §5, §6): listed here as plain strings so the
+ * store rules are ready; the engine waves add them to GameEventKind.
  */
-export const CONCEPT_MINIMIZE_DAYS = 10
+type PendingEventKind = 'paydayShort' | 'crisis' | 'roundFailed' | 'loanCalled'
 
-/** Events that are worth watching at 1×: at 4× they slow the run down (never pause). */
-export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
-  'projectLaunched',
+/**
+ * Events that interrupt a center screen: it closes so no card or payday desk is hidden behind it (and 4× drops to 1×).
+ * docs/GAMEPLAY_V2.md §3.6.
+ */
+const INTERRUPTS: readonly (GameEventKind | PendingEventKind)[] = [
   'decisionShown',
-  'milestone',
-  'bankruptWarning',
-  'roundClosed',
-  'release',
+  'paydayShort',
+  'crisis',
   // The early round window opening is the "tur teklifi" moment.
   'roundWindow',
   // Payroll could not be paid: the bankruptcy clock started (phase 3).
   'payrollMissed',
+  'roundFailed',
+  'loanCalled',
+]
+export const INTERRUPT_EVENT_KINDS: ReadonlySet<string> = new Set<string>(INTERRUPTS)
+
+/** Events that are worth watching at 1×: at 4× they slow the run down (never pause). */
+export const IMPORTANT_EVENT_KINDS: ReadonlySet<string> = new Set<GameEventKind | PendingEventKind>([
+  ...INTERRUPTS,
+  'projectLaunched',
+  'milestone',
+  'bankruptWarning',
+  'roundClosed',
+  'release',
 ])
 
 /** A payday that leaves less than this many months of runway is an important moment too (docs/CORE_LOOP.md §3.2). */
 export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
 
 /**
- * True when `next` brought an event that should slow 4× down to 1× (see IMPORTANT_EVENT_KINDS), with three edges so
+ * True when `next` brought an event that should slow 4× down to 1× (see IMPORTANT_EVENT_KINDS), with two edges so
  * 4× is not dropped every ~25 s (review fix):
- * - a decision card only when it is the first one of the stage (opening any card pauses anyway);
  * - a release only for a new version, not for the updates after 1.0;
  * - a payday only when runway CROSSES below PAYDAY_SLOW_RUNWAY_MONTHS, not on every tight month.
+ * Every decision card counts (the card budget keeps them rare, docs/GAMEPLAY_V2.md §3.11).
  */
 export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   const since = lastEventId(prev)
   for (const e of next.events) {
     if (e.id <= since) continue
-    if (e.kind === 'decisionShown') {
-      const from = next.stageStart?.day ?? 0
-      if (!next.decisions.history.some((h) => h.day >= from)) return true
-      continue
-    }
     if (e.kind === 'release') {
       if (next.releases?.find((r) => r.id === e.refId)?.update === undefined) return true
       continue
@@ -70,6 +78,29 @@ export function hasImportantMoment(prev: GameState, next: GameState): boolean {
     }
   }
   return false
+}
+
+/** True when `next` brought an event that closes an open center screen (INTERRUPT_EVENT_KINDS). */
+export function hasInterrupt(prev: GameState, next: GameState): boolean {
+  const since = lastEventId(prev)
+  return next.events.some((e) => e.id > since && INTERRUPT_EVENT_KINDS.has(e.kind))
+}
+
+/** Stable empty list (older saves have no goalsDone). */
+const NO_GOALS: readonly string[] = []
+
+/** Concepts waiting to be read: the one just arrived plus the minimized ones, never a learned one. */
+export function waitingConcepts(s: GameState): ConceptId[] {
+  const c = s.concepts
+  const out = c.minimized.filter((id) => !c.learned.includes(id))
+  if (c.active && !c.learned.includes(c.active.id) && !out.includes(c.active.id)) out.push(c.active.id)
+  return out
+}
+
+/** Kazanımlar badge (docs/GAMEPLAY_V2.md §12): concepts waiting to be read + stage goals done since last opened. */
+export function achievementsBadge(s: GameState, seenGoals: readonly string[]): number {
+  const done = s.goalsDone ?? NO_GOALS
+  return waitingConcepts(s).length + done.filter((id) => !seenGoals.includes(id)).length
 }
 
 const initialUi = (saved = readUiSave()): UiState => ({
@@ -90,6 +121,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   pinnedMetrics: saved.pinnedMetrics ?? [],
   seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
   pinTouched: saved.pinTouched ?? false,
+  seenGoals: saved.seenGoals ?? [],
 })
 
 /** UI fields that survive newGame()/load() (player preferences of this session, top-bar pins included). */
@@ -101,9 +133,9 @@ const keptUi = (ui: UiState): Pick<UiState, 'zoom' | 'slowOnMoments' | 'generati
   pinTouched: ui.pinTouched,
 })
 
-/** Writes the UI profile (pins, seen gauges) to localStorage 'be-unicorn:ui'. */
+/** Writes the UI profile (pins, seen gauges, seen goals) to localStorage 'be-unicorn:ui'. */
 function persistUi(ui: UiState): void {
-  writeUiSave({ pinnedMetrics: ui.pinnedMetrics, seenMetrics: ui.seenMetrics, pinTouched: ui.pinTouched })
+  writeUiSave({ pinnedMetrics: ui.pinnedMetrics, seenMetrics: ui.seenMetrics, pinTouched: ui.pinTouched, seenGoals: ui.seenGoals })
 }
 
 /**
@@ -130,10 +162,24 @@ export function offerWaiting(s: GameState): boolean {
   return s.derived.canStartRound && !s.gameOver
 }
 
-/** Focus pauses implied by what is open (one mechanism for modals, decision cards, Defter cards and round offers). */
+/** The open overlay when it is a blocking modal; null for none or a center screen (time flows under those). */
+export function blockingOverlay(ui: Pick<UiState, 'overlay'>): Overlay | null {
+  return ui.overlay && !CENTER_KINDS.has(ui.overlay.kind) ? ui.overlay : null
+}
+
+/** True when a center screen (statistics, Kanun Kitabı, Pazar haritası) is open. */
+export function centerOpen(ui: Pick<UiState, 'overlay'>): boolean {
+  return !!ui.overlay && CENTER_KINDS.has(ui.overlay.kind)
+}
+
+/**
+ * Focus pauses implied by what is open (one mechanism for modals, decision cards, Defter cards and round offers).
+ * A center screen is not one: it shows, it does not ask for a decision (docs/GAMEPLAY_V2.md §14.1).
+ * `concept` holds only while the card itself is open; a concept arriving never pauses.
+ */
 export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean }, state?: GameState): PauseReason[] {
   const r: PauseReason[] = []
-  if (ui.overlay) r.push('modal')
+  if (blockingOverlay(ui)) r.push('modal')
   const p = ui.panel
   if ((p?.kind === 'decision' && p.answered === undefined) || ui.decisionExpanded) r.push('decision')
   if (p?.kind === 'journal' && p.conceptId) r.push('concept')
@@ -176,6 +222,22 @@ const targetSelections = new WeakMap<Panel, Selection>()
 
 function samePanel(a: Panel | null, b: Panel | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/**
+ * True while the visitor who brought `id` is still standing in the office. minimizeConcept sends that visitor away,
+ * so the store only shelves the concept after the visitor's own stay (CONCEPT_VISITOR_DAYS) is over.
+ */
+function conceptVisitorStays(s: GameState, id: ConceptId): boolean {
+  return s.visitors.some((v) => v.purpose === 'concept' && v.refId === id && v.leaveDay > s.time.day)
+}
+
+/** Concept a visitor came to tell, while it is still unread (they stand silently until tapped). */
+function visitorConcept(s: GameState, visitorId: string): ConceptId | null {
+  const v = s.visitors.find((x) => x.id === visitorId)
+  if (v?.purpose !== 'concept' || !v.refId) return null
+  const id = v.refId as ConceptId
+  return s.concepts.triggered.includes(id) && !s.concepts.learned.includes(id) ? id : null
 }
 
 /** Empty slot in an open ring (not the founder desk): tapping it goes straight to the shop. */
@@ -283,7 +345,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     writeProfile({ founderXp: state.meta.founderXp, runIndex: state.meta.runIndex })
     resetReplay(state, false)
     // A fresh run: every gauge beyond the first three is new again (pins stay, locked until relearned).
-    const ui: UiState = { ...initialUi(), ...keptUi(get().ui), seenMetrics: [...INITIAL_WIDGETS] }
+    const ui: UiState = { ...initialUi(), ...keptUi(get().ui), seenMetrics: [...INITIAL_WIDGETS], seenGoals: [] }
     set({ state, ui })
     persistUi(ui)
     writeSave(state)
@@ -317,6 +379,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       pinnedMetrics,
       pinTouched,
       seenMetrics: prof.seenMetrics ?? [...state.unlockedWidgets],
+      // An old profile without seenGoals counts the save's goals as seen (no badge on continue).
+      seenGoals: prof.seenGoals ?? [...(state.goalsDone ?? NO_GOALS)],
     }
     set({ state, ui })
     if (pinnedMetrics.join() !== pins.join()) persistUi(ui)
@@ -336,14 +400,21 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       return
     }
     if (selection.kind === 'slot' && isEmptyOpenSlot(state, selection.id)) openPanel({ kind: 'shop', slotTarget: selection.id })
-    else openPanel({ kind: 'detail', selection })
+    else if (selection.kind === 'visitor' && visitorConcept(state, selection.id)) {
+      // The visitor who brought a concept stands silently; tapping them opens the card (the only concept pause).
+      const conceptId = visitorConcept(state, selection.id)!
+      if (!state.concepts.learned.includes(conceptId)) get().dispatch({ type: 'openConcept', conceptId })
+      openPanel({ kind: 'journal', conceptId })
+    } else openPanel({ kind: 'detail', selection })
   },
   openPanel(panel, opts) {
     set((s) => {
       const cur = s.ui.panel
       if (samePanel(cur, panel)) return s
       const panelBack = opts?.root ? null : opts?.replace ? s.ui.panelBack : cur
-      return { ui: withPause({ ...s.ui, panel, panelBack }, s.state) }
+      // One surface: a panel replaces an open center screen (a blocking modal stays).
+      const overlay = centerOpen(s.ui) ? null : s.ui.overlay
+      return { ui: withPause({ ...s.ui, panel, panelBack, overlay }, s.state) }
     })
   },
   togglePanel(tab) {
@@ -355,7 +426,17 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: withPause({ ...s.ui, panel: null, panelBack: null }, s.state) })),
   panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: withPause({ ...s.ui, panel: s.ui.panelBack, panelBack: null }, s.state) } : s)),
   setHoverSlot: (hoverSlotId) => set((s) => (s.ui.hoverSlotId === hoverSlotId ? s : { ui: { ...s.ui, hoverSlotId } })),
-  openOverlay: (overlay) => set((s) => ({ ui: withPause({ ...s.ui, overlay }, s.state) })),
+  openOverlay: (overlay) =>
+    set((s) => {
+      // A center screen and the panel are one surface (phones have room for one): the screen closes the panel.
+      if (CENTER_KINDS.has(overlay.kind)) return { ui: withPause({ ...s.ui, overlay, panel: null, panelBack: null }, s.state) }
+      return { ui: withPause({ ...s.ui, overlay }, s.state) }
+    }),
+  toggleCenter(kind) {
+    const { ui, openOverlay, closeOverlay } = get()
+    if (ui.overlay?.kind === kind) closeOverlay()
+    else if (!blockingOverlay(ui)) openOverlay({ kind })
+  },
   closeOverlay: () =>
     set((s) => {
       // "Yeni ofise geç": the new office opens paused with the Başlat call, like a new game (docs/CORE_LOOP.md §3.2
@@ -393,6 +474,14 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     set({ ui: next })
     persistUi(next)
   },
+  markGoalsSeen() {
+    const { ui, state } = get()
+    const done = state.goalsDone ?? NO_GOALS
+    if (done.every((id) => ui.seenGoals.includes(id))) return
+    const next = { ...ui, seenGoals: [...new Set([...ui.seenGoals, ...done])] }
+    set({ ui: next })
+    persistUi(next)
+  },
   markMetricsSeen(ids) {
     const ui = get().ui
     const add = [...new Set(ids)].filter((x) => !ui.seenMetrics.includes(x))
@@ -405,14 +494,18 @@ export const useGameStore = create<GameStore>()((set, get) => ({
 
 /**
  * Store-side rules that follow game time (run after every tick that advanced the world):
- * - an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS game days;
+ * - a concept that arrived never shows as a scene bubble: it counts on the Kazanımlar badge at once, its visitor
+ *   stands silently (tap → card) and, once the visitor's stay is over, it moves to the shelf (minimizeConcept);
+ * - an interrupting event (a card, the round window, a missed payroll…) closes an open center screen;
  * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it).
- * Both go through dispatch, so the replay log reproduces them.
+ * Engine changes go through dispatch, so the replay log reproduces them.
  */
 function afterStep(prev: GameState, next: GameState): void {
-  const { dispatch, ui } = useGameStore.getState()
+  const { dispatch, closeOverlay } = useGameStore.getState()
   const ac = next.concepts.active
-  if (ac && next.time.day - ac.shownDay >= CONCEPT_MINIMIZE_DAYS) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
+  if (ac && !conceptVisitorStays(next, ac.id)) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
+  if (centerOpen(useGameStore.getState().ui) && hasInterrupt(prev, next)) closeOverlay()
+  const ui = useGameStore.getState().ui
   if (ui.slowOnMoments && next.time.speed === 4) {
     if (hasImportantMoment(prev, next)) {
       dispatch({ type: 'setSpeed', speed: 1 })

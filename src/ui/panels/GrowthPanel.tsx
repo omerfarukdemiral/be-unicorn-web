@@ -1,4 +1,5 @@
 // Büyüme: funding round, product health, channels (ad budget), price, enterprise. Locked tools show a hint.
+// Stage goals (☆) live in Kazanımlar (JournalPanel).
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { ToolId } from '../../engine/types'
@@ -9,7 +10,7 @@ import { Bar, Dot, Empty, LockedHint, SectionTitle, Stat } from '../primitives'
 import { iconTone, WIDGET_COLOR } from '../theme'
 import { Icon } from '../icons'
 import { RoundSection } from './RoundSection'
-import { DecisionOutcomes, GoalsCard } from './GoalsCard'
+import { DecisionOutcomes } from './GoalsCard'
 
 const AD_STEPS = [0, 250, 500, 1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000]
 
@@ -25,7 +26,6 @@ export function GrowthPanel({ section }: { section?: 'round' }) {
   }, [section])
   return (
     <div className="flex flex-col gap-5">
-      <GoalsCard />
       {(showRound || section === 'round') && <RoundSection />}
       <ProductSection />
       <DecisionOutcomes />

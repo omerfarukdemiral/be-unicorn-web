@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { GameSpeed } from '../engine/types'
 import { STAGES } from '../content'
-import { effectiveSpeed, useGameStore } from '../store/gameStore'
+import { blockingOverlay, effectiveSpeed, useGameStore } from '../store/gameStore'
 import type { PauseReason } from '../store/types'
 import { Icon } from './icons'
 import { t } from './i18n'
@@ -193,8 +193,8 @@ export function ScreenFrame() {
 
 /** Still world: the scene fades a little (desaturated, soft vignette). Below every UI surface. */
 export function PauseVeil() {
-  const { still, overlay } = useGameStore(useShallow((s) => ({ still: effectiveSpeed(s) === 0 && !s.state.gameOver, overlay: s.ui.overlay !== null })))
-  const show = still && !overlay // modals bring their own backdrop
+  const { still, overlay } = useGameStore(useShallow((s) => ({ still: effectiveSpeed(s) === 0 && !s.state.gameOver, overlay: blockingOverlay(s.ui) !== null })))
+  const show = still && !overlay // blocking modals bring their own backdrop; a center screen keeps the veil
   return (
     <div
       aria-hidden="true"
@@ -216,7 +216,7 @@ export function StartCall() {
   const inset = useGameStore((st) => st.ui.sceneInset)
   const s = useGameStore(
     useShallow((st) => ({
-      show: !st.ui.runStarted && st.state.time.speed === 0 && !st.state.gameOver && st.ui.overlay === null,
+      show: !st.ui.runStarted && st.state.time.speed === 0 && !st.state.gameOver && blockingOverlay(st.ui) === null,
       stage: st.state.stage,
       panelOpen: st.ui.panel !== null,
     })),

@@ -21,12 +21,6 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
   'strip.paid': 'ödenen',
   'strip.receipt': '{m}. ay fişi · net {n} · ödenen {p}{r}',
   'strip.release': '{project} {level} yayında · +{u} kullanıcı · +{m}/ay',
-  'strip.goal': 'Hedef tamam: {v}',
-  'strip.roundWeek': 'Tur {w}/{n} · teklif {a} → {b}',
-  'strip.newMetric': 'Yeni gösterge: {name}',
-  'strip.newMetric.pinned': 'üst bara sabitlendi',
-  'strip.newMetric.top': 'üst barda',
-  'strip.newMetric.listed': 'Metrikler’de',
   'strip.step': 'Sıradaki adım {i}/{n}',
 
   // Horizon (readable text, nearest first): "Maaş günü 8 gün · Sürüm ~4 gün"

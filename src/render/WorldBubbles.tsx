@@ -1,13 +1,14 @@
-// Decides which world-anchored bubbles exist (ambient lines, concept, minimized concepts, decision)
-// and anchors them above their speakers. Content is drawn by the BubbleRenderer (ui) or DefaultBubble.
+// Decides which world-anchored bubbles exist (ambient lines, decision) and anchors them above their speakers.
+// Content is drawn by the BubbleRenderer (ui) or DefaultBubble. Concepts have no scene bubble since GAMEPLAY_V2 A2:
+// they go to the Kazanımlar icon, and tapping the visitor who brought one opens its card.
 import { useMemo, useState } from 'react'
-import { CONCEPTS, DECISIONS, OFFICE_LINES } from '../content'
-import type { ConceptId, Dept, Employee, GameState, NpcRole, Visitor } from '../engine/types'
+import { DECISIONS, OFFICE_LINES } from '../content'
+import type { Dept, Employee, GameState, NpcRole, Visitor } from '../engine/types'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, WorldBubble } from './bubbles'
 import { UI_TONES } from './palette'
 import { useLayout } from './sceneRegistry'
-import { dispatchAction, storeApi, useGS } from './source'
+import { storeApi, useGS } from './source'
 
 const ROLE_DEPT: Partial<Record<NpcRole, Dept>> = { engineer: 'eng', accountant: 'ops' }
 
@@ -26,7 +27,6 @@ export function resolveSpeaker(role: NpcRole, refId: string | undefined, visitor
   return 'founder'
 }
 
-const conceptRole = (id: string): NpcRole => CONCEPTS.find((x) => x.id === id)?.speaker ?? 'mentor'
 const decisionRole = (id: string): NpcRole => DECISIONS.find((d) => d.id === id)?.speaker ?? 'mentor'
 
 /**
@@ -37,21 +37,12 @@ const decisionRole = (id: string): NpcRole => DECISIONS.find((d) => d.id === id)
 function selectBubbleKey(s: GameState): string {
   const out: string[] = []
   for (const b of s.bubbles) out.push(`a|${b.id}|${b.speakerId}|${b.lineId}`)
-  const ac = s.concepts.active
-  if (ac) out.push(`c|${ac.id}|${resolveSpeaker(conceptRole(ac.id), ac.id, s.visitors, s.employees)}`)
-  for (const id of s.concepts.minimized) out.push(`i|${id}|${resolveSpeaker(conceptRole(id), id, s.visitors, s.employees)}`)
   const ad = s.decisions.active
   if (ad) {
     const visitorOk = ad.visitorId !== undefined && s.visitors.some((v) => v.id === ad.visitorId)
     out.push(`d|${ad.cardId}|${visitorOk ? ad.visitorId! : resolveSpeaker(decisionRole(ad.cardId), ad.cardId, s.visitors, s.employees)}`)
   }
   return out.join('\n')
-}
-
-/** Fallback path (no UI renderer): concept/decision open in the single panel. */
-function openConcept(conceptId: ConceptId): void {
-  if (!storeApi().state.concepts.learned.includes(conceptId)) dispatchAction({ type: 'openConcept', conceptId })
-  storeApi().openPanel({ kind: 'journal', conceptId })
 }
 
 function buildList(key: string, ambient: boolean): WorldBubble[] {
@@ -63,12 +54,6 @@ function buildList(key: string, ambient: boolean): WorldBubble[] {
       if (!ambient) continue
       const text = OFFICE_LINES.find((l) => l.id === extra)?.text ?? '…'
       out.push({ kind: 'ambient', key: `amb:${id}`, bubbleId: id, lineId: extra ?? '', speakerId, text })
-    } else if (kind === 'c') {
-      const cid = id as ConceptId
-      out.push({ kind: 'concept', key: `concept:${cid}`, conceptId: cid, role: conceptRole(cid), speakerId, text: CONCEPTS.find((x) => x.id === cid)?.bubble ?? '…', onOpen: () => openConcept(cid) })
-    } else if (kind === 'i') {
-      const cid = id as ConceptId
-      out.push({ kind: 'conceptIcon', key: `icon:${cid}`, conceptId: cid, role: conceptRole(cid), speakerId, onOpen: () => openConcept(cid) })
     } else if (kind === 'd') {
       out.push({
         kind: 'decision',
@@ -88,9 +73,6 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
   const key = useGS(selectBubbleKey)
   const layout = useLayout()
   const list = useMemo(() => buildList(key, ambient), [key, ambient])
-
-  // An unclicked concept bubble shrinks to an icon after CONCEPT_MINIMIZE_DAYS of GAME time: the store does it
-  // after each tick (store/gameStore.ts afterStep), so it never shrinks while time is still.
 
   // Overlaps (same or different speakers) are resolved in screen space by the layout driver.
   const [registry] = useState(() => new BubbleLayoutRegistry())

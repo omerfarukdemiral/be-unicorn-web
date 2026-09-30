@@ -1,16 +1,15 @@
 // UI look for render's world-anchored bubbles. Integrate wires it as
 // <GameCanvas renderBubble={renderWorldBubble} /> together with <GameUI worldBubbles />.
 // The param type mirrors render/bubbles.ts `WorldBubble` structurally (ui may not import render).
-// Clicks open the single right panel (Defter card / decision), never a blocking modal.
+// Clicks open the single right panel (decision), never a blocking modal. A concept draws nothing in the scene: it
+// lands on the Kazanımlar badge and its visitor stands silently (docs/GAMEPLAY_V2.md §12). Office lines pass the
+// daily budget (AmbientBubble officeLineShown).
 import type { ReactNode } from 'react'
 import type { ConceptId, DecisionCardId, NpcRole } from '../../engine/types'
 import { NPC_TEXT } from '../../content'
 import { Icon } from '../icons'
-import { AmbientBubbleView } from './AmbientBubble'
-import { ConceptBubbleView, ConceptIconView } from './ConceptBubble'
-import { conceptTitle } from '../panels/JournalPanel'
+import { AmbientBubbleView, officeLineShown } from './AmbientBubble'
 import { useGameStore } from '../../store/gameStore'
-import { openConceptCard } from '../uiActions'
 import { t } from '../i18n'
 import { cx } from '../primitives'
 import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, BubbleText, SpeakerLine } from './shell'
@@ -32,11 +31,10 @@ const WORLD_W = 'w-max max-w-[min(260px,60vw)]'
 export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
   switch (b.kind) {
     case 'ambient':
-      return <AmbientBubbleView text={b.text} className={WORLD_W} tail />
+      return officeLineShown(b.bubbleId, b.lineId) ? <AmbientBubbleView text={b.text} className={WORLD_W} tail /> : null
     case 'concept':
-      return <ConceptBubbleView text={b.text} speaker={NPC_TEXT[b.role].name} onClick={() => openConceptCard(b.conceptId)} className={WORLD_W} tail />
     case 'conceptIcon':
-      return <ConceptIconView label={conceptTitle(b.conceptId)} onClick={() => openConceptCard(b.conceptId)} />
+      return null
     case 'decision':
       // Mark: orange chat tile + "Karar" (vs. the concept's violet book); neutral body.
       return (

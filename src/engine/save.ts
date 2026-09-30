@@ -1,5 +1,6 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState } from './types'
+import { HISTORY_MAX_MONTHS } from './balance'
+import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt } from './types'
 
 export interface SaveFile {
   version: number
@@ -24,6 +25,30 @@ const MIGRATIONS: Record<number, Migration> = {
     if (meta && (typeof meta.companyName !== 'string' || !meta.companyName.trim())) meta.companyName = DEFAULT_COMPANY_NAME
     return st
   },
+  // v3 → v4 (docs/GAMEPLAY_V2.md §3.1): the single migration of GAMEPLAY V2. Every wave adds its own defaults here;
+  // the engine also defaults each new field lazily (??=), so a wave never depends on another one having landed.
+  3: (st) => {
+    const finance = st.finance as { mrrHistory?: unknown; usersHistory?: unknown; receipts?: unknown; netHistory?: unknown } | undefined
+    if (finance) {
+      if (!Array.isArray(finance.receipts)) finance.receipts = partialReceipts(finance.mrrHistory, finance.usersHistory)
+      if (!Array.isArray(finance.netHistory)) finance.netHistory = []
+    }
+    return st
+  },
+}
+
+/** Month history rebuilt from the v3 month-end snapshots (MRR, users): the last HISTORY_MAX_MONTHS months. */
+function partialReceipts(mrrRaw: unknown, usersRaw: unknown): PartialReceipt[] {
+  const mrr = Array.isArray(mrrRaw) ? (mrrRaw as unknown[]) : []
+  const users = Array.isArray(usersRaw) ? (usersRaw as unknown[]) : []
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const out: PartialReceipt[] = []
+  const n = Math.max(mrr.length, users.length)
+  for (let i = Math.max(0, n - HISTORY_MAX_MONTHS); i < n; i++) {
+    const u = Math.round(num(users[i]))
+    out.push({ partial: true, month: i, day: (i + 1) * DAYS_PER_MONTH, mrr: Math.round(num(mrr[i])), users: u, usersDelta: u - Math.round(num(users[i - 1])) })
+  }
+  return out
 }
 
 export function serialize(state: GameState): string {

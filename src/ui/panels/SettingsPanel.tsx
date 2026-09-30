@@ -12,7 +12,9 @@ import { AccountSection } from './AccountSection'
 const SHORTCUTS: [string, string][] = [
   ['Space', 'shortcut.pause'],
   ['1 / 2 / 3', 'shortcut.speed'],
-  ['M · E · P · B · G · K', 'shortcut.tabs'],
+  ['M · E · P · B · G', 'shortcut.tabs'],
+  ['K', 'shortcut.achievements'],
+  ['I', 'shortcut.stats'],
   ['L', 'shortcut.leaderboard'],
   ['Esc', 'shortcut.escape'],
   ['+ / −', 'shortcut.zoom'],

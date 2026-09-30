@@ -1,9 +1,9 @@
 // Moments (docs/CORE_LOOP.md §4.2, §7 "Popup bütçesi"; docs/LAYOUT.md §3): month receipt (ay fişi) on payday,
-// release moment (sürüm anı), "Kararın → sonucu", ☆ goal reached, and the round beats (early window, each round week).
-// They are items of the ONE notification strip now: `useMomentSource` turns fresh engine events into moments,
+// release moment (sürüm anı) and "Kararın → sonucu". A ☆ goal only grows the Kazanımlar badge and the round beats
+// live in the top bar (docs/GAMEPLAY_V2.md §12 D9).
+// They are items of the ONE notification strip: `useMomentSource` turns fresh engine events into moments,
 // `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
 import type { MonthReceipt } from '../engine/types'
-import { GOALS, STAGES } from '../content'
 import type { Panel } from '../store/types'
 import type { IconName } from './icons'
 import { t } from './i18n'
@@ -16,9 +16,6 @@ export type Moment =
   | { key: number; kind: 'receipt'; receipt: MonthReceipt }
   | { key: number; kind: 'release'; project: string; level: number; update?: number; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
-  | { key: number; kind: 'goal'; text: string }
-  | { key: number; kind: 'roundWindow'; stage: string }
-  | { key: number; kind: 'roundWeek'; week: number; weeks: number; from: number; to: number; pitch: boolean }
 
 /** Calls `onMoments` with the moments hidden in fresh engine events (skips a loaded run's history). */
 export function useMomentSource(onMoments: (add: Moment[]) => void): void {
@@ -33,24 +30,13 @@ export function useMomentSource(onMoments: (add: Moment[]) => void): void {
       } else if (e.kind === 'delayedEffect') {
         const o = [...(s.decisions.outcomes ?? [])].reverse().find((x) => x.cardId === e.refId)
         if (o) add.push({ key: e.id, kind: 'outcome', option: optionLabel(o.cardId, o.optionIndex) ?? '', effects: effectSummary(o.effects) })
-      } else if (e.kind === 'roundWindow') {
-        add.push({ key: e.id, kind: 'roundWindow', stage: STAGES[e.value ?? s.stage + 1]?.name ?? '' })
-      } else if (e.kind === 'roundWeek' && s.round?.lastMove) {
-        const m = s.round.lastMove
-        add.push({ key: e.id, kind: 'roundWeek', week: m.week, weeks: s.round.weeksTotal, from: m.from, to: m.to, pitch: s.round.pitchDue !== undefined })
-      } else if (e.kind === 'goalDone') {
-        const g = GOALS.find((x) => x.id === e.refId)
-        if (g) add.push({ key: e.id, kind: 'goal', text: g.text })
       }
     }
     if (add.length) onMoments(add)
   })
 }
 
-/**
- * Icon, identity hue and the panel a moment opens. No red here (docs/LAYOUT.md §4.1): a negative receipt uses the
- * burn identity hue, a falling round offer the warning (energy) hue.
- */
+/** Icon, identity hue and the panel a moment opens. No red here (docs/LAYOUT.md §4.1): a negative receipt uses the burn identity hue. */
 export function momentLook(m: Moment): { icon: IconName; color: string; panel: Panel } {
   const panel = momentPanel(m.kind)
   switch (m.kind) {
@@ -60,12 +46,6 @@ export function momentLook(m: Moment): { icon: IconName; color: string; panel: P
       return { icon: 'rocket', color: 'var(--color-brand)', panel }
     case 'outcome':
       return { icon: 'hourglass', color: 'var(--color-kind-decision)', panel }
-    case 'goal':
-      return { icon: 'star', color: 'var(--color-g-equity)', panel }
-    case 'roundWindow':
-      return { icon: 'rocket', color: 'var(--color-brand)', panel }
-    case 'roundWeek':
-      return { icon: 'handshake', color: m.to >= m.from ? 'var(--color-positive)' : 'var(--color-energy)', panel }
   }
 }
 
@@ -93,12 +73,6 @@ export function momentText(m: Moment): string {
       return t('strip.release', { project: m.project, level: releaseName(m.level, m.update), u: Math.round(m.users), m: money(m.mrr) })
     case 'outcome':
       return t('outcome.line', { option: m.option, effects: m.effects })
-    case 'goal':
-      return t('strip.goal', { v: m.text })
-    case 'roundWindow':
-      return `${t('moment.roundWindow', { stage: m.stage })} · ${t('moment.roundWindowSub')}`
-    case 'roundWeek':
-      return t('strip.roundWeek', { w: m.week, n: m.weeks, a: money(m.from), b: money(m.to) }) + (m.pitch ? ` · ${t('moment.roundWeekSub')}` : '')
   }
 }
 
@@ -134,22 +108,6 @@ export function MomentLine({ m }: { m: Moment }) {
         <span>
           <span className={main}>{t('outcome.title')}</span>
           <span className={sub}> · {t('outcome.line', { option: m.option, effects: m.effects })}</span>
-        </span>
-      )
-    case 'goal':
-      return <span className={main}>{t('strip.goal', { v: m.text })}</span>
-    case 'roundWindow':
-      return (
-        <span>
-          <span className={main}>{t('moment.roundWindow', { stage: m.stage })}</span>
-          <span className={sub}> · {t('moment.roundWindowSub')}</span>
-        </span>
-      )
-    case 'roundWeek':
-      return (
-        <span className="tabular">
-          <span className={main}>{t('strip.roundWeek', { w: m.week, n: m.weeks, a: money(m.from), b: money(m.to) })}</span>
-          {m.pitch && <span className="text-brand-ink"> · {t('moment.roundWeekSub')}</span>}
         </span>
       )
   }

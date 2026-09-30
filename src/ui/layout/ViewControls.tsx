@@ -1,12 +1,13 @@
-// View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), settings.
-// No card of their own: they sit inside the top bar, divided from the speed control by a 1px rule.
-import { useGameStore } from '../../store/gameStore'
+// View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, Liderlik,
+// settings. No card of their own: they sit inside the top bar, divided from the speed control by a 1px rule.
+import { useEffect, useRef } from 'react'
+import { achievementsBadge, useGameStore } from '../../store/gameStore'
 import type { ZoomLevel } from '../../store/types'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { IconButton } from '../primitives'
 import { useCloud } from '../../net/cloud'
-import { toggleLeaderboard } from '../shortcuts'
+import { toggleAchievements, toggleLeaderboard } from '../shortcuts'
 
 /** Gear → settings in the single panel (again closes it). */
 export function toggleSettings() {
@@ -40,9 +41,44 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
           TR
         </button>
       )}
+      <AchievementsButton size={size} />
       <LeaderboardButton size={size} />
       <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={size} active={settingsOpen} />
     </div>
+  )
+}
+
+/** One short pop when the badge grows (a new concept or goal): the only notice an achievement gets. */
+const POP_MS = 600
+
+/**
+ * Book → Kazanımlar (K, docs/GAMEPLAY_V2.md §12): stage goals, the concept shelf, Keşif. The badge counts concepts
+ * waiting to be read + goals done since it was last opened; when it grows the icon pops once (audio plays the
+ * milestone cue). Nothing else announces an achievement.
+ */
+function AchievementsButton({ size }: { size: number }) {
+  const n = useGameStore((s) => achievementsBadge(s.state, s.ui.seenGoals))
+  const open = useGameStore((s) => s.ui.panel?.kind === 'journal')
+  const box = useRef<HTMLSpanElement>(null)
+  const prev = useRef(n)
+  useEffect(() => {
+    const grew = n > prev.current
+    prev.current = n
+    if (!grew || typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    box.current?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.22)' }, { transform: 'scale(1)' }], { duration: POP_MS, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1.3)' })
+  }, [n])
+  return (
+    <span ref={box} className="relative inline-flex shrink-0">
+      <IconButton icon="book" label={t('achv.open')} onClick={toggleAchievements} size={size} active={open} />
+      {n > 0 && (
+        <span
+          aria-hidden="true"
+          className="tabular pointer-events-none absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-on-ink ring-2 ring-surface"
+        >
+          {n}
+        </span>
+      )}
+    </span>
   )
 }
 

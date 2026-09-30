@@ -1,15 +1,30 @@
 // Integration: store ⇄ engine ⇄ content. M2/M3 chain: hire → desk → sit & work → project → users; 10 min in the garage.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONCEPTS, FURNITURE } from '../content'
+import { balance } from '../engine'
+import { promoteConcept } from '../engine/concepts'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY } from '../engine/types'
 import type { GameEvent, GameState, HudWidget } from '../engine/types'
 import { autoPin, effectivePins, PIN_MAX, pinEvictee, unseenMetrics } from './metricPins'
 import { readUiSave, UI_KEY } from './save'
-import { CONCEPT_MINIMIZE_DAYS, effectiveSpeed, hasImportantMoment, offerWaiting, panelSelection, pauseReasonsOf, PAYDAY_SLOW_RUNWAY_MONTHS, useGameStore } from './gameStore'
+import {
+  achievementsBadge,
+  blockingOverlay,
+  effectiveSpeed,
+  hasImportantMoment,
+  hasInterrupt,
+  offerWaiting,
+  panelSelection,
+  pauseReasonsOf,
+  PAYDAY_SLOW_RUNWAY_MONTHS,
+  useGameStore,
+  waitingConcepts,
+} from './gameStore'
+import type { Overlay } from './types'
 
 const store = () => useGameStore.getState()
 
-/** Plays `seconds` of real time at the current speed in 60 fps frames; the "player" opens concept bubbles. */
+/** Plays `seconds` of real time at the current speed in 60 fps frames; the "player" opens concepts from the badge. */
 function play(seconds: number, onDay?: (day: number) => void) {
   const frames = Math.round(seconds * 60)
   let lastDay = -1
@@ -17,8 +32,7 @@ function play(seconds: number, onDay?: (day: number) => void) {
     store().tick(1 / 60)
     const s = store().state
     if (s.gameOver) return
-    const active = s.concepts.active
-    if (active) store().dispatch({ type: 'openConcept', conceptId: active.id })
+    for (const id of waitingConcepts(s)) store().dispatch({ type: 'openConcept', conceptId: id })
     const day = Math.floor(s.time.day)
     if (day !== lastDay) {
       lastDay = day
@@ -319,11 +333,17 @@ describe('focus (CORE_LOOP phase 0)', () => {
     return cardId
   }
   /** Puts a triggered concept bubble on screen at the current day. */
-  function withConcept(id = 'runway' as const): void {
-    const st = store().state
-    useGameStore.setState({
-      state: { ...st, concepts: { ...st.concepts, triggered: [...st.concepts.triggered, id], queue: [], active: { id, shownDay: st.time.day } } },
-    })
+  /** The engine's own promotion: the concept becomes active and its speaker walks in as a concept visitor. */
+  function withConcept(id = 'runway' as const): string {
+    const st = structuredClone(store().state)
+    st.concepts.triggered.push(id)
+    st.concepts.queue = [id]
+    st.concepts.active = undefined
+    promoteConcept(st, CONCEPTS, true)
+    useGameStore.setState({ state: st })
+    const v = st.visitors.find((x) => x.purpose === 'concept' && x.refId === id)
+    if (!v) throw new Error('no concept visitor')
+    return v.id
   }
 
   it('the expanded scene decision bubble pauses; collapsing it resumes the previous speed', () => {
@@ -369,25 +389,67 @@ describe('focus (CORE_LOOP phase 0)', () => {
     store().setSlowOnMoments(true)
   })
 
-  it('an unclicked concept bubble shrinks after CONCEPT_MINIMIZE_DAYS of game time, never while still', () => {
-    withConcept()
-    // Paused (start): real seconds pass, the bubble stays.
-    store().tick(SECONDS_PER_DAY * (CONCEPT_MINIMIZE_DAYS + 5))
-    expect(store().state.concepts.active?.id).toBe('runway')
-    // Flowing at 1×: just before the limit it is still up, after it it is an icon.
-    store().dispatch({ type: 'setSpeed', speed: 1 })
-    for (let i = 0; i < (CONCEPT_MINIMIZE_DAYS - 1) * 4; i++) store().tick(SECONDS_PER_DAY / 4)
-    expect(store().state.concepts.active?.id).toBe('runway')
-    // A Defter card open elsewhere holds time: no shrinking while reading.
-    store().openPanel({ kind: 'journal', conceptId: 'burn' })
+  it('a concept goes straight to the Kazanımlar badge: no scene bubble, no pause; only the open card pauses', () => {
+    const vid = withConcept()
+    expect(achievementsBadge(store().state, [])).toBe(1)
+    // Paused (start): nothing happens to it while time is still.
     store().tick(SECONDS_PER_DAY * 5)
     expect(store().state.concepts.active?.id).toBe('runway')
-    store().closePanel()
-    for (let i = 0; i < 8; i++) store().tick(SECONDS_PER_DAY / 4)
-    expect(store().state.concepts.active).toBeUndefined()
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    store().tick(SECONDS_PER_DAY)
+    // Time keeps flowing; the visitor stands silently and the badge already counts the concept.
+    expect(store().state.visitors.some((v) => v.id === vid)).toBe(true)
+    expect(waitingConcepts(store().state)).toEqual(['runway'])
+    expect(achievementsBadge(store().state, [])).toBe(1)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(1)
+    // Once the visitor's stay is over the concept moves to the shelf (still on the badge).
+    for (let d = 0; d < balance.CONCEPT_VISITOR_DAYS + 2; d++) store().tick(SECONDS_PER_DAY)
+    expect(store().state.visitors.some((v) => v.id === vid)).toBe(false)
+    expect(store().state.concepts.active?.id).not.toBe('runway')
     expect(store().state.concepts.minimized).toContain('runway')
+    expect(waitingConcepts(store().state)).toContain('runway')
     // Recorded like any action: a replay reproduces it.
     expect(store().exportReplay().actions.some((a) => a.action.type === 'minimizeConcept')).toBe(true)
+    // The Kazanımlar list alone never pauses; the card itself does, and only while open.
+    store().openPanel({ kind: 'journal' }, { root: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    store().openPanel({ kind: 'journal', conceptId: 'runway' })
+    expect(store().ui.pauseReasons).toEqual(['concept'])
+    store().openPanel({ kind: 'journal' }, { replace: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(1)
+  })
+
+  it('tapping the silent visitor who brought a concept opens its card (learned) and pauses while it is open', () => {
+    const vid = withConcept()
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    // A few days at 1×: the visitor is still there to be tapped.
+    store().tick(SECONDS_PER_DAY * 3)
+    expect(store().state.visitors.some((v) => v.id === vid)).toBe(true)
+    expect(store().ui.pauseReasons).toEqual([])
+    store().select({ kind: 'visitor', id: vid })
+    expect(store().ui.panel).toEqual({ kind: 'journal', conceptId: 'runway' })
+    expect(store().state.concepts.learned).toContain('runway')
+    expect(store().ui.pauseReasons).toEqual(['concept'])
+    expect(achievementsBadge(store().state, [])).toBe(0)
+    // Once learned the visitor is an ordinary one: tapping shows their detail.
+    store().select({ kind: 'visitor', id: vid })
+    expect(store().ui.panel?.kind).toBe('detail')
+  })
+
+  it('goals count on the badge until Kazanımlar marks them seen', () => {
+    const st = store().state
+    useGameStore.setState({ state: { ...st, goalsDone: ['g1', 'g2'] } })
+    expect(achievementsBadge(store().state, store().ui.seenGoals)).toBe(2)
+    store().markGoalsSeen()
+    expect(store().ui.seenGoals).toEqual(['g1', 'g2'])
+    expect(achievementsBadge(store().state, store().ui.seenGoals)).toBe(0)
+    useGameStore.setState((x) => ({ state: { ...x.state, goalsDone: ['g1', 'g2', 'g3'] } }))
+    expect(achievementsBadge(store().state, store().ui.seenGoals)).toBe(1)
+    // A new run starts with nothing seen.
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    expect(store().ui.seenGoals).toEqual([])
   })
 
   it('at 4× an important moment slows the run to 1× (not a pause); 2× is left alone', () => {
@@ -546,11 +608,11 @@ describe('review fixes (store side)', () => {
     expect(hasImportantMoment(s, receipt(8, 6))).toBe(false)
   })
 
-  it('4× slows for the first decision card of a stage only, and for versions but not updates after 1.0', () => {
+  it('4× slows for every decision card (not only the stage\'s first), and for versions but not updates after 1.0', () => {
     const s = store().state
     const card = (history: GameState['decisions']['history']): GameState => ({ ...s, decisions: { ...s.decisions, history }, events: [...s.events, ev(s, 'decisionShown', { refId: 'x' })] })
     expect(hasImportantMoment(s, card([]))).toBe(true)
-    expect(hasImportantMoment(s, card([{ cardId: 'early-sidegig', optionIndex: 0, day: s.time.day }]))).toBe(false)
+    expect(hasImportantMoment(s, card([{ cardId: 'early-sidegig', optionIndex: 0, day: s.time.day }]))).toBe(true)
     const rel = (update?: number): GameState => ({
       ...s,
       releases: [{ id: 'rel-x', day: 0, projectId: 'p', projectName: 'P', level: 5, users: 1, mrr: 0, ...(update !== undefined ? { update } : {}) }],
@@ -744,5 +806,84 @@ describe('Metrikler: top-bar pins (docs/LAYOUT.md §5.2)', () => {
     expect(store().ui.pauseReasons).toEqual([])
     store().togglePanel('metrics')
     expect(store().ui.panel).toBeNull()
+  })
+})
+
+describe('center screens (docs/GAMEPLAY_V2.md §14.3)', () => {
+  beforeEach(() => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+  })
+  afterEach(() => store().closeOverlay())
+
+  const withEvent = (kind: string): GameState => {
+    const s = store().state
+    return { ...s, events: [...s.events, { id: s.nextId + 100, day: s.time.day, kind: kind as GameEvent['kind'] }] }
+  }
+
+  it('center overlays never pause; moveScene still does', () => {
+    for (const o of [{ kind: 'stats' }, { kind: 'stats', tab: 'team' }, { kind: 'lawbook' }, { kind: 'market' }] as Overlay[]) {
+      store().openOverlay(o)
+      expect(store().ui.pauseReasons).toEqual([])
+      expect(blockingOverlay(store().ui)).toBeNull()
+      expect(effectiveSpeed(store())).toBe(1)
+      expect(pauseReasonsOf({ overlay: o, panel: null })).toEqual([])
+    }
+    store().openOverlay({ kind: 'moveScene' })
+    expect(store().ui.pauseReasons).toEqual(['modal'])
+    expect(blockingOverlay(store().ui)).toEqual({ kind: 'moveScene' })
+  })
+
+  it('openOverlay(stats) then tick: the day moves on', () => {
+    store().openOverlay({ kind: 'stats' })
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY)
+    expect(store().state.time.day).toBeCloseTo(day + 1, 6)
+    expect(store().ui.overlay).toEqual({ kind: 'stats' })
+  })
+
+  it('one surface: a center screen closes the panel, a panel closes the center screen', () => {
+    store().togglePanel('team')
+    store().openOverlay({ kind: 'stats' })
+    expect(store().ui.panel).toBeNull()
+    store().openPanel({ kind: 'growth' })
+    expect(store().ui.overlay).toBeNull()
+    expect(store().ui.panel).toEqual({ kind: 'growth' })
+    // A blocking modal keeps the panel under its backdrop, and a panel does not close the modal.
+    store().openOverlay({ kind: 'victory' })
+    expect(store().ui.panel).toEqual({ kind: 'growth' })
+    store().openPanel({ kind: 'team' })
+    expect(store().ui.overlay).toEqual({ kind: 'victory' })
+  })
+
+  it('toggleCenter opens, again closes; it never replaces a blocking modal', () => {
+    store().toggleCenter('stats')
+    expect(store().ui.overlay).toEqual({ kind: 'stats' })
+    store().toggleCenter('stats')
+    expect(store().ui.overlay).toBeNull()
+    store().openOverlay({ kind: 'postMortem' })
+    store().toggleCenter('stats')
+    expect(store().ui.overlay).toEqual({ kind: 'postMortem' })
+  })
+
+  it('stats open + decisionShown: the screen closes, 4× drops to 1×, the tick goes on', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    store().openOverlay({ kind: 'stats' })
+    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.decisions.active).toBeDefined()
+    expect(store().ui.overlay).toBeNull()
+    expect(store().state.time.speed).toBe(1)
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY)
+    expect(store().state.time.day).toBeGreaterThan(day)
+  })
+
+  it('interrupting events: cards, the round window, cash tension (engine kinds still to come); not a hire or a release', () => {
+    const s = store().state
+    for (const k of ['decisionShown', 'roundWindow', 'payrollMissed', 'paydayShort', 'crisis', 'roundFailed', 'loanCalled']) {
+      expect(hasInterrupt(s, withEvent(k)), k).toBe(true)
+      expect(hasImportantMoment(s, withEvent(k)), k).toBe(true)
+    }
+    for (const k of ['hired', 'release', 'payday', 'goalDone', 'conceptQueued']) expect(hasInterrupt(s, withEvent(k)), k).toBe(false)
   })
 })

@@ -87,7 +87,6 @@ export const LOOP_TEXT: Record<string, string> = {
   'release.title': 'Yayında! {project} {level}',
   'release.wave': '+{u} kullanıcı · MRR +{m}',
   'release.banner': 'Yayında! {level}',
-  'release.waveShort': '+{u} kullanıcı',
 
   // Valuation breakdown (değerleme dökümü)
   'val.pre': 'Değerleme = ekip {t} × $40K ({tv}) + {u} kullanıcı × $150 ({uv}) + {l} yayında × $100K ({lv})',
@@ -100,7 +99,6 @@ export const LOOP_TEXT: Record<string, string> = {
   'goals.reward': 'Her ☆ hedef, sonraki turda satılan hisseden 1 puan düşer. Kaçırmanın cezası yok.',
   'goals.done': 'Tamam',
   'goals.final': 'Son düzlük: 1 milyar dolar değerleme.',
-  'goals.toast': 'Hedef tamam: {v}',
   'goals.stars': '☆ {a}/{b}',
 
   // Kararın → sonucu
@@ -167,12 +165,6 @@ export const LOOP_TEXT: Record<string, string> = {
   'pitch.metrics.desc': 'Rakamlar konuşur: 3 aylık büyüme {v}, istenen {t} → teklif {d}',
   'pitch.story.desc': 'Risk: teklif {a} ile {b} arası (itibarla artar) · enerji −{e}',
   'pitch.coinvestor.desc': 'Tur {w} hafta kısalır · hisse +{e}',
-
-  // Moment cards (round)
-  'moment.roundWindow': '{stage} turu için pencere açıldı',
-  'moment.roundWindowSub': 'Şimdi mi, biraz daha mı? Büyüme › Tur',
-  'moment.roundWeek': 'Tur haftası {w}/{n} · teklif {a} → {b}',
-  'moment.roundWeekSub': 'Bu haftanın pitch’ini seç',
 
   // "Elle kullanıcı bul" saturation (dont-scale)
   'founder.findUsers.preview': '{r} kullanıcı · bu ay {n} tam hak',

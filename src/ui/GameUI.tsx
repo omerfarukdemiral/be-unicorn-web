@@ -2,7 +2,8 @@
 // pointer-events-auto. Three fixed surfaces and one strip (docs/LAYOUT.md §1): the top bar (stage · gauges · time),
 // the single right panel (phone: bottom sheet), the bottom bar (founder actions · panel tabs) with the notification
 // strip just above it. The office is framed in the area between them (store.ui.sceneInset, layout/useSceneInset).
-// Only move scene / post-mortem / victory are centered modals (ModalHost).
+// Only move scene / post-mortem / victory are centered modals (ModalHost); the center screens (statistics…) share the
+// overlay slot but never pause, and the K / I keys reach Kazanımlar and İstatistik (shortcuts.ts).
 import { useEffect, useMemo } from 'react'
 import type { DockTab } from '../store/types'
 import { useGameStore } from '../store/gameStore'

@@ -1,13 +1,17 @@
-// Defter: bookshelf of learned concepts (one book per card), plus waiting (minimized) bubbles.
+// Kazanımlar (top-bar book icon, K; docs/GAMEPLAY_V2.md §12): ☆ stage goals, the concept shelf (one book per learned
+// card, plus the concepts waiting to be read) and Keşif (hidden / thread cards, filled by a later wave).
+// Opening it clears the goals part of the badge.
+import { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { CONCEPT_IDS, type ConceptId } from '../../engine/types'
-import { useGameStore } from '../../store/gameStore'
+import { useGameStore, waitingConcepts } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { cx, Empty, SectionTitle } from '../primitives'
 import { readableOn } from '../theme'
 import { conceptById, openConceptCard } from '../uiActions'
 import { NotebookCard } from '../NotebookCard'
+import { GoalsCard } from './GoalsCard'
 
 const PER_SHELF = 9
 
@@ -15,11 +19,15 @@ export function conceptTitle(id: ConceptId): string {
   return t(`concept.${id}`)
 }
 
-/** Defter shelf; `conceptId` shows that card on top (opened from a bubble, a decision or the shelf). */
+/** Kazanımlar; `conceptId` shows that card on top (opened from the badge list, a visitor, a decision or the shelf). */
 export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
   const openPanel = useGameStore((s) => s.openPanel)
-  const { learned, minimized } = useGameStore(useShallow((s) => ({ learned: s.state.concepts.learned, minimized: s.state.concepts.minimized })))
-  const waiting = minimized.filter((id) => !learned.includes(id))
+  const markGoalsSeen = useGameStore((s) => s.markGoalsSeen)
+  const learned = useGameStore((s) => s.state.concepts.learned)
+  const waiting = useGameStore(useShallow((s) => waitingConcepts(s.state)))
+  const goalsDone = useGameStore((s) => s.state.goalsDone)
+  // Open = seen: goals reached while it is open never count on the badge either.
+  useEffect(() => markGoalsSeen(), [goalsDone, markGoalsSeen])
 
   // Fixed shelf order (catalog order) so books keep their place.
   const slots = CONCEPT_IDS.map((id) => ({ id, learned: learned.includes(id) }))
@@ -33,6 +41,7 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
           <NotebookCard conceptId={conceptId} onClose={() => openPanel({ kind: 'journal' }, { replace: true })} />
         </div>
       )}
+      <GoalsCard />
       {waiting.length > 0 && (
         <section>
           <SectionTitle>{t('journal.waiting')}</SectionTitle>
@@ -90,6 +99,10 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
             </div>
           ))}
         </div>
+      </section>
+      <section>
+        <SectionTitle>{t('achv.discovery')}</SectionTitle>
+        <Empty text={t('achv.discoveryEmpty')} icon="sparkle" />
       </section>
     </div>
   )

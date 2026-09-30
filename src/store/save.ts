@@ -6,7 +6,7 @@ import { cleanMetricIds, PIN_MAX } from './metricPins'
 
 export const SAVE_KEY = 'be-unicorn:save'
 export const PROFILE_KEY = 'be-unicorn:profile'
-/** UI profile (docs/LAYOUT.md §5.2): top-bar pins survive runs and reloads; the game save never holds UI state. */
+/** UI profile (docs/LAYOUT.md §5.2): top-bar pins and seen badges survive reloads; the game save never holds UI state. */
 export const UI_KEY = 'be-unicorn:ui'
 /** When the local save was last written and for which account (cloud sync picks the newer of local and cloud). */
 export const SAVE_META_KEY = 'be-unicorn:save-meta'
@@ -28,6 +28,8 @@ export interface UiSave {
   pinnedMetrics: HudWidget[]
   seenMetrics: HudWidget[]
   pinTouched: boolean
+  /** Goal ids already seen in Kazanımlar (the achievements badge counts the others). */
+  seenGoals: string[]
 }
 
 /** Survives bankruptcies: founder XP carries into the next run (PLAN §5.10). */
@@ -117,6 +119,7 @@ export function readUiSave(): Partial<UiSave> {
     if (Array.isArray(p.pinnedMetrics)) out.pinnedMetrics = cleanMetricIds(p.pinnedMetrics, HUD_WIDGETS).slice(-PIN_MAX)
     if (Array.isArray(p.seenMetrics)) out.seenMetrics = cleanMetricIds(p.seenMetrics, HUD_WIDGETS)
     if (typeof p.pinTouched === 'boolean') out.pinTouched = p.pinTouched
+    if (Array.isArray(p.seenGoals)) out.seenGoals = p.seenGoals.filter((x): x is string => typeof x === 'string')
     return out
   } catch {
     return {}
@@ -125,7 +128,7 @@ export function readUiSave(): Partial<UiSave> {
 
 export function writeUiSave(u: UiSave): void {
   try {
-    storage()?.setItem(UI_KEY, JSON.stringify({ v: 1, pinnedMetrics: u.pinnedMetrics, seenMetrics: u.seenMetrics, pinTouched: u.pinTouched }))
+    storage()?.setItem(UI_KEY, JSON.stringify({ v: 1, pinnedMetrics: u.pinnedMetrics, seenMetrics: u.seenMetrics, pinTouched: u.pinTouched, seenGoals: u.seenGoals }))
   } catch {
     /* ignore */
   }

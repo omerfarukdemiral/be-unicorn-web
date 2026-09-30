@@ -1,7 +1,7 @@
 // Wires sound cues to the game: engine events (own cursor over state.events), panel changes,
-// speed/pause, action errors, game over — plus a soft tap for any UI button press.
+// speed/pause, action errors, game over, the Kazanımlar badge growing — plus a soft tap for any UI button press.
 import type { GameEvent, GameEventKind, GameState } from '../engine/types'
-import { useGameStore } from '../store/gameStore'
+import { achievementsBadge, blockingOverlay, useGameStore } from '../store/gameStore'
 import type { GameStore } from '../store/types'
 import { usePrefs } from '../ui/hooks'
 import { playCue, setAudioEnabled, unlockAudio, type CueId } from './synth'
@@ -22,7 +22,7 @@ const EVENT_CUES: Partial<Record<GameEventKind, CueId>> = {
   roundStarted: 'roundStarted',
   roundClosed: 'roundClosed',
   stageUp: 'stageUp',
-  conceptQueued: 'conceptQueued',
+  // A concept arriving plays the Kazanımlar cue (badge grows, see onStore), not its own.
   conceptLearned: 'conceptLearned',
   decisionShown: 'decisionShown',
   decisionAnswered: 'decisionAnswered',
@@ -51,7 +51,6 @@ const PRIORITY: Partial<Record<CueId, number>> = {
   decisionAnswered: 3,
   actionDone: 3,
   actionStart: 2,
-  conceptQueued: 1,
   visitor: 1,
 }
 
@@ -117,10 +116,15 @@ function onStore(next: GameStore, prev: GameStore): void {
 
   if (s.projects.length > p.projects.length) cue('projectStarted')
 
+  // A new concept or goal lands on the Kazanımlar badge: the one sound it makes (docs/GAMEPLAY_V2.md §12).
+  if (s.concepts !== p.concepts || s.goalsDone !== p.goalsDone) {
+    if (achievementsBadge(s, next.ui.seenGoals) > achievementsBadge(p, next.ui.seenGoals)) cue('milestone')
+  }
+
   if (next.ui.lastError && next.ui.lastError.at !== prev.ui.lastError?.at) cue('error')
 
-  // Player speed changes only (overlays pause the game themselves).
-  if (s.time.speed !== p.time.speed && next.ui.overlay === null && prev.ui.overlay === null) {
+  // Player speed changes only (blocking overlays pause the game themselves; time flows under a center screen).
+  if (s.time.speed !== p.time.speed && blockingOverlay(next.ui) === null && blockingOverlay(prev.ui) === null) {
     if (s.time.speed === 0) cue('pause')
     else if (p.time.speed === 0) cue('resume')
     else cue('speed')

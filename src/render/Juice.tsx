@@ -1,6 +1,6 @@
 // Scene juice for the core loop beats (docs/CORE_LOOP.md §7), kept apart from Office/Npc/Character:
-// - release moment: a banner over the founder desk, a light pulse, confetti (from v1 on; MVP already
-//   celebrates via projectLaunched) and a wave of simple user figures walking in through the door;
+// - release moment: a banner over the founder desk (version name only, the numbers are in the strip), a light pulse,
+//   confetti (from v1 on; MVP already celebrates via projectLaunched) and a wave of simple user figures walking in;
 // - payday: a short warm-red light pulse over the office.
 // Watches state.events with its own cursor; a new game / loaded save skips the history.
 import { Html } from '@react-three/drei'
@@ -121,8 +121,8 @@ function ReleaseBanner({ wave, at }: { wave: Wave; at: XZ }) {
         className="animate-pop-in whitespace-nowrap rounded-[10px] px-3 py-1.5 text-center shadow-pop"
         style={{ background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)' }}
       >
+        {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
         <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>{text('release.banner', { level })}</div>
-        <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9 }}>{text('release.waveShort', { u: Math.round(r.users) })}</div>
       </div>
     </Html>
   )

@@ -67,7 +67,22 @@ export interface DecisionOption {
   conceptId?: ConceptId
 }
 
-export type DecisionCategory = 'normal' | 'crisis' | 'rival'
+/** 'thread': a step of a card thread (GAMEPLAY V2 §9.2). */
+export type DecisionCategory = 'normal' | 'crisis' | 'rival' | 'thread'
+
+/** Card threads (GAMEPLAY V2 §9.2): recurring characters whose cards follow each other. */
+export const THREAD_IDS = ['mentor', 'investor', 'customer', 'rival', 'press'] as const
+export type ThreadId = (typeof THREAD_IDS)[number]
+
+/**
+ * A card's place in a thread: step > 1 waits for the thread's step − 1 card in the history; `after` (option indexes of
+ * that step) narrows it to the branch the player took. At most one card per thread per stage.
+ */
+export interface CardThread {
+  id: ThreadId
+  step: number
+  after?: readonly number[]
+}
 
 export interface DecisionCard {
   id: DecisionCardId
@@ -94,6 +109,10 @@ export interface DecisionCard {
   defaultOption?: number
   /** Days before the default applies (crisis / rescue cards are short); omitted = DECISION_DEFAULT_AFTER_DAYS. */
   defaultAfterDays?: number
+  /** Thread step (GAMEPLAY V2 §9.2); thread cards weigh THREAD_CARD_WEIGHT unless `weight` says otherwise. */
+  thread?: CardThread
+  /** A secret card (GAMEPLAY V2 §9.2): rare, deterministic, counted by the discovery grid. */
+  secret?: boolean
 }
 
 // ---------------------------------------------------------------------------

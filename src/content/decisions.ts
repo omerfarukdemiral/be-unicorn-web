@@ -2,8 +2,9 @@
 // Effect notes for the engine:
 //   - modifiers.value is a multiplier, except kind 'morale' where it is an additive morale-target bonus.
 //   - cashPercent stays within ±0.25 here; engine caps again.
-//   - Flags set by cards: rushedProject, starHire, vcHeavy, bootstrapLean, nichePath, platformPath,
-//     bridgeLoan, emergencyLoan (engine may turn the loan flags into finance.debt).
+//   - Flags set by cards: rushedProject, starHire, vcHeavy, bootstrapLean, nichePath, platformPath.
+//   - Loans (GAMEPLAY V2 §6.2) are `effects.loan` terms; the engine sizes them on the burn and closes every loan offer
+//     while one runs (one loan only).
 //   - Rival cards read flags.rivalPressure (0–1), maintained by the engine.
 import type { GameState, ModifierKind } from '../engine/types'
 import type { DecisionCard } from './types'
@@ -1226,13 +1227,13 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'crisis',
     speaker: 'investor',
     question: 'Tur bitmeden kasa bitebilir. Mevcut yatırımcı köprü kredi öneriyor.',
-    condition: (s) => s.round?.active === true && s.finance.runway !== null && s.finance.runway < 2,
+    condition: (s) => !s.finance.loan && s.round?.active === true && s.finance.runway !== null && s.finance.runway < 2,
     weight: 3,
     options: [
       {
         label: 'Köprüyü al',
-        tradeoff: { gain: 'Kasa nefes alır', cost: '%3 hisse ve borç' },
-        effects: { cashPercent: 0.25, equity: -0.03, setFlag: 'bridgeLoan' },
+        tradeoff: { gain: 'Dört aylık gider kasada', cost: '%3 hisse, faiz, şart' },
+        effects: { loan: { burnMonths: 4, months: 9, rate: 0.02, covenantRunway: 2 }, equity: -0.03 },
         reflection: 'Köprü, karşıya geçmek için; üstünde yaşamak için değil.',
         conceptId: 'fundraise-time',
       },
@@ -1246,12 +1247,13 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
   {
-    id: 'emergency-bridge',
+    id: 'emergency-loan',
     stage: 0,
     category: 'crisis',
     speaker: 'mentor',
     question: 'Kasa eksiye düştü. Birlikte bir çıkış yolu bulalım.',
-    condition: (s) => s.stats.cash < 0,
+    // One loan only: with a loan running this rescue does not come (GAMEPLAY V2 §6.2).
+    condition: (s) => s.stats.cash < 0 && !s.finance.loan,
     weight: 5,
     once: false,
     // The rescue must land well before the 60-day bankruptcy clock: unanswered, the savings go in after 14 days.
@@ -1260,8 +1262,8 @@ export const DECISIONS: readonly DecisionCard[] = [
     options: [
       {
         label: 'Acil kredi çek',
-        tradeoff: { gain: 'Kasa toparlanır', cost: 'Borç ve faiz' },
-        effects: { cash: 15_000, setFlag: 'emergencyLoan' },
+        tradeoff: { gain: 'Üç aylık gider kasada', cost: 'Faiz ve runway şartı' },
+        effects: { loan: { burnMonths: 3, months: 12, rate: 0.03, covenantRunway: 1 } },
         reflection: 'Kredi zaman satın alır; zamanı ne için kullanacağın önemli.',
         conceptId: 'runway',
       },
@@ -1296,7 +1298,7 @@ export const DECISIONS: readonly DecisionCard[] = [
       {
         label: 'Kendi yolunu bul',
         tradeoff: { gain: 'Hisse korunur', cost: 'Olağan kurtarma masada' },
-        effects: { queueCard: 'emergency-bridge' },
+        effects: { queueCard: 'emergency-loan' },
         reflection: 'Hisse sende kalır; çıkış yolu yine masada.',
         conceptId: 'burn',
       },

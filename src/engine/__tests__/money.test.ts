@@ -1,10 +1,12 @@
 // Phase 3 (docs/CORE_LOOP.md §5, §10 Faz 3): money constraint, stage multiple cap, unanswered card default,
-// delayed effects inside the horizon, rescue loan → debt, v1 → v2 save migration.
+// delayed effects inside the horizon, rescue loan → debt, v1 → v2 save migration; GAMEPLAY V2 §6.2 the loan.
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { createEngine } from '../index'
 import { migrate } from '../save'
-import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState } from '../types'
+import { DECISIONS, type DecisionCard } from '../../content/index'
+import { isCardEligible } from '../decisions'
+import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type MonthReceipt } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
 describe('garage money (S1-b)', () => {
@@ -149,7 +151,7 @@ describe('delayed effects stay on the horizon', () => {
 })
 
 describe('rescue loan', () => {
-  it('cash from an emergencyLoan option becomes finance.debt', () => {
+  it('cash from a legacy emergencyLoan flag becomes the loan (finance.debt mirrors its balance)', () => {
     const card = fakeCard('loan', {
       options: [{ label: 'a', tradeoff: { gain: 'g', cost: 'c' }, effects: { cash: 15_000, setFlag: 'emergencyLoan' }, reflection: 'r' }],
     })
@@ -158,6 +160,186 @@ describe('rescue loan', () => {
     for (let i = 0; i < 60 && !s.decisions.active; i++) s = api.step(s, 1)
     s = api.applyAction(s, { type: 'answerDecision', cardId: 'loan', optionIndex: 0 }).state
     expect(s.finance.debt).toBe(15_000)
+    expect(s.finance.loan!.balance).toBe(15_000)
+    expect(s.finance.loan!.rateMonthly).toBe(B.LOAN_LEGACY_RATE)
+  })
+})
+
+describe('the loan (GAMEPLAY V2 §6.2: şeytanla anlaşma)', () => {
+  const TERMS = { burnMonths: 3, months: 12, rate: 0.03, covenantRunway: 1 }
+  const loanCard = (id: string, terms = TERMS): DecisionCard =>
+    fakeCard(id, {
+      category: 'crisis',
+      options: [
+        { label: 'a', tradeoff: { gain: 'g', cost: 'c' }, effects: { loan: terms }, reflection: 'r' },
+        { label: 'b', tradeoff: { gain: 'g', cost: 'c' }, effects: { morale: 1 }, reflection: 'r' },
+      ],
+    })
+  const api = createEngine(fakeContent({ decisions: [loanCard('loan'), loanCard('loan-2', { burnMonths: 4, months: 9, rate: 0.02, covenantRunway: 2 })] }))
+
+  /** A garage with one hire and no revenue (nothing launched), `cash` in the bank, day 0. */
+  function garage(cash: number): GameState {
+    let s = api.createGame({ seed: 1 })
+    s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
+    s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
+    const c = s.candidates.find((x) => x.dept === 'eng') ?? s.candidates[0]!
+    s = api.applyAction(s, { type: 'hire', candidateId: c.id }).state
+    return { ...s, stats: { ...s.stats, cash } }
+  }
+
+  /** The loan card comes (queued) and its loan option is taken. */
+  function borrow(s: GameState, id = 'loan'): GameState {
+    s = api.step({ ...s, decisions: { ...s.decisions, queue: [id] } }, 1)
+    expect(s.decisions.active?.cardId).toBe(id)
+    return api.applyAction(s, { type: 'answerDecision', cardId: id, optionIndex: 0 }).state
+  }
+
+  it('takes max(burn × burnMonths, LOAN_MIN[stage]) into cash; debt mirrors the balance', () => {
+    const s0 = api.step(garage(50_000), 1)
+    const s = borrow(s0)
+    const loan = s.finance.loan!
+    const amount = Math.round(Math.max(s0.finance.burn * TERMS.burnMonths, B.LOAN_MIN[0]!))
+    expect(loan.principal).toBeCloseTo(amount, -1)
+    expect(loan.balance).toBe(loan.principal)
+    expect(s.finance.debt).toBe(loan.balance)
+    expect(loan.covenantFromDay - s.time.day).toBeCloseTo(B.LOAN_COVENANT_GRACE_DAYS, 0)
+    expect(loan.interestOnlyUntil - s.time.day).toBeCloseTo(B.LOAN_INTEREST_ONLY_MONTHS * 30, 0)
+    expect(s.events.some((e) => e.kind === 'loanTaken')).toBe(true)
+  })
+
+  it('payday pays the interest on the receipt; no principal for the first 6 months, then amortization', () => {
+    let s = borrow(garage(50_000_000))
+    const loan0 = s.finance.loan!
+    s = api.step(s, 30 - s.time.day + 0.5)
+    const r = s.finance.lastReceipt!
+    expect(r.interest).toBeCloseTo(loan0.balance * loan0.rateMonthly, 6)
+    expect(r.loanRepay ?? 0).toBe(0)
+    expect(r.paid).toBeGreaterThan(r.salaries + r.rent + r.infra + r.ads + (r.founder ?? 0))
+    expect((s.finance.receipts!.at(-1) as MonthReceipt).interest).toBe(Math.round(r.interest!))
+    // Interest only until interestOnlyUntil (6 months): every payday before it repays nothing.
+    while (s.time.day + 30 < loan0.interestOnlyUntil) {
+      s = api.step(s, 30)
+      expect(s.finance.lastReceipt!.loanRepay ?? 0).toBe(0)
+      expect(s.finance.loan!.balance).toBe(loan0.balance)
+    }
+    s = api.step(s, 60)
+    expect(s.finance.lastReceipt!.loanRepay!).toBeGreaterThan(0)
+    expect(s.finance.loan!.balance).toBeLessThan(loan0.balance)
+    expect(s.finance.debt).toBe(s.finance.loan!.balance)
+  })
+
+  it('the covenant is not measured for 90 days; then warning → half called (rate × 1.5) → the rest called', () => {
+    let s = borrow(garage(50_000_000))
+    // Raise the bar out of reach: every measured payday is a breach.
+    s = { ...s, finance: { ...s.finance, loan: { ...s.finance.loan!, covenantRunway: 1e12 } } }
+    const from = s.finance.loan!.covenantFromDay
+    // Every payday before covenantFromDay (30, 60, 90) passes unmeasured.
+    const firstMeasured = Math.ceil(from / 30) * 30
+    while (s.time.day + 30 < firstMeasured) {
+      s = api.step(s, 30)
+      expect(s.finance.loan!.breaches).toBe(0)
+    }
+    s = api.step(s, firstMeasured - 0.5 - s.time.day)
+    expect(s.finance.loan!.breaches).toBe(0)
+    expect(s.events.some((e) => e.kind === 'loanWarning')).toBe(false)
+    s = api.step(s, 1)
+    expect(s.finance.loan!.breaches).toBe(1)
+    expect(s.events.some((e) => e.kind === 'loanWarning' && e.refId === 'warn')).toBe(true)
+    const before = s.finance.loan!
+    const cash = s.stats.cash
+    s = api.step(s, 30)
+    expect(s.finance.loan!.breaches).toBe(2)
+    expect(s.finance.loan!.balance).toBeCloseTo(before.balance * (1 - B.LOAN_CALL_SHARE), 3)
+    expect(s.finance.loan!.rateMonthly).toBeCloseTo(before.rateMonthly * B.LOAN_CALL_RATE_MULT, 9)
+    expect(s.events.some((e) => e.kind === 'loanWarning' && e.refId === 'half')).toBe(true)
+    expect(cash - s.stats.cash).toBeGreaterThan(before.balance * B.LOAN_CALL_SHARE)
+    // The called money is on the receipt (with the instalment), so the receipt explains the cash drop.
+    expect(s.finance.lastReceipt!.loanRepay).toBeCloseTo(before.balance * B.LOAN_CALL_SHARE, 3)
+    const half = s.finance.loan!.balance
+    s = api.step(s, 30)
+    expect(s.finance.lastReceipt!.loanRepay).toBeCloseTo(half, 3)
+    expect(s.finance.loan).toBeUndefined()
+    expect(s.finance.debt).toBe(0)
+    expect(s.events.some((e) => e.kind === 'loanCalled')).toBe(true)
+  })
+
+  it('a company with no revenue that takes the loan lives ≥ 90 days without closing a round', () => {
+    const s0 = api.step(garage(500), 1)
+    expect(s0.finance.mrr).toBe(0)
+    let s = borrow(s0)
+    s = api.step(s, 92)
+    expect(s.gameOver).toBeUndefined()
+    expect(s.finance.loan!.breaches).toBe(0)
+    expect(s.time.day).toBeGreaterThanOrEqual(90)
+  })
+
+  it('one loan only: with a loan running every loan offer is closed (eligibility and the queue)', () => {
+    let s = borrow(garage(50_000_000))
+    const p = s.finance.loan!.principal
+    const card2 = loanCard('loan-2')
+    expect(isCardEligible(card2, s)).toBe(false)
+    expect(isCardEligible(card2, { ...s, finance: { ...s.finance, loan: undefined, debt: 0 } })).toBe(true)
+    // An older save's debt before its lazy loan is written counts as a running loan.
+    expect(isCardEligible(card2, { ...s, finance: { ...s.finance, loan: undefined, debt: 5_000 } })).toBe(false)
+    s = api.step({ ...s, decisions: { ...s.decisions, active: undefined, queue: ['loan-2'] } }, 1)
+    expect(s.decisions.active?.cardId).not.toBe('loan-2')
+    expect(s.finance.loan!.principal).toBe(p)
+    // The real rescue and bridge cards close too.
+    const rescue = DECISIONS.find((c) => c.id === B.RESCUE_CARD_ID)!
+    const bridge = DECISIONS.find((c) => c.id === B.BRIDGE_CARD_ID)!
+    const broke = { ...s, stats: { ...s.stats, cash: -100 } }
+    expect(rescue.condition!(broke)).toBe(false)
+    expect(rescue.condition!({ ...broke, finance: { ...broke.finance, loan: undefined } })).toBe(true)
+    expect(isCardEligible(bridge, broke)).toBe(false)
+    expect(rescue.options.some((o) => o.effects.loan)).toBe(true)
+  })
+})
+
+describe('a legacy loan flag never stacks on the running loan', () => {
+  it('with a loan running, the option brings no cash and takes no equity', () => {
+    const card = fakeCard('legacy', {
+      category: 'crisis',
+      options: [{ label: 'a', tradeoff: { gain: 'g', cost: 'c' }, effects: { cash: 2_000_000, equity: -0.02, setFlag: 'bridgeLoan' }, reflection: 'r' }],
+    })
+    const api = createEngine(fakeContent({ decisions: [card] }))
+    let s = api.createGame({ seed: 1 })
+    const loan = { principal: 20_000, balance: 20_000, rateMonthly: 0.03, monthsLeft: 12, covenantRunway: 1, covenantFromDay: 999, interestOnlyUntil: 999, breaches: 0 }
+    s = api.step({ ...s, finance: { ...s.finance, loan, debt: loan.balance }, decisions: { ...s.decisions, queue: ['legacy'] } }, 1)
+    expect(s.decisions.active?.cardId).toBe('legacy')
+    const cash = s.stats.cash
+    const equity = s.stats.equity
+    s = api.applyAction(s, { type: 'answerDecision', cardId: 'legacy', optionIndex: 0 }).state
+    expect(s.stats.cash).toBe(cash)
+    expect(s.stats.equity).toBe(equity)
+    expect(s.finance.loan!.principal).toBe(20_000)
+    expect(s.finance.debt).toBe(20_000)
+  })
+})
+
+describe('save v3 → v4 (GAMEPLAY V2 §3.1: loan, strikes, stage reports)', () => {
+  it('an old debt becomes the loan on the legacy terms; a running round gets 0 strikes; no stage reports', () => {
+    const api = createEngine(fakeContent())
+    const s = api.step(api.createGame({ seed: 1 }), 40)
+    const v3 = structuredClone(s) as unknown as Record<string, unknown>
+    const fin = v3.finance as Record<string, unknown>
+    fin.debt = 20_000
+    delete fin.loan
+    delete v3.stageReports
+    v3.round = { active: true, targetStage: 1, startedDay: 30, weeksTotal: 8, weeksLeft: 6, offer: { amount: 1000, equity: 0.1, preMoney: 0 }, baseValuation: 1 }
+    const out = migrate({ version: 3, state: v3 })!
+    expect(out.finance.loan).toEqual({
+      principal: 20_000, balance: 20_000, rateMonthly: 0.02, monthsLeft: 12, covenantRunway: 1,
+      covenantFromDay: s.time.day + 90, interestOnlyUntil: s.time.day + 180, breaches: 0,
+    })
+    expect(out.round!.strikes).toBe(0)
+    expect(out.round!.ddStart).toBeUndefined()
+    expect(out.stageReports).toEqual([])
+    // No debt: no loan.
+    const clean = migrate({ version: 3, state: structuredClone(s) })!
+    expect(clean.finance.loan).toBeUndefined()
+    // The engine defaults the same lazily (a v4 save with debt but no loan).
+    const lazy = api.step({ ...s, finance: { ...s.finance, debt: 20_000 } }, 30)
+    expect(lazy.finance.loan!.principal).toBe(20_000)
   })
 })
 

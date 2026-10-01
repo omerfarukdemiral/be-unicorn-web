@@ -22,7 +22,7 @@ const NO_INSET = { top: 0, right: 0, bottom: 0 }
  * Cash-tension events the engine does not emit yet (docs/GAMEPLAY_V2.md §5, §6): listed here as plain strings so the
  * store rules are ready; the engine waves add them to GameEventKind.
  */
-type PendingEventKind = 'paydayShort' | 'crisis' | 'roundFailed' | 'loanCalled'
+type PendingEventKind = 'paydayShort' | 'crisis'
 
 /**
  * Events that interrupt a center screen: it closes so no card or payday desk is hidden behind it (and 4× drops to 1×).

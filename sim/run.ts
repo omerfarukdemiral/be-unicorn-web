@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, SECONDS_PER_DAY, balance } from '../src/engine/index'
-import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DAYS_5_MIN, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
+import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -465,6 +465,19 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   const inB = goodRuns.filter((r) => r.techDebtByStage[4] !== null).map((r) => r.rivalShareByStage[4]!)
   const shareB = median(inB)
   line(`- Rakip Σpay Series B sonu medyanı (iyi botlar, ${inB.length} koşu): ${shareB === null ? '—' : shareB.toFixed(2)} (hedef 0.15–0.35): **${yes(shareB !== null && shareB >= 0.15 && shareB <= 0.35)}** · Seed / A / C ${[2, 3, 5].map((st) => (median(goodRuns.filter((r) => r.techDebtByStage[st] !== null).map((r) => r.rivalShareByStage[st]!)) ?? 0).toFixed(2)).join(' / ')}`)
+}
+{
+  // GAMEPLAY V2 §6.2 loan and §6.3 failed rounds (good bots = the 4 archetypes).
+  const took = goodRuns.filter((r) => r.loansTaken > 0)
+  crit('İyi botlarda kredi alan koşu', band(took.length, goodRuns.length, 0, 0.3))
+  const alive = took.filter((r) => r.loanSurvived12m === true).length
+  crit(`Kredi alan iyi botların ${LOAN_SURVIVE_DAYS / 30} ay sonra hayatta olanı`, band(alive, took.length, 0.5, 1), took.length ? '' : ' (kredi alan yok)')
+  const failedRounds = goodRuns.reduce((a, r) => a + r.roundsFailed, 0)
+  const attempts = failedRounds + goodRuns.reduce((a, r) => a + r.roundsClosed, 0)
+  crit('Düşen tur payı, iyi botlar (ara bant; nihai %10–20 T20)', band(failedRounds, attempts, 0.05, 0.25), ` · down round ${goodRuns.reduce((a, r) => a + r.downRounds, 0)} · kredi çağrısı ${goodRuns.reduce((a, r) => a + r.loanCalled, 0)}`)
+  const info = (name: string, runs: BotRun[]) =>
+    `${name}: kredi ${runs.filter((r) => r.loansTaken > 0).length}/${runs.length} · çağrı ${runs.reduce((a, r) => a + r.loanCalled, 0)} · düşen tur ${runs.reduce((a, r) => a + r.roundsFailed, 0)} · down round ${runs.reduce((a, r) => a + r.downRounds, 0)}`
+  line(`- Bilgi: ${info('careless', careless)} · ${info('greedyGood', v2('greedyGood'))} · iplik adımı / koşu (iyi, medyan) ${median(goodRuns.map((r) => r.threadSteps)) ?? 0}`)
 }
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)

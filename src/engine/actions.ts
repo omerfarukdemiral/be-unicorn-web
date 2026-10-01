@@ -356,7 +356,7 @@ const minimizeConceptH: Handler<'minimizeConcept'> = ({ s, content }, a) => (min
 
 const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => answerDecision(s, content, a.cardId, a.optionIndex)
 
-const startRoundH: Handler<'startRound'> = ({ s, rng, content }, a) => startRound(s, rng, starsOfStage(s, content, s.stage), a.size ?? 'target')
+const startRoundH: Handler<'startRound'> = ({ s, rng, content }, a) => startRound(s, rng, starsOfStage(s, content, s.stage), a.size ?? 'target', a.down === true)
 
 const roundPitchH: Handler<'roundPitch'> = ({ s, rng }, a) => roundPitch(s, a.pitch, rng)
 

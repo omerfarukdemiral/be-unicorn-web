@@ -6,13 +6,15 @@
 // - offer = amount × (clamp(price × due diligence, floor, ceiling) + pitch bonus), where half the price is locked
 //   when the round starts (an early start is safe but cheap) and the amount follows the burn you actually run;
 // - close → cash, dilution, move. The bridge loan card still comes when cash runs out mid-round (tick.ts).
+// - GAMEPLAY V2 §6.3: a round can fail (strikes on what broke since the start, or the offer floor from week 4); the
+//   door stays shut ROUND_RETRY_DAYS, then a one-time down round (less money, more equity, no floor) is the way out.
 import * as B from './balance'
 import { clamp } from './economy'
 import { scheduleCrisis } from './decisions'
-import { applyMorale, unlockTool, unlockWidget } from './effects'
+import { applyMorale, loanOf, syncDebt, unlockTool, unlockWidget } from './effects'
 import { relocateOffice } from './office'
 import type { Rng } from './rng'
-import type { ActionErrorCode, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex } from './types'
+import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
 import { ROUND_PITCHES, ROUND_SIZES } from './types'
 import { incCounter, modifierMult, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
 import { ensureRivals, markRivalAnchor } from './world'
@@ -20,6 +22,10 @@ import { ensureRivals, markRivalAnchor } from './world'
 const WEEK_ACC = 'roundWeekAcc'
 /** Flag: the stage whose round window already announced itself (one roundWindow event per stage). */
 const WINDOW_FLAG = 'roundWindowStage'
+/** GAMEPLAY V2 §6.3 flags: the day and stage a round failed, and the stage whose down round was used. */
+const FAILED_DAY = 'roundFailedDay'
+const FAILED_STAGE = 'roundFailedStage'
+const DOWN_STAGE = 'downRoundStage'
 
 /** Valuation the round into `target` is priced against. */
 function targetValuationOf(target: StageIndex): number | null {
@@ -128,14 +134,41 @@ export function priceRatio(valuation: number, target: number): number {
   return target > 0 ? clamp(lo, hi, valuation / target) : 1
 }
 
-/** Price × diligence, in [ROUND_OFFER_FLOOR, ROUND_OFFER_CEIL]: what the numbers alone are worth. */
-export function metricsFactor(price: number, diligence: readonly DiligenceItem[]): number {
-  return clamp(B.ROUND_OFFER_FLOOR, B.ROUND_OFFER_CEIL, price * diligenceFactor(diligence))
+/** Price × diligence, in [floor, ROUND_OFFER_CEIL]: what the numbers alone are worth (a down round has no floor). */
+export function metricsFactor(price: number, diligence: readonly DiligenceItem[], floor = B.ROUND_OFFER_FLOOR): number {
+  return clamp(floor, B.ROUND_OFFER_CEIL, price * diligenceFactor(diligence))
 }
 
-/** Whole offer factor: metrics part + the pitch bonus (±PITCH_BONUS_CAP), never below ROUND_OFFER_FLOOR. */
-export function offerFactor(price: number, diligence: readonly DiligenceItem[], pitchBonus: number): number {
-  return Math.max(B.ROUND_OFFER_FLOOR, metricsFactor(price, diligence) + clamp(-B.PITCH_BONUS_CAP, B.PITCH_BONUS_CAP, pitchBonus))
+/** Whole offer factor: metrics part + the pitch bonus (±PITCH_BONUS_CAP), never below the floor. */
+export function offerFactor(price: number, diligence: readonly DiligenceItem[], pitchBonus: number, floor = B.ROUND_OFFER_FLOOR): number {
+  return Math.max(floor, metricsFactor(price, diligence, floor) + clamp(-B.PITCH_BONUS_CAP, B.PITCH_BONUS_CAP, pitchBonus))
+}
+
+/** Offer floor of a round: none on a down round (GAMEPLAY V2 §6.3). */
+function floorOf(r: RoundState): number {
+  return r.down ? 0 : B.ROUND_OFFER_FLOOR
+}
+
+/** Days until a round can start again after a failed one (0 = it can). */
+export function roundRetryIn(s: GameState): number {
+  const failed = s.flags[FAILED_DAY]
+  if (typeof failed !== 'number') return 0
+  return Math.max(0, Math.ceil(failed + B.ROUND_RETRY_DAYS - s.time.day - 1e-9))
+}
+
+/** The one-time down round is open: a round failed in this stage and no down round was started here yet. */
+export function downRoundOpen(s: GameState): boolean {
+  return Number(s.flags[FAILED_STAGE] ?? -1) === s.stage && Number(s.flags[DOWN_STAGE] ?? -1) !== s.stage
+}
+
+/** Equity a down round sells for a normal round's `equity` (× DOWN_ROUND_EQUITY, capped). */
+function downEquity(equity: number): number {
+  return Math.min(B.ROUND_EQUITY_MAX, equity * B.DOWN_ROUND_EQUITY)
+}
+
+/** Diligence checks met (and asked) right now: what a strike is measured against. */
+function metIds(items: readonly DiligenceItem[]): DiligenceId[] {
+  return items.filter((d) => d.asked !== false && d.met).map((d) => d.id)
 }
 
 /** Half the price is locked when the round starts: √(price at start × price now). */
@@ -154,13 +187,19 @@ function live(r: RoundState): Required<Pick<RoundState, 'baseAmount' | 'targetVa
 
 /** Amount at factor 1 right now: re-sized on today's burn (older saves without `months` keep their fixed base). */
 function liveBase(s: GameState, r: RoundState): number {
-  return r.months !== undefined ? roundAmountFor(s, r.targetStage, r.months) : live(r).baseAmount
+  const base = r.months !== undefined ? roundAmountFor(s, r.targetStage, r.months) : live(r).baseAmount
+  return r.down ? base * B.DOWN_ROUND_AMOUNT : base
+}
+
+/** Price part of the running round today (half locked at the start). */
+function livePrice(s: GameState, r: RoundState): number {
+  const l = live(r)
+  return lockedPrice(l.priceAtStart, priceRatio(s.finance.valuation, l.targetValuation))
 }
 
 /** Offer factor of the running round with today's numbers. */
 function liveFactor(s: GameState, r: RoundState, diligence: readonly DiligenceItem[]): number {
-  const l = live(r)
-  return offerFactor(lockedPrice(l.priceAtStart, priceRatio(s.finance.valuation, l.targetValuation)), diligence, l.pitchBonus)
+  return offerFactor(livePrice(s, r), diligence, live(r).pitchBonus, floorOf(r))
 }
 
 /** Offer the running round would close at with today's numbers. */
@@ -206,10 +245,24 @@ export function roundView(s: GameState, stars: number): RoundView | undefined {
     view.priceAtStart = live(r).priceAtStart
     view.projected = liveOffer(s, r, diligence)
     if (r.pitchDue !== undefined) view.pitchOptions = ROUND_PITCHES.map((p) => pitchOption(s, p))
+    view.strikes = r.strikes ?? 0
+    view.risk = Math.min(1, view.strikes / B.ROUND_FAIL_STRIKES)
+    if (r.down) view.downRound = true
   } else {
+    const down = downRoundOpen(s)
+    if (down) view.downRound = true
+    const wait = roundRetryIn(s)
+    if (wait > 0) view.retryIn = wait
+    const downFactor = offerFactor(price, diligence, 0, 0)
     view.sizes = ROUND_SIZES.map((size): RoundSizeOption => {
       const amount = roundAmountFor(s, targetStage, B.ROUND_RUNWAY_MONTHS[size])
-      return { size, months: B.ROUND_RUNWAY_MONTHS[size], amount, offer: Math.round(amount * view.factor), equity: roundEquityFor(targetStage, size, stars) }
+      const equity = roundEquityFor(targetStage, size, stars)
+      const o: RoundSizeOption = { size, months: B.ROUND_RUNWAY_MONTHS[size], amount, offer: Math.round(amount * view.factor), equity }
+      if (down) {
+        const downAmount = amount * B.DOWN_ROUND_AMOUNT
+        o.down = { amount: downAmount, offer: Math.round(downAmount * downFactor), equity: downEquity(equity) }
+      }
+      return o
     })
   }
   return view
@@ -228,17 +281,23 @@ export function checkRoundWindow(s: GameState): void {
   pushEvent(s, { kind: 'roundWindow', value: s.stage + 1 })
 }
 
-/** `stars`: ☆ stage goals reached this stage; each takes GOAL_STAR_EQUITY_DISCOUNT off the equity sold. */
-export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 'target'): ActionErrorCode | null {
+/**
+ * `stars`: ☆ stage goals reached this stage; each takes GOAL_STAR_EQUITY_DISCOUNT off the equity sold.
+ * `down`: the one-time down round after a failed one (GAMEPLAY V2 §6.3) — it does not wait for the valuation window
+ * (it is the way out when the numbers fell), only for ROUND_RETRY_DAYS.
+ */
+export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 'target', down = false): ActionErrorCode | null {
   if (s.round?.active) return 'roundActive'
-  if (!s.derived.canStartRound) return 'roundNotReady'
+  if (down) {
+    if (!downRoundOpen(s) || roundRetryIn(s) > 0 || s.gameOver || s.stage >= B.LAST_STAGE - 1) return 'roundNotReady'
+  } else if (!s.derived.canStartRound) return 'roundNotReady'
   if (!(ROUND_SIZES as readonly string[]).includes(size)) return 'invalid'
   const target = (s.stage + 1) as StageIndex
   const targetValuation = targetValuationOf(target)
   if (B.ROUND_AMOUNT[target] == null || B.ROUND_EQUITY[target] == null || targetValuation == null) return 'roundNotReady'
   const months = B.ROUND_RUNWAY_MONTHS[size]
-  const baseAmount = roundAmountFor(s, target, months)
-  const equity = roundEquityFor(target, size, stars)
+  const baseAmount = roundAmountFor(s, target, months) * (down ? B.DOWN_ROUND_AMOUNT : 1)
+  const equity = down ? downEquity(roundEquityFor(target, size, stars)) : roundEquityFor(target, size, stars)
   const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
   const diligence = diligenceNow(s)
   const r: RoundState = {
@@ -257,6 +316,12 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
     priceAtStart: priceRatio(s.finance.valuation, targetValuation),
     pitches: [],
     diligence,
+    strikes: 0,
+    ddStart: metIds(diligence),
+  }
+  if (down) {
+    r.down = true
+    s.flags[DOWN_STAGE] = s.stage
   }
   setOfferAmount(r, liveOffer(s, r, diligence))
   s.round = r
@@ -282,16 +347,58 @@ export function progressRound(s: GameState, content: EngineContent, dtDays: numb
   while (acc >= 7 && r.weeksLeft > 0) {
     acc -= 7
     r.weeksLeft -= 1
-    weekPassed(s, r)
+    if (!weekPassed(s, r)) {
+      s.flags[WEEK_ACC] = 0
+      return
+    }
   }
   s.flags[WEEK_ACC] = acc
   if (r.weeksLeft <= 0) closeRound(s, content, rng)
 }
 
-/** One round week: diligence values refresh, the offer follows the metrics, the next pitch is due. */
-function weekPassed(s: GameState, r: RoundState): void {
+/**
+ * GAMEPLAY V2 §6.3 strike of a round week: only checks met when the round started count (the investor does not get
+ * angry at a number it knew). ≥ ROUND_STRIKE_BROKEN of them broken → +1, else −1 (min 0). An older save's round takes
+ * its snapshot on the first week and strikes from the next. True = the round fails now.
+ */
+function strikeWeek(s: GameState, r: RoundState, week: number): boolean {
+  const items = r.diligence ?? diligenceNow(s)
+  if (r.ddStart === undefined) {
+    r.ddStart = metIds(items)
+    r.strikes ??= 0
+  } else {
+    const now = new Set(metIds(items))
+    const broken = r.ddStart.filter((id) => !now.has(id)).length
+    r.strikes = broken >= B.ROUND_STRIKE_BROKEN ? (r.strikes ?? 0) + 1 : Math.max(0, (r.strikes ?? 0) - 1)
+  }
+  if ((r.strikes ?? 0) >= B.ROUND_FAIL_STRIKES) return true
+  // From week 4 the metrics part sitting on the floor ends it (a down round has no floor).
+  return !r.down && week >= B.ROUND_FAIL_FLOOR_WEEK && metricsFactor(livePrice(s, r), items) <= B.ROUND_OFFER_FLOOR + 1e-9
+}
+
+/**
+ * The investor walks away (GAMEPLAY V2 §6.3): reputation and morale drop, the stage stays, the door shuts for
+ * ROUND_RETRY_DAYS and the one-time down round opens.
+ */
+function failRound(s: GameState, r: RoundState): void {
+  r.active = false
+  s.round = undefined
+  s.stats.reputation = clamp(0, 100, s.stats.reputation + B.ROUND_FAIL_REPUTATION)
+  applyMorale(s, B.ROUND_FAIL_MORALE)
+  s.flags[FAILED_DAY] = s.time.day
+  s.flags[FAILED_STAGE] = s.stage
+  for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay = Math.min(v.leaveDay, s.time.day)
+  pushEvent(s, { kind: 'roundFailed', value: r.targetStage })
+}
+
+/** One round week: diligence values refresh, strikes, the offer follows the metrics, the next pitch is due. False = failed. */
+function weekPassed(s: GameState, r: RoundState): boolean {
   const week = r.weeksTotal - r.weeksLeft
   r.diligence = diligenceNow(s)
+  if (strikeWeek(s, r, week)) {
+    failRound(s, r)
+    return false
+  }
   const from = r.offer.amount
   if (r.months !== undefined) r.amountBy = roundAmountParts(s, r.targetStage, r.months).by
   const to = liveOffer(s, r, r.diligence)
@@ -305,6 +412,7 @@ function weekPassed(s: GameState, r: RoundState): void {
   } else delete r.pitchDue
   pushActivity(s, 'roundOffer', { done: week, total: r.weeksTotal, from: Math.round(from), amount: Math.round(to) })
   pushEvent(s, { kind: 'roundWeek', value: to })
+  return true
 }
 
 /** The week's pitch (docs/CORE_LOOP.md §4.3): changes the offer factor or the round length. */
@@ -318,7 +426,7 @@ export function roundPitch(s: GameState, pitch: RoundPitch, rng?: Rng): ActionEr
   if (!o.ok) return 'noEnergy'
   s.founder.energy -= o.energy
   if (o.weeks > 0) r.weeksLeft = Math.max(1, r.weeksLeft - o.weeks)
-  if (o.equity > 0) r.offer.equity = Math.min(0.5, r.offer.equity + o.equity)
+  if (o.equity > 0) r.offer.equity = Math.min(B.ROUND_EQUITY_MAX, r.offer.equity + o.equity)
   // "Hikâye anlat" is a gamble between min and max (reputation lifts both); the others are known in advance.
   const delta = o.min !== undefined && o.max !== undefined && rng ? rng.range(o.min, o.max) : o.delta
   ;(r.pitches ??= []).push({ week: r.pitchDue, pitch, delta })
@@ -350,7 +458,30 @@ export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   markRivalAnchor(s)
 }
 
-export function closeRound(s: GameState, _content: EngineContent, rng: Rng): void {
+/**
+ * GAMEPLAY V2 §9.3: the report card of the stage being left (round close, Unicorn). Thread steps = thread cards
+ * answered since the stage began; the lowest runway was tracked on its paydays.
+ */
+export function pushStageReport(s: GameState, content: EngineContent): void {
+  const from = s.stageStart?.stage === s.stage ? s.stageStart.day : 0
+  const done = s.goalsDone ?? []
+  const threadIds = new Set(content.decisions.filter((c) => c.thread).map((c) => c.id))
+  const lead = s.rivals?.[0]
+  const report: StageReport = {
+    stage: s.stage,
+    days: Math.round(s.time.day - from),
+    roundsClosed: s.counters.roundsClosed ?? 0,
+    goalsDone: (content.goals ?? []).filter((g) => g.stage === s.stage && done.includes(g.id)).length,
+    threadSteps: s.decisions.history.filter((h) => h.day >= from && threadIds.has(h.cardId)).length,
+    rivalRatio: lead && s.finance.valuation > 0 ? Math.round((lead.valuation / s.finance.valuation) * 1000) / 1000 : 0,
+    minRunway: Math.round(Math.min(99, s.stageStart?.stage === s.stage ? (s.stageStart.minRunway ?? 99) : 99) * 10) / 10,
+  }
+  const list = (s.stageReports ??= [])
+  list.push(report)
+  if (list.length > B.STAGE_REPORTS_MAX) list.splice(0, list.length - B.STAGE_REPORTS_MAX)
+}
+
+export function closeRound(s: GameState, content: EngineContent, rng: Rng): void {
   const r = s.round
   if (!r?.active) return
   // The close prices today's numbers (canlı teklif).
@@ -358,8 +489,17 @@ export function closeRound(s: GameState, _content: EngineContent, rng: Rng): voi
   if (r.months !== undefined) r.amountBy = roundAmountParts(s, r.targetStage, r.months).by
   setOfferAmount(r, liveOffer(s, r, r.diligence))
   r.active = false
-  const repay = Math.min(s.finance.debt, r.offer.amount)
-  s.finance.debt -= repay
+  // GAMEPLAY V2 §6.2: the close pays the loan off first (the balance, not the principal).
+  const loan = loanOf(s)
+  const repay = loan ? Math.min(loan.balance, r.offer.amount) : 0
+  if (loan) {
+    loan.balance -= repay
+    if (loan.balance < 0.5) {
+      s.finance.loan = undefined
+      pushEvent(s, { kind: 'loanRepaid', value: loan.principal })
+    }
+  }
+  syncDebt(s)
   s.stats.cash += r.offer.amount - repay
   s.stats.equity = clamp(0.01, 1, s.stats.equity * (1 - r.offer.equity))
   applyMorale(s, B.ROUND_CLOSE_MORALE)
@@ -370,6 +510,7 @@ export function closeRound(s: GameState, _content: EngineContent, rng: Rng): voi
   for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay = Math.min(v.leaveDay, s.time.day)
   pushActivity(s, 'roundClosed', { amount: Math.round(r.offer.amount), equity: r.offer.equity })
   pushEvent(s, { kind: 'roundClosed', value: r.offer.amount })
+  pushStageReport(s, content)
   enterStage(s, r.targetStage, rng)
   s.round = undefined
 }

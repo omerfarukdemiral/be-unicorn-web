@@ -116,6 +116,7 @@ export const DECISION_CATEGORY_TEXT: Record<DecisionCategory, string> = {
   normal: 'Karar',
   crisis: 'Kriz',
   rival: 'Rakip',
+  thread: 'Hikâye',
 }
 
 /** Post-mortem reason headings (body text lives in POST_MORTEM_TEXT). */

@@ -3,6 +3,7 @@ import * as B from './balance'
 import { bringCardNow, isCardEligible } from './decisions'
 import { recomputeDerived } from './derive'
 import { ledgerCosts } from './economy'
+import { loanOf, syncDebt } from './effects'
 import { lastUpdateDay } from './loopSelectors'
 import { yearlyRaises } from './people'
 import { DAYS_PER_MONTH, type GameState, type MonthLedger, type MonthReceipt, type Project, type ReleaseEntry } from './types'
@@ -35,10 +36,14 @@ export function accrueMonth(s: GameState, dt: number): void {
   s.stats.cash += revenue
 }
 
-/** Payday (day % 30 === 0): salaries, rent, infra and ads leave in one lump; the month receipt is written. */
+/**
+ * Payday (day % 30 === 0): salaries, rent, infra and ads leave in one lump, with the loan's interest and principal;
+ * the lender checks its covenant; the month receipt is written.
+ */
 export function payday(s: GameState, content: EngineContent): void {
   const l = ledgerOf(s)
-  const paid = ledgerCosts(l)
+  const loan = serviceLoan(s)
+  let paid = ledgerCosts(l) + loan.interest + loan.repay
   // Runway already counts owed costs, so payday itself does not move it: compare with last payday instead.
   const prev = s.finance.lastReceipt
   s.stats.cash -= paid
@@ -46,6 +51,10 @@ export function payday(s: GameState, content: EngineContent): void {
   // The month is paid at the old salaries; a raise earned today shows on the next receipt.
   yearlyRaises(s)
   recomputeDerived(s, content)
+  // A covenant call is principal leaving today: it goes on the receipt with the instalment (the receipt reconciles).
+  const called = checkCovenant(s, content)
+  loan.repay += called
+  paid += called
   s.finance.lastReceipt = {
     month: Math.max(0, Math.round(s.time.day / DAYS_PER_MONTH) - 1),
     day: Math.floor(s.time.day),
@@ -55,6 +64,7 @@ export function payday(s: GameState, content: EngineContent): void {
     infra: l.infra,
     ads: l.ads,
     founder: l.founder ?? 0,
+    ...(loan.interest > 0 || loan.repay > 0 ? { interest: loan.interest, loanRepay: loan.repay } : {}),
     paid,
     net: l.revenue - paid,
     cashAfter: s.stats.cash,
@@ -77,9 +87,67 @@ export function payday(s: GameState, content: EngineContent): void {
     ...(s.derived.penetration !== undefined ? { penetration: s.derived.penetration } : {}),
   }
   pushReceipt(s, s.finance.lastReceipt)
+  // §9.3 stage report: the stage's lowest payday runway.
+  if (s.stageStart?.stage === s.stage) s.stageStart.minRunway = Math.min(s.stageStart.minRunway ?? 99, s.finance.runway ?? 99)
   if (paid > 0.5) pushActivity(s, 'payday', { amount: Math.round(paid) })
   pushEvent(s, { kind: 'payday', value: paid })
   missedPayroll(s, content)
+}
+
+/**
+ * GAMEPLAY V2 §6.2: the month's loan service. Interest = balance × rate; principal only after the interest-only months
+ * (balance / months left). The last instalment closes the loan.
+ */
+function serviceLoan(s: GameState): { interest: number; repay: number } {
+  const loan = loanOf(s)
+  if (!loan) return { interest: 0, repay: 0 }
+  const interest = loan.balance * loan.rateMonthly
+  let repay = 0
+  if (s.time.day >= loan.interestOnlyUntil) {
+    repay = loan.balance / Math.max(1, loan.monthsLeft)
+    loan.monthsLeft = Math.max(0, loan.monthsLeft - 1)
+    loan.balance = Math.max(0, loan.balance - repay)
+  }
+  if (loan.monthsLeft <= 0 || loan.balance < 0.5) {
+    repay += loan.balance
+    s.finance.loan = undefined
+    pushEvent(s, { kind: 'loanRepaid', value: loan.principal })
+  }
+  syncDebt(s)
+  return { interest, repay }
+}
+
+/**
+ * GAMEPLAY V2 §6.2 covenant, measured on paydays from covenantFromDay: runway < covenantRunway is a breach.
+ * 1st: a warning (the next payday is the next check); 2nd: LOAN_CALL_SHARE of the balance is called and the rate
+ * goes × LOAN_CALL_RATE_MULT; 3rd: the rest is called. A call that leaves cash < 0 is a missed payroll (the desk).
+ * Returns the amount called today.
+ */
+function checkCovenant(s: GameState, content: EngineContent): number {
+  const loan = s.finance.loan
+  if (!loan || s.time.day < loan.covenantFromDay) return 0
+  const runway = s.finance.runway
+  if (runway === null || runway >= loan.covenantRunway) return 0
+  loan.breaches += 1
+  if (loan.breaches === 1) {
+    pushEvent(s, { kind: 'loanWarning', refId: 'warn', value: s.time.day + B.LOAN_WARNING_DAYS })
+    return 0
+  }
+  let called: number
+  if (loan.breaches === 2) {
+    called = loan.balance * B.LOAN_CALL_SHARE
+    loan.balance -= called
+    loan.rateMonthly *= B.LOAN_CALL_RATE_MULT
+    pushEvent(s, { kind: 'loanWarning', refId: 'half', value: called })
+  } else {
+    called = loan.balance
+    s.finance.loan = undefined
+    pushEvent(s, { kind: 'loanCalled', value: called })
+  }
+  s.stats.cash -= called
+  syncDebt(s)
+  recomputeDerived(s, content)
+  return called
 }
 
 /** Month end: the engineers pay TECH_DEBT_AMORT_PER_ENG × eng of tech debt back (the reason to keep engineers). */
@@ -131,6 +199,8 @@ function pushReceipt(s: GameState, r: MonthReceipt): void {
   if (r.equity !== undefined) out.equity = ratio(r.equity)
   if (r.reputation !== undefined) out.reputation = Math.round(r.reputation)
   if (r.debt) out.debt = Math.round(r.debt)
+  if (r.interest) out.interest = Math.round(r.interest)
+  if (r.loanRepay) out.loanRepay = Math.round(r.loanRepay)
   if (r.adBudget) out.adBudget = Math.round(r.adBudget)
   if (r.usersDelta !== undefined) out.usersDelta = Math.round(r.usersDelta)
   if (r.stage !== undefined) out.stage = r.stage

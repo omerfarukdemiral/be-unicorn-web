@@ -153,6 +153,35 @@ export interface EffectBundle {
   setFlag?: string | readonly string[]
   /** Cash worth this many months of today's burn (the one-time angel, GAMEPLAY V2 §5.2). */
   cashBurnMonths?: number
+  /** Takes the (single) loan (GAMEPLAY V2 §6.2): max(burn × burnMonths, LOAN_MIN[stage]) into cash, on these terms. */
+  loan?: LoanTerms
+}
+
+/** Terms of a loan option. `covenantRunway` (months of runway the lender asks for) defaults to burnMonths × 0.5. */
+export interface LoanTerms {
+  burnMonths: number
+  /** Months of amortization after the interest-only period. */
+  months: number
+  /** Monthly interest rate (0.03 = 3%). */
+  rate: number
+  covenantRunway?: number
+}
+
+/**
+ * The loan (GAMEPLAY V2 §6.2, "şeytanla anlaşma"): interest from the first payday, amortization only after
+ * `interestOnlyUntil`, the covenant (runway ≥ covenantRunway) measured on paydays from `covenantFromDay`.
+ * 1st breach: warning; 2nd: half the balance is called and the rate × LOAN_CALL_RATE_MULT; 3rd: the rest is called.
+ */
+export interface LoanState {
+  principal: number
+  balance: number
+  rateMonthly: number
+  /** Amortization months left (counted down once amortization starts). */
+  monthsLeft: number
+  covenantRunway: number
+  covenantFromDay: number
+  interestOnlyUntil: number
+  breaches: number
 }
 
 export interface DelayedEffect {
@@ -394,6 +423,15 @@ export interface RoundState {
   diligence?: DiligenceItem[]
   /** Last weekly move of the offer (the live offer line). */
   lastMove?: { week: number; from: number; to: number }
+  /**
+   * GAMEPLAY V2 §6.3: strikes (a week where ≥ 2 checks met at the start broke: +1, else −1, min 0); ROUND_FAIL_STRIKES
+   * fails the round. Older saves default to 0.
+   */
+  strikes?: number
+  /** Diligence checks met when the round started (the investor only gets angry at what broke). Older saves: first week. */
+  ddStart?: DiligenceId[]
+  /** A down round (after a failed one): less money, more equity, no offer floor. */
+  down?: boolean
 }
 
 /** Round size: Küçük (12 months of runway, less equity) / Hedef (18) / Büyük (24, more equity). */
@@ -434,6 +472,8 @@ export interface RoundSizeOption {
   offer: number
   /** Equity sold (after ☆ discounts). */
   equity: number
+  /** The same size as the one-time down round (GAMEPLAY V2 §6.3), when it is open: less money, more equity, no floor. */
+  down?: { amount: number; offer: number; equity: number }
 }
 
 /** Live round numbers for the Büyüme > Tur section (recomputed every step). */
@@ -466,6 +506,14 @@ export interface RoundView {
   pitchOptions?: PitchOption[]
   /** MoM growth the investor asks for at this stage (diligence + "Metrik göster"). */
   growthAsk: number
+  /** Running round: strikes / ROUND_FAIL_STRIKES (0–1, the round chip's colour; GAMEPLAY V2 §6.3). */
+  risk?: number
+  /** Running round: strikes so far. */
+  strikes?: number
+  /** The one-time down round is open (a round failed this stage); the running round is one when on a down round. */
+  downRound?: boolean
+  /** Days until a round can start again after a failed one (0 = can). */
+  retryIn?: number
 }
 
 /** Preview of one weekly pitch (engine computed). */
@@ -523,7 +571,10 @@ export interface MonthReceipt {
   ads: number
   /** Founder living cost ("Kurucu"). */
   founder?: number
-  /** Costs paid on payday (salaries + rent + infra + ads + founder). */
+  /** Loan interest and principal repaid on this payday (GAMEPLAY V2 §6.2); missing = no loan. */
+  interest?: number
+  loanRepay?: number
+  /** Costs paid on payday (salaries + rent + infra + ads + founder + loan service). */
   paid: number
   /** revenue − paid. */
   net: number
@@ -613,8 +664,10 @@ export interface FinanceState {
   /** Day of last price increase (churn penalty lasts 30 days). */
   priceChangeDay?: number
   enterpriseCustomers: EnterpriseCustomer[]
-  /** Bridge loan outstanding, if any. */
+  /** Loan balance outstanding (= loan.balance; kept for older readers). */
   debt: number
+  /** The single loan (GAMEPLAY V2 §6.2); older saves with debt get one in the v4 migration (or lazily on payday). */
+  loan?: LoanState
   /** Costs accrue daily and are paid in one lump on payday (day % 30 === 0, the 1st of the month). */
   ledger?: MonthLedger
   /** Last payday's receipt (unrounded; the UI reads it). */
@@ -863,6 +916,25 @@ export interface StageBaseline {
   releases: number
   mrr: number
   projects: number
+  /** Lowest payday runway seen in the stage (months, 99 = profitable; GAMEPLAY V2 §9.3). */
+  minRunway?: number
+}
+
+/** A stage's report card (GAMEPLAY V2 §9.3), written when the stage is left (round close, Unicorn). */
+export interface StageReport {
+  stage: StageIndex
+  /** Days spent in the stage. */
+  days: number
+  /** Rounds closed over the run so far. */
+  roundsClosed: number
+  /** ☆ goals reached in the stage. */
+  goalsDone: number
+  /** Thread cards answered in the stage. */
+  threadSteps: number
+  /** Lead rival valuation / the player's (0 = no rival). */
+  rivalRatio: number
+  /** Lowest payday runway in the stage (months, 99 = profitable). */
+  minRunway: number
 }
 
 // ---------------------------------------------------------------------------
@@ -940,6 +1012,16 @@ export type GameEventKind =
   | 'rivalBorn'
   /** The lead rival's valuation went past the player's (refId = rival id, value = its valuation); once per overtake. */
   | 'rivalPassed'
+  /** A loan was taken (value = amount). */
+  | 'loanTaken'
+  /** Covenant breach (GAMEPLAY V2 §6.2): refId 'warn' (1st, value = the next check day) or 'half' (2nd, value = cash called). */
+  | 'loanWarning'
+  /** 3rd breach: the whole balance is called (value = amount). */
+  | 'loanCalled'
+  /** The loan was paid off (by amortization or a round close). */
+  | 'loanRepaid'
+  /** The investor walked away (GAMEPLAY V2 §6.3; value = the round's target stage). */
+  | 'roundFailed'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1052,6 +1134,8 @@ export interface GameState {
   cast?: Record<NpcRole, string>
   /** Named rivals (GAMEPLAY V2 §8.2), the lead first; older saves from Seed on get theirs lazily (world.ensureRivals). */
   rivals?: Rival[]
+  /** Stage report cards (GAMEPLAY V2 §9.3), oldest first (at most STAGE_REPORTS_MAX). Older saves: []. */
+  stageReports?: StageReport[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1086,8 +1170,8 @@ export type Action =
   | { type: 'minimizeConcept'; conceptId: ConceptId }
   | { type: 'answerDecision'; cardId: DecisionCardId; optionIndex: number }
   // Fundraising
-  /** `size` omitted = 'target' (18 months). */
-  | { type: 'startRound'; size?: RoundSize }
+  /** `size` omitted = 'target' (12 months). `down`: the one-time down round after a failed round (GAMEPLAY V2 §6.3). */
+  | { type: 'startRound'; size?: RoundSize; down?: boolean }
   /** This week's pitch of the running round (docs/CORE_LOOP.md §4.3). */
   | { type: 'roundPitch'; pitch: RoundPitch }
 

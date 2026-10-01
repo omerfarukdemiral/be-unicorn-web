@@ -263,6 +263,126 @@ describe('round weeks: live offer + weekly pitch', () => {
   })
 })
 
+describe('a round can fail (GAMEPLAY V2 §6.3)', () => {
+  /** A garage round started with morale met and a 3-month MoM above the ask (both on the investor's checklist). */
+  function strong(): GameState {
+    const base = launched(usersFor(450_000))
+    const s0 = refresh({ ...base, stats: { ...base.stats, morale: 70 }, employees: base.employees.map((e) => ({ ...e, morale: 70 })), finance: { ...base.finance, mrrHistory: [1_000, 1_200] } })
+    const s = api.applyAction(s0, { type: 'startRound' }).state
+    return { ...s, round: { ...s.round!, weeksTotal: 10, weeksLeft: 10 } }
+  }
+  /** Morale and MoM broken (kept down every week: morale drifts back toward its target). */
+  const broken = (s: GameState): GameState => ({
+    ...s,
+    stats: { ...s.stats, morale: 40 },
+    employees: s.employees.map((e) => ({ ...e, morale: 40 })),
+    finance: { ...s.finance, mrrHistory: [1_200, 1_000] },
+  })
+
+  it('morale and MoM met at the start break for 3 weeks → roundFailed; the stage stays, 14 days shut, the down round opens', () => {
+    let s = strong()
+    const met = s.round!.ddStart!
+    expect(met).toContain('morale')
+    expect(met).toContain('growth')
+    const rep = s.stats.reputation
+    for (let w = 1; w <= 2; w++) {
+      s = api.step(broken(s), 7)
+      expect(s.round!.strikes).toBe(w)
+      expect(s.derived.round!.risk).toBeCloseTo(w / B.ROUND_FAIL_STRIKES, 9)
+    }
+    s = api.step(broken(s), 7)
+    expect(s.round).toBeUndefined()
+    expect(s.stage).toBe(0)
+    expect(s.events.some((e) => e.kind === 'roundFailed' && e.value === 1)).toBe(true)
+    expect(s.events.some((e) => e.kind === 'roundClosed')).toBe(false)
+    expect(s.stats.reputation).toBeCloseTo(Math.max(0, rep + B.ROUND_FAIL_REPUTATION), 6)
+    expect(s.flags['roundFailedDay']).toBeCloseTo(21, 0)
+    // The door is shut for ROUND_RETRY_DAYS, the down round shows as the way out.
+    expect(s.derived.canStartRound).toBe(false)
+    expect(s.derived.round!.downRound).toBe(true)
+    expect(s.derived.round!.retryIn).toBe(B.ROUND_RETRY_DAYS)
+    expect(api.applyAction(s, { type: 'startRound' }).error).toBe('roundNotReady')
+    expect(api.applyAction(s, { type: 'startRound', down: true }).error).toBe('roundNotReady')
+    // The view carries the down round's terms per size (the UI draws, never computes).
+    for (const o of s.derived.round!.sizes!) {
+      expect(o.down!.amount).toBeCloseTo(o.amount * B.DOWN_ROUND_AMOUNT, 6)
+      expect(o.down!.equity).toBeCloseTo(Math.min(B.ROUND_EQUITY_MAX, o.equity * B.DOWN_ROUND_EQUITY), 9)
+      expect(o.down!.offer).toBeGreaterThan(0)
+    }
+    s = api.step(s, B.ROUND_RETRY_DAYS)
+    expect(s.derived.round!.retryIn).toBeUndefined()
+    const normal = api.applyAction(s, { type: 'startRound' }).state
+    const down = api.applyAction(s, { type: 'startRound', down: true })
+    expect(down.ok).toBe(true)
+    expect(down.state.round!.down).toBe(true)
+    expect(down.state.round!.offer.equity).toBeCloseTo(Math.min(B.ROUND_EQUITY_MAX, normal.round!.offer.equity * B.DOWN_ROUND_EQUITY), 9)
+    expect(down.state.round!.baseAmount).toBeCloseTo(normal.round!.baseAmount! * B.DOWN_ROUND_AMOUNT, 6)
+    expect(down.state.derived.round!.downRound).toBe(true)
+    // One-time: the stage's down round is used.
+    const after = { ...down.state, round: undefined }
+    expect(api.applyAction(refresh(after), { type: 'startRound', down: true }).error).toBe('roundNotReady')
+  })
+
+  it('a check unmet at the start never strikes; one broken check strikes, a clean week takes one back', () => {
+    let s = strong()
+    // Runway / growth / morale unmet from the start do not count; only what broke since does.
+    s = { ...s, round: { ...s.round!, ddStart: [] } }
+    for (let w = 0; w < 3; w++) s = api.step(broken(s), 7)
+    expect(s.round!.active).toBe(true)
+    expect(s.round!.strikes).toBe(0)
+    // Only morale broken (growth back above the ask): one strike.
+    s = { ...s, round: { ...s.round!, ddStart: ['morale', 'growth'], strikes: 1 } }
+    s = api.step({ ...broken(s), finance: { ...s.finance, mrrHistory: [1_000, 1_200] } }, 7)
+    expect(s.round!.strikes).toBe(2)
+    // Nothing broken: one back.
+    const healthy = (x: GameState): GameState => ({ ...x, stats: { ...x.stats, morale: 70 }, employees: x.employees.map((e) => ({ ...e, morale: 70 })), finance: { ...x.finance, mrrHistory: [1_000, 1_200] } })
+    s = api.step(healthy(s), 7)
+    expect(s.round!.strikes).toBe(1)
+  })
+
+  it('from week 4 a metrics part on the floor fails the round (not before); a down round has no floor', () => {
+    const early = launched(usersFor(target * 0.65))
+    const weak = (s: GameState): GameState => ({ ...s, stats: { ...s.stats, cash: 200, morale: 40 }, employees: s.employees.map((e) => ({ ...e, morale: 40 })) })
+    let s = api.applyAction(refresh(weak(early)), { type: 'startRound' }).state
+    s = { ...s, round: { ...s.round!, weeksTotal: 10, weeksLeft: 10 } }
+    for (let w = 1; w <= 3; w++) {
+      s = api.step(weak(s), 7)
+      expect(s.round?.active).toBe(true)
+    }
+    expect(s.derived.round!.factor - s.derived.round!.pitchBonus).toBeLessThanOrEqual(B.ROUND_OFFER_FLOOR + 1e-9)
+    s = api.step(weak(s), 7)
+    expect(s.round).toBeUndefined()
+    expect(s.events.some((e) => e.kind === 'roundFailed')).toBe(true)
+    // A down round on the same numbers runs past week 4 (no floor) and prices below the old floor.
+    s = api.step(s, B.ROUND_RETRY_DAYS)
+    s = api.applyAction(weak(s), { type: 'startRound', down: true }).state
+    s = { ...s, round: { ...s.round!, weeksTotal: 10, weeksLeft: 10 } }
+    for (let w = 1; w <= 5; w++) s = api.step(weak(s), 7)
+    expect(s.round?.active).toBe(true)
+    expect(s.round!.weeksTotal - s.round!.weeksLeft).toBe(5)
+    expect(offerFactor(0.6, dd([false, false, false]), 0)).toBe(B.ROUND_OFFER_FLOOR)
+    expect(offerFactor(0.6, dd([false, false, false]), 0, 0)).toBeLessThan(B.ROUND_OFFER_FLOOR)
+  })
+
+  it('the close pays the loan balance off first', () => {
+    const s = running()
+    const loan = { principal: 20_000, balance: 12_000, rateMonthly: 0.02, monthsLeft: 6, covenantRunway: 1, covenantFromDay: 999, interestOnlyUntil: 999, breaches: 0 }
+    const cash0 = s.stats.cash
+    const end = api.step({ ...s, finance: { ...s.finance, loan, debt: loan.balance } }, 6 * 7 + 1)
+    expect(end.stage).toBe(1)
+    expect(end.finance.loan).toBeUndefined()
+    expect(end.finance.debt).toBe(0)
+    const amount = end.events.find((e) => e.kind === 'roundClosed')!.value!
+    expect(end.events.some((e) => e.kind === 'loanRepaid')).toBe(true)
+    expect(end.stats.cash).toBeLessThan(cash0 + amount - 12_000 + 1)
+  })
+
+  function running(users = usersFor(450_000)): GameState {
+    const s = api.applyAction(launched(users), { type: 'startRound' }).state
+    return { ...s, round: { ...s.round!, weeksTotal: 6, weeksLeft: 6 } }
+  }
+})
+
 describe('"Elle kullanıcı bul" saturation (dont-scale)', () => {
   const findOnce = (s: GameState): GameState => {
     const r = api.applyAction(s, { type: 'founderAction', kind: 'findUsers' })

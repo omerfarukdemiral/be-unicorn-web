@@ -19,10 +19,43 @@ function safeCondition(c: DecisionCard, s: GameState): boolean {
   }
 }
 
-/** `ignoreCooldown`: a newly missed payday brings the rescue card even inside its repeat cooldown (max still holds). */
-export function isCardEligible(c: DecisionCard, s: GameState, opts: { ignoreCooldown?: boolean } = {}): boolean {
+/** A card with a loan option (GAMEPLAY V2 §6.2): closed while the single loan runs. */
+export function offersLoan(c: DecisionCard): boolean {
+  return c.options.some((o) => o.effects.loan !== undefined)
+}
+
+/** A loan runs: an older save's debt counts before its lazy loan is written (loanOf). */
+function loanRuns(s: GameState): boolean {
+  return s.finance.loan !== undefined || s.finance.debt > 0
+}
+
+/** Flag of the stage a thread last showed a card in (GAMEPLAY V2 §9.2: one card per thread per stage). */
+const threadFlag = (id: string): string => `threadStage:${id}`
+
+/**
+ * GAMEPLAY V2 §9.2 thread gate: one card per thread per stage; step > 1 needs the thread's step − 1 card answered
+ * (with one of `after`'s options, when given). Without `cards` a later step cannot be checked and stays closed.
+ */
+function threadOpen(c: DecisionCard, s: GameState, cards?: readonly DecisionCard[]): boolean {
+  const t = c.thread
+  if (!t) return true
+  if (s.flags[threadFlag(t.id)] === s.stage) return false
+  if (t.step <= 1) return true
+  if (!cards) return false
+  const prev = new Set(cards.filter((x) => x.thread?.id === t.id && x.thread.step === t.step - 1).map((x) => x.id))
+  return s.decisions.history.some((h) => prev.has(h.cardId) && (t.after === undefined || t.after.includes(h.optionIndex)))
+}
+
+/**
+ * `ignoreCooldown`: a newly missed payday brings the rescue card even inside its repeat cooldown (max still holds).
+ * `cards`: the whole card list, for thread steps (GAMEPLAY V2 §9.2).
+ */
+export function isCardEligible(c: DecisionCard, s: GameState, opts: { ignoreCooldown?: boolean; cards?: readonly DecisionCard[] } = {}): boolean {
   if (c.stage > s.stage) return false
   if (c.maxStage !== undefined && c.maxStage < s.stage) return false
+  // There is only ever one loan: its offers close while it runs.
+  if (loanRuns(s) && offersLoan(c)) return false
+  if (!threadOpen(c, s, opts.cards)) return false
   const once = c.once ?? true
   if (once && (s.decisions.history.some((h) => h.cardId === c.id) || s.decisions.active?.cardId === c.id)) return false
   if (!once) {
@@ -36,7 +69,7 @@ export function isCardEligible(c: DecisionCard, s: GameState, opts: { ignoreCool
 }
 
 export function eligibleCards(s: GameState, cards: readonly DecisionCard[]): DecisionCard[] {
-  return cards.filter((c) => isCardEligible(c, s))
+  return cards.filter((c) => isCardEligible(c, s, { cards }))
 }
 
 function showCard(s: GameState, card: DecisionCard): void {
@@ -44,6 +77,7 @@ function showCard(s: GameState, card: DecisionCard): void {
   s.visitors.push({ id: vid, role: card.speaker, purpose: 'decision', targetSlotId: 'founder', arriveDay: s.time.day, leaveDay: s.time.day + B.DECISION_VISITOR_WAIT_DAYS, refId: card.id })
   s.decisions.active = { cardId: card.id, shownDay: s.time.day, visitorId: vid }
   s.decisions.lastCardDay = s.time.day
+  if (card.thread) s.flags[threadFlag(card.thread.id)] = s.stage
   pushEvent(s, { kind: 'visitorArrived', refId: vid })
   pushEvent(s, { kind: 'decisionShown', refId: card.id })
 }
@@ -54,6 +88,8 @@ export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng
   while (s.decisions.queue.length) {
     const id = s.decisions.queue.shift()!
     const card = content.decisions.find((c) => c.id === id)
+    // A loan offer queued before the loan was taken (the bridge mid-round) is dropped: one loan only.
+    if (card && loanRuns(s) && offersLoan(card)) continue
     if (card && (card.once === false || !s.decisions.history.some((h) => h.cardId === id))) {
       showCard(s, card)
       return
@@ -65,7 +101,8 @@ export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng
   if (!rng.chance(B.CARD_DAILY_CHANCE)) return
   // GAMEPLAY V2 §5.2: the director weighs crisis and rival cards (× (1 + pressure)); how often a card comes stays fixed.
   const pressure = directorOf(s).pressure
-  const pick = rng.weighted(eligibleCards(s, content.decisions), (c) => (c.weight ?? 1) * (c.category === 'crisis' || c.category === 'rival' ? 1 + pressure : 1))
+  // GAMEPLAY V2 §9.2: thread cards weigh THREAD_CARD_WEIGHT unless they say otherwise.
+  const pick = rng.weighted(eligibleCards(s, content.decisions), (c) => (c.weight ?? (c.thread ? B.THREAD_CARD_WEIGHT : 1)) * (c.category === 'crisis' || c.category === 'rival' ? 1 + pressure : 1))
   if (pick) showCard(s, pick)
 }
 

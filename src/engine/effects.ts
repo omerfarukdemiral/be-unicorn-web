@@ -2,7 +2,7 @@
 import type { Concept } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
-import { HUD_WIDGETS, TOOL_IDS, type ConceptId, type EffectBundle, type GameState, type HudWidget, type ToolId } from './types'
+import { DAYS_PER_MONTH, HUD_WIDGETS, TOOL_IDS, type ConceptId, type EffectBundle, type GameState, type HudWidget, type LoanState, type LoanTerms, type ToolId } from './types'
 import { incCounter, newId, pushEvent, uniquePush, type EngineContent } from './util'
 
 /** Flags that also bump a counter (content sets them via `setFlag`). */
@@ -62,15 +62,87 @@ export function applyMorale(s: GameState, delta: number): void {
   for (const e of s.employees) e.morale = clamp(0, 100, e.morale + delta)
 }
 
-/** Flags that make the cash an option brings a loan: it becomes finance.debt, repaid from the next round. */
+/**
+ * Legacy loan flags (an option without `loan` that still sets them, e.g. an older content card): the cash it brought
+ * becomes a loan on the legacy terms (GAMEPLAY V2 §3.1).
+ */
 const LOAN_FLAGS: ReadonlySet<string> = new Set(['emergencyLoan', 'bridgeLoan'])
 
+/** finance.debt mirrors the loan balance (older readers: top bar, receipts). */
+export function syncDebt(s: GameState): void {
+  s.finance.debt = s.finance.loan ? s.finance.loan.balance : 0
+}
+
+/** A loan of `amount` taken today on the given terms (GAMEPLAY V2 §6.2): interest-only, then amortized; covenant later. */
+export function newLoan(day: number, amount: number, rate: number, months: number, covenantRunway: number): LoanState {
+  return {
+    principal: amount,
+    balance: amount,
+    rateMonthly: rate,
+    monthsLeft: Math.max(1, Math.round(months)),
+    covenantRunway,
+    covenantFromDay: day + B.LOAN_COVENANT_GRACE_DAYS,
+    interestOnlyUntil: day + B.LOAN_INTEREST_ONLY_MONTHS * DAYS_PER_MONTH,
+    breaches: 0,
+  }
+}
+
+/** The loan; an older save's debt without one becomes a loan on the legacy terms (lazy twin of the v4 migration). */
+export function loanOf(s: GameState): LoanState | undefined {
+  if (!s.finance.loan && s.finance.debt > 0) {
+    s.finance.loan = newLoan(s.time.day, s.finance.debt, B.LOAN_LEGACY_RATE, B.LOAN_LEGACY_MONTHS, B.LOAN_LEGACY_COVENANT)
+  }
+  return s.finance.loan
+}
+
+/** Next payday's loan service (interest, plus principal once amortizing): runway counts it (it does not lie). */
+export function loanMonthlyService(s: GameState): number {
+  const loan = s.finance.loan
+  if (!loan) return s.finance.debt > 0 ? s.finance.debt * B.LOAN_LEGACY_RATE : 0
+  const repay = s.time.day >= loan.interestOnlyUntil ? loan.balance / Math.max(1, loan.monthsLeft) : 0
+  return loan.balance * loan.rateMonthly + repay
+}
+
+/** What a loan option would bring right now: max(burn × burnMonths, LOAN_MIN[stage]). */
+export function loanAmount(s: GameState, terms: LoanTerms): number {
+  return Math.round(Math.max(Math.max(0, s.finance.burn) * terms.burnMonths, B.LOAN_MIN[s.stage] ?? 0))
+}
+
+/** Takes the loan; there is only ever one (a second offer is closed by isCardEligible, and is a no-op here). */
+export function takeLoan(s: GameState, terms: LoanTerms): void {
+  if (loanOf(s)) return
+  const amount = loanAmount(s, terms)
+  if (!(amount > 0)) return
+  const covenant = terms.covenantRunway ?? terms.burnMonths * B.LOAN_COVENANT_PER_BURN_MONTH
+  s.finance.loan = newLoan(s.time.day, amount, terms.rate, terms.months, covenant)
+  s.stats.cash += amount
+  syncDebt(s)
+  pushEvent(s, { kind: 'loanTaken', value: amount })
+}
+
+/** An option on a legacy loan flag without `loan` terms (its cash is the loan). */
+export function isLegacyLoanOption(fx: EffectBundle): boolean {
+  if (fx.loan !== undefined || fx.setFlag === undefined) return false
+  return (typeof fx.setFlag === 'string' ? [fx.setFlag] : fx.setFlag).some((f) => LOAN_FLAGS.has(f))
+}
+
+/** Legacy flag: the cash an option already brought becomes a loan (applyEffects never lets it stack on a running one). */
+function legacyLoan(s: GameState, amount: number): void {
+  if (!(amount > 0) || loanOf(s)) return
+  s.finance.loan = newLoan(s.time.day, amount, B.LOAN_LEGACY_RATE, B.LOAN_LEGACY_MONTHS, B.LOAN_LEGACY_COVENANT)
+  syncDebt(s)
+  pushEvent(s, { kind: 'loanTaken', value: amount })
+}
+
 export function applyEffects(s: GameState, content: EngineContent, fx: EffectBundle, source: string): void {
+  // One loan only (GAMEPLAY V2 §6.2): with a loan running, a legacy loan option's lender says no — no cash, no equity.
+  if (isLegacyLoanOption(fx) && loanOf(s)) fx = { ...fx, cash: undefined, cashPercent: undefined, cashBurnMonths: undefined, equity: undefined }
   const cash0 = s.stats.cash
   if (fx.cash !== undefined) s.stats.cash += fx.cash
   if (fx.cashPercent !== undefined) s.stats.cash += cappedCashPercent(s, fx.cashPercent)
   // GAMEPLAY V2 §5.2 angel: months of today's burn (the angel pays for time, not a percent of an empty till).
   if (fx.cashBurnMonths !== undefined) s.stats.cash += Math.round(Math.max(0, s.finance.burn) * fx.cashBurnMonths)
+  if (fx.loan !== undefined) takeLoan(s, fx.loan)
   if (fx.users !== undefined) s.stats.users = Math.max(0, s.stats.users + fx.users)
   if (fx.usersPercent !== undefined) s.stats.users = Math.max(0, s.stats.users * (1 + clamp(-B.USERS_PERCENT_CAP, B.USERS_PERCENT_CAP, fx.usersPercent)))
   if (fx.morale !== undefined) applyMorale(s, fx.morale)
@@ -100,7 +172,6 @@ export function applyEffects(s: GameState, content: EngineContent, fx: EffectBun
     s.flags[flag] = true
     const counter = FLAG_COUNTERS[flag]
     if (counter) incCounter(s, counter)
-    // "Borç ve faiz" (content/decisions.ts): a rescue or bridge loan is paid back from the next round's money.
-    if (LOAN_FLAGS.has(flag)) s.finance.debt += Math.max(0, s.stats.cash - cash0)
   }
+  if (isLegacyLoanOption(fx)) legacyLoan(s, s.stats.cash - cash0)
 }

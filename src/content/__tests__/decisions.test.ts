@@ -13,7 +13,7 @@ const PLAN_IDS = [
   'crunch-vs-launch', 'b2b-opportunity', 'custom-feature-trap', 'blitzscale-pressure',
   'enterprise-rfp', 'whale-churn', 'gdpr-audit', 'cloud-bill-shock', 'talent-raid', 'international-launch', 'market-downturn',
   'acquisition-offer', 'strategic-investor', 'secondary-sale', 'founder-burnout', 'ipo-vs-stay-private',
-  'payroll-risk', 'vc-bridge-loan', 'emergency-bridge',
+  'payroll-risk', 'vc-bridge-loan', 'emergency-loan',
   // GAMEPLAY V2 §5.2: the one-time angel (engine-brought only).
   'angel-lifeline',
   'rival-price-war', 'rival-talent-raid', 'rival-copycat-feature',
@@ -101,7 +101,7 @@ describe('decision cards', () => {
     })
     for (const d of DECISIONS.filter((x) => x.category === 'crisis')) expect(d.condition?.(calm)).toBe(false)
     const broke = makeState((s) => (s.stats.cash = -100))
-    expect(DECISIONS.find((d) => d.id === 'emergency-bridge')!.condition!(broke)).toBe(true)
+    expect(DECISIONS.find((d) => d.id === 'emergency-loan')!.condition!(broke)).toBe(true)
   })
 
   it('the crunch option counts as a crunch (tech-debt trigger) and a rushed project', () => {

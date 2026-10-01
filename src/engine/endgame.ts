@@ -3,7 +3,7 @@ import * as B from './balance'
 import { promoteConcept } from './concepts'
 import { queueConcept } from './effects'
 import { owedCosts } from './derive'
-import { enterStage } from './round'
+import { enterStage, pushStageReport } from './round'
 import type { ConceptId, GameState, PostMortemCode, PostMortemReason } from './types'
 import { pushActivity, pushEvent, type EngineContent } from './util'
 
@@ -54,8 +54,10 @@ export function endRun(s: GameState, content: EngineContent, kind: 'bankrupt' | 
   pushEvent(s, { kind: 'gameOver', value: xp })
 }
 
-export function winRun(s: GameState): void {
+/** `content`: the Series C report card is written (GAMEPLAY V2 §9.3); without it (tests) none is. */
+export function winRun(s: GameState, content?: EngineContent): void {
   if (s.gameOver) return
+  if (content) pushStageReport(s, content)
   // No rng: Unicorn ends the run, no crisis is scheduled there (GAMEPLAY V2 §5.1 RNG chain).
   enterStage(s, B.LAST_STAGE)
   s.gameOver = { kind: 'unicorn', day: s.time.day, reasons: [], xpEarned: B.XP_PER_STAGE * (B.LAST_STAGE + 1) }
@@ -88,5 +90,5 @@ export function dailyEndgame(s: GameState, content: EngineContent): void {
     delete s.flags['teamZeroSince']
   }
   const target = B.STAGE_TARGET_VALUATION[B.LAST_STAGE] ?? Infinity
-  if (s.stage === B.LAST_STAGE - 1 && s.finance.valuation >= target) winRun(s)
+  if (s.stage === B.LAST_STAGE - 1 && s.finance.valuation >= target) winRun(s, content)
 }

@@ -7,6 +7,7 @@ import {
   balance,
   createEngine,
   createRngState,
+  loanAmount,
   nextCrisis,
   nextLockedRing,
   serialize,
@@ -75,6 +76,8 @@ export interface BotConfig {
    * careless / greedyGood: off.
    */
   prepareCrisis?: boolean
+  /** GAMEPLAY V2 §6.2: 'always' takes every loan offered (greedyGood); default: only on runway < 3 up to Series A. */
+  loans?: 'always'
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -124,14 +127,14 @@ export const BOTS: Record<Archetype, BotConfig> = {
  * GAMEPLAY V2 §15 bots. All play the real engine through the same routine as the archetypes; what differs is config.
  * - coaster / idleAfterProfit: bootstrap until the first profitable day, then autopilot (see BotConfig.afterProfit).
  * - greedyGood: a good policy that takes risks — hires down to 4 months of runway, always the large round, never
- *   prepares for a scheduled crisis (§5.1). // T09 kredi: takes the loan within 3 months of runway once loans exist.
+ *   prepares for a scheduled crisis (§5.1), takes every loan offered (§6.2).
  * - burner / frugal: the same bootstrap plan on the same seeds; burner spends hard but watches runway (hires down to 3
  *   months, heavy ads), frugal hires only on a thick cushion. "Careless burner" = burner with minRunwayToHire 0.
  */
 export const V2_BOTS: Record<V2BotKind, BotConfig> = {
   coaster: { ...BOTS.bootstrap, kind: 'coaster', afterProfit: 'coast' },
   idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', afterProfit: 'idle' },
-  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false },
+  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false, loans: 'always' },
   burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
 }
@@ -192,7 +195,12 @@ export interface BotRun {
   profitMonthsShare: number
   loansTaken: number
   loanCalled: number
+  /** Took a loan and was alive LOAN_SURVIVE_DAYS after the first one (null = never took one; a run that ended alive counts). */
+  loanSurvived12m: boolean | null
   roundsFailed: number
+  /** Rounds closed (for the failed-round share). */
+  roundsClosed: number
+  downRounds: number
   crisesFired: number
   crisisNearDeath: number
   /** Alive ≥ 180 days after the first near-death payday (null = never near death). */
@@ -239,6 +247,9 @@ export interface CrisisRun {
   minRunway: number
 }
 
+/** §6.2 kabul: a loan taker must still be alive this many days after the loan. */
+export const LOAN_SURVIVE_DAYS = 360
+
 /** §8.2 kabul: no overtake in the first this many days of Seed for a good bot. */
 export const RIVAL_EARLY_DAYS = 90
 
@@ -264,10 +275,44 @@ export const DAYS_10_MIN = 300
 
 type Ctx = { s: GameState; act: (a: Action) => boolean; content: EngineContent; mem: Record<string, number> }
 
+/** Good bots take a loan only on runway < this, while no loan runs, up to LOAN_MAX_STAGE (GAMEPLAY V2 §6.2). */
+const LOAN_RUNWAY = 3
+const LOAN_MAX_STAGE = 3
+
+const LEGACY_LOAN_FLAGS: ReadonlySet<string> = new Set(['bridgeLoan', 'emergencyLoan'])
+function isLegacyLoan(flag: string | readonly string[] | undefined): boolean {
+  return flag !== undefined && (typeof flag === 'string' ? [flag] : flag).some((f) => LEGACY_LOAN_FLAGS.has(f))
+}
+
+/**
+ * A good bot takes the devil's deal last: another option of the card that covers the hole in the till (savings, an
+ * angel) wins over the loan (GAMEPLAY V2 §6.2: ≤ 30% of good bots ever borrow).
+ */
+function otherWayOut(s: GameState, card: DecisionCard, loanIndex: number): boolean {
+  const hole = Math.max(0, -s.stats.cash)
+  return card.options.some((o, j) => {
+    if (j === loanIndex || o.effects.loan || isLegacyLoan(o.effects.setFlag)) return false
+    const fx = o.effects
+    const cash = (fx.cash ?? 0) + (fx.cashPercent ?? 0) * Math.max(0, s.stats.cash) + (fx.cashBurnMonths ?? 0) * Math.max(0, s.finance.burn)
+    return cash > 0 && cash >= hole
+  })
+}
+
 function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig): number {
   const fx = card.options[i]!.effects
   const w = cfg.weights
+  // The devil's deal: the loan's cash counts half (interest, covenant), and only when there is no other way.
+  // A legacy loan flag (a crisis card still on the old bridge: its cash becomes the loan) is weighed the same way.
+  let loan = 0
+  if (fx.loan || isLegacyLoan(fx.setFlag)) {
+    // One loan only: an offer while one runs brings nothing (the engine closes it), whatever the bot.
+    if (s.finance.loan) return -Infinity
+    const need = cfg.loans === 'always' || ((s.finance.runway ?? 99) < LOAN_RUNWAY && s.stage <= LOAN_MAX_STAGE && !otherWayOut(s, card, i))
+    if (!need) return -Infinity
+    if (fx.loan) loan = w.cash * loanAmount(s, fx.loan) * (cfg.loans === 'always' ? 2 : 0.5)
+  }
   return (
+    loan +
     w.cash * ((fx.cash ?? 0) + (fx.cashPercent ?? 0) * Math.max(0, s.stats.cash) + (fx.cashBurnMonths ?? 0) * Math.max(0, s.finance.burn)) +
     w.users * ((fx.users ?? 0) + (fx.usersPercent ?? 0) * s.stats.users) +
     w.morale * (fx.morale ?? 0) +
@@ -276,8 +321,11 @@ function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig
   )
 }
 
-/** Concepts, decision cards and resignation windows: the "answer the bubbles" part of play. */
-function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: DecisionPolicy = 'best'): void {
+/**
+ * Concepts, decision cards and resignation windows: the "answer the bubbles" part of play. `loans`: a careless player
+ * answers at random but always takes a loan offered (§15).
+ */
+function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: DecisionPolicy = 'best', loans = false): void {
   const { act, content } = c
   for (let i = 0; i < 5 && c.s.concepts.active; i++) if (!act({ type: 'openConcept', conceptId: c.s.concepts.active.id })) break
   const active = c.s.decisions.active
@@ -290,6 +338,8 @@ function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: Decision
       const sign = policy === 'worst' ? -1 : 1
       card.options.forEach((_, i) => { if (sign * scoreOption(c.s, card, i, cfg) > sign * scoreOption(c.s, card, best, cfg)) best = i })
     } else if (!cfg && rng) best = rng.int(0, card.options.length - 1)
+    const loan = card.options.findIndex((o) => o.effects.loan)
+    if (loans && loan >= 0) best = loan
     act({ type: 'answerDecision', cardId: card.id, optionIndex: best })
   }
   for (const e of c.s.employees) {
@@ -573,13 +623,31 @@ function growth(c: Ctx, cfg: BotConfig): void {
 /** Days without new progress after which a bot takes the open round window. */
 const STALL_DAYS = 60
 
+/** Below this runway the bot starts a round even with a weak due-diligence list (GAMEPLAY V2 §6.3). */
+const DD_SKIP_RUNWAY = 4
+/** Due-diligence checks met (or not asked) the bot wants before starting a round. */
+const DD_MIN_MET = 3
+/** After a failed round, the down round is taken below this runway (else the bot repairs and waits for the window). */
+const DOWN_ROUND_RUNWAY = 6
+
+/** GAMEPLAY V2 §6.3 repair: a broken morale gets the team talk, a broken runway / burn multiple cuts the ads. */
+function repairDiligence(c: Ctx): void {
+  const dd = c.s.round?.diligence ?? c.s.derived.round?.diligence ?? []
+  const broken = (id: string) => dd.some((d) => d.id === id && d.asked !== false && !d.met)
+  if (broken('morale') && !c.s.founder.currentAction) c.act({ type: 'founderAction', kind: 'motivateTeam' })
+  if ((broken('runway') || broken('burn')) && c.s.finance.adBudget > 0) c.act({ type: 'setAdBudget', amount: Math.round(c.s.finance.adBudget * 0.5) })
+}
+
 function fundraise(c: Ctx, cfg: BotConfig, careless = false): void {
   const { act } = c
   const r = c.s.round
   if (r?.active) {
+    // A strike on the round: bring a co-investor (a shorter round) and repair what broke.
+    const struck = !careless && (r.strikes ?? 0) >= 1
+    if (struck) repairDiligence(c)
     if (r.pitchDue === undefined) return
     const good = (c.s.derived.round?.pitchOptions?.find((o) => o.pitch === 'metrics')?.delta ?? 0) > 0
-    const pitch: RoundPitch = good ? 'metrics' : cfg.weakPitch
+    const pitch: RoundPitch = struck ? 'coinvestor' : good ? 'metrics' : cfg.weakPitch
     if (!act({ type: 'roundPitch', pitch }) && pitch === 'story') act({ type: 'roundPitch', pitch: 'metrics' })
     return
   }
@@ -591,7 +659,21 @@ function fundraise(c: Ctx, cfg: BotConfig, careless = false): void {
     c.mem.bestProg = p
     c.mem.bestDay = c.s.time.day
   }
+  const runwayNow = c.s.finance.runway ?? 99
+  // After a failed round (§6.3): the down round once the door opens again when cash is short; otherwise repair.
+  const rv = c.s.derived.round
+  if (rv?.downRound && !rv.retryIn) {
+    if (careless || runwayNow < DOWN_ROUND_RUNWAY) {
+      if (act({ type: 'startRound', size: cfg.roundSize, down: true })) return
+    } else repairDiligence(c)
+  }
   if (!c.s.derived.canStartRound) return
+  // §6.3: no round into a weak due-diligence list (≥ 3 of 4 met or not asked), unless cash is short.
+  const ddMet = (rv?.diligence ?? []).filter((d) => d.met || d.asked === false).length
+  if (!careless && ddMet < DD_MIN_MET && runwayNow >= DD_SKIP_RUNWAY) {
+    repairDiligence(c)
+    return
+  }
   // A winter crisis ahead (revealed, the round could not close before it) or on: the round would be priced in it.
   // Wait it out — unless runway is under WINTER_ROUND_RUNWAY months.
   const prep = preparing(c.s, cfg)
@@ -656,12 +738,15 @@ export function playBot(
     }
     lastMoment = Math.max(lastMoment, day)
   }
+  /** Down rounds started (counted in ctx.act). */
+  let downRounds = 0
   const ctx: Ctx = {
     get s() { return s },
     act: (a: Action): boolean => {
       const r = api.applyAction(s, a)
       if (r.ok) {
         s = r.state
+        if (a.type === 'startRound' && a.down) downRounds++
         const key = a.type === 'founderAction' ? `founderAction:${a.kind}` : a.type
         actionCounts[key] = (actionCounts[key] ?? 0) + 1
         if (MOVE_ACTIONS.has(a.type)) moment(s.time.day)
@@ -701,11 +786,16 @@ export function playBot(
   let rivalPassed = 0
   let rivalPassedSeedEarly = 0
   const rivalShareByStage = [0, 0, 0, 0, 0, 0, 0]
+  let loansTaken = 0
+  let loanCalled = 0
+  let firstLoanDay: number | null = null
+  let roundsFailed = 0
+  let roundsClosed = 0
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
-      // Random card answers (no weighing), otherwise the bootstrap routine without runway care.
-      housekeeping(ctx, null, botRng)
+      // Random card answers (no weighing; a loan is always taken), otherwise the bootstrap routine without runway care.
+      housekeeping(ctx, null, botRng, 'best', true)
       if (!c10Skip(botRng)) {
         // Impulse buy: a random item it can pay for right now, on a random open slot, reserve or not.
         if (botRng.next() < (cfg.impulseBuy ?? 0)) {
@@ -763,6 +853,13 @@ export function playBot(
         const seedDay = stageDays[2]
         if (s.stage === 2 && seedDay != null && e.day - seedDay <= RIVAL_EARLY_DAYS) rivalPassedSeedEarly++
       }
+      if (e.kind === 'loanTaken') {
+        loansTaken++
+        firstLoanDay ??= e.day
+      }
+      if (e.kind === 'loanCalled') loanCalled++
+      if (e.kind === 'roundFailed') roundsFailed++
+      if (e.kind === 'roundClosed') roundsClosed++
       if (e.kind === 'crisis') crises.push({ day: e.day, stage: s.stage, prepared: prepOn, minRunway: 99, eventId: e.id })
       if (e.kind === 'payday') {
         const rw = Math.min(99, s.finance.lastReceipt?.runwayAfter ?? 99)
@@ -808,6 +905,7 @@ export function playBot(
     onDay?.(s)
   }
   const failed = s.gameOver?.kind === 'bankrupt' || s.gameOver?.kind === 'teamLost'
+  const threadCards = new Set(content.decisions.filter((d) => d.thread).map((d) => d.id))
   return {
     kind,
     seed,
@@ -837,9 +935,12 @@ export function playBot(
     profitPaydays,
     paydays,
     profitMonthsShare: paydays ? profitPaydays / paydays : 0,
-    loansTaken: 0,
-    loanCalled: 0,
-    roundsFailed: 0,
+    loansTaken,
+    loanCalled,
+    loanSurvived12m: firstLoanDay === null ? null : !(failed && s.time.day - firstLoanDay < LOAN_SURVIVE_DAYS),
+    roundsFailed,
+    roundsClosed,
+    downRounds,
     crisesFired: crises.length,
     crisisNearDeath: crises.filter((k) => k.minRunway < 2).length,
     survivedNearDeath: firstNearDeath === null ? null : !(failed && s.time.day - firstNearDeath < 180),
@@ -859,7 +960,7 @@ export function playBot(
     rivalPassed,
     rivalPassedSeedEarly,
     rivalShareByStage,
-    threadSteps: 0,
+    threadSteps: s.decisions.history.filter((h) => threadCards.has(h.cardId)).length,
     secretsSeen: 0,
     saveBytes: new TextEncoder().encode(serialize(s)).length,
     crises: crises.map(({ eventId: _id, ...k }) => k),

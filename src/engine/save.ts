@@ -1,5 +1,6 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS } from './balance'
+import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE } from './balance'
+import { newLoan } from './effects'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt } from './types'
 import { castOf, ensureRivals } from './world'
 
@@ -46,6 +47,16 @@ const MIGRATIONS: Record<number, Migration> = {
     if (!st.director || typeof st.director !== 'object') st.director = { pressure: DIRECTOR_PRESSURE_DEFAULT, graceUntil: 0 }
     if (!st.cast || typeof st.cast !== 'object') st.cast = castOf()
     if (!Array.isArray(st.rivals)) st.rivals = []
+    // Loan (§6.2): an outstanding bridge debt becomes the single loan on the §3.1 terms (grace and covenant from load).
+    const debtFin = finance as { debt?: unknown; loan?: unknown } | undefined
+    if (debtFin && !debtFin.loan && typeof debtFin.debt === 'number' && debtFin.debt > 0 && typeof time?.day === 'number') {
+      debtFin.loan = newLoan(time.day, debtFin.debt, LOAN_LEGACY_RATE, LOAN_LEGACY_MONTHS, LOAN_LEGACY_COVENANT)
+    }
+    // Rounds can fail (§6.3): a running round starts with no strikes; its snapshot is taken on the next week.
+    const round = st.round as { strikes?: unknown } | undefined
+    if (round && typeof round === 'object' && typeof round.strikes !== 'number') round.strikes = 0
+    // Stage report cards (§9.3): none on record.
+    if (!Array.isArray(st.stageReports)) st.stageReports = []
     const game = st as unknown as GameState
     if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st

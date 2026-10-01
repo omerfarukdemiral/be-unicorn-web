@@ -1,9 +1,10 @@
 // Recomputes stats/finance/derived from the raw state. Render/UI read these; they never compute formulas.
 import * as B from './balance'
 import * as E from './economy'
+import { loanMonthlyService } from './effects'
 import { findUsersPreview, salesCallPreview } from './founder'
 import { horizon, nextCrisis, nextStep } from './loopSelectors'
-import { roundView, roundWindowOpen } from './round'
+import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId, type ValuationBreakdown } from './types'
 import { modifierMult, moraleModifierSum, type EngineContent } from './util'
@@ -193,8 +194,9 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.finance.burn = burn
   s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget, founder: living }
   s.finance.net = net
-  // Runway counts what payday will take: cash already earmarked for accrued costs is not runway.
-  s.finance.runway = E.runway(s.stats.cash - owedCosts(s), net)
+  // Runway counts what payday will take: cash already earmarked for accrued costs is not runway, and the loan's
+  // monthly service is a cost like any other (GAMEPLAY V2 §6.2).
+  s.finance.runway = E.runway(s.stats.cash - owedCosts(s), net - loanMonthlyService(s))
   s.finance.valuation = valuation
 
   const gTarget = globalMoraleTarget(s, o, over)
@@ -226,7 +228,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     channels: { organic, paid, manual: Math.max(manualNow, manualLast), enterprise: s.finance.enterpriseCustomers.length },
     stageProgress: target ? valuation / target : 1,
     // Early window (docs/CORE_LOOP.md §4.3): the round can start at ROUND_EARLY_RATIO of the target.
-    canStartRound: s.gameOver === undefined && s.stage < B.LAST_STAGE - 1 && !(s.round?.active ?? false) && roundWindowOpen(valuation, target),
+    // GAMEPLAY V2 §6.3: a failed round closes the door for ROUND_RETRY_DAYS.
+    canStartRound: s.gameOver === undefined && s.stage < B.LAST_STAGE - 1 && !(s.round?.active ?? false) && roundWindowOpen(valuation, target) && roundRetryIn(s) === 0,
   }
   const goalsDone = s.goalsDone ?? []
   const stars = (content.goals ?? []).filter((g) => g.stage === s.stage && goalsDone.includes(g.id)).length

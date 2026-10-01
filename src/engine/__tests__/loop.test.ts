@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { CRISES, CRISIS_CARDS, type StageGoal } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
-import { crisisSeverity } from '../decisions'
+import { crisisSeverity, isCardEligible } from '../decisions'
+import { winRun } from '../endgame'
 import { releaseLevel } from '../loop'
 import { daysToPayday, horizon, nextCrisis, nextStep } from '../loopSelectors'
 import { migrate } from '../save'
@@ -551,5 +552,98 @@ describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
       for (const o of card.options) expect(words(o.label)).toBeLessThanOrEqual(5)
       expect(words(c.name)).toBeLessThanOrEqual(6)
     }
+  })
+})
+
+describe('card threads (GAMEPLAY V2 §9.2)', () => {
+  const T1 = fakeCard('t-1', { category: 'thread', thread: { id: 'mentor', step: 1 } })
+  const T2 = fakeCard('t-2', { category: 'thread', thread: { id: 'mentor', step: 2, after: [0] } })
+  const T2B = fakeCard('t-2b', { category: 'thread', thread: { id: 'mentor', step: 2, after: [1] } })
+  const P1 = fakeCard('p-1', { category: 'thread', thread: { id: 'press', step: 1 } })
+  const cards = [T1, T2, T2B, P1]
+  const tapi = createEngine(fakeContent({ decisions: cards }))
+  const answered = (s: GameState, cardId: string, optionIndex: number): GameState => ({
+    ...s,
+    decisions: { ...s.decisions, history: [...s.decisions.history, { cardId, optionIndex, day: s.time.day }] },
+  })
+
+  it('a step 2 card waits for step 1; `after` picks the branch', () => {
+    const s = tapi.createGame({ seed: 1 })
+    expect(isCardEligible(T1, s, { cards })).toBe(true)
+    expect(isCardEligible(T2, s, { cards })).toBe(false)
+    expect(isCardEligible(T2B, s, { cards })).toBe(false)
+    const a = answered(s, 't-1', 0)
+    expect(isCardEligible(T2, a, { cards })).toBe(true)
+    expect(isCardEligible(T2B, a, { cards })).toBe(false)
+    const b = answered(s, 't-1', 1)
+    expect(isCardEligible(T2, b, { cards })).toBe(false)
+    expect(isCardEligible(T2B, b, { cards })).toBe(true)
+    // Without the card list a later step cannot be checked: it stays closed.
+    expect(isCardEligible(T2, a)).toBe(false)
+  })
+
+  it('one card per thread per stage: the next step waits for the next stage; other threads are not held', () => {
+    let s = tapi.createGame({ seed: 2 })
+    s = { ...s, stats: { ...s.stats, cash: 50_000_000 } }
+    const play = (st: GameState, days: number): GameState => {
+      for (let d = 0; d < days; d++) {
+        st = tapi.step(st, 1)
+        const a = st.decisions.active
+        if (a) st = tapi.applyAction(st, { type: 'answerDecision', cardId: a.cardId, optionIndex: 0 }).state
+      }
+      return st
+    }
+    s = play(s, 400)
+    const ids = s.decisions.history.map((h) => h.cardId)
+    expect(ids).toContain('t-1')
+    expect(ids).toContain('p-1')
+    expect(ids).not.toContain('t-2')
+    expect(s.flags['threadStage:mentor']).toBe(0)
+    s = play({ ...s, stage: 1 }, 400)
+    expect(s.decisions.history.map((h) => h.cardId)).toContain('t-2')
+    expect(s.decisions.history.map((h) => h.cardId)).not.toContain('t-2b')
+  })
+
+  it('thread cards weigh THREAD_CARD_WEIGHT and take the shared cooldown', () => {
+    expect(B.THREAD_CARD_WEIGHT).toBe(3)
+    let s = tapi.createGame({ seed: 3 })
+    s = { ...s, stats: { ...s.stats, cash: 50_000_000 } }
+    for (let d = 0; d < 200 && !s.decisions.active; d++) s = tapi.step(s, 1)
+    expect(s.decisions.lastCardDay).toBe(s.decisions.active!.shownDay)
+  })
+})
+
+describe('stage report cards (GAMEPLAY V2 §9.3)', () => {
+  function rich(seed = 1): GameState {
+    const s = api.createGame({ seed })
+    return { ...s, stats: { ...s.stats, cash: 50_000_000 } }
+  }
+  function closeInto(s: GameState, target: StageIndex): GameState {
+    const round: RoundState = { active: true, targetStage: target, startedDay: s.time.day, weeksTotal: 1, weeksLeft: 1, offer: { amount: 1000, equity: 0.01, preMoney: 0 }, baseValuation: 1 }
+    return api.step({ ...s, round }, 7)
+  }
+
+  it('every stage left writes one report: the length is the number of stages left', () => {
+    let s = api.step(rich(), 40)
+    expect(s.stageReports ?? []).toHaveLength(0)
+    for (let st = 1; st <= 5; st++) {
+      s = closeInto(api.step(s, 31), st as StageIndex)
+      expect(s.stage).toBe(st)
+      expect(s.stageReports).toHaveLength(st)
+      expect(s.stageReports!.at(-1)!.stage).toBe(st - 1)
+    }
+    const garage = s.stageReports![0]!
+    expect(garage.days).toBeGreaterThanOrEqual(70)
+    // g-launch needs a launch (none here); Pre-seed's g-later holds at once.
+    expect(garage.goalsDone).toBe(0)
+    expect(s.stageReports![1]!.goalsDone).toBe(1)
+    expect(garage.roundsClosed).toBe(1)
+    expect(garage.minRunway).toBeLessThanOrEqual(99)
+    // Unicorn: the Series C card is the last one.
+    const won = structuredClone(s)
+    winRun(won, fakeContent({ goals: GOALS }))
+    expect(won.stageReports).toHaveLength(6)
+    expect(won.stageReports!.at(-1)!.stage).toBe(5)
+    expect(won.stageReports!.length).toBeLessThanOrEqual(B.STAGE_REPORTS_MAX)
   })
 })

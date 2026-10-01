@@ -320,12 +320,32 @@ export const PITCH_STORY_ENERGY = 10
 export const PITCH_COINVESTOR_WEEKS = 1
 export const PITCH_COINVESTOR_EQUITY = 0.01
 
+// GAMEPLAY V2 §6.3: a round can fail ---------------------------------------
+/** Strikes that fail a round (a week where ≥ ROUND_STRIKE_BROKEN checks met at the start broke: +1, else −1). */
+export const ROUND_FAIL_STRIKES = 3
+/**
+ * 1, not the plan's 2: only checks met at the start count, so the plan's reason for 2 (Seed's burn check always unmet)
+ * is gone, and a good player who starts on ≥ 3/4 met almost never breaks two at once (sim: 0.2% of rounds failed).
+ */
+export const ROUND_STRIKE_BROKEN = 1
+/** From this round week on, a metrics part at the offer floor fails the round (not at the close: no 8–12 wasted weeks). */
+export const ROUND_FAIL_FLOOR_WEEK = 4
+/** Days after a failed round before the next can start (45 + a new round ≈ 4 months: a failed round would be death). */
+export const ROUND_RETRY_DAYS = 14
+export const ROUND_FAIL_REPUTATION = -10
+export const ROUND_FAIL_MORALE = -8
+/** The one-time down round after a failed one: amount × this, equity × this, and no offer floor. */
+export const DOWN_ROUND_AMOUNT = 0.7
+export const DOWN_ROUND_EQUITY = 1.5
+/** Equity a round can sell at most (a co-investor or a down round never takes more). */
+export const ROUND_EQUITY_MAX = 0.5
+
 // ---------------------------------------------------------------------------
 // Bankruptcy (PLAN §5.10)
 // ---------------------------------------------------------------------------
 export const BANKRUPT_DAYS = 60
 /** [Faz 3] The bankruptcy clock starts only when payday cannot be paid (cash < 0 after payday), not on a dip. */
-export const RESCUE_CARD_ID = 'emergency-bridge'
+export const RESCUE_CARD_ID = 'emergency-loan'
 export const BANKRUPT_WARNING_DAYS: readonly number[] = [1, 30, 45, 55]
 /** Team at 0 (after first hire) ends the run after this many days (DECISIONS #6). */
 export const TEAM_ZERO_GRACE_DAYS = 14
@@ -468,6 +488,35 @@ export const NEXT_STEP_USERS = 50
 export const NEXT_STEP_FIRST_USERS = 3
 /** Each ☆ stage goal reached takes this much off the equity sold in the next round (1 point). */
 export const GOAL_STAR_EQUITY_DISCOUNT = 0.01
+/** GAMEPLAY V2 §9.2: a thread card's default pick weight (it still takes the shared card cooldown). */
+export const THREAD_CARD_WEIGHT = 3
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §6.2: the loan ("şeytanla anlaşma")
+// ---------------------------------------------------------------------------
+/** Smallest loan by stage: max(burn × burnMonths, this). */
+export const LOAN_MIN: readonly number[] = [15_000, 40_000, 150_000, 600_000, 3_000_000, 15_000_000, 15_000_000]
+/** No amortization for this many months after the loan is taken (only interest). */
+export const LOAN_INTEREST_ONLY_MONTHS = 6
+/** The covenant is not measured in the first this many days. */
+export const LOAN_COVENANT_GRACE_DAYS = 90
+/** covenantRunway when the option does not say: burnMonths × this. */
+export const LOAN_COVENANT_PER_BURN_MONTH = 0.5
+/** 2nd breach: this share of the balance is called and the rate × LOAN_CALL_RATE_MULT. */
+export const LOAN_CALL_SHARE = 0.5
+export const LOAN_CALL_RATE_MULT = 1.5
+/** Horizon of the 1st-breach warning (the next measured payday). */
+export const LOAN_WARNING_DAYS = 30
+/**
+ * Terms of a loan from an older save (debt without a loan) or a legacy loan flag (bridgeLoan / emergencyLoan without
+ * `loan`): GAMEPLAY V2 §3.1 migration values.
+ */
+export const LOAN_LEGACY_RATE = 0.02
+export const LOAN_LEGACY_MONTHS = 12
+export const LOAN_LEGACY_COVENANT = 1
+
+/** GAMEPLAY V2 §9.3: stage report cards kept (one per stage left). */
+export const STAGE_REPORTS_MAX = 7
 
 // ---------------------------------------------------------------------------
 // GAMEPLAY V2 §14.2: month history (stats screen) and the company profile radar

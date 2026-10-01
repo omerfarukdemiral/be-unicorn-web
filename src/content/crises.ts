@@ -154,9 +154,9 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
       },
       {
         label: 'Köprü kredi al',
-        // T09: the §6.2 loan (covenants) once loans exist; until then the bridge flag makes it debt paid from the next round.
+        // §6.2 loan sized on the burn (covenant = 2 months of runway); with a loan already running the engine pays nothing.
         tradeoff: { gain: 'Kasa nefes alır', cost: '%2 hisse ve borç' },
-        effects: { cash: 2_000_000, equity: -0.02, setFlag: 'bridgeLoan' },
+        effects: { loan: { burnMonths: 4, months: 9, rate: 0.02, covenantRunway: 2 }, equity: -0.02 },
         reflection: 'Köprü, karşıya geçmek için; üstünde yaşamak için değil.',
         conceptId: 'fundraise-time',
       },

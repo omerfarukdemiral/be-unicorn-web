@@ -39,3 +39,8 @@ export const ENTERPRISE_NAMES: readonly string[] = [
   'Anadolu Lojistik', 'Boğaz Holding', 'Kuzey Enerji', 'Ege Tekstil', 'Toros Gıda', 'Marmara Sigorta',
   'Kapadokya Turizm', 'Karadeniz Denizcilik', 'Başkent Sağlık', 'Trakya Tarım', 'Yıldız Perakende', 'Fırat Yapı',
 ]
+
+/** Named rivals (GAMEPLAY V2 §8.2): the lead is born at Seed, the 2nd at Series A, the 3rd at Series B. */
+export const RIVAL_NAMES: readonly string[] = [
+  'Kasırga Labs', 'Atmaca', 'Tufan AI', 'Gökbörü', 'Yalaz.io', 'Karakulak', 'Sarp Tech', 'Vargı',
+]

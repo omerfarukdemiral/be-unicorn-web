@@ -8,6 +8,7 @@ import { valuation, valuationMultiple, valuationPreRevenue } from '../economy'
 import { createEngine } from '../index'
 import { recomputeDerived } from '../derive'
 import type { GameState } from '../types'
+import { playBot, RIVAL_EARLY_DAYS } from '../../../sim/bots'
 import { fakeCard, fakeContent } from './fixtures'
 
 const api = createEngine(fakeContent())
@@ -64,7 +65,8 @@ describe('rescue card on a missed payday (review #19)', () => {
     const real = createEngine(CONTENT)
     let s = real.createGame({ seed: 5 })
     s = real.applyAction(s, { type: 'startProject', category: 'web' }).state
-    s = { ...s, stats: { ...s.stats, cash: 500 } }
+    // The one-time angel (GAMEPLAY V2 §5.2, director.test) already spent: this is the rescue's path.
+    s = { ...s, stats: { ...s.stats, cash: 500 }, director: { ...s.director!, angelUsed: true } }
     let missedDay: number | null = null
     let defaulted: number | null = null
     for (let d = 0; d < 200 && !s.gameOver && defaulted === null; d++) {
@@ -168,5 +170,76 @@ describe('weekly pitch: an average impression that never saturates (review #4, #
     expect(next.round!.pitchDue).toBe(2)
     expect(next.round!.pitchBonus).toBeCloseTo(B.PITCH_METRICS_GOOD / 2, 9)
     expect(next.derived.round!.factor).toBeLessThanOrEqual(B.ROUND_OFFER_CEIL + B.PITCH_BONUS_CAP + 1e-9)
+  })
+})
+
+describe('named rivals (GAMEPLAY V2 §8.2)', () => {
+  const USERS = 1500
+  /** A Seed company with one product and its engineer: the lead rival is born on the first day. */
+  function seedCompany(reputation = 50, maturity = 1): GameState {
+    const s = withProject(maturity)
+    return flat(refresh({ ...s, stage: 2, stats: { ...s.stats, users: USERS, reputation, cash: 5e6 } }), 1)
+  }
+  /**
+   * Steps `days` with the user count held: a company that does not grow (MoM 0, under every stage's ask). `holdShare`
+   * also holds the rivals' share, so the price (ARPU × (1 − Σshare × 0.2)) does not creep and the MRR stays flat.
+   */
+  function flat(s: GameState, days: number, holdShare = false): GameState {
+    for (let d = 0; d < days; d++) {
+      const rivals = holdShare ? s.rivals?.map((r) => ({ ...r, share: B.RIVAL_BORN_SHARE })) : s.rivals
+      s = api.step({ ...s, stats: { ...s.stats, users: USERS }, rivals }, 1)
+    }
+    return s
+  }
+  const passes = (s: GameState, from: number) => s.events.filter((e) => e.kind === 'rivalPassed' && e.id > from)
+
+  it('a stalled company (3+ months under the ask) is overtaken by the lead — once', () => {
+    let s = seedCompany()
+    expect(s.rivals).toHaveLength(1)
+    expect(s.rivals![0]!.valuation).toBeLessThan(s.finance.valuation)
+    const from = s.events.at(-1)?.id ?? 0
+    const seen: number[] = []
+    let firstDay: number | null = null
+    for (let d = 0; d < 240; d++) {
+      s = flat(s, 1, true)
+      for (const e of passes(s, seen.at(-1) ?? from)) {
+        seen.push(e.id)
+        firstDay ??= e.day
+      }
+    }
+    expect(seen).toHaveLength(1)
+    // Three months under the ask are not enough yet; the fourth month end is (0.75 × tempo^4 > 1).
+    expect(firstDay! - 1).toBeGreaterThanOrEqual(90)
+    expect(firstDay! - 1).toBeLessThanOrEqual(150)
+    expect(s.rivals![0]!.ahead).toBe(true)
+    expect(s.flags['rivalPressure']).toBeGreaterThan(0.2)
+  })
+
+  it('a good bot arriving at Seed through a closed round is not overtaken in its first 90 days', () => {
+    // The real path: closeRound → enterStage; the lead anchors on the new stage's valuation (the pre-revenue floor
+    // fades at Seed), not on the Pre-seed figure.
+    for (const kind of ['bootstrap', 'vcRocket'] as const) {
+      let seedDay: number | null = null
+      let lastDay = 0
+      const run = playBot(kind, 1, CONTENT, 420, (s) => {
+        if (s.stage >= 2) seedDay ??= s.time.day
+        lastDay = s.time.day
+      })
+      expect(run.stageDays[2]).not.toBeNull()
+      expect(lastDay - seedDay!).toBeGreaterThanOrEqual(RIVAL_EARLY_DAYS)
+      expect(run.rivalPassedSeedEarly).toBe(0)
+    }
+  })
+
+  it('share is not one-way: a mature, well-known product wins share back; a raw one loses it', () => {
+    let strong = seedCompany(80, 1)
+    let weak = seedCompany(10, 0.3)
+    strong = flat(strong, 70)
+    weak = flat(weak, 70)
+    expect(strong.rivals![0]!.share).toBeLessThan(B.RIVAL_BORN_SHARE)
+    expect(weak.rivals![0]!.share).toBeGreaterThan(B.RIVAL_BORN_SHARE)
+    // Σ share presses the channels: organic and ARPU fall with it (§4.3).
+    const base = refresh({ ...weak, rivals: [] })
+    expect(weak.stats.arpu).toBeLessThan(base.stats.arpu)
   })
 })

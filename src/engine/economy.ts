@@ -67,9 +67,14 @@ export function penetration(users: number, tam: number): number {
   return tam > 0 ? clamp(0, 1, users / tam) : 0
 }
 
-/** organik/ay = pazarlama × 42 × (0.5 + itibar/100) × ortOlgunluk × max(0.1, 1 − pen). */
-export function organicPerMonth(marketing: number, reputation: number, avgMaturity: number, pen = 0): number {
-  return marketing * B.ORGANIC_PER_MARKETING * (0.5 + reputation / 100) * avgMaturity * Math.max(B.ORGANIC_PEN_FLOOR, 1 - pen)
+/** Σ rival share (GAMEPLAY V2 §8.2), capped at RIVAL_SHARE_TOTAL_MAX: what the rivals take from the channels. */
+export function rivalShareTotal(rivals: readonly { share: number }[] | undefined): number {
+  return clamp(0, B.RIVAL_SHARE_TOTAL_MAX, (rivals ?? []).reduce((a, r) => a + r.share, 0))
+}
+
+/** organik/ay = pazarlama × 42 × (0.5 + itibar/100) × ortOlgunluk × max(0.1, 1 − pen) × (1 − Σpay × 0.5). */
+export function organicPerMonth(marketing: number, reputation: number, avgMaturity: number, pen = 0, rivalShare = 0): number {
+  return marketing * B.ORGANIC_PER_MARKETING * (0.5 + reputation / 100) * avgMaturity * Math.max(B.ORGANIC_PEN_FLOOR, 1 - pen) * (1 - rivalShare * B.RIVAL_ORGANIC_SHARE)
 }
 
 /**
@@ -105,14 +110,15 @@ export function priceChurnFactor(priceMultiplier: number, daysSinceChange: numbe
 
 // §5.5 Revenue ----------------------------------------------------------------
 
-/** arpu = 4 × 1.15^aşama × fiyat × (1 + min(0.8, satış × 0.04)) × (0.3 + 0.7 × ortOlgunluk). */
-export function arpu(stage: number, priceMultiplier: number, sales: number, avgMaturity: number): number {
+/** arpu = 4 × 1.15^aşama × fiyat × (1 + min(0.8, satış × 0.04)) × (0.3 + 0.7 × ortOlgunluk) × (1 − Σpay × 0.2). */
+export function arpu(stage: number, priceMultiplier: number, sales: number, avgMaturity: number, rivalShare = 0): number {
   return (
     B.ARPU_BASE *
     B.ARPU_STAGE_GROWTH ** stage *
     priceMultiplier *
     (1 + Math.min(B.ARPU_SALES_MAX, sales * B.ARPU_SALES_PER)) *
-    (0.3 + 0.7 * avgMaturity)
+    (0.3 + 0.7 * avgMaturity) *
+    (1 - rivalShare * B.RIVAL_ARPU_SHARE)
   )
 }
 

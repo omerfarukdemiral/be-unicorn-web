@@ -69,6 +69,8 @@ export function applyEffects(s: GameState, content: EngineContent, fx: EffectBun
   const cash0 = s.stats.cash
   if (fx.cash !== undefined) s.stats.cash += fx.cash
   if (fx.cashPercent !== undefined) s.stats.cash += cappedCashPercent(s, fx.cashPercent)
+  // GAMEPLAY V2 §5.2 angel: months of today's burn (the angel pays for time, not a percent of an empty till).
+  if (fx.cashBurnMonths !== undefined) s.stats.cash += Math.round(Math.max(0, s.finance.burn) * fx.cashBurnMonths)
   if (fx.users !== undefined) s.stats.users = Math.max(0, s.stats.users + fx.users)
   if (fx.usersPercent !== undefined) s.stats.users = Math.max(0, s.stats.users * (1 + clamp(-B.USERS_PERCENT_CAP, B.USERS_PERCENT_CAP, fx.usersPercent)))
   if (fx.morale !== undefined) applyMorale(s, fx.morale)

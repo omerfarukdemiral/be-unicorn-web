@@ -115,7 +115,9 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const cap = E.capacity(o.deptCounts.eng, o.fx.capacityMult)
   const over = E.overload(s.stats.users, cap)
 
-  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat) * modifierMult(s, 'arpu')
+  // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
+  const rivalShare = E.rivalShareTotal(s.rivals)
+  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu')
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
   const anyLaunched = s.projects.some((p) => p.launched)
@@ -126,7 +128,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const tam = E.marketTam(s.stage)
   const pen = E.penetration(s.stats.users, tam)
   const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac')
-  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen) * modifierMult(s, 'organic')
+  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic')
   const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)
   const manualNow = Number(s.flags['manualThisMonth'] ?? 0)
   const manualLast = Number(s.flags['manualLastMonth'] ?? 0)

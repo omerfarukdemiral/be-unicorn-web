@@ -433,8 +433,6 @@ export const AMBIENT_VISITOR_DAYS = 2
 export const ACTIVITY_MAX = 30
 export const EVENTS_MAX = 64
 export const MODIFIER_MORALE_IS_ADDITIVE = true
-export const RIVAL_PRESSURE_PER_STAGE = 0.1
-export const RIVAL_PRESSURE_BASE = 0.05
 export const ARCHETYPE_MIN_STAGE: StageIndex = 3
 export const LOW_GROWTH_MOM = 0.02
 export const MOM_CLAMP_MAX = 5
@@ -506,9 +504,13 @@ export const CRISIS_GAP_MAX = 300
 export const CRISIS_HORIZON_DAYS = 60
 /** What the crisis is shows this many days ahead (crisisRevealed). */
 export const CRISIS_TELEGRAPH_DAYS = 30
-/** Severity = BASE + PER_PRESSURE × director pressure (director lands in C2; until then the default pressure). */
-export const CRISIS_SEVERITY_BASE = 0.7
-export const CRISIS_SEVERITY_PER_PRESSURE = 0.6
+/**
+ * Severity = BASE + PER_PRESSURE × director pressure. §5.2's 0.7 + 0.6 × p hit Series C (pressure ≈ 1) at 1.3 and
+ * cost the good bots ~300 days (sim T08); 0.5 + 0.4 × p keeps C at the pre-director 0.9 and softens the early storms.
+ */
+export const CRISIS_SEVERITY_BASE = 0.5
+export const CRISIS_SEVERITY_PER_PRESSURE = 0.4
+/** Director pressure of a save from before the director (and the migration's default, §3.1). */
 export const DIRECTOR_PRESSURE_DEFAULT = 0.3
 /** The stage's pool used up: the previous crisis comes back this much softer (still with its card). */
 export const CRISIS_LIGHT_SEVERITY = 0.7
@@ -517,3 +519,82 @@ export const CRISIS_LIGHT_SEVERITY = 0.7
  * (≈ one card's expected gap: CARD_COOLDOWN_DAYS + 1 / CARD_DAILY_CHANCE).
  */
 export const CRISIS_CARD_RESERVE_DAYS = 38
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §5.2: the director (RimWorld; pressure scales with wealth, never with how often cards come)
+// ---------------------------------------------------------------------------
+/**
+ * raw = BASE + PER_STAGE × stage + RICH × [runway null or > RICH_RUNWAY] + PROFIT × [profitMonths ≥ PROFIT_MONTHS]
+ *       + FAST × [momAvg > FAST_MOM] − GRACE × [day < graceUntil]; pressure = clamp(MIN, MAX, raw).
+ */
+export const DIRECTOR_BASE = 0.2
+export const DIRECTOR_PER_STAGE = 0.1
+export const DIRECTOR_RICH = 0.25
+export const DIRECTOR_RICH_RUNWAY = 12
+export const DIRECTOR_PROFIT = 0.2
+export const DIRECTOR_PROFIT_MONTHS = 3
+export const DIRECTOR_FAST = 0.1
+export const DIRECTOR_FAST_MOM = 0.15
+export const DIRECTOR_GRACE = 0.4
+/** A missed payroll gives this many days of breath (lower pressure, weaker rivals). */
+export const DIRECTOR_GRACE_DAYS = 180
+export const DIRECTOR_PRESSURE_MIN = 0.1
+export const DIRECTOR_PRESSURE_MAX = 1
+/** The one-time angel lifeline: comes instead of the rescue on the first missed payroll up to Seed. */
+export const ANGEL_CARD_ID = 'angel-lifeline'
+export const ANGEL_MAX_STAGE: StageIndex = 2
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §8.2: named rivals (pull share, pace the valuation)
+// ---------------------------------------------------------------------------
+/** Rivals in the market by stage (index = stage): the lead at Seed, the 2nd at Series A, the 3rd at Series B. */
+export const RIVALS_BY_STAGE: readonly number[] = [0, 0, 1, 2, 3, 3, 3]
+/** The lead is born (and re-anchored on every stage arrival) at this share of the player's valuation and MRR. */
+export const RIVAL_START_RATIO = 0.75
+/** Later rivals are born at this share of the player's valuation (they pull share, they do not pace). */
+export const RIVAL_FOLLOWER_RATIO = 0.4
+/** Monthly valuation and MRR tempo: × (1 + TEMPO_ASK[stage] × DILIGENCE_MOM[stage] × (1 + TEMPO_PRESSURE × pressure)). */
+export const RIVAL_TEMPO_PRESSURE = 0.5
+/**
+ * Share of the ask the lead keeps up, by stage. Series C is long and slow: at the full ask (× pressure ≈ 1 there) every
+ * good bot was passed late in C (sim T08: 48/48, §15 wants 10–30%). Up to B a stalled company still falls behind in
+ * about four months (§8.2).
+ */
+export const RIVAL_TEMPO_ASK: readonly number[] = [1, 1, 1, 1, 1, 0.5, 0.5]
+export const RIVAL_BORN_SHARE = 0.1
+/** Weekly: share += SHARE_K × (strength − player power) + SLOW_GROWTH (when momAvg < the ask); clamp(0, SHARE_MAX). */
+export const RIVAL_SHARE_K = 0.03
+export const RIVAL_SHARE_SLOW_GROWTH = 0.005
+export const RIVAL_SHARE_MAX = 0.5
+/** Player power = MAT × avgMaturity + REP × rep/100 + ROOM × (1 − pen). */
+export const RIVAL_POWER_MAT = 0.5
+export const RIVAL_POWER_REP = 0.3
+export const RIVAL_POWER_ROOM = 0.2
+/** strengthTarget = clamp(MIN, MAX, BASE + PER_STAGE × stage + PER_MRR × (mrr / stage target MRR) + PER_PRESSURE × pressure). */
+export const RIVAL_STRENGTH_BASE = 0.3
+export const RIVAL_STRENGTH_PER_STAGE = 0.1
+export const RIVAL_STRENGTH_PER_MRR = 0.2
+export const RIVAL_STRENGTH_PER_PRESSURE = 0.1
+export const RIVAL_STRENGTH_MIN = 0.2
+export const RIVAL_STRENGTH_MAX = 0.9
+/** Monthly, strength moves this share of the way to its target. */
+export const RIVAL_STRENGTH_LERP = 0.5
+/** Inside adaptUntilDay (DIRECTOR_GRACE_DAYS after a missed payroll) the target is × this. */
+export const RIVAL_ADAPT_STRENGTH = 0.6
+/**
+ * Σ share takes organic × (1 − Σ × ORGANIC) and ARPU × (1 − Σ × ARPU) (§4.3); Σ is capped at SHARE_TOTAL_MAX. §4.3's
+ * 0.5 / 0.2 cost Series C (Σ at its cap, growth slow) 400+ days: C's growth is slow, so every percent compounds (sim T08).
+ */
+export const RIVAL_ORGANIC_SHARE = 0.2
+export const RIVAL_ARPU_SHARE = 0.05
+/**
+ * The rivals together hold at most this share (weekly growth stops there). At 1 the late game (strength at its cap,
+ * growth under the ask) let Σ reach ~1 by Series C; 0.4 still left no Unicorn in reach (sim T08).
+ */
+export const RIVAL_SHARE_TOTAL_MAX = 0.25
+/** flags.rivalPressure = clamp(0, 1, Σ strength × share + VALUATION × lead valuation / player valuation). */
+export const RIVAL_PRESSURE_VALUATION = 0.2
+/** After an overtake the player must lead by this much (× the lead's MRR) before the next rivalPassed. */
+export const RIVAL_PASS_RESET = 1.05
+/** The lead / player valuation ratio counted at most this (a pre-revenue player is near 0). */
+export const RIVAL_PRESSURE_RATIO_MAX = 3

@@ -15,6 +15,7 @@ import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex } from './types'
 import { ROUND_PITCHES, ROUND_SIZES } from './types'
 import { incCounter, modifierMult, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
+import { ensureRivals, markRivalAnchor } from './world'
 
 const WEEK_ACC = 'roundWeekAcc'
 /** Flag: the stage whose round window already announced itself (one roundWindow event per stage). */
@@ -333,7 +334,9 @@ export function roundPitch(s: GameState, pitch: RoundPitch, rng?: Rng): ActionEr
 
 /**
  * Stage arrival side effects (office move, tools). With `rng` the crisis calendar starts on Pre-seed (a pending crisis
- * keeps its date); without it (winRun: no crisis at Unicorn) the first daily() schedules lazily.
+ * keeps its date); without it (winRun: no crisis at Unicorn) the first daily() schedules lazily. The lead rival
+ * re-anchors on the player's valuation and the stage's new rival is born (GAMEPLAY V2 §8.2; its name drawn with `rng`);
+ * the anchor waits for the next daily(), which prices the new stage's valuation.
  */
 export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   s.stage = stage
@@ -343,6 +346,8 @@ export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   pushActivity(s, 'stageUp', { stage })
   pushEvent(s, { kind: 'stageUp', value: stage })
   if (rng) scheduleCrisis(s, rng)
+  ensureRivals(s, rng)
+  markRivalAnchor(s)
 }
 
 export function closeRound(s: GameState, _content: EngineContent, rng: Rng): void {

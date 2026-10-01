@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, SECONDS_PER_DAY, balance } from '../src/engine/index'
-import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DAYS_5_MIN, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
+import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DAYS_5_MIN, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -451,6 +451,20 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   const uc = uniCensored(goodRuns)
   const ucm = uc === null ? null : toMin(uc)
   line(`- İyi bot Unicorn medyanı, ulaşmayan = ${toMin(DAYS).toFixed(0)} dk (${goodRuns.filter((r) => r.stageDays[6] != null).length}/${goodRuns.length} ulaştı): ${fmtMin(uc)} (tolerans 55–95 dk): **${yes(ucm !== null && ucm >= 55 && ucm <= 95)}** · kriz içeriği olmadan ${fmtMin(uniCensored(calmRuns))} (${calmRuns.filter((r) => r.stageDays[6] != null).length}/${calmRuns.length})`)
+}
+{
+  // GAMEPLAY V2 §8.2 named rivals: the lead paces the valuation, the share presses the channels.
+  const reachedSeed = (runs: BotRun[]) => runs.filter((r) => r.stageDays[2] != null)
+  const passed = (runs: BotRun[]) => runs.filter((r) => r.rivalPassed > 0).length
+  const goodSeed = reachedSeed(goodRuns)
+  const carelessSeed = reachedSeed(careless)
+  crit("Rakip oyuncuyu geçen koşu, iyi botlar (Seed'e ulaşan)", band(passed(goodSeed), goodSeed.length, 0.1, 0.3), ` · geçili gün medyanı ${median(goodSeed.map((r) => r.rivalPassedDays)) ?? '—'}`)
+  crit("Rakip oyuncuyu geçen koşu, careless (Seed'e ulaşan)", band(passed(carelessSeed), carelessSeed.length, 0.5, 1))
+  const early = goodRuns.reduce((a, r) => a + r.rivalPassedSeedEarly, 0)
+  line(`- İyi bot Seed'in ilk ${RIVAL_EARLY_DAYS} gününde rivalPassed: ${early} (hedef 0): **${yes(early === 0)}**`)
+  const inB = goodRuns.filter((r) => r.techDebtByStage[4] !== null).map((r) => r.rivalShareByStage[4]!)
+  const shareB = median(inB)
+  line(`- Rakip Σpay Series B sonu medyanı (iyi botlar, ${inB.length} koşu): ${shareB === null ? '—' : shareB.toFixed(2)} (hedef 0.15–0.35): **${yes(shareB !== null && shareB >= 0.15 && shareB <= 0.35)}** · Seed / A / C ${[2, 3, 5].map((st) => (median(goodRuns.filter((r) => r.techDebtByStage[st] !== null).map((r) => r.rivalShareByStage[st]!)) ?? 0).toFixed(2)).join(' / ')}`)
 }
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)

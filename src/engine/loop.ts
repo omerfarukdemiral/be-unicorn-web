@@ -7,6 +7,7 @@ import { lastUpdateDay } from './loopSelectors'
 import { yearlyRaises } from './people'
 import { DAYS_PER_MONTH, type GameState, type MonthLedger, type MonthReceipt, type Project, type ReleaseEntry } from './types'
 import { newId, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
+import { directorOf, graceAfterMissedPayroll } from './world'
 
 const emptyLedger = (): MonthLedger => ({ revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0, founder: 0 })
 
@@ -151,6 +152,15 @@ function missedPayroll(s: GameState, content: EngineContent): void {
   s.finance.negativeCashDays = 0
   pushActivity(s, 'payrollMissed', { amount: Math.round(-s.stats.cash) })
   pushEvent(s, { kind: 'payrollMissed', value: -s.stats.cash })
+  graceAfterMissedPayroll(s)
+  // GAMEPLAY V2 §5.2: up to Seed, the first missed payroll brings the one-time angel instead (its second option is the
+  // usual rescue). Offered once: it never comes again, taken or not.
+  const director = directorOf(s)
+  if (s.stage <= B.ANGEL_MAX_STAGE && !director.angelUsed && content.decisions.some((c) => c.id === B.ANGEL_CARD_ID)) {
+    director.angelUsed = true
+    bringCardNow(s, B.ANGEL_CARD_ID)
+    return
+  }
   const id = B.RESCUE_CARD_ID
   const card = content.decisions.find((c) => c.id === id)
   // The rescue skips the repeat cooldown (a second missed payday must still have a way out) but keeps REPEAT_CARD_MAX,

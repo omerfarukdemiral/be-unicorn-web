@@ -4,8 +4,11 @@ import * as B from '../balance'
 import { createEngine } from '../index'
 import { applyEffects } from '../effects'
 import { buildOffice, findAutoSlot, findAutoSlotFor, relocateOffice } from '../office'
-import { deserialize, serialize } from '../save'
-import type { Action, GameState, TimedAction } from '../types'
+import { enterStage } from '../round'
+import { Rng } from '../rng'
+import { deserialize, migrate, serialize } from '../save'
+import { NPC_ROLES, type Action, type GameState, type TimedAction } from '../types'
+import { NPC_NAMES, RIVAL_NAMES } from '../../content/names'
 import { fakeCard, fakeConcept, fakeContent } from './fixtures'
 
 const dist2 = (p: { x: number; z: number }) => p.x * p.x + p.z * p.z
@@ -418,5 +421,64 @@ describe('effects', () => {
     expect(s.flags['rushedProject']).toBe(true)
     expect(s.counters.crunches).toBe(1)
     expect(s.unlockedWidgets).toContain('reputation')
+  })
+})
+
+describe('fixed cast and named rivals (GAMEPLAY V2 §9.1, §8.2)', () => {
+  /** Arrives at `stage` the way a round close does: with the step's rng, then saves the rng back. */
+  const arrive = (s: GameState, stage: 2 | 3 | 4): GameState => {
+    const c = structuredClone(s)
+    const rng = new Rng(c.rng)
+    enterStage(c, stage, rng)
+    c.rng = rng.snapshot()
+    return c
+  }
+
+  it('same seed → the same cast and the same rival names; every role has a name from its pool', () => {
+    const a = api.createGame({ seed: 21 })
+    const b = api.createGame({ seed: 21 })
+    expect(a.cast).toEqual(b.cast)
+    for (const role of NPC_ROLES) expect(NPC_NAMES[role]).toContain(a.cast![role])
+    const ra = arrive(arrive(a, 2), 3)
+    const rb = arrive(arrive(b, 2), 3)
+    expect(ra.rivals!.map((r) => r.name)).toEqual(rb.rivals!.map((r) => r.name))
+    expect(ra.rivals).toHaveLength(2)
+    for (const r of ra.rivals!) expect(RIVAL_NAMES).toContain(r.name)
+    expect(new Set(ra.rivals!.map((r) => r.name)).size).toBe(2)
+    // Casts differ across seeds (the draw is real).
+    const casts = new Set([1, 2, 3, 4, 5, 6].map((seed) => JSON.stringify(api.createGame({ seed }).cast)))
+    expect(casts.size).toBeGreaterThan(1)
+  })
+
+  it('no rival before Seed; the lead is born at Seed at RIVAL_START_RATIO of the player valuation', () => {
+    const s = api.step(api.createGame({ seed: 4 }), 3)
+    expect(s.rivals).toEqual([])
+    const seed = arrive({ ...s, finance: { ...s.finance, valuation: 2_000_000 } }, 2)
+    expect(seed.rivals).toHaveLength(1)
+    expect(seed.rivals![0]!.valuation).toBe(1_500_000)
+    expect(seed.rivals![0]!.share).toBe(B.RIVAL_BORN_SHARE)
+    expect(seed.events.some((e) => e.kind === 'rivalBorn')).toBe(true)
+  })
+
+  it('an old v3 save opens with a cast, a director and (from Seed on) its rivals, without rng', () => {
+    const s = api.step(api.createGame({ seed: 8 }), 5)
+    const old = structuredClone(s) as unknown as Record<string, unknown>
+    delete old.cast
+    delete old.director
+    delete old.rivals
+    old.stage = 3
+    ;(old.finance as { valuation: number }).valuation = 20_000_000
+    ;(old.meta as { saveVersion: number }).saveVersion = 3
+    const up = migrate({ version: 3, state: old })!
+    for (const role of NPC_ROLES) expect(up.cast![role]).toBe(NPC_NAMES[role][0])
+    expect(up.director).toEqual({ pressure: B.DIRECTOR_PRESSURE_DEFAULT, graceUntil: 0 })
+    expect(up.rivals!.map((r) => r.name)).toEqual(RIVAL_NAMES.slice(0, 2))
+    expect(up.rivals![0]!.valuation).toBe(15_000_000)
+    // A garage save gets no rival.
+    const garage = structuredClone(s) as unknown as Record<string, unknown>
+    delete garage.rivals
+    expect(migrate({ version: 3, state: garage })!.rivals).toEqual([])
+    // The engine still steps it.
+    expect(api.step(up, 2).rivals).toHaveLength(2)
   })
 })

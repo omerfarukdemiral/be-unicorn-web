@@ -7,6 +7,7 @@ import { fillCandidates } from './people'
 import { Rng, createRngState } from './rng'
 import { COMPANY_NAME_MAX, COMPANY_NAME_MIN, DEFAULT_COMPANY_NAME, DEPTS, INITIAL_WIDGETS, SAVE_VERSION, type Dept, type GameState, type NewGameOptions } from './types'
 import { stageBaseline, type EngineContent } from './util'
+import { castOf } from './world'
 
 function perDept(v: number): Record<Dept, number> {
   const o = {} as Record<Dept, number>
@@ -87,9 +88,14 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
     goalsDone: [],
     // GAMEPLAY V2 §5.1: the first crisis is scheduled on arriving at Pre-seed.
     calendar: [],
+    director: { pressure: B.DIRECTOR_PRESSURE_DEFAULT, graceUntil: 0 },
+    // GAMEPLAY V2 §8.2: the lead rival is born on arriving at Seed.
+    rivals: [],
   }
   const rng = new Rng(s.rng)
   fillCandidates(s, content, rng, true)
+  // GAMEPLAY V2 §9.1: the cast is drawn once (same seed → same cast).
+  s.cast = castOf(rng)
   s.rng = rng.snapshot()
   recomputeDerived(s, content)
   s.stageStart = stageBaseline(s)

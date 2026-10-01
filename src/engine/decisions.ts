@@ -8,6 +8,7 @@ import { applyEffects } from './effects'
 import type { Rng } from './rng'
 import type { CalendarEntry, DecisionCardId, GameState } from './types'
 import { newId, pushActivity, pushEvent, type EngineContent } from './util'
+import { directorOf } from './world'
 
 function safeCondition(c: DecisionCard, s: GameState): boolean {
   if (!c.condition) return true
@@ -62,7 +63,9 @@ export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng
   if (s.decisions.history.length > 0 && s.time.day - s.decisions.lastCardDay < B.CARD_COOLDOWN_DAYS) return
   if (crisisHoldsSlot(s, content)) return
   if (!rng.chance(B.CARD_DAILY_CHANCE)) return
-  const pick = rng.weighted(eligibleCards(s, content.decisions), (c) => c.weight ?? 1)
+  // GAMEPLAY V2 §5.2: the director weighs crisis and rival cards (× (1 + pressure)); how often a card comes stays fixed.
+  const pressure = directorOf(s).pressure
+  const pick = rng.weighted(eligibleCards(s, content.decisions), (c) => (c.weight ?? 1) * (c.category === 'crisis' || c.category === 'rival' ? 1 + pressure : 1))
   if (pick) showCard(s, pick)
 }
 
@@ -186,10 +189,9 @@ export function pendingCrisis(s: GameState): CalendarEntry | undefined {
   return (s.calendar ?? []).find((c) => !c.fired)
 }
 
-/** Severity = 0.7 + 0.6 × director pressure. The director lands in C2; until then the default pressure. */
+/** Severity = 0.7 + 0.6 × director pressure (§5.2: a richer company meets a harder storm). */
 export function crisisSeverity(s: GameState): number {
-  const pressure = (s as GameState & { director?: { pressure?: number } }).director?.pressure ?? B.DIRECTOR_PRESSURE_DEFAULT
-  return B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * pressure
+  return B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * directorOf(s).pressure
 }
 
 /** Days to the next crisis after one fired at `stage`: interval ± jitter, kept inside [GAP_MIN, GAP_MAX]. */

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { CRISES, CRISIS_CARDS, type StageGoal } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
+import { crisisSeverity } from '../decisions'
 import { releaseLevel } from '../loop'
 import { daysToPayday, horizon, nextCrisis, nextStep } from '../loopSelectors'
 import { migrate } from '../save'
@@ -380,8 +381,8 @@ describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
   })
 
   it('crises come 150–300 days apart; a used pool repeats the last one, lighter', () => {
-    let s = closeInto(capi, rich(capi, 5), 1)
-    s = capi.step(s, 1300)
+    const start = closeInto(capi, rich(capi, 5), 1)
+    const s = capi.step(start, 1300)
     const fired = s.calendar!.filter((c) => c.fired)
     expect(fired.length).toBeGreaterThanOrEqual(5)
     for (let i = 1; i < fired.length; i++) {
@@ -392,7 +393,8 @@ describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
     expect(fired[1]!.light).toBe(true)
     expect(pending(s)).toHaveLength(1)
     // The lighter repeat lands at × CRISIS_LIGHT_SEVERITY and still brings its card (always a way to soften it, §18).
-    const sev = B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * B.DIRECTOR_PRESSURE_DEFAULT
+    // Severity reads the director's pressure on the crisis day (§5.2).
+    const sev = crisisSeverity(stepTo(capi, start, fired.at(-1)!.day))
     expect(s.events.filter((ev) => ev.kind === 'crisis').at(-1)!.value).toBeCloseTo(sev * B.CRISIS_LIGHT_SEVERITY, 9)
     const storm = s.decisions.history.filter((h) => h.cardId === 'card-storm').length + (s.decisions.active?.cardId === 'card-storm' ? 1 : 0)
     expect(storm).toBe(fired.length)
@@ -429,7 +431,7 @@ describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
     const cap = s.derived.multipleCap!
     s = stepTo(e, s, day)
     expect(s.modifiers.some((m) => m.kind === 'multipleCap' && m.source === 'crisis:investor-winter')).toBe(true)
-    const sev = B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * B.DIRECTOR_PRESSURE_DEFAULT
+    const sev = crisisSeverity(s)
     expect(s.derived.multipleCap!).toBeCloseTo(Math.max(B.MULTIPLE_MIN_BY_STAGE[1]!, cap * (1 - 0.4 * sev)), 9)
     expect(s.derived.multipleCap!).toBeLessThan(cap)
     expect(s.derived.multipleCap!).toBeGreaterThanOrEqual(B.MULTIPLE_MIN_BY_STAGE[1]!)
@@ -442,7 +444,7 @@ describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
     // An unanswered normal card is on the desk the day before.
     s = { ...s, decisions: { ...s.decisions, active: { cardId: 'c-normal', shownDay: s.time.day } } }
     s = stepTo(capi, s, day)
-    const sev = B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * B.DIRECTOR_PRESSURE_DEFAULT
+    const sev = crisisSeverity(s)
     const mod = s.modifiers.find((m) => m.source === 'crisis:storm')!
     expect(mod.kind).toBe('churn')
     expect(mod.value).toBeCloseTo(1 + 0.5 * sev, 9)

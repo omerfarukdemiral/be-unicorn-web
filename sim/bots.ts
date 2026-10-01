@@ -212,7 +212,13 @@ export interface BotRun {
   valuationDropAfterPeak: number
   /** Market penetration on the last payday of each stage (index = stage; 0 = never reached). */
   penetrationByStage: number[]
+  /** Days the lead rival's valuation was past the player's (§8.2). */
   rivalPassedDays: number
+  /** rivalPassed events over the run, and those in the first RIVAL_EARLY_DAYS of Seed. */
+  rivalPassed: number
+  rivalPassedSeedEarly: number
+  /** Σ rival share on the last payday of each stage (index = stage; 0 = no payday there). */
+  rivalShareByStage: number[]
   threadSteps: number
   secretsSeen: number
   /** Serialized save at the end of the run (UTF-8 bytes). */
@@ -232,6 +238,9 @@ export interface CrisisRun {
   /** Lowest payday runway (months, 99 = profitable) in the CRISIS_WINDOW_DAYS after it hit. */
   minRunway: number
 }
+
+/** §8.2 kabul: no overtake in the first this many days of Seed for a good bot. */
+export const RIVAL_EARLY_DAYS = 90
 
 /** The window after a crisis whose paydays count as "kriz sonrası" (the longest crisis modifier lasts 120 days). */
 export const CRISIS_WINDOW_DAYS = 120
@@ -259,7 +268,7 @@ function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig
   const fx = card.options[i]!.effects
   const w = cfg.weights
   return (
-    w.cash * ((fx.cash ?? 0) + (fx.cashPercent ?? 0) * Math.max(0, s.stats.cash)) +
+    w.cash * ((fx.cash ?? 0) + (fx.cashPercent ?? 0) * Math.max(0, s.stats.cash) + (fx.cashBurnMonths ?? 0) * Math.max(0, s.finance.burn)) +
     w.users * ((fx.users ?? 0) + (fx.usersPercent ?? 0) * s.stats.users) +
     w.morale * (fx.morale ?? 0) +
     w.equity * (fx.equity ?? 0) +
@@ -688,6 +697,10 @@ export function playBot(
   const penetrationByStage = [0, 0, 0, 0, 0, 0, 0]
   const crises: (CrisisRun & { eventId: number })[] = []
   let cardsShown = 0
+  let rivalPassedDays = 0
+  let rivalPassed = 0
+  let rivalPassedSeedEarly = 0
+  const rivalShareByStage = [0, 0, 0, 0, 0, 0, 0]
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -735,6 +748,7 @@ export function playBot(
     s = api.step(s, 1)
     if (profitDay === null && s.finance.mrr > 0 && s.finance.net > 0) profitDay = s.time.day
     if ((s.finance.runway ?? 99) < 3) daysRunwayBelow3++
+    if (s.rivals?.[0]?.ahead) rivalPassedDays++
     peakValuation = Math.max(peakValuation, s.finance.valuation)
     for (let st = prev + 1; st <= s.stage; st++) stageDays[st] = Math.round(s.time.day)
     // Dead time inside a round: gap between world beats while the round runs.
@@ -744,6 +758,11 @@ export function playBot(
       if (e.kind === 'payrollMissed') payrollMissed++
       if (e.kind === 'decisionDefaulted') defaulted++
       if (e.kind === 'decisionShown') cardsShown++
+      if (e.kind === 'rivalPassed') {
+        rivalPassed++
+        const seedDay = stageDays[2]
+        if (s.stage === 2 && seedDay != null && e.day - seedDay <= RIVAL_EARLY_DAYS) rivalPassedSeedEarly++
+      }
       if (e.kind === 'crisis') crises.push({ day: e.day, stage: s.stage, prepared: prepOn, minRunway: 99, eventId: e.id })
       if (e.kind === 'payday') {
         const rw = Math.min(99, s.finance.lastReceipt?.runwayAfter ?? 99)
@@ -753,6 +772,7 @@ export function playBot(
         for (const k of crises) if (e.id > k.eventId && e.day - k.day <= CRISIS_WINDOW_DAYS) k.minRunway = Math.min(k.minRunway, rw)
         techDebtByStage[s.stage] = s.techDebt
         penetrationByStage[s.stage] = s.derived.penetration ?? 0
+        rivalShareByStage[s.stage] = (s.rivals ?? []).reduce((a, r) => a + r.share, 0)
         if (rw < 2) {
           nearDeathPaydays[s.stage] = (nearDeathPaydays[s.stage] ?? 0) + 1
           firstNearDeath ??= s.time.day
@@ -835,7 +855,10 @@ export function playBot(
     peakValuation,
     valuationDropAfterPeak: peakValuation > 0 ? Math.max(0, 1 - s.finance.valuation / peakValuation) : 0,
     penetrationByStage,
-    rivalPassedDays: 0,
+    rivalPassedDays,
+    rivalPassed,
+    rivalPassedSeedEarly,
+    rivalShareByStage,
     threadSteps: 0,
     secretsSeen: 0,
     saveBytes: new TextEncoder().encode(serialize(s)).length,

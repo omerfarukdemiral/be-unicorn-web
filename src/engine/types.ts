@@ -151,6 +151,8 @@ export interface EffectBundle {
   queueCard?: DecisionCardId
   /** Sets named flag(s) (for card conditions / archetype detection). */
   setFlag?: string | readonly string[]
+  /** Cash worth this many months of today's burn (the one-time angel, GAMEPLAY V2 §5.2). */
+  cashBurnMonths?: number
 }
 
 export interface DelayedEffect {
@@ -716,6 +718,35 @@ export interface CalendarEntry {
   light?: true
 }
 
+/**
+ * The director (GAMEPLAY V2 §5.2, RimWorld): pressure 0.1–1 grows with the player's wealth and drops for
+ * DIRECTOR_GRACE_DAYS after a missed payroll. It weighs crisis / rival cards (never how often cards come), the crisis
+ * severity and the rivals' strength. `angelUsed`: the one-time angel lifeline was offered.
+ */
+export interface DirectorState {
+  pressure: number
+  graceUntil: number
+  angelUsed?: true
+}
+
+/**
+ * A named rival (GAMEPLAY V2 §8.2). `strength` and `share` are 0–1; the lead (rivals[0]) paces the player's valuation
+ * (born at RIVAL_START_RATIO of it, growing at the investor's ask). `ahead`: its valuation is past the player's now.
+ */
+export interface Rival {
+  id: string
+  name: string
+  bornDay: number
+  strength: number
+  share: number
+  mrr: number
+  valuation: number
+  momentum: -1 | 0 | 1
+  /** Strength × RIVAL_ADAPT_STRENGTH until this day (a missed payroll gives the player room to breathe). */
+  adaptUntilDay?: number
+  ahead?: boolean
+}
+
 /** Valuation breakdown (docs/CORE_LOOP.md §4.3 "çarpan dökümü"): engine computed, the UI only prints it. */
 export interface ValuationBreakdown {
   /** 'pre': launched × $150K + users × $400 + releases (max 5) × $15K; 'post': MRR × 12 × multiple (blended in below $1K MRR). */
@@ -905,6 +936,10 @@ export type GameEventKind =
   | 'crisisRevealed'
   /** A scheduled crisis hit (refId = CrisisId, value = severity). */
   | 'crisis'
+  /** A named rival entered the market (refId = rival id). */
+  | 'rivalBorn'
+  /** The lead rival's valuation went past the player's (refId = rival id, value = its valuation); once per overtake. */
+  | 'rivalPassed'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1011,6 +1046,12 @@ export interface GameState {
   releaseCount?: number
   /** Crisis calendar (GAMEPLAY V2 §5.1), oldest first; older saves default lazily to [] (tick.ts). */
   calendar?: CalendarEntry[]
+  /** The director (GAMEPLAY V2 §5.2); older saves default lazily (world.directorOf). */
+  director?: DirectorState
+  /** The fixed cast (GAMEPLAY V2 §9.1): one name per NPC role for the whole run. Older saves: each role's first name. */
+  cast?: Record<NpcRole, string>
+  /** Named rivals (GAMEPLAY V2 §8.2), the lead first; older saves from Seed on get theirs lazily (world.ensureRivals). */
+  rivals?: Rival[]
 }
 
 // ---------------------------------------------------------------------------

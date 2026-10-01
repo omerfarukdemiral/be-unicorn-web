@@ -14,6 +14,8 @@ const PLAN_IDS = [
   'enterprise-rfp', 'whale-churn', 'gdpr-audit', 'cloud-bill-shock', 'talent-raid', 'international-launch', 'market-downturn',
   'acquisition-offer', 'strategic-investor', 'secondary-sale', 'founder-burnout', 'ipo-vs-stay-private',
   'payroll-risk', 'vc-bridge-loan', 'emergency-bridge',
+  // GAMEPLAY V2 §5.2: the one-time angel (engine-brought only).
+  'angel-lifeline',
   'rival-price-war', 'rival-talent-raid', 'rival-copycat-feature',
 ]
 
@@ -30,10 +32,10 @@ describe('decision cards', () => {
     expect([...DECISIONS.map((d) => d.id)].sort()).toEqual([...PLAN_IDS].sort())
   })
 
-  it('has the priority sets fully written: Garaj 7, Pre-seed 7, Kriz 3', () => {
+  it('has the priority sets fully written: Garaj 7, Pre-seed 7, Kriz 3 (+ the one-time angel)', () => {
     const garage = DECISIONS.filter((d) => d.category === 'normal' && d.stage === 0)
     const preseed = DECISIONS.filter((d) => d.category === 'normal' && d.stage === 1)
-    const crisis = DECISIONS.filter((d) => d.category === 'crisis')
+    const crisis = DECISIONS.filter((d) => d.category === 'crisis' && d.id !== 'angel-lifeline')
     const rival = DECISIONS.filter((d) => d.category === 'rival')
     expect(garage).toHaveLength(7)
     expect(preseed).toHaveLength(7)

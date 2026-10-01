@@ -1,4 +1,4 @@
-// PLAN §6.3 decision cards, v1 set (52). No card scolds the player; every option shows gain / cost.
+// PLAN §6.3 decision cards, v1 set (52) + the one-time angel (GAMEPLAY V2 §5.2). No card scolds the player; every option shows gain / cost.
 // Effect notes for the engine:
 //   - modifiers.value is a multiplier, except kind 'morale' where it is an additive morale-target bonus.
 //   - cashPercent stays within ±0.25 here; engine caps again.
@@ -1193,7 +1193,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
 
-  // =========================================================== Kriz (3, every stage)
+  // =========================================================== Kriz (3, every stage; + the angel, up to Seed)
   {
     id: 'payroll-risk',
     stage: 0,
@@ -1270,6 +1270,34 @@ export const DECISIONS: readonly DecisionCard[] = [
         tradeoff: { gain: 'Kontrol sende', cost: 'Kişisel risk ve enerji' },
         effects: { cash: 8000, energy: -25 },
         reflection: 'Kendi parası ortada olan kurucu, her doları iki kez sayar.',
+        conceptId: 'burn',
+      },
+    ],
+  },
+  {
+    // GAMEPLAY V2 §5.2: the one-time angel. Only the engine brings it (first missed payroll up to Seed), never a roll.
+    id: 'angel-lifeline',
+    stage: 0,
+    maxStage: 2,
+    category: 'crisis',
+    speaker: 'investor',
+    question: 'Maaş kaçtı. Bir melek yatırımcı tek seferlik can simidi uzatıyor.',
+    condition: () => false,
+    defaultOption: 0,
+    defaultAfterDays: 14,
+    options: [
+      {
+        label: 'Can simidini al',
+        tradeoff: { gain: 'İki aylık gider kasada', cost: '%5 hisse' },
+        effects: { cashBurnMonths: 2, equity: -0.05 },
+        reflection: 'İkinci şans bir kez gelir; zamanı iyi kullan.',
+        conceptId: 'runway',
+      },
+      {
+        label: 'Kendi yolunu bul',
+        tradeoff: { gain: 'Hisse korunur', cost: 'Olağan kurtarma masada' },
+        effects: { queueCard: 'emergency-bridge' },
+        reflection: 'Hisse sende kalır; çıkış yolu yine masada.',
         conceptId: 'burn',
       },
     ],

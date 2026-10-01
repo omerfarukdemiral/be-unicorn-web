@@ -1,6 +1,7 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { HISTORY_MAX_MONTHS } from './balance'
+import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS } from './balance'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt } from './types'
+import { castOf, ensureRivals } from './world'
 
 export interface SaveFile {
   version: number
@@ -40,6 +41,13 @@ const MIGRATIONS: Record<number, Migration> = {
     if (fin && typeof fin.lastRoundCloseDay !== 'number' && typeof time?.day === 'number') fin.lastRoundCloseDay = time.day
     // Crisis calendar (§5.1): empty; the first daily() schedules the next crisis with the step's rng (none used here).
     if (!Array.isArray(st.calendar)) st.calendar = []
+    // Director (§5.2), fixed cast (§9.1) and rivals (§8.2): no rng here — each role's first name, rivals from Seed on
+    // in RIVAL_NAMES order (the lead anchored on the saved valuation).
+    if (!st.director || typeof st.director !== 'object') st.director = { pressure: DIRECTOR_PRESSURE_DEFAULT, graceUntil: 0 }
+    if (!st.cast || typeof st.cast !== 'object') st.cast = castOf()
+    if (!Array.isArray(st.rivals)) st.rivals = []
+    const game = st as unknown as GameState
+    if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st
   },
 }

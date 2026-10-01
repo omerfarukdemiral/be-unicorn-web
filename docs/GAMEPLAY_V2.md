@@ -127,10 +127,10 @@ cac     = 45 × 1.7^stage / (0.5 + mat)
           × (1 + CAC_SATURATION_K(3) × pen²)                                       // pazar doygunluğu
 CAC_SPEND_FLOOR = [500, 2K, 10K, 50K, 250K, 1M, 1M]
 paid    = adBudget / cac × (1 − pen)
-organic = marketing × 42 × (0.5 + rep/100) × mat × max(0.1, 1 − pen) × (1 − Σ rival.share × 0.5)
+organic = marketing × 42 × (0.5 + rep/100) × mat × max(0.1, 1 − pen) × (1 − Σ rival.share × RIVAL_ORGANIC_SHARE(0.2))   // Σshare ≤ RIVAL_SHARE_TOTAL_MAX(0.25)
 churn   = max(CHURN_MIN(0.025), 0.06 × (1 − min(0.6, ops×0.02)) × (1 + overload) × (1.5 − mat))
           × (1 + CHURN_SATURATION(0.5) × pen) × (1 + techDebt/200) × modifiers
-arpu    = arpu_base × (1 − Σ rival.share × 0.2)                                    // fiyat baskısı
+arpu    = arpu_base × (1 − Σ rival.share × RIVAL_ARPU_SHARE(0.05))                  // fiyat baskısı (dalga 5 sim: 0.5/0.2 C'de 400+ gün yaktı)
 ```
 Reklam bütçesi MRR'ye eşitken CAC 2× → "reklamı 2×" içbükey; üs 1.5 sayesinde `paid`in tepesi vardır (ads ≈ 2×MRR'de düşmeye başlar) — lineer taslakta `paid → mrr/cac0` asimptotu ve `MRR_eq = MRR × arpu/(cac0×churn)` C'de 3.4 > 1 olduğundan doygunluğa rağmen sınırsız büyüme kalıyordu. Yine de coaster'ı nihai durduran doygunluk değil, gerçek TAM (§8.1) ve büyüme-ölçekli çarpandır (§4.1); bu yüzden `coaster 0/N` kriteri E1'de kesinleşir (§16). Pazar %70 dolunca reklam fiilen boşa gider ve ufukta `'saturation'` öğesi çıkar. Pazar ve rakip terimleri §8'de tanımlanır; §4 dalgası onlar gelmeden `pen = users / MARKET_FALLBACK_TAM[stage]` (§8.1 tablosunun büyüklükleri) ve `Σshare = 0` ile çalışır.
 
@@ -160,7 +160,7 @@ Bilinen fırtına en ucuz gerilimdir: tarih kesin, içerik 30 gün kala açığa
 | Series B | `investor-winter` | `multipleCap ×0.6`, `DILIGENCE_MOM ×1.5`, 120 gün | Tur ertele / köprü kredi (§6.2) |
 | Series C | `market-correction` | churn ×1.4 + yatırımcı kışı, 90 gün | Kesinti (maaş ×0.9, moral −8) / nakit yak (segment upkeep ×1.5 sürdür) |
 
-`severity = 0.7 + 0.6 × director.pressure`. Ufuk: `HorizonKind` += `'crisis'`, `HorizonItem.hidden?: boolean`; `HORIZON_DAYS` 42 diğer öğeler için kalır, kriz için `CRISIS_HORIZON_DAYS` 60 → kriz 60 gün kala **"? · 58g"**, 30 gün kala adı ve ikonuyla görünür. `derived.nextCrisis?: {day, id | hidden}` ufuk şeridi geri sayımı için. Ay fişine tek satır teaser: "→ 12g · Yatırımcı kışı" (§11). Kabul: koşuda krizler arası boşluk 150-300 gün; C'de ≥ 2 kriz; aşama değişiminde bekleyen kriz kaybolmaz ve üst üste binmez (test).
+`severity = CRISIS_SEVERITY_BASE(0.5) + CRISIS_SEVERITY_PER_PRESSURE(0.4) × director.pressure` (dalga 5: taslaktaki 0.7 + 0.6p C'de baskı 1'de 1.3 verip iyi botu ~300 gün geciktirdi; yeni değer C'de eski 0.9'u korur). Ufuk: `HorizonKind` += `'crisis'`, `HorizonItem.hidden?: boolean`; `HORIZON_DAYS` 42 diğer öğeler için kalır, kriz için `CRISIS_HORIZON_DAYS` 60 → kriz 60 gün kala **"? · 58g"**, 30 gün kala adı ve ikonuyla görünür. `derived.nextCrisis?: {day, id | hidden}` ufuk şeridi geri sayımı için. Ay fişine tek satır teaser: "→ 12g · Yatırımcı kışı" (§11). Kabul: koşuda krizler arası boşluk 150-300 gün; C'de ≥ 2 kriz; aşama değişiminde bekleyen kriz kaybolmaz ve üst üste binmez (test).
 
 **Bot hazırlığı** (bilinen fırtınanın bütün değeri hazırlıktır; hazırlanmayan bot ölçümü sahteleştirir): iyi bot tarih "?" göründüğü andan itibaren **hazırlık modu** — işe alım durur, `adBudget ×0.5`, tür açığa çıkınca türe göre rezerv (`lease-hike`: `rent×3` nakit; `cac-war`: reklam kes, fiyatı koru; `key-account-renewal`: SLA yatırımı; `investor-winter`/`market-correction`: `fundraise` `nextCrisis.day − day < weeksMax×7 + 14` ise turu krizden önce kapatmaya başlar ya da krizden sonraya erteler; runway < 4 ise yine başlatır — oyuncunun ikilemi). `careless` hazırlanmaz. Sim kriteri: hazırlanan botun kriz sonrası min runway'i hazırlanmayanın ≥ +2 ayı; hazırlanmayan botlarda kriz sonrası payday runway<2 ≥ %40. Kriz kartı seçimi `scoreOption` ile.
 
@@ -273,8 +273,11 @@ Action `{type: 'openSegment', id}` (1 hamle, §7.1); 60 gün rampa (`RAMP_DAYS`,
 strengthTarget = clamp(0.2, 0.9, 0.3 + 0.1×stage + 0.2 × (oyuncu MRR / aşama hedef MRR) + 0.1 × director.pressure)
 adaptUntilDay içinde ×0.6 (payrollMissed sonrası 180 gün nefes)
 başRakip.valuation: doğuşta / aşama girişinde oyuncuDeğerleme × RIVAL_START_RATIO(0.75);
-                    aylık × (1 + DILIGENCE_MOM[stage] × (1 + 0.5 × director.pressure))   // yatırımcının beklediği tempo
+                    aylık × (1 + RIVAL_TEMPO_ASK[stage] × ask × (1 + 0.5 × director.pressure))   // yatırımcının beklediği tempo
+RIVAL_TEMPO_ASK = [1, 1, 1, 1, 1, 0.5, 0.5]   // B'ye kadar tam ask (durgun şirket ~4 ayda geçilir); C'de yarım
+başRakip.mrr: değerlemeyle aynı anda oyuncu MRR × 0.75'e çapalanır, aynı tempoyla büyür
 ```
+**MRR yarışı (dalga 5):** `rivalPassed` ve 1.05 sıfırlama değerleme değil **MRR** karşılaştırır; C'de çarpan büyümeyi izlediği için oyuncu değerlemesi ±%40 salınıyor, düzgün büyüyen rakip her iyi botu geçiyordu.
 Eski `STAGE_TARGET_VALUATION[stage+1] × clamp(...)` taslağı reddedildi: rakip Seed'de 10.5M vs oyuncu 1.5-3M, A'da 60M vs 15M doğar → her aşama girişinde 4-7× öndeydi, `rivalPassed` durgunluğa değil formüle bağlı tetiklenir, gölge çentik hep turuncu kalırdı. Yeni kurguda rakip **tempo belirleyicidir** (DD ile aynı dil): oyuncu ask'ın üzerinde büyüdükçe önde kalır, 3+ ay ask'ın altında kalınca rakip geçer → `rivalPassed` yalnız `rival.valuation > oyuncuDeğerleme` **geçişinde** (bir kez; tekrar geçince yeniden), ilerleme çubuğunda gölge çentik turuncuya döner. Test: iyi bot Seed'de ilk 90 gün `rivalPassed` üretmez; durgun 3 ay → bir kez.
 
 Pay: doğuşta `share = RIVAL_BORN_SHARE(0.10)`; haftalık `share += 0.03 × (strength − oyuncuGüç) + (momAvg < ask ? 0.005 : 0)`, `clamp(0, 0.5)`; `oyuncuGüç = 0.5×avgMaturity + 0.3×rep/100 + 0.2×(1−pen)`; share tek yönlü artmaz (olgunluk 1 + rep 80 → düşer). Eski `0.01 × fark` yılda ±0.016 veriyordu, B medyanı 0.15-0.35 ulaşılamazdı. `flags.rivalPressure = clamp(0, 1, Σ strength×share + 0.2 × başRakip.valuation / oyuncu değerleme)` — 3 mevcut rakip kartı aynen çalışır, daha anlamlı tetiklenir.

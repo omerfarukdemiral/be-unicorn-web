@@ -85,6 +85,8 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
     nextId: 1,
     releases: [],
     goalsDone: [],
+    // GAMEPLAY V2 §5.1: the first crisis is scheduled on arriving at Pre-seed.
+    calendar: [],
   }
   const rng = new Rng(s.rng)
   fillCandidates(s, content, rng, true)

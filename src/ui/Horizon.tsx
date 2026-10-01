@@ -19,6 +19,8 @@ export const HORIZON_KIND: Record<HorizonItem['kind'], { icon: IconName; color: 
   release: { icon: 'rocket', color: 'var(--color-brand)' },
   roundClose: { icon: 'handshake', color: 'var(--color-brand)' },
   roundReady: { icon: 'rocket', color: 'var(--color-positive)' },
+  // A known storm, not danger: brick identity hue, never --color-negative (one red rule).
+  crisis: { icon: 'warning', color: 'var(--color-g-burn)' },
 }
 
 export function horizonLabel(h: HorizonItem, projectName: (id: string | undefined) => string): string {
@@ -35,6 +37,8 @@ export function horizonLabel(h: HorizonItem, projectName: (id: string | undefine
       return t('horizon.roundClose')
     case 'roundReady':
       return t('horizon.roundReady')
+    case 'crisis':
+      return crisisName(h)
   }
 }
 
@@ -44,8 +48,13 @@ function whenLabel(days: number, short = false): string {
 }
 
 /** Readable one-liner of an item: "Maaş günü 8 gün", "Sürüm ~4 gün", "Tur kapanışı ~12 gün". */
+/** "?" until the reveal (CRISIS_TELEGRAPH_DAYS), then the crisis name. */
+function crisisName(h: HorizonItem): string {
+  return h.hidden || !h.crisisId ? t('horizon.crisisHidden') : t(`crisis.${h.crisisId}`)
+}
+
 export function horizonItemText(h: HorizonItem, days: number, short = false): string {
-  return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short) })
+  return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short), ...(h.kind === 'crisis' ? { v: crisisName(h) } : {}) })
 }
 
 function useHorizon() {

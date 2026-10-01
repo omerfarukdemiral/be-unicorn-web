@@ -397,7 +397,11 @@ export const CANDIDATE_DEPT_WEIGHT: Readonly<Record<Dept, number>> = { eng: 3, p
 export const FIRST_CARD_DAY = 8
 /** [Faz 3] Fewer, heavier cards (CORE_LOOP §5 "Karar sıklığı"): ~1 per 30–40 days instead of ~1 per 13. */
 export const CARD_COOLDOWN_DAYS = 25
-export const CARD_DAILY_CHANCE = 0.1
+/**
+ * [GAMEPLAY V2 §3 md.11 0.1 → 0.08] The card budget is fixed: crisis cards share CARD_COOLDOWN_DAYS with the normal
+ * ones (one card a day at most, the crisis first), so the random roll gives up what the calendar brings.
+ */
+export const CARD_DAILY_CHANCE = 0.08
 /** Repeatable (once: false) cards: days before the same card may show again, and max shows per run. */
 export const REPEAT_CARD_COOLDOWN_DAYS = 90
 export const REPEAT_CARD_MAX = 3
@@ -482,3 +486,34 @@ export const PROFILE_PRODUCT_EXPECT: readonly number[] = [0.2, 0.4, 0.6, 0.8, 1,
 export const PROFILE_TEAM_EXPECT: readonly number[] = [2, 5, 9, 16, 26, 36, 36]
 /** Cash axis: months of runway that count as 1 (profitable = PROFILE_MAX). */
 export const PROFILE_RUNWAY_MONTHS = 6
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §5.1: crisis calendar (a known storm, tied to time, not to stages)
+// ---------------------------------------------------------------------------
+/** The first crisis lands this many days after arriving at Pre-seed (rng.int, inclusive). */
+export const CRISIS_FIRST_DAYS: readonly [number, number] = [30, 80]
+/** Days from one crisis to the next, by the stage it fired in (index = stage; Garage never schedules). */
+export const CRISIS_INTERVAL_DAYS: readonly number[] = [150, 150, 180, 210, 240, 270, 270]
+/** ± jitter on the interval (rng.int(−J, J)). */
+export const CRISIS_INTERVAL_JITTER = 30
+/**
+ * Gap between two crises stays in this band whatever the jitter (§5.1 kabul: 150–300 days); the Pre-seed interval
+ * (150 − 30) would otherwise dip below it.
+ */
+export const CRISIS_GAP_MIN = 150
+export const CRISIS_GAP_MAX = 300
+/** The date shows on the horizon as "?" this many days ahead (a round's length: time to plan it around). */
+export const CRISIS_HORIZON_DAYS = 60
+/** What the crisis is shows this many days ahead (crisisRevealed). */
+export const CRISIS_TELEGRAPH_DAYS = 30
+/** Severity = BASE + PER_PRESSURE × director pressure (director lands in C2; until then the default pressure). */
+export const CRISIS_SEVERITY_BASE = 0.7
+export const CRISIS_SEVERITY_PER_PRESSURE = 0.6
+export const DIRECTOR_PRESSURE_DEFAULT = 0.3
+/** The stage's pool used up: the previous crisis comes back this much softer (still with its card). */
+export const CRISIS_LIGHT_SEVERITY = 0.7
+/**
+ * §3 md.11: the crisis card takes the slot of a rolled one. No random roll this many days before a crisis day
+ * (≈ one card's expected gap: CARD_COOLDOWN_DAYS + 1 / CARD_DAILY_CHANCE).
+ */
+export const CRISIS_CARD_RESERVE_DAYS = 38

@@ -71,7 +71,8 @@ export function valuationLine(v: ValuationBreakdown | undefined): string {
   if (v.mode === 'pre') {
     return t('val.pre', { l: num(v.launched), lv: money(v.launchedValue), u: num(v.users), uv: money(v.usersValue), r: num(v.releases), rv: money(v.releasesValue) })
   }
-  return t(v.blend < 1 ? 'val.postBlend' : 'val.post', { m: money(v.mrr), x: fixed(v.multiple, 1), g: pct(v.momAvg, 1), n: fixed(v.min, 1), c: fixed(v.cap, 0), b: pct(v.blend, 0) })
+  const key = v.blend >= 1 ? 'val.post' : v.preFade > 0 ? 'val.postFade' : 'val.postBlend'
+  return t(key, { m: money(v.mrr), x: fixed(v.multiple, 1), g: pct(v.momAvg, 1), n: fixed(v.min, 1), c: fixed(v.cap, 0), b: pct(v.blend, 0), p: money(v.preFade) })
 }
 
 /** Version name, or "güncelleme N" for an update after 1.0. */

@@ -13,6 +13,7 @@ import type {
   ToolId,
 } from '../engine/types'
 import type { DecisionCategory } from './types'
+import { CRISES } from './crises'
 import { STAGES } from './stages'
 import { DEPT_TEXT, PROJECT_CATEGORY_TEXT } from './text'
 
@@ -577,4 +578,8 @@ export const UI_TEXT: Record<string, string> = {
   ...prefixed('category', PROJECT_CATEGORY_TEXT),
   ...Object.fromEntries(STAGES.map((st) => [`stage.${st.key}`, st.name])),
   ...Object.fromEntries(STAGES.map((st) => [`office.${st.key}`, st.officeName])),
+  // Crisis calendar (GAMEPLAY V2 §5.1): "? · 58g" until the reveal, then "Yatırımcı kışı · 12g".
+  'horizon.item.crisis': '{v} · {d}',
+  'horizon.crisisHidden': '?',
+  ...Object.fromEntries(CRISES.map((c) => [`crisis.${c.id}`, c.name])),
 }

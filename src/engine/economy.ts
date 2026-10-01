@@ -207,13 +207,18 @@ export function multipleMin(stage: number): number {
   return B.MULTIPLE_MIN_BY_STAGE[Math.min(B.MULTIPLE_MIN_BY_STAGE.length - 1, Math.max(0, stage))]!
 }
 
-export function multipleCap(stage: number): number {
-  return B.MULTIPLE_MAX_BY_STAGE[stage] ?? B.MULTIPLE_MAX
+/** `capMult`: product of the 'multipleCap' modifiers (investor winter, GAMEPLAY V2 §5.1), never below the floor. */
+export function multipleCap(stage: number, capMult = 1): number {
+  const cap = B.MULTIPLE_MAX_BY_STAGE[stage] ?? B.MULTIPLE_MAX
+  return capMult === 1 ? cap : Math.max(multipleMin(stage), cap * capMult)
 }
 
-/** 0–1: the 3-month MoM against GROWTH_FULL_K × the stage's diligence ask (1 = the ceiling is earned). */
-export function growthScore(momAvg: number, stage: number): number {
-  const ask = B.DILIGENCE_MOM[Math.min(B.DILIGENCE_MOM.length - 1, Math.max(0, stage))]!
+/**
+ * 0–1: the 3-month MoM against GROWTH_FULL_K × the stage's diligence ask (1 = the ceiling is earned). `askMult`:
+ * product of the 'diligenceMom' modifiers (investor winter asks for more growth, GAMEPLAY V2 §5.1).
+ */
+export function growthScore(momAvg: number, stage: number, askMult = 1): number {
+  const ask = B.DILIGENCE_MOM[Math.min(B.DILIGENCE_MOM.length - 1, Math.max(0, stage))]! * askMult
   return clamp(0, 1, momAvg / (B.GROWTH_FULL_K * ask))
 }
 
@@ -234,9 +239,9 @@ export function idlePenalty(stage: number, cash: number, grossBurn: number, day:
  * çarpan = (MIN[aşama] + (MAX − MIN) × growthScore) × cezalar (GAMEPLAY V2 §4.1). `penalty` is
  * bmPenalty × idlePenalty × boardPenalty; zero growth gives MIN at every stage.
  */
-export function valuationMultiple(momAvg: number, stage: number, penalty = 1): number {
+export function valuationMultiple(momAvg: number, stage: number, penalty = 1, capMult = 1, askMult = 1): number {
   const min = multipleMin(stage)
-  return (min + (Math.max(min, multipleCap(stage)) - min) * growthScore(momAvg, stage)) * penalty
+  return (min + (Math.max(min, multipleCap(stage, capMult)) - min) * growthScore(momAvg, stage, askMult)) * penalty
 }
 
 /**

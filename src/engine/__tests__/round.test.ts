@@ -163,6 +163,10 @@ describe('live offer: clamp and due diligence', () => {
     const burn = s.round!.diligence!.find((d) => d.id === 'burn')!
     expect(burn.target).toBe(99)
     expect(burn.met).toBe(true)
+    // Not asked = neutral: it adds nothing to the offer (no free +5% before Seed).
+    expect(burn.asked).toBe(false)
+    const asked = s.round!.diligence!.filter((d) => d.id !== 'burn')
+    expect(diligenceFactor(s.round!.diligence!)).toBeCloseTo(diligenceFactor(asked), 9)
   })
 
   it('from Seed the investor asks for a burn multiple ≤ 3 (GAMEPLAY V2 §4.1)', () => {
@@ -171,6 +175,7 @@ describe('live offer: clamp and due diligence', () => {
     expect(at(2).target).toBe(3)
     expect(at(2).met).toBe(true)
     expect(at(3.5).met).toBe(false)
+    expect(at(2).asked).toBe(true)
     expect(B.DILIGENCE_BM).toEqual([99, 99, 3, 2.5, 2, 1.5, 1.5])
   })
 })

@@ -1,13 +1,14 @@
 // Core loop, phase 1 (docs/CORE_LOOP.md §4–§6): payday + month receipt, release moments, next step chain,
 // horizon, stage goals and "Kararın → sonucu".
 import { describe, expect, it } from 'vitest'
-import type { StageGoal } from '../../content/index'
+import { CRISES, CRISIS_CARDS, type StageGoal } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
 import { releaseLevel } from '../loop'
-import { daysToPayday, horizon, nextStep } from '../loopSelectors'
-import type { GameState } from '../types'
-import { fakeCard, fakeContent } from './fixtures'
+import { daysToPayday, horizon, nextCrisis, nextStep } from '../loopSelectors'
+import { migrate } from '../save'
+import type { EngineApi, GameState, RoundState, StageIndex } from '../types'
+import { fakeCard, fakeContent, fakeCrisis } from './fixtures'
 
 const GOALS: StageGoal[] = [
   { id: 'g-launch', stage: 0, text: 't', hint: 'h', check: (s) => s.projects.some((p) => p.launched) },
@@ -193,6 +194,17 @@ describe('tech debt (GAMEPLAY V2 §4.2)', () => {
 })
 
 describe('next step chain (sıradaki adım)', () => {
+  it('from Seed below $1K MRR the valuation line adds up: revenue part + the fading pre-revenue part', () => {
+    const base = withTeam()
+    const s0: GameState = { ...base, stage: 2, projects: base.projects.map((p) => ({ ...p, maturity: 0.3, launched: true, releaseLevel: 1 })), stats: { ...base.stats, users: 40 } }
+    const v = api.step(s0, 0.01).derived.valuationParts!
+    expect(v.mode).toBe('post')
+    expect(v.blend).toBeGreaterThan(0)
+    expect(v.blend).toBeLessThan(1)
+    expect(v.preFade).toBeGreaterThan(0)
+    expect(v.mrr * 12 * v.multiple * v.blend + v.preFade).toBeCloseTo(v.total, 6)
+  })
+
   it('garage: idea → first users → desk → hire → launch → users → traction → grow', () => {
     let s = api.createGame({ seed: 1 })
     expect(nextStep(s).id).toBe('idea')
@@ -315,5 +327,227 @@ describe('stage goals (☆)', () => {
     expect(r.state.round!.offer.equity).toBeCloseTo(B.ROUND_EQUITY[1]! - B.GOAL_STAR_EQUITY_DISCOUNT, 6)
     const plain = api.applyAction({ ...ready, goalsDone: [] }, { type: 'startRound' })
     expect(plain.state.round!.offer.equity).toBeCloseTo(B.ROUND_EQUITY[1]!, 6)
+  })
+})
+
+describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
+  const CARD = fakeCard('card-storm', { category: 'crisis', once: false, condition: () => false })
+  const NORMAL = fakeCard('c-normal', { condition: () => false })
+  const capi = createEngine(fakeContent({ decisions: [CARD, NORMAL, fakeCard('card-gale', { category: 'crisis', once: false, condition: () => false })], crises: [fakeCrisis('storm', 1), fakeCrisis('gale', 2)] }))
+
+  /** A rich garage (no bankruptcy over long runs). */
+  function rich(e: EngineApi, seed = 1): GameState {
+    const s = e.createGame({ seed })
+    return { ...s, stats: { ...s.stats, cash: 50_000_000 } }
+  }
+
+  /** Closes a one-week round into `target` (the real close: rng chain progressRound → closeRound → enterStage). */
+  function closeInto(e: EngineApi, s: GameState, target: StageIndex): GameState {
+    const round: RoundState = { active: true, targetStage: target, startedDay: s.time.day, weeksTotal: 1, weeksLeft: 1, offer: { amount: 1000, equity: 0.01, preMoney: 0 }, baseValuation: 1 }
+    const out = e.step({ ...s, round }, 7)
+    expect(out.stage).toBe(target)
+    return out
+  }
+
+  const stepTo = (e: EngineApi, s: GameState, day: number): GameState => e.step(s, day - s.time.day)
+  const pending = (s: GameState) => (s.calendar ?? []).filter((c) => !c.fired)
+
+  it('the first crisis lands 30–80 days after arriving at Pre-seed; the garage has none', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const garage = capi.step(rich(capi, seed), 5)
+      expect(garage.calendar).toEqual([])
+      const s = closeInto(capi, garage, 1)
+      const up = s.events.find((ev) => ev.kind === 'stageUp')!
+      const [c] = s.calendar!
+      expect(s.calendar).toHaveLength(1)
+      expect(c!.id).toBeNull()
+      expect(c!.day - up.day).toBeGreaterThanOrEqual(B.CRISIS_FIRST_DAYS[0])
+      expect(c!.day - up.day).toBeLessThanOrEqual(B.CRISIS_FIRST_DAYS[1] + 1)
+      expect(c!.revealDay).toBe(c!.day - B.CRISIS_TELEGRAPH_DAYS)
+    }
+  })
+
+  it('a stage change keeps the pending date and never stacks a second crisis', () => {
+    const s = closeInto(capi, rich(capi, 3), 1)
+    const day = s.calendar![0]!.day
+    const seed = closeInto(capi, s, 2)
+    expect(seed.calendar).toHaveLength(1)
+    expect(seed.calendar![0]!.day).toBe(day)
+    // Drawn on the reveal day from the stage it is in then: Seed's pool.
+    const revealed = stepTo(capi, seed, day - 20)
+    expect(revealed.calendar![0]!.id).toBe('gale')
+    expect(revealed.events.some((ev) => ev.kind === 'crisisRevealed' && ev.refId === 'gale')).toBe(true)
+  })
+
+  it('crises come 150–300 days apart; a used pool repeats the last one, lighter', () => {
+    let s = closeInto(capi, rich(capi, 5), 1)
+    s = capi.step(s, 1300)
+    const fired = s.calendar!.filter((c) => c.fired)
+    expect(fired.length).toBeGreaterThanOrEqual(5)
+    for (let i = 1; i < fired.length; i++) {
+      expect(fired[i]!.day - fired[i - 1]!.day).toBeGreaterThanOrEqual(B.CRISIS_GAP_MIN)
+      expect(fired[i]!.day - fired[i - 1]!.day).toBeLessThanOrEqual(B.CRISIS_GAP_MAX)
+    }
+    expect(fired[0]!.id).toBe('storm')
+    expect(fired[1]!.light).toBe(true)
+    expect(pending(s)).toHaveLength(1)
+    // The lighter repeat lands at × CRISIS_LIGHT_SEVERITY and still brings its card (always a way to soften it, §18).
+    const sev = B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * B.DIRECTOR_PRESSURE_DEFAULT
+    expect(s.events.filter((ev) => ev.kind === 'crisis').at(-1)!.value).toBeCloseTo(sev * B.CRISIS_LIGHT_SEVERITY, 9)
+    const storm = s.decisions.history.filter((h) => h.cardId === 'card-storm').length + (s.decisions.active?.cardId === 'card-storm' ? 1 : 0)
+    expect(storm).toBe(fired.length)
+  })
+
+  it('the crisis card takes the slot of a rolled card: no roll in the reserve window before a crisis day', () => {
+    const roll = fakeCard('c-roll', { once: false })
+    const e = createEngine(fakeContent({ decisions: [CARD, roll], crises: [fakeCrisis('storm', 1)] }))
+    let s = closeInto(e, rich(e, 7), 1)
+    s = e.step(s, 1300)
+    const crisisDays = s.calendar!.filter((c) => c.fired).map((c) => c.day)
+    const rolled = s.events.filter((ev) => ev.kind === 'decisionShown' && ev.refId === 'c-roll')
+    for (const ev of rolled) for (const d of crisisDays) expect(ev.day > d - B.CRISIS_CARD_RESERVE_DAYS && ev.day <= d).toBe(false)
+  })
+
+  it('a rescue on the desk stays first: the crisis card waits behind it', () => {
+    const rescue = fakeCard('bridge', { category: 'crisis', once: false, condition: () => false })
+    const e = createEngine(fakeContent({ decisions: [CARD, rescue], crises: [fakeCrisis('storm', 1)] }))
+    let s = closeInto(e, rich(e, 2), 1)
+    const day = s.calendar![0]!.day
+    s = stepTo(e, s, day - 1)
+    s = { ...s, decisions: { ...s.decisions, active: { cardId: 'bridge', shownDay: s.time.day } } }
+    s = stepTo(e, s, day)
+    expect(s.decisions.active?.cardId).toBe('bridge')
+    expect(s.decisions.queue[0]).toBe('card-storm')
+  })
+
+  it('investor winter prices the multiple: the ceiling × ~0.6 (above the floor) and a higher growth ask', () => {
+    const winter = CRISES.find((c) => c.id === 'investor-winter')!
+    const e = createEngine(fakeContent({ decisions: [...CRISIS_CARDS], crises: [{ ...winter, stage: 1 }] }))
+    let s = closeInto(e, rich(e, 3), 1)
+    const day = s.calendar![0]!.day
+    s = stepTo(e, s, day - 1)
+    const cap = s.derived.multipleCap!
+    s = stepTo(e, s, day)
+    expect(s.modifiers.some((m) => m.kind === 'multipleCap' && m.source === 'crisis:investor-winter')).toBe(true)
+    const sev = B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * B.DIRECTOR_PRESSURE_DEFAULT
+    expect(s.derived.multipleCap!).toBeCloseTo(Math.max(B.MULTIPLE_MIN_BY_STAGE[1]!, cap * (1 - 0.4 * sev)), 9)
+    expect(s.derived.multipleCap!).toBeLessThan(cap)
+    expect(s.derived.multipleCap!).toBeGreaterThanOrEqual(B.MULTIPLE_MIN_BY_STAGE[1]!)
+  })
+
+  it('crisis day: the effects land at severity and the crisis card comes first', () => {
+    let s = closeInto(capi, rich(capi, 2), 1)
+    const day = s.calendar![0]!.day
+    s = stepTo(capi, s, day - 1)
+    // An unanswered normal card is on the desk the day before.
+    s = { ...s, decisions: { ...s.decisions, active: { cardId: 'c-normal', shownDay: s.time.day } } }
+    s = stepTo(capi, s, day)
+    const sev = B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * B.DIRECTOR_PRESSURE_DEFAULT
+    const mod = s.modifiers.find((m) => m.source === 'crisis:storm')!
+    expect(mod.kind).toBe('churn')
+    expect(mod.value).toBeCloseTo(1 + 0.5 * sev, 9)
+    expect(mod.untilDay).toBe(day + 90)
+    expect(s.events.find((ev) => ev.kind === 'crisis')).toMatchObject({ refId: 'storm', day })
+    expect(s.decisions.active?.cardId).toBe('card-storm')
+    expect(s.calendar![0]!.fired).toBe(true)
+    expect(pending(s)).toHaveLength(1)
+    // One card a day: the pushed normal card is not queued behind it, it waits for the shared cooldown.
+    expect(s.decisions.queue).not.toContain('c-normal')
+    expect(s.events.filter((ev) => ev.kind === 'decisionShown' && ev.day === day)).toHaveLength(1)
+    s = capi.applyAction(s, { type: 'answerDecision', cardId: 'card-storm', optionIndex: 0 }).state
+    const after = capi.step(s, B.CARD_COOLDOWN_DAYS - 1)
+    expect(after.events.filter((ev) => ev.kind === 'decisionShown' && ev.day > day)).toHaveLength(0)
+    expect(after.decisions.lastCardDay).toBe(day)
+  })
+
+  it('horizon: "?" from 60 days ahead, the id from 30 days ahead', () => {
+    let s = closeInto(capi, rich(capi, 4), 1)
+    const day = s.calendar![0]!.day
+    s = capi.step(s, 1)
+    if (day - s.time.day > 58) {
+      s = stepTo(capi, s, day - 58)
+      const far = horizon(s).find((h) => h.kind === 'crisis')!
+      expect(far).toMatchObject({ day, hidden: true })
+      expect(far.crisisId).toBeUndefined()
+    }
+    expect(horizon(s).some((h) => h.kind === 'crisis')).toBe(day - s.time.day <= B.CRISIS_HORIZON_DAYS)
+    s = stepTo(capi, s, day - 29)
+    expect(horizon(s).find((h) => h.kind === 'crisis')).toMatchObject({ day, hidden: false, crisisId: 'storm' })
+    expect(nextCrisis(s)).toEqual({ day, id: 'storm', hidden: false })
+    expect(s.derived.nextCrisis).toEqual({ day, id: 'storm', hidden: false })
+  })
+
+  it('the first-crisis 58-day "?" (a date far enough ahead)', () => {
+    // Find a seed whose first crisis lands ≥ 60 days out, then look at it 58 days before.
+    for (let seed = 1; seed <= 30; seed++) {
+      let s = closeInto(capi, rich(capi, seed), 1)
+      const day = s.calendar![0]!.day
+      if (day - s.time.day < 60) continue
+      s = stepTo(capi, s, day - 58)
+      expect(horizon(s).find((h) => h.kind === 'crisis')).toMatchObject({ day, hidden: true })
+      expect(nextCrisis(s)).toEqual({ day, hidden: true })
+      expect(s.derived.nextCrisis).toEqual({ day, hidden: true })
+      return
+    }
+    throw new Error('no seed with a first crisis ≥ 60 days out')
+  })
+
+  it('same seed → same calendar (across round closes and step batching)', () => {
+    const run = (batch: number) => {
+      let s = closeInto(capi, rich(capi, 9), 1)
+      for (let d = 0; d < 400; d += batch) s = capi.step(s, batch)
+      s = closeInto(capi, s, 2)
+      return capi.step(s, 500).calendar
+    }
+    const a = run(1)
+    expect(a!.length).toBeGreaterThanOrEqual(3)
+    expect(run(1)).toEqual(a)
+    expect(run(50)).toEqual(a)
+    const other = (() => {
+      let s = closeInto(capi, rich(capi, 10), 1)
+      s = capi.step(s, 400)
+      return capi.step(closeInto(capi, s, 2), 500).calendar
+    })()
+    expect(other).not.toEqual(a)
+  })
+
+  it('an old v3 save opens and schedules its crisis on the first day (lazily, deterministically)', () => {
+    const s = closeInto(capi, closeInto(capi, rich(capi, 6), 1), 2)
+    const old = JSON.parse(JSON.stringify(s)) as Record<string, unknown>
+    delete old.calendar
+    const load = () => migrate({ version: 3, state: JSON.parse(JSON.stringify(old)) })!
+    const loaded = load()
+    expect(loaded.calendar).toEqual([])
+    const a = capi.step(loaded, 1)
+    expect(a.calendar).toHaveLength(1)
+    expect(a.calendar![0]!.day).toBeGreaterThanOrEqual(a.time.day + B.CRISIS_TELEGRAPH_DAYS - 1)
+    expect(capi.step(load(), 1).calendar).toEqual(a.calendar)
+    // A v4 save from before the calendar (no field at all) defaults lazily too.
+    const bare = { ...s }
+    delete bare.calendar
+    expect(capi.step(bare, 1).calendar).toHaveLength(1)
+  })
+
+  it('runs without crisis content: the dates pass quietly', () => {
+    let s = closeInto(api, rich(api, 1), 1)
+    s = api.step(s, 400)
+    expect(s.calendar!.filter((c) => c.fired).length).toBeGreaterThanOrEqual(1)
+    expect(s.calendar!.every((c) => c.id === null)).toBe(true)
+    expect(s.events.some((ev) => ev.kind === 'crisis')).toBe(false)
+  })
+
+  it('the card budget: CARD_DAILY_CHANCE 0.08; every crisis has its calendar-only card within the text budgets', () => {
+    expect(B.CARD_DAILY_CHANCE).toBe(0.08)
+    const words = (t: string) => t.trim().split(/\s+/).length
+    expect(new Set(CRISES.map((c) => c.stage)).size).toBe(CRISES.length)
+    for (const c of CRISES) {
+      const card = CRISIS_CARDS.find((x) => x.id === c.cardId)!
+      expect(card.category).toBe('crisis')
+      expect(card.condition?.(rich(api))).toBe(false)
+      expect(card.options).toHaveLength(2)
+      expect(words(card.question)).toBeLessThanOrEqual(12)
+      for (const o of card.options) expect(words(o.label)).toBeLessThanOrEqual(5)
+      expect(words(c.name)).toBeLessThanOrEqual(6)
+    }
   })
 })

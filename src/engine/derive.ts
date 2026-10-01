@@ -2,7 +2,7 @@
 import * as B from './balance'
 import * as E from './economy'
 import { findUsersPreview, salesCallPreview } from './founder'
-import { horizon, nextStep } from './loopSelectors'
+import { horizon, nextCrisis, nextStep } from './loopSelectors'
 import { roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId, type ValuationBreakdown } from './types'
@@ -155,15 +155,18 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     E.bmPenalty(bm, s.stage) *
     E.idlePenalty(s.stage, s.stats.cash, burn, s.time.day, s.finance.lastRoundCloseDay ?? s.time.day) *
     (s.flags['boardCapPenalty'] ? B.BOARD_CAP_PENALTY : 1)
-  const multCap = E.multipleCap(s.stage)
-  const multiple = E.valuationMultiple(momAvg, s.stage, penalty)
+  // Investor winter (GAMEPLAY V2 §5.1): a lower ceiling and a higher growth ask while its modifiers last.
+  const capMult = modifierMult(s, 'multipleCap')
+  const multCap = E.multipleCap(s.stage, capMult)
+  const multiple = E.valuationMultiple(momAvg, s.stage, penalty, capMult, modifierMult(s, 'diligenceMom'))
   const launched = s.projects.filter((p) => p.launched).length
   const releases = Math.min(B.VAL_RELEASE_MAX, s.releaseCount ?? 0)
   const pre = E.valuationPreRevenue(s.stats.users, launched, releases)
   const valuation = E.valuation(mrr, multiple, pre, s.stage)
   const blend = E.revenueBlend(mrr)
+  const mode = blend > 0 && valuation !== pre ? 'post' : 'pre'
   const valuationParts: ValuationBreakdown = {
-    mode: blend > 0 && valuation !== pre ? 'post' : 'pre',
+    mode,
     users: s.stats.users,
     launched,
     releases,
@@ -177,6 +180,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     cap: multCap,
     penalty,
     blend,
+    // What the revenue part does not explain: the pre-revenue floor fading out from Seed (economy.valuation).
+    preFade: mode === 'post' ? Math.max(0, valuation - E.valuationPostRevenue(mrr, multiple) * blend) : 0,
     total: valuation,
   }
 
@@ -233,5 +238,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)
   s.derived.horizon = horizon(s)
+  const crisis = nextCrisis(s)
+  if (crisis) s.derived.nextCrisis = crisis
   return o
 }

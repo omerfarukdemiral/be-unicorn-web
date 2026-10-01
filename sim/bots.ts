@@ -7,6 +7,7 @@ import {
   balance,
   createEngine,
   createRngState,
+  nextCrisis,
   nextLockedRing,
   serialize,
   type Action,
@@ -15,6 +16,7 @@ import {
   type EngineContent,
   type GameEventKind,
   type GameState,
+  type NextCrisis,
   type ProjectCategory,
   type RoundPitch,
   type RoundSize,
@@ -66,6 +68,12 @@ export interface BotConfig {
   afterProfit?: 'coast' | 'idle'
   /** "Careless burner" (§4.2 kabul d): spends on ads without looking at cash or runway (only the paid peak caps it). */
   ignoreRunway?: boolean
+  /**
+   * GAMEPLAY V2 §5.1 preparation mode (default on): from the "?" on the horizon no hires, ads × 0.5, a rent × 3 cash
+   * reserve on furniture; once revealed, per kind (lease-hike: the reserve stays; cac-war: ads off; key-account-renewal:
+   * the SLA investment on its card; winter: no round into it unless runway < 4). careless / greedyGood: off.
+   */
+  prepareCrisis?: boolean
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -114,16 +122,15 @@ export const BOTS: Record<Archetype, BotConfig> = {
 /**
  * GAMEPLAY V2 §15 bots. All play the real engine through the same routine as the archetypes; what differs is config.
  * - coaster / idleAfterProfit: bootstrap until the first profitable day, then autopilot (see BotConfig.afterProfit).
- * - greedyGood: a good policy that takes risks — hires down to 4 months of runway, always the large round.
- *   // T09 kredi: takes the loan within 3 months of runway once loans exist.
- *   // T07 kriz hazırlığı: never prepares for a scheduled crisis.
+ * - greedyGood: a good policy that takes risks — hires down to 4 months of runway, always the large round, never
+ *   prepares for a scheduled crisis (§5.1). // T09 kredi: takes the loan within 3 months of runway once loans exist.
  * - burner / frugal: the same bootstrap plan on the same seeds; burner spends hard but watches runway (hires down to 3
  *   months, heavy ads), frugal hires only on a thick cushion. "Careless burner" = burner with minRunwayToHire 0.
  */
 export const V2_BOTS: Record<V2BotKind, BotConfig> = {
   coaster: { ...BOTS.bootstrap, kind: 'coaster', afterProfit: 'coast' },
   idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', afterProfit: 'idle' },
-  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2 },
+  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false },
   burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
 }
@@ -209,7 +216,24 @@ export interface BotRun {
   secretsSeen: number
   /** Serialized save at the end of the run (UTF-8 bytes). */
   saveBytes: number
+  /** Crises that hit (§5.1): day, stage, whether the bot was preparing, and the lowest payday runway in the window after. */
+  crises: CrisisRun[]
+  /** Crises the bot was in preparation mode for when they hit. */
+  preparedForCrisis: number
+  /** Decision cards shown over the run (the card budget, §3 md.11). */
+  cardsShown: number
 }
+
+export interface CrisisRun {
+  day: number
+  stage: number
+  prepared: boolean
+  /** Lowest payday runway (months, 99 = profitable) in the CRISIS_WINDOW_DAYS after it hit. */
+  minRunway: number
+}
+
+/** The window after a crisis whose paydays count as "kriz sonrası" (the longest crisis modifier lasts 120 days). */
+export const CRISIS_WINDOW_DAYS = 120
 
 /** How the bot answers decision cards: its weighted best (default), its worst, or always the first option. */
 export type DecisionPolicy = 'best' | 'worst' | 'first'
@@ -250,7 +274,9 @@ function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: Decision
   const card = active && content.decisions.find((c) => c.id === active.cardId)
   if (card) {
     let best = 0
-    if (cfg && policy !== 'first') {
+    const prepared = cfg && policy === 'best' && cfg.prepareCrisis !== false ? PREP_CARD_OPTION[card.id] : undefined
+    if (prepared !== undefined) best = prepared
+    else if (cfg && policy !== 'first') {
       const sign = policy === 'worst' ? -1 : 1
       card.options.forEach((_, i) => { if (sign * scoreOption(c.s, card, i, cfg) > sign * scoreOption(c.s, card, best, cfg)) best = i })
     } else if (!cfg && rng) best = rng.int(0, card.options.length - 1)
@@ -291,8 +317,11 @@ function affordable(s: GameState, reserve: number, price: number): boolean {
 /** Desks, desk upgrades, common-area auras and rooms. */
 function furnish(c: Ctx, cfg: BotConfig): void {
   const { act, content } = c
-  const reserve = Math.max(5_000, fixedBurn(c.s) * 3)
-  const rich = Math.max(10_000, fixedBurn(c.s) * cfg.furnishReserveMonths)
+  // Preparing for a crisis: rent × 3 stays in the bank (what lease-hike asks at once), until it shows another kind.
+  const prep = preparing(c.s, cfg)
+  const prepReserve = prep && (prep.hidden || prep.id === 'lease-hike') ? c.s.finance.burnBreakdown.rent * 3 : 0
+  const reserve = Math.max(5_000, fixedBurn(c.s) * 3) + prepReserve
+  const rich = Math.max(10_000, fixedBurn(c.s) * cfg.furnishReserveMonths) + prepReserve
   const open = new Set(c.s.office.rings.filter((r) => r.unlocked).map((r) => r.index))
   const avail = (f: FurnitureItem) => f.stageUnlock <= c.s.stage
   const desks = content.furniture.filter((f) => f.slotType === 'desk' && f.size === 1 && avail(f) && !f.effects.deptBonus).sort((a, b) => a.price - b.price)
@@ -346,8 +375,28 @@ function furnish(c: Ctx, cfg: BotConfig): void {
 
 const GARAGE_MIN_RUNWAY = 2.5
 
+// GAMEPLAY V2 §5.1 bot preparation: the whole value of a known storm is getting ready for it.
+/** Ads while preparing: × this of the budget when the "?" appeared. */
+const PREP_AD_SHARE = 0.5
+/** Crises that price a round down (multiple ceiling, diligence ask): no round is started into them. */
+const WINTER_CRISES: ReadonlySet<string> = new Set(['investor-winter', 'market-correction'])
+/** Below this runway the round starts anyway, winter or not (the player's dilemma). */
+const WINTER_ROUND_RUNWAY = 4
+
+/** The next crisis once its date is on the horizon ("?", CRISIS_HORIZON_DAYS), for a bot that prepares; else null. */
+function preparing(s: GameState, cfg: BotConfig | null): NextCrisis | null {
+  if (!cfg || cfg.prepareCrisis === false) return null
+  const nc = nextCrisis(s)
+  return nc && nc.day - s.time.day <= balance.CRISIS_HORIZON_DAYS ? nc : null
+}
+
+/** Card the preparing bot answers with its preparation, not by score (key-account-renewal: the SLA investment). */
+const PREP_CARD_OPTION: Readonly<Record<string, number>> = { 'crisis-key-account': 1 }
+
 function hiring(c: Ctx, cfg: BotConfig): void {
   const { act } = c
+  // Preparation mode (§5.1): no hires from the "?" to the crisis day.
+  if (preparing(c.s, cfg)) return
   const runway = c.s.finance.runway ?? 99
   // Servers overflowing: an engineer is a need, not growth — the soft team cap gives way (up to +50%).
   const overloaded = c.s.derived.capacity < c.s.stats.users * 1.05
@@ -489,6 +538,14 @@ function growth(c: Ctx, cfg: BotConfig): void {
     else if (ltvCac >= minLtvCac * AD_RAISE_MARGIN) t = Math.min(cap, ads * AD_STEP_UP)
     else if (ltvCac < minLtvCac) t = ads * AD_STEP_DOWN
     t = Math.min(t, cap)
+    // Preparing: half the budget the "?" found; a revealed ad war (cac-war) cuts it, price kept.
+    const prep = preparing(c.s, cfg)
+    if (prep?.id === 'cac-war') t = 0
+    else if (prep) {
+      c.mem.prepAds ??= ads
+      t = Math.min(t, c.mem.prepAds * PREP_AD_SHARE)
+    }
+    if (!prep) delete c.mem.prepAds
     t = t < AD_MIN_SHARE * mrr ? 0 : Math.round(t)
     if (Math.abs(t - ads) > 0.2 * Math.max(1, ads)) act({ type: 'setAdBudget', amount: Math.max(0, t) })
   }
@@ -516,6 +573,12 @@ function fundraise(c: Ctx, cfg: BotConfig, careless = false): void {
     c.mem.bestDay = c.s.time.day
   }
   if (!c.s.derived.canStartRound) return
+  // A winter crisis ahead (revealed, the round could not close before it) or on: the round would be priced in it.
+  // Wait it out — unless runway is under WINTER_ROUND_RUNWAY months.
+  const prep = preparing(c.s, cfg)
+  const winterAhead = prep?.id !== undefined && WINTER_CRISES.has(prep.id) && prep.day - c.s.time.day < balance.ROUND_WEEKS_MAX * 7 + 14
+  const winterOn = cfg.prepareCrisis !== false && c.s.modifiers.some((m) => m.kind === 'diligenceMom' && m.source.startsWith('crisis:'))
+  if ((winterAhead || winterOn) && (c.s.finance.runway ?? 99) >= WINTER_ROUND_RUNWAY) return
   const short = (c.s.finance.runway ?? 99) < (careless ? 2 : 6)
   const stalled = !careless && c.s.time.day - (c.mem.bestDay ?? c.s.time.day) >= STALL_DAYS
   if (short || stalled || p >= cfg.roundEagerness) act({ type: 'startRound', size: cfg.roundSize })
@@ -541,7 +604,7 @@ function randomTurn(c: Ctx, rng: Rng): void {
 }
 
 /** Careless player: bootstrap's plan without the care (see BotKind). */
-const CARELESS: BotConfig = { ...BOTS.bootstrap, kind: 'careless', minRunwayToHire: 0, teamCap: ALL_CAP, furnishReserveMonths: 0, impulseBuy: 0.15 }
+const CARELESS: BotConfig = { ...BOTS.bootstrap, kind: 'careless', minRunwayToHire: 0, teamCap: ALL_CAP, furnishReserveMonths: 0, impulseBuy: 0.15, prepareCrisis: false }
 
 export function playBot(
   kind: BotKind,
@@ -613,6 +676,8 @@ export function playBot(
   let peakValuation = 0
   const techDebtByStage: (number | null)[] = [null, null, null, null, null, null, null]
   const penetrationByStage = [0, 0, 0, 0, 0, 0, 0]
+  const crises: (CrisisRun & { eventId: number })[] = []
+  let cardsShown = 0
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -621,7 +686,9 @@ export function playBot(
       if (!c10Skip(botRng)) {
         // Impulse buy: a random item it can pay for right now, on a random open slot, reserve or not.
         if (botRng.next() < (cfg.impulseBuy ?? 0)) {
-          const item = botRng.pick(content.furniture.filter((f) => f.stageUnlock <= s.stage && f.price <= s.stats.cash))
+          // Nothing affordable (a crisis can take the cash below every price): no impulse today.
+          const affordableNow = content.furniture.filter((f) => f.stageUnlock <= s.stage && f.price <= s.stats.cash)
+          const item = affordableNow.length ? botRng.pick(affordableNow) : undefined
           const open = new Set(s.office.rings.filter((r) => r.unlocked).map((r) => r.index))
           const slots = s.office.slots.filter((x) => x.type === item?.slotType && !x.itemId && x.spanOf === undefined && x.id !== 'founder' && open.has(x.ring))
           if (item && slots.length) ctx.act({ type: 'placeItem', itemId: item.id, slotId: botRng.pick(slots).id })
@@ -653,6 +720,8 @@ export function playBot(
     }
     const prev = s.stage
     const before = s
+    // An autopilot past its first profit does nothing: it is not preparing even though it could.
+    const prepOn = preparing(s, cfg) !== null && !(cfg?.afterProfit && profitDay !== null)
     s = api.step(s, 1)
     if (profitDay === null && s.finance.mrr > 0 && s.finance.net > 0) profitDay = s.time.day
     if ((s.finance.runway ?? 99) < 3) daysRunwayBelow3++
@@ -664,11 +733,14 @@ export function playBot(
       if (MOMENT_KINDS.has(e.kind)) moment(e.day)
       if (e.kind === 'payrollMissed') payrollMissed++
       if (e.kind === 'decisionDefaulted') defaulted++
+      if (e.kind === 'decisionShown') cardsShown++
+      if (e.kind === 'crisis') crises.push({ day: e.day, stage: s.stage, prepared: prepOn, minRunway: 99, eventId: e.id })
       if (e.kind === 'payday') {
         const rw = Math.min(99, s.finance.lastReceipt?.runwayAfter ?? 99)
         paydayRunway.push({ stage: s.stage, runway: rw })
         paydays++
         stageMinRunway[s.stage] = Math.min(stageMinRunway[s.stage] ?? 99, rw)
+        for (const k of crises) if (e.id > k.eventId && e.day - k.day <= CRISIS_WINDOW_DAYS) k.minRunway = Math.min(k.minRunway, rw)
         techDebtByStage[s.stage] = s.techDebt
         penetrationByStage[s.stage] = s.derived.penetration ?? 0
         if (rw < 2) {
@@ -738,8 +810,8 @@ export function playBot(
     loansTaken: 0,
     loanCalled: 0,
     roundsFailed: 0,
-    crisesFired: 0,
-    crisisNearDeath: 0,
+    crisesFired: crises.length,
+    crisisNearDeath: crises.filter((k) => k.minRunway < 2).length,
     survivedNearDeath: firstNearDeath === null ? null : !(failed && s.time.day - firstNearDeath < 180),
     policiesAdopted: 0,
     paydayDeferrals: 0,
@@ -757,6 +829,9 @@ export function playBot(
     threadSteps: 0,
     secretsSeen: 0,
     saveBytes: new TextEncoder().encode(serialize(s)).length,
+    crises: crises.map(({ eventId: _id, ...k }) => k),
+    preparedForCrisis: crises.filter((k) => k.prepared).length,
+    cardsShown,
   }
 }
 

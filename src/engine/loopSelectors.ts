@@ -9,6 +9,7 @@ import {
   type CompanyProfile,
   type GameState,
   type HorizonItem,
+  type NextCrisis,
   type NextStep,
   type NextStepId,
   type SpendPreview,
@@ -73,9 +74,17 @@ export function daysToPayday(day: number): number {
   return next - day
 }
 
+/** The crisis that has not hit yet: its date, and its id once revealed (GAMEPLAY V2 §5.1). */
+export function nextCrisis(s: GameState): NextCrisis | undefined {
+  const e = (s.calendar ?? []).find((c) => !c.fired)
+  if (!e) return undefined
+  return e.id === null ? { day: e.day, hidden: true } : { day: e.day, id: e.id, hidden: false }
+}
+
 /**
  * The next HORIZON_DAYS: paydays with their projected lump, delayed decision effects (with the source card),
- * release ETAs at today's build speed, the round close and a ready round. Sorted by day.
+ * release ETAs at today's build speed, the round close and a ready round. Sorted by day. The next crisis looks
+ * further (CRISIS_HORIZON_DAYS): "?" until its reveal, then its id.
  */
 export function horizon(s: GameState): HorizonItem[] {
   const now = s.time.day
@@ -123,6 +132,10 @@ export function horizon(s: GameState): HorizonItem[] {
     out.push({ kind: 'roundClose', day: now + Math.max(0, r.weeksLeft * DAYS_PER_WEEK - acc) })
   } else if (s.derived.canStartRound) {
     out.push({ kind: 'roundReady', day: now })
+  }
+  const crisis = nextCrisis(s)
+  if (crisis && crisis.day <= now + B.CRISIS_HORIZON_DAYS) {
+    out.push({ kind: 'crisis', day: crisis.day, hidden: crisis.hidden, ...(crisis.id !== undefined ? { crisisId: crisis.id } : {}) })
   }
   return out.sort((a, b) => a.day - b.day)
 }

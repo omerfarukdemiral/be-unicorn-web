@@ -8,12 +8,13 @@
 // - close → cash, dilution, move. The bridge loan card still comes when cash runs out mid-round (tick.ts).
 import * as B from './balance'
 import { clamp } from './economy'
+import { scheduleCrisis } from './decisions'
 import { applyMorale, unlockTool, unlockWidget } from './effects'
 import { relocateOffice } from './office'
 import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex } from './types'
 import { ROUND_PITCHES, ROUND_SIZES } from './types'
-import { incCounter, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
+import { incCounter, modifierMult, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
 
 const WEEK_ACC = 'roundWeekAcc'
 /** Flag: the stage whose round window already announced itself (one roundWindow event per stage). */
@@ -66,9 +67,9 @@ export function roundEquityFor(target: StageIndex, size: RoundSize, stars: numbe
   return Math.max(0.02, base * B.ROUND_SIZE_EQUITY[size] - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT)
 }
 
-/** MoM growth the investor asks for at the current stage. */
+/** MoM growth the investor asks for at the current stage (× 'diligenceMom' modifiers: investor winter, §5.1). */
 export function growthAsk(s: GameState): number {
-  return B.DILIGENCE_MOM[s.stage] ?? B.DILIGENCE_MOM[B.DILIGENCE_MOM.length - 1]!
+  return (B.DILIGENCE_MOM[s.stage] ?? B.DILIGENCE_MOM[B.DILIGENCE_MOM.length - 1]!) * modifierMult(s, 'diligenceMom')
 }
 
 /** Growth the investor looks at: the 3-month average MoM (one lucky month on a tiny base does not count). */
@@ -111,13 +112,13 @@ export function diligenceNow(s: GameState): DiligenceItem[] {
     { id: 'runway', target: B.DILIGENCE_RUNWAY_MONTHS, value: runway ?? B.DILIGENCE_RUNWAY_MONTHS, met: runway === null || runway >= B.DILIGENCE_RUNWAY_MONTHS },
     { id: 'growth', target: ask, value: mom, met: mom >= ask },
     { id: 'morale', target: B.DILIGENCE_MORALE, value: s.stats.morale, met: s.stats.morale >= B.DILIGENCE_MORALE },
-    { id: 'burn', target: bmAsk, value: bm, met: bm <= bmAsk },
+    { id: 'burn', target: bmAsk, value: bm, met: bm <= bmAsk, asked: bmAsk < B.BURN_MULTIPLE_MAX },
   ]
 }
 
-/** 1 + Σ (met +5%, unmet −10%). */
+/** 1 + Σ (met +5%, unmet −10%); an item the stage does not ask for counts 0. */
 export function diligenceFactor(items: readonly DiligenceItem[]): number {
-  return items.reduce((f, d) => f + (d.met ? B.DILIGENCE_MET : B.DILIGENCE_UNMET), 1)
+  return items.reduce((f, d) => (d.asked === false ? f : f + (d.met ? B.DILIGENCE_MET : B.DILIGENCE_UNMET)), 1)
 }
 
 /** Price part of the offer: valuation / target in ROUND_OFFER_CLAMP. */
@@ -269,8 +270,11 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
   return null
 }
 
-/** Continuous: advance round weeks (roundSpeed modifiers make weeks pass faster). Weekly: live offer + pitch due. */
-export function progressRound(s: GameState, content: EngineContent, dtDays: number, roundSpeed: number): void {
+/**
+ * Continuous: advance round weeks (roundSpeed modifiers make weeks pass faster). Weekly: live offer + pitch due.
+ * `rng` is the step's own: the close enters the next stage, which may schedule the first crisis (GAMEPLAY V2 §5.1).
+ */
+export function progressRound(s: GameState, content: EngineContent, dtDays: number, roundSpeed: number, rng: Rng): void {
   const r = s.round
   if (!r?.active) return
   let acc = Number(s.flags[WEEK_ACC] ?? 0) + dtDays * roundSpeed
@@ -280,7 +284,7 @@ export function progressRound(s: GameState, content: EngineContent, dtDays: numb
     weekPassed(s, r)
   }
   s.flags[WEEK_ACC] = acc
-  if (r.weeksLeft <= 0) closeRound(s, content)
+  if (r.weeksLeft <= 0) closeRound(s, content, rng)
 }
 
 /** One round week: diligence values refresh, the offer follows the metrics, the next pitch is due. */
@@ -327,17 +331,21 @@ export function roundPitch(s: GameState, pitch: RoundPitch, rng?: Rng): ActionEr
   return null
 }
 
-/** Stage arrival side effects (office move, tools). */
-export function enterStage(s: GameState, stage: StageIndex): void {
+/**
+ * Stage arrival side effects (office move, tools). With `rng` the crisis calendar starts on Pre-seed (a pending crisis
+ * keeps its date); without it (winRun: no crisis at Unicorn) the first daily() schedules lazily.
+ */
+export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   s.stage = stage
   s.stageStart = stageBaseline(s)
   s.office = relocateOffice(s.office, stage)
   for (const t of B.STAGE_UNLOCK_TOOLS[stage] ?? []) unlockTool(s, t)
   pushActivity(s, 'stageUp', { stage })
   pushEvent(s, { kind: 'stageUp', value: stage })
+  if (rng) scheduleCrisis(s, rng)
 }
 
-export function closeRound(s: GameState, _content: EngineContent): void {
+export function closeRound(s: GameState, _content: EngineContent, rng: Rng): void {
   const r = s.round
   if (!r?.active) return
   // The close prices today's numbers (canlı teklif).
@@ -357,6 +365,6 @@ export function closeRound(s: GameState, _content: EngineContent): void {
   for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay = Math.min(v.leaveDay, s.time.day)
   pushActivity(s, 'roundClosed', { amount: Math.round(r.offer.amount), equity: r.offer.equity })
   pushEvent(s, { kind: 'roundClosed', value: r.offer.amount })
-  enterStage(s, r.targetStage)
+  enterStage(s, r.targetStage, rng)
   s.round = undefined
 }

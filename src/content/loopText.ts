@@ -91,6 +91,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'val.pre': 'Değerleme = {l} yayında × $150K ({lv}) + {u} kullanıcı × $400 ({uv}) + {r} sürüm × $15K ({rv})',
   'val.post': 'Değerleme = MRR {m} × 12 × {x}× (3 aylık büyüme {g}, taban {n}×, tavan {c}×)',
   'val.postBlend': 'Değerleme = MRR {m} × 12 × {x}× × {b} (gelir $1K MRR’a kadar kademeli sayılır)',
+  'val.postFade': 'Değerleme = MRR {m} × 12 × {x}× × {b} + sönen gelir öncesi değer {p}',
 
   // Stage goals
   'goals.title': 'Aşama hedefleri',

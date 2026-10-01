@@ -3,6 +3,7 @@
 import type {
   ActivityKind,
   ConceptId,
+  CrisisId,
   DecisionCardId,
   Dept,
   EffectBundle,
@@ -93,6 +94,25 @@ export interface DecisionCard {
   defaultOption?: number
   /** Days before the default applies (crisis / rescue cards are short); omitted = DECISION_DEFAULT_AFTER_DAYS. */
   defaultAfterDays?: number
+}
+
+// ---------------------------------------------------------------------------
+// Crisis calendar (GAMEPLAY V2 §5.1)
+// ---------------------------------------------------------------------------
+
+export interface CrisisDef {
+  id: CrisisId
+  /** The stage whose pool it belongs to (drawn on the reveal day from the then-current stage). */
+  stage: StageIndex
+  /** Horizon name, ≤ 6 words. */
+  name: string
+  /** Mitigation card brought on the crisis day (category 'crisis', 2 options). */
+  cardId: DecisionCardId
+  /**
+   * What hits on the crisis day at `severity` (≈ 0.7–1.3): modifiers scale as 1 + (v − 1) × severity. Pure; reads the
+   * state for sizes (rent, burn).
+   */
+  effects: (s: GameState, severity: number) => EffectBundle
 }
 
 // ---------------------------------------------------------------------------
@@ -268,4 +288,6 @@ export interface ContentBundle {
   uiText: Record<string, string>
   /** Optional stage goals (☆). */
   goals?: readonly StageGoal[]
+  /** Crisis calendar pool (GAMEPLAY V2 §5.1); optional so engine fakes run without it. */
+  crises?: readonly CrisisDef[]
 }

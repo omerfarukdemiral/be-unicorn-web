@@ -4,7 +4,7 @@ import { ACTIVITY_MAX, EVENTS_MAX } from './balance'
 import type { ActivityKind, GameEvent, GameState, ModifierKind, StageBaseline } from './types'
 
 /** The slice of content the engine reads. Tests inject fakes. */
-export type EngineContent = Pick<ContentBundle, 'concepts' | 'decisions' | 'furniture' | 'officeLines' | 'employeeNames' | 'goals'>
+export type EngineContent = Pick<ContentBundle, 'concepts' | 'decisions' | 'furniture' | 'officeLines' | 'employeeNames' | 'goals' | 'crises'>
 
 export function clone<T>(v: T): T {
   return structuredClone(v)

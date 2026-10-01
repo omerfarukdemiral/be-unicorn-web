@@ -56,6 +56,7 @@ export function endRun(s: GameState, content: EngineContent, kind: 'bankrupt' | 
 
 export function winRun(s: GameState): void {
   if (s.gameOver) return
+  // No rng: Unicorn ends the run, no crisis is scheduled there (GAMEPLAY V2 §5.1 RNG chain).
   enterStage(s, B.LAST_STAGE)
   s.gameOver = { kind: 'unicorn', day: s.time.day, reasons: [], xpEarned: B.XP_PER_STAGE * (B.LAST_STAGE + 1) }
   s.time.speed = 0

@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, SECONDS_PER_DAY, balance } from '../src/engine/index'
-import { DAYS_10_MIN, DAYS_5_MIN, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
+import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DAYS_5_MIN, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -73,6 +73,15 @@ const sizeRuns = SIZE_ARCHS.map((a) => {
   const bySize = (['small', 'target', 'large'] as const).map((size) => [size, size === cfgSize ? byArch.get(a)! : extra(a, 'best', { roundSize: size })] as const)
   return [a, bySize] as const
 })
+/** Crisis preparation (§5.1): the same archetypes on the same seeds with preparation mode off (always run, quick too). */
+const PREP_ARCHS: BotKind[] = ['bootstrap', 'vcRocket']
+const unprepRuns = PREP_ARCHS.map((a) => [a, runMany(a, 'best', { prepareCrisis: false })] as const)
+/**
+ * §3 md.11 card budget: the good archetypes on the same seeds without crisis content (the calendar's dates pass
+ * quietly), measured in this run so the baseline follows the balance. The calendar must not raise cards per run.
+ */
+const { crises: _crises, ...NO_CRISES } = CONTENT
+const calmRuns = ARCHETYPES.flatMap((a) => Array.from({ length: SEEDS }, (_, i) => playBot(a, i + 1, NO_CRISES, DAYS)))
 /** Round timing: take the window as soon as it opens (eagerness 0.6) vs wait for the target (1.0). */
 const EAGER_ARCHS: BotKind[] = ['bootstrap', 'platform']
 const eagerRuns = EAGER_ARCHS.map((a) => [a, extra(a, 'best', { roundEagerness: 0.6 }), byArch.get(a)!] as const)
@@ -415,6 +424,34 @@ crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, car
   }
 }
 line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${saveMax.toFixed(1)} KB (hedef < 120): **${yes(saveMed < 70 && saveMax < 120)}**`)
+{
+  // GAMEPLAY V2 §5.1 crisis calendar.
+  const withCrises = [...goodRuns, ...careless, ...[...v2Runs.values()].flat(), ...unprepRuns.flatMap(([, runs]) => runs)]
+  const gaps = withCrises.flatMap((r) => r.crises.slice(1).map((k, i) => k.day - r.crises[i]!.day))
+  const gapOk = gaps.length > 0 && Math.min(...gaps) >= balance.CRISIS_GAP_MIN && Math.max(...gaps) <= balance.CRISIS_GAP_MAX
+  line(`- Krizler arası boşluk (${gaps.length} aralık): ${gaps.length ? `${Math.min(...gaps)}–${Math.max(...gaps)}` : '—'} gün (hedef 150–300): **${yes(gapOk)}**`)
+  // Series C crises over every good run that reached C (§5.1 as written, no length filter).
+  const reachedC = goodRuns.filter((r) => r.stageDays[5] != null).map((r) => r.crises.filter((k) => k.stage === 5).length)
+  line(`- C'de kriz, iyi botlar (C'ye ulaşan ${reachedC.length} koşu, medyan): ${median(reachedC) ?? '—'} (hedef ≥ 2): **${yes((median(reachedC) ?? 0) >= 2)}** · ≥ 2 krizli koşu ${reachedC.filter((n) => n >= 2).length}/${reachedC.length}`)
+  const prepared = PREP_ARCHS.flatMap((a) => byArch.get(a)!.flatMap((r) => r.crises))
+  const unprepared = unprepRuns.flatMap(([, runs]) => runs.flatMap((r) => r.crises))
+  const pMed = median(prepared.map((k) => k.minRunway))
+  const uMed = median(unprepared.map((k) => k.minRunway))
+  line(`- Kriz hazırlığı (${PREP_ARCHS.join(' + ')}, aynı seed'ler): kriz sonrası ${CRISIS_WINDOW_DAYS} gün min runway medyanı hazırlanan ${pMed?.toFixed(1) ?? '—'} ↔ hazırlanmayan ${uMed?.toFixed(1) ?? '—'} ay (hedef ≥ +2): **${yes(pMed !== null && uMed !== null && pMed - uMed >= 2)}** · hazırlık modunda gelen kriz ${prepared.filter((k) => k.prepared).length}/${prepared.length}`)
+  const noPrep = [...unprepared, ...careless.flatMap((r) => r.crises), ...v2('greedyGood').flatMap((r) => r.crises)]
+  const near = noPrep.filter((k) => k.minRunway < 2).length
+  line(`- Hazırlanmayanlarda kriz sonrası maaş günü runway < 2 (hazırlıksız A/B + careless + greedyGood, ${noPrep.length} kriz): ${pct(near, noPrep.length)} (hedef ≥ %40): **${yes(noPrep.length > 0 && near / noPrep.length >= 0.4)}**`)
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
+  const cardsMean = mean(goodRuns.map((r) => r.cardsShown))
+  const calmMean = mean(calmRuns.map((r) => r.cardsShown))
+  const per1000 = (runs: BotRun[]) => (1000 * runs.reduce((a, r) => a + r.cardsShown, 0)) / Math.max(1, runs.reduce((a, r) => a + r.endDay, 0))
+  line(`- Kart / koşu, iyi botlar (ortalama): ${cardsMean.toFixed(1)} ↔ kriz içeriği olmadan aynı seed'ler ${calmMean.toFixed(1)} (hedef artış ≤ 0, mutlak ≤ 45): **${yes(cardsMean <= calmMean && cardsMean <= 45)}** · 1000 günde ${per1000(goodRuns).toFixed(1)} ↔ ${per1000(calmRuns).toFixed(1)} · kriz / koşu medyanı ${median(goodRuns.map((r) => r.crisesFired))}`)
+  // Unicorn with and without the calendar; runs that never arrive count as DAYS (censored, no survivor bias).
+  const uniCensored = (runs: BotRun[]) => median(runs.map((r) => r.stageDays[6] ?? DAYS))
+  const uc = uniCensored(goodRuns)
+  const ucm = uc === null ? null : toMin(uc)
+  line(`- İyi bot Unicorn medyanı, ulaşmayan = ${toMin(DAYS).toFixed(0)} dk (${goodRuns.filter((r) => r.stageDays[6] != null).length}/${goodRuns.length} ulaştı): ${fmtMin(uc)} (tolerans 55–95 dk): **${yes(ucm !== null && ucm >= 55 && ucm <= 95)}** · kriz içeriği olmadan ${fmtMin(uniCensored(calmRuns))} (${calmRuns.filter((r) => r.stageDays[6] != null).length}/${calmRuns.length})`)
+}
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)
 

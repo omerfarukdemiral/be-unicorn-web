@@ -97,6 +97,7 @@ export type ProjectId = string
 export type VisitorId = string
 export type FurnitureId = string // FurnitureItem.id from content
 export type DecisionCardId = string // DecisionCard.id from content
+export type CrisisId = string // CrisisDef.id from content (GAMEPLAY V2 §5.1)
 export type OfficeLineId = string
 
 export const FOUNDER_SLOT_ID: SlotId = 'founder'
@@ -105,7 +106,11 @@ export const FOUNDER_SLOT_ID: SlotId = 'founder'
 // Effects (shared by decisions, concepts, furniture, founder actions)
 // ---------------------------------------------------------------------------
 
-export type ModifierKind = 'churn' | 'arpu' | 'production' | 'morale' | 'cac' | 'organic' | 'roundSpeed'
+/**
+ * GAMEPLAY V2 §5.1 (additive): 'multipleCap' scales the stage's multiple ceiling, 'diligenceMom' the MoM the investor
+ * asks for (investor winter); 'capacity' is reserved for the payday desk (§6.1).
+ */
+export type ModifierKind = 'churn' | 'arpu' | 'production' | 'morale' | 'cac' | 'organic' | 'roundSpeed' | 'multipleCap' | 'diligenceMom' | 'capacity'
 
 /** Temporary multiplier living in state until `untilDay`. */
 export interface TimedModifier {
@@ -413,6 +418,8 @@ export interface DiligenceItem {
   /** Current value (runway null = profitable → counts as met, stored as target). */
   value: number
   met: boolean
+  /** false: not asked at this stage (burn before Seed), neutral in the offer. Missing = asked (old saves). */
+  asked?: boolean
 }
 
 /** One size option of the round chooser (engine computed, UI shows it as is). */
@@ -685,6 +692,28 @@ export interface DerivedMetrics {
   tam?: number
   /** users / tam, 0–1: saturates paid and organic reach and lifts churn and CAC. */
   penetration?: number
+  /** The next scheduled crisis (GAMEPLAY V2 §5.1): its day, and its id once revealed (hidden = "?" on the horizon). */
+  nextCrisis?: NextCrisis
+}
+
+/** Next crisis on the calendar: the date is known, the id only from CRISIS_TELEGRAPH_DAYS before. */
+export interface NextCrisis {
+  day: number
+  id?: CrisisId
+  hidden: boolean
+}
+
+/**
+ * One date of the crisis calendar (GAMEPLAY V2 §5.1). The date is set when it is scheduled; the id is drawn from the
+ * then-current stage's pool on `revealDay` (null until then). `light`: the pool was used up, so it is a softer repeat
+ * of the previous crisis (severity × CRISIS_LIGHT_SEVERITY).
+ */
+export interface CalendarEntry {
+  id: CrisisId | null
+  day: number
+  revealDay: number
+  fired?: true
+  light?: true
 }
 
 /** Valuation breakdown (docs/CORE_LOOP.md §4.3 "çarpan dökümü"): engine computed, the UI only prints it. */
@@ -709,6 +738,8 @@ export interface ValuationBreakdown {
   penalty: number
   /** Share of the post-revenue formula counted (mrr / PRE_REVENUE_MRR, max 1). */
   blend: number
+  /** From Seed, below $1K MRR: the fading pre-revenue part, pre × (1 − blend) (0 otherwise). */
+  preFade: number
   total: number
 }
 
@@ -755,7 +786,7 @@ export interface NextStep {
   value?: number
 }
 
-export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady'
+export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady' | 'crisis'
 
 export interface HorizonItem {
   kind: HorizonKind
@@ -771,6 +802,10 @@ export interface HorizonItem {
   level?: number
   /** Update number (after 1.0), when the release is an update. */
   update?: number
+  /** Crisis: its id once revealed. */
+  crisisId?: CrisisId
+  /** Crisis: the date is known but not what it is yet ("?"). */
+  hidden?: boolean
 }
 
 /** A release moment (maturity threshold passed): the user wave and the MRR jump it brought. */
@@ -866,6 +901,10 @@ export type GameEventKind =
   | 'payrollMissed'
   /** An unanswered card applied its default option (refId = card, value = option index). */
   | 'decisionDefaulted'
+  /** A scheduled crisis showed what it is (refId = CrisisId, value = crisis day). */
+  | 'crisisRevealed'
+  /** A scheduled crisis hit (refId = CrisisId, value = severity). */
+  | 'crisis'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -970,6 +1009,8 @@ export interface GameState {
   stageStart?: StageBaseline
   /** Releases shipped over the run (levels + updates), for stage goals. */
   releaseCount?: number
+  /** Crisis calendar (GAMEPLAY V2 §5.1), oldest first; older saves default lazily to [] (tick.ts). */
+  calendar?: CalendarEntry[]
 }
 
 // ---------------------------------------------------------------------------

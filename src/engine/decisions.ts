@@ -1,10 +1,12 @@
 // Generic decision card engine (PLAN §6.3): pick (stage + condition + seeded RNG + cooldown, max 1 active),
-// answer (effects + delayed queue), and fire due delayed effects.
-import type { DecisionCard } from '../content/index'
+// answer (effects + delayed queue), and fire due delayed effects. Also the crisis calendar (GAMEPLAY V2 §5.1), whose
+// cards share the same card budget.
+import type { CrisisDef, DecisionCard } from '../content/index'
 import * as B from './balance'
+import { clamp } from './economy'
 import { applyEffects } from './effects'
 import type { Rng } from './rng'
-import type { DecisionCardId, GameState } from './types'
+import type { CalendarEntry, DecisionCardId, GameState } from './types'
 import { newId, pushActivity, pushEvent, type EngineContent } from './util'
 
 function safeCondition(c: DecisionCard, s: GameState): boolean {
@@ -58,6 +60,7 @@ export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng
   }
   if (s.time.day < B.FIRST_CARD_DAY) return
   if (s.decisions.history.length > 0 && s.time.day - s.decisions.lastCardDay < B.CARD_COOLDOWN_DAYS) return
+  if (crisisHoldsSlot(s, content)) return
   if (!rng.chance(B.CARD_DAILY_CHANCE)) return
   const pick = rng.weighted(eligibleCards(s, content.decisions), (c) => c.weight ?? 1)
   if (pick) showCard(s, pick)
@@ -165,4 +168,127 @@ export function bringCardNow(s: GameState, cardId: DecisionCardId): void {
   }
   if (s.decisions.active?.cardId !== cardId) q.unshift(cardId)
   s.decisions.queue = q
+}
+
+// ---------------------------------------------------------------------------
+// Crisis calendar (GAMEPLAY V2 §5.1): a known storm. The date is tied to time, not to stages (a pending crisis
+// survives a stage change); what it is gets drawn on the reveal day from the then-current stage's pool; on the day it
+// hits, its effects land and its card comes first. Every rng draw comes from the step's Rng (never a local one).
+// ---------------------------------------------------------------------------
+
+/** The calendar; older saves default lazily to []. */
+export function calendarOf(s: GameState): CalendarEntry[] {
+  return (s.calendar ??= [])
+}
+
+/** The crisis that has not hit yet (at most one is ever scheduled). */
+export function pendingCrisis(s: GameState): CalendarEntry | undefined {
+  return (s.calendar ?? []).find((c) => !c.fired)
+}
+
+/** Severity = 0.7 + 0.6 × director pressure. The director lands in C2; until then the default pressure. */
+export function crisisSeverity(s: GameState): number {
+  const pressure = (s as GameState & { director?: { pressure?: number } }).director?.pressure ?? B.DIRECTOR_PRESSURE_DEFAULT
+  return B.CRISIS_SEVERITY_BASE + B.CRISIS_SEVERITY_PER_PRESSURE * pressure
+}
+
+/** Days to the next crisis after one fired at `stage`: interval ± jitter, kept inside [GAP_MIN, GAP_MAX]. */
+function crisisGap(stage: number, rng: Rng): number {
+  const base = B.CRISIS_INTERVAL_DAYS[Math.min(B.CRISIS_INTERVAL_DAYS.length - 1, stage)]!
+  return clamp(B.CRISIS_GAP_MIN, B.CRISIS_GAP_MAX, base + rng.int(-B.CRISIS_INTERVAL_JITTER, B.CRISIS_INTERVAL_JITTER))
+}
+
+/**
+ * Schedules the next crisis unless one is pending (so a stage change never stacks two). The first one comes
+ * CRISIS_FIRST_DAYS after arriving at Pre-seed; each later one a gap after the last that fired. An old save (or a
+ * stage entered long ago) never gets a crisis without its telegraph: at least CRISIS_TELEGRAPH_DAYS ahead.
+ */
+export function scheduleCrisis(s: GameState, rng: Rng): void {
+  if (s.stage < 1 || s.stage >= B.LAST_STAGE || s.gameOver || pendingCrisis(s)) return
+  const cal = calendarOf(s)
+  const now = Math.ceil(s.time.day)
+  const last = cal[cal.length - 1]
+  const planned = last ? last.day + crisisGap(s.stage, rng) : Math.ceil(s.stageStart?.day ?? s.time.day) + rng.int(B.CRISIS_FIRST_DAYS[0], B.CRISIS_FIRST_DAYS[1])
+  const day = Math.max(planned, now + B.CRISIS_TELEGRAPH_DAYS)
+  cal.push({ id: null, day, revealDay: day - B.CRISIS_TELEGRAPH_DAYS })
+}
+
+/**
+ * Reveal day: a crisis of the current stage that has not come yet; the pool used up → the previous crisis again,
+ * lighter (severity × CRISIS_LIGHT_SEVERITY); no previous one → an unused crisis of an earlier stage.
+ */
+function revealCrisis(s: GameState, content: EngineContent, rng: Rng, e: CalendarEntry): void {
+  const pool = content.crises ?? []
+  if (!pool.length) return
+  const cal = calendarOf(s)
+  const used = new Set(cal.map((c) => c.id).filter((id): id is string => id !== null))
+  const fresh = pool.filter((c) => c.stage === s.stage && !used.has(c.id))
+  let pick: CrisisDef | undefined = fresh.length > 1 ? rng.pick(fresh) : fresh[0]
+  if (!pick) {
+    const prev = [...cal].reverse().find((c) => c !== e && c.id !== null)
+    pick = prev ? pool.find((c) => c.id === prev.id) : undefined
+    if (pick) e.light = true
+  }
+  pick ??= pool.filter((c) => c.stage <= s.stage && !used.has(c.id)).sort((a, b) => b.stage - a.stage)[0]
+  if (!pick) return
+  e.id = pick.id
+  pushEvent(s, { kind: 'crisisRevealed', refId: pick.id, value: e.day })
+}
+
+/**
+ * The crisis card takes a rolled card's slot (§3 md.11): no roll in the CRISIS_CARD_RESERVE_DAYS before a crisis day
+ * whose card the calendar will bring.
+ */
+function crisisHoldsSlot(s: GameState, content: EngineContent): boolean {
+  if (!content.crises?.length) return false
+  const e = pendingCrisis(s)
+  return e !== undefined && e.day - s.time.day <= B.CRISIS_CARD_RESERVE_DAYS
+}
+
+/** A rescue (the bridge on a missed payday, category 'crisis' but not a calendar card): it never waits. */
+function isRescue(content: EngineContent, id: DecisionCardId): boolean {
+  if (content.crises?.some((c) => c.cardId === id)) return false
+  return content.decisions.find((c) => c.id === id)?.category === 'crisis'
+}
+
+/**
+ * The crisis card takes the day (§3 md.11: one card a day, the crisis first). An unanswered normal card steps out
+ * and goes back to the pool: it can come again on a later roll, after the shared cooldown (it is not in the history).
+ * A rescue on the desk or in the queue stays first (the bankruptcy clock runs); the crisis card comes right after.
+ */
+function bringCrisisCard(s: GameState, content: EngineContent, cardId: DecisionCardId): void {
+  const a = s.decisions.active
+  if (a?.cardId === cardId) return
+  if (a && !isRescue(content, a.cardId)) {
+    for (const v of s.visitors) if (v.id === a.visitorId) v.leaveDay = Math.min(v.leaveDay, s.time.day)
+    s.decisions.active = undefined
+  }
+  const q = s.decisions.queue.filter((id) => id !== cardId)
+  let i = 0
+  while (i < q.length && isRescue(content, q[i]!)) i++
+  q.splice(i, 0, cardId)
+  s.decisions.queue = q
+}
+
+/**
+ * Daily, before the card roll: lazily schedules (old saves), reveals on the reveal day, and on the crisis day applies
+ * its effects, brings its card and schedules the next one.
+ */
+export function fireCalendar(s: GameState, content: EngineContent, rng: Rng): void {
+  scheduleCrisis(s, rng)
+  const e = pendingCrisis(s)
+  if (!e || s.gameOver) return
+  if (e.id === null && s.time.day >= e.revealDay) revealCrisis(s, content, rng, e)
+  if (s.time.day < e.day) return
+  e.fired = true
+  const def = e.id === null ? undefined : content.crises?.find((c) => c.id === e.id)
+  if (def) {
+    const severity = crisisSeverity(s) * (e.light ? B.CRISIS_LIGHT_SEVERITY : 1)
+    applyEffects(s, content, def.effects(s, severity), `crisis:${def.id}`)
+    // The lighter repeat brings its card too: a crisis always comes with a way to soften it (§18 spiral). It costs no
+    // extra card: the reserve window already kept a roll back (crisisHoldsSlot).
+    if (content.decisions.some((c) => c.id === def.cardId)) bringCrisisCard(s, content, def.cardId)
+    pushEvent(s, { kind: 'crisis', refId: def.id, value: severity })
+  }
+  scheduleCrisis(s, rng)
 }

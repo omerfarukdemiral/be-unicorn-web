@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ROUND_SIZES, type DiligenceItem, type PitchOption, type RoundPitch, type RoundSize } from '../../engine/types'
+import { BURN_MULTIPLE_MAX } from '../../engine/balance'
 import { STAGES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
@@ -18,8 +19,8 @@ const PITCH_ICON: Record<RoundPitch, IconName> = { metrics: 'bars', story: 'chat
 function ddValue(d: DiligenceItem): string {
   if (d.id === 'runway') return t('unit.months', { v: fixed(d.value, 1) })
   if (d.id === 'growth') return pct(d.value, 1)
-  // Burn multiple: capped at 99 = no net-new ARR yet, shown as a dash.
-  if (d.id === 'burn') return d.value >= 99 ? '—' : fixed(d.value, 1)
+  // Burn multiple: capped at BURN_MULTIPLE_MAX = no net-new ARR yet, shown as a dash.
+  if (d.id === 'burn') return d.value >= BURN_MULTIPLE_MAX ? '—' : fixed(d.value, 1)
   return fixed(d.value, 0)
 }
 
@@ -34,7 +35,7 @@ function Diligence({ items }: { items: readonly DiligenceItem[] }) {
     <div className="flex flex-col gap-1.5">
       <div className="ui-label">{t('round.diligenceTitle')}</div>
       <ul className="flex flex-col gap-1">
-        {items.map((d) => (
+        {items.filter((d) => d.asked !== false).map((d) => (
           <li key={d.id} className="flex items-center gap-2 text-xs">
             <span
               className={cx('grid size-5 shrink-0 place-items-center rounded-full', d.met ? 'bg-positive/15 text-positive-ink' : 'bg-negative/15 text-negative-ink')}

@@ -1,8 +1,9 @@
 // Content barrel. Engine, render and UI import content ONLY from here.
-import type { ContentBundle } from './types'
+import type { ContentBundle, DecisionCard } from './types'
 import { STAGES } from './stages'
 import { CONCEPTS } from './concepts'
-import { DECISIONS } from './decisions'
+import { DECISIONS as CARD_DECISIONS } from './decisions'
+import { CRISES, CRISIS_CARDS } from './crises'
 import { FURNITURE } from './furniture'
 import { OFFICE_LINES } from './officeLines'
 import { EMPLOYEE_NAMES, ENTERPRISE_NAMES, NPC_NAMES, PROJECT_NAMES } from './names'
@@ -17,6 +18,9 @@ import { ONLINE_TEXT } from './onlineText'
 import { HUD_TEXT } from './hudText'
 import { GOALS, goalsOfStage } from './goals'
 
+/** Every decision card: the rolled ones + the crisis cards the calendar brings (GAMEPLAY V2 §5.1). */
+const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...CRISIS_CARDS]
+
 /** strings.ts + feature tables (time flow, core loop, V2 HUD). One flat key → text dictionary. */
 const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT, ...HUD_TEXT }
 
@@ -26,6 +30,7 @@ export { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_
 // Additions (content lane): extra name pools, typed text tables, formatting helpers.
 export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }
 export { GOALS, goalsOfStage }
+export { CRISES, CRISIS_CARDS }
 export {
   ACTION_ERROR_TEXT,
   ARCHETYPE_TEXT,
@@ -57,4 +62,5 @@ export const CONTENT: ContentBundle = {
   npcText: NPC_TEXT,
   uiText: UI_TEXT,
   goals: GOALS,
+  crises: CRISES,
 }

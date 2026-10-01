@@ -38,6 +38,8 @@ const MIGRATIONS: Record<number, Migration> = {
     const time = st.time as { day?: unknown } | undefined
     const fin = finance as { lastRoundCloseDay?: unknown } | undefined
     if (fin && typeof fin.lastRoundCloseDay !== 'number' && typeof time?.day === 'number') fin.lastRoundCloseDay = time.day
+    // Crisis calendar (§5.1): empty; the first daily() schedules the next crisis with the step's rng (none used here).
+    if (!Array.isArray(st.calendar)) st.calendar = []
     return st
   },
 }

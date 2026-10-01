@@ -71,7 +71,8 @@ export interface BotConfig {
   /**
    * GAMEPLAY V2 §5.1 preparation mode (default on): from the "?" on the horizon no hires, ads × 0.5, a rent × 3 cash
    * reserve on furniture; once revealed, per kind (lease-hike: the reserve stays; cac-war: ads off; key-account-renewal:
-   * the SLA investment on its card; winter: no round into it unless runway < 4). careless / greedyGood: off.
+   * the SLA investment on its card; winter: no round into it unless runway < 4); a storm's churn does not cut its ads.
+   * careless / greedyGood: off.
    */
   prepareCrisis?: boolean
 }
@@ -274,7 +275,7 @@ function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: Decision
   const card = active && content.decisions.find((c) => c.id === active.cardId)
   if (card) {
     let best = 0
-    const prepared = cfg && policy === 'best' && cfg.prepareCrisis !== false ? PREP_CARD_OPTION[card.id] : undefined
+    const prepared = policy === 'best' && prepares(cfg) ? PREP_CARD_OPTION[card.id] : undefined
     if (prepared !== undefined) best = prepared
     else if (cfg && policy !== 'first') {
       const sign = policy === 'worst' ? -1 : 1
@@ -383,9 +384,14 @@ const WINTER_CRISES: ReadonlySet<string> = new Set(['investor-winter', 'market-c
 /** Below this runway the round starts anyway, winter or not (the player's dilemma). */
 const WINTER_ROUND_RUNWAY = 4
 
+/** §5.1 preparation mode on (one gate for every preparation behaviour: horizon, card, storm ads). */
+function prepares(cfg: BotConfig | null): cfg is BotConfig {
+  return cfg !== null && cfg.prepareCrisis !== false
+}
+
 /** The next crisis once its date is on the horizon ("?", CRISIS_HORIZON_DAYS), for a bot that prepares; else null. */
 function preparing(s: GameState, cfg: BotConfig | null): NextCrisis | null {
-  if (!cfg || cfg.prepareCrisis === false) return null
+  if (!prepares(cfg)) return null
   const nc = nextCrisis(s)
   return nc && nc.day - s.time.day <= balance.CRISIS_HORIZON_DAYS ? nc : null
 }
@@ -524,7 +530,11 @@ function growth(c: Ctx, cfg: BotConfig): void {
     // GAMEPLAY V2 §4.3: CAC climbs with spend (super-linear) and with the market, so the budget is a hill to climb:
     // raise it while LTV:CAC holds above the bar, back off when it drops below. Two ceilings: stay under the paid
     // peak (ads ≈ 1.9 × MRR), and spend no more than the profit plus cash / N months (longer once no round is left).
-    const ltvCac = c.s.derived.ltvCac ?? 0
+    // A prepared bot reads a storm's churn as passing (§5.1): while a crisis' churn is on it judges the channel by the
+    // LTV:CAC from before the storm, instead of cutting ads into it.
+    const storm = prepares(cfg) && c.s.modifiers.some((m) => m.kind === 'churn' && m.source.startsWith('crisis:'))
+    if (!storm) c.mem.calmLtvCac = c.s.derived.ltvCac ?? 0
+    const ltvCac = storm ? Math.max(c.s.derived.ltvCac ?? 0, c.mem.calmLtvCac ?? 0) : (c.s.derived.ltvCac ?? 0)
     const ads = c.s.finance.adBudget
     const mrr = c.s.finance.mrr
     const lastRound = c.s.stage >= balance.LAST_STAGE - 1

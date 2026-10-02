@@ -364,16 +364,35 @@ export interface FounderActionDef {
   energy: number
   /** Days after the action ends before it can be used again. */
   cooldownDays: number
+  /** Weekly moves it takes (GAMEPLAY V2 §7.1); from MOVES_FROM_STAGE on this replaces energy and cooldown. */
+  moves: number
 }
 
+/**
+ * GAMEPLAY V2 §7.1 weekly move budget (limited labour): from Pre-seed on the founder has MOVES_PER_WEEK[stage] moves a
+ * week, refilled on every day % 7 === 0. The garage keeps energy and cooldowns as they were (its one verb is
+ * findUsers; a 3/week budget there would halve it and delay Pre-seed). From Pre-seed on actions cost no energy and have
+ * no cooldown (saturation stays); energy becomes a health gauge only rest refills. refactorSprint keeps its cooldown:
+ * it is the month its production cut runs, not founder fatigue.
+ */
+export const MOVES_FROM_STAGE = 1
+export const MOVES_PER_WEEK: readonly number[] = [0, 3, 3, 4, 4, 5, 5]
+/**
+ * Late verbs that come off the budget too ("answerDecision" never does); the policy / market / board waves use theirs.
+ * talkResignation: the talk that keeps a leaver costs no energy on the budget, so it takes a move (else it is free and
+ * the raise never wins).
+ */
+export const MOVE_COST = { roundPitch: 1, refactorSprint: 2, talkResignation: 1, renewContract: 1, acquireRival: 2, adoptPolicy: 1, openSegment: 1 } as const
+export type MoveVerb = keyof typeof MOVE_COST
+
 export const FOUNDER_ACTION_DEFS: Readonly<Record<FounderActionKind, FounderActionDef>> = {
-  findUsers: { stage: 0, durationDays: 1, energy: 12, cooldownDays: 1 },
-  talkToUsers: { stage: 0, durationDays: 1, energy: 10, cooldownDays: 3 },
-  motivateTeam: { stage: 1, durationDays: 0.5, energy: 20, cooldownDays: 5 },
-  investorCoffee: { stage: 1, durationDays: 1, energy: 15, cooldownDays: 4 },
-  salesCall: { stage: 2, durationDays: 2, energy: 20, cooldownDays: 7 },
-  rest: { stage: 0, durationDays: 2, energy: 0, cooldownDays: 0 },
-  refactorSprint: { stage: TECH_DEBT_MIN_STAGE, durationDays: 1, energy: 15, cooldownDays: REFACTOR_COOLDOWN_DAYS },
+  findUsers: { stage: 0, durationDays: 1, energy: 12, cooldownDays: 1, moves: 1 },
+  talkToUsers: { stage: 0, durationDays: 1, energy: 10, cooldownDays: 3, moves: 1 },
+  motivateTeam: { stage: 1, durationDays: 0.5, energy: 20, cooldownDays: 5, moves: 1 },
+  investorCoffee: { stage: 1, durationDays: 1, energy: 15, cooldownDays: 4, moves: 1 },
+  salesCall: { stage: 2, durationDays: 2, energy: 20, cooldownDays: 7, moves: 2 },
+  rest: { stage: 0, durationDays: 2, energy: 0, cooldownDays: 0, moves: 0 },
+  refactorSprint: { stage: TECH_DEBT_MIN_STAGE, durationDays: 1, energy: 15, cooldownDays: REFACTOR_COOLDOWN_DAYS, moves: MOVE_COST.refactorSprint },
 }
 export const FIND_USERS_MIN = 3
 export const FIND_USERS_MAX = 6

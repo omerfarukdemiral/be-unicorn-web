@@ -110,6 +110,7 @@ export const ACTION_ERROR_TEXT: Record<ActionErrorCode, string> = {
   gameOver: 'Oyun bitti.',
   invalid: 'Bu işlem yapılamıyor.',
   engineNotConnected: 'Motor henüz bağlı değil.',
+  noMoves: 'Haftaya.',
 }
 
 export const DECISION_CATEGORY_TEXT: Record<DecisionCategory, string> = {
@@ -392,6 +393,7 @@ const BASE_TEXT: Record<string, string> = {
   'founder.lockedAt': '{action} {stage} aşamasında açılır',
   'founder.cooldown': '{action} {d} gün sonra hazır',
   'founder.noEnergy': '{action}: enerjin yetmiyor, önce dinlen',
+  'founder.noMoves': '{action}: bu haftanın hamleleri bitti',
   'founder.noProject': '{action}: önce bir proje başlat',
   'founder.short.findUsers': 'Bul',
   'founder.short.talkToUsers': 'Konuş',

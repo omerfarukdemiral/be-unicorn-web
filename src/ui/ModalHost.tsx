@@ -2,16 +2,46 @@
 // turns engine events (stageUp / gameOver / victory) into overlays. An open overlay holds time still through
 // the store's pause reasons ('modal'), never by rewriting the player's speed. The center screens (CENTER_KINDS:
 // statistics, Kanun Kitabı, Pazar haritası) render in the CenterFrame and never pause; a blocking modal replaces them.
+// The payday desk (GAMEPLAY V2 §6.1) opens on `paydayShort` (and on a loaded save with a month waiting), takes the place
+// of a center screen, and goes ahead of anything queued while a month waits; it holds time through its own `payday`
+// pause, and "Sonra" closes it like any overlay (the horizon strip reopens it).
 // Everything else (Defter cards, decisions, round, settings) opens in the single right panel.
 import { useCallback, useEffect, useRef } from 'react'
 import { useGameStore } from '../store/gameStore'
 import type { Overlay } from '../store/types'
 import { requestOverlay, useModalQueue } from './modalQueue'
+import { PaydayOverlay } from './overlays/PaydayOverlay'
 import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
 import { CenterFrame } from './stats/CenterFrame'
 
 function gameOverOverlay(kind: 'bankrupt' | 'teamLost' | 'unicorn'): Overlay {
   return kind === 'unicorn' ? { kind: 'victory' } : { kind: 'postMortem' }
+}
+
+/** A month waits on the payday desk (and the run goes on). */
+function deskWaiting(): boolean {
+  const s = useGameStore.getState().state
+  return !!s.finance.pendingPayday && !s.gameOver
+}
+
+/**
+ * requestOverlay with the desk's priority: the desk is not a blocking overlay for the store (it has its own pause), so
+ * a move scene arriving while it is open and a month waits queues behind it instead of replacing it. Only the end of
+ * the run (post-mortem, or a victory: gameOver is set, no month waits) takes its place.
+ */
+function requestOverDesk(o: Overlay): void {
+  const open = useGameStore.getState().ui.overlay
+  if (open?.kind === 'payday' && deskWaiting() && o.kind !== 'postMortem') {
+    if (o.kind !== 'payday') useModalQueue.getState().push(o)
+    return
+  }
+  requestOverlay(o)
+}
+
+/** Next queued overlay: the payday desk first while a month waits on it; a desk entry with no month left is dropped. */
+function takeNext(): Overlay | undefined {
+  if (useModalQueue.getState().drop('payday') && deskWaiting()) return { kind: 'payday' }
+  return useModalQueue.getState().shift()
 }
 
 export function ModalHost() {
@@ -21,15 +51,17 @@ export function ModalHost() {
   const queueLen = useModalQueue((q) => q.queue.length)
 
   const close = useCallback(() => {
+    // "Sonra" on the desk must not bring the desk straight back: drop its queued copies first.
+    if (useGameStore.getState().ui.overlay?.kind === 'payday') useModalQueue.getState().drop('payday')
     closeOverlay()
-    const next = useModalQueue.getState().shift()
+    const next = takeNext()
     if (next) openOverlay(next)
   }, [closeOverlay, openOverlay])
 
   // Drain the queue whenever nothing is open.
   useEffect(() => {
     if (!overlay && queueLen > 0) {
-      const next = useModalQueue.getState().shift()
+      const next = takeNext()
       if (next) openOverlay(next)
     }
   }, [overlay, queueLen, openOverlay])
@@ -44,6 +76,8 @@ export function ModalHost() {
       return <PostMortemOverlay />
     case 'victory':
       return <VictoryOverlay />
+    case 'payday':
+      return <PaydayOverlay onClose={close} />
     case 'stats':
       return <CenterFrame kind="stats" tab={overlay.tab} onClose={closeOverlay} />
     case 'lawbook':
@@ -62,6 +96,8 @@ function useEngineEventOverlays() {
   // New game / load (same run too): skip the loaded event history, never replay it.
   useEffect(() => {
     cursor.current = useGameStore.getState().state.events.reduce((m, e) => Math.max(m, e.id), 0)
+    // A save loaded with a month on the desk: the desk is the first thing to answer.
+    if (deskWaiting()) requestOverDesk({ kind: 'payday' })
   }, [generation])
 
   useEffect(() => {
@@ -69,8 +105,9 @@ function useEngineEventOverlays() {
     const maxId = events.reduce((m, e) => Math.max(m, e.id), 0)
     for (const e of events) {
       if (e.id <= cursor.current) continue
-      if (e.kind === 'stageUp') requestOverlay({ kind: 'moveScene' })
-      else if (e.kind === 'victory') requestOverlay({ kind: 'victory' })
+      if (e.kind === 'stageUp') requestOverDesk({ kind: 'moveScene' })
+      else if (e.kind === 'victory') requestOverDesk({ kind: 'victory' })
+      else if (e.kind === 'paydayShort' && deskWaiting()) requestOverDesk({ kind: 'payday' })
     }
     cursor.current = Math.max(cursor.current, maxId)
   }, [events])
@@ -85,6 +122,6 @@ function useEngineEventOverlays() {
     const key = `${gameOver.kind}:${gameOver.day}`
     if (shown.current === key) return
     shown.current = key
-    requestOverlay(gameOverOverlay(gameOver.kind))
+    requestOverDesk(gameOverOverlay(gameOver.kind))
   }, [gameOver])
 }

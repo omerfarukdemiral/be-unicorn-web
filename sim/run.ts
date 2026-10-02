@@ -495,6 +495,23 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   const defers = (runs: BotRun[]) => runs.reduce((a, r) => a + r.paydayDeferrals, 0)
   line(`- Bilgi (maaş masası): iyi botlar masa ${shorts(goodRuns)} · erteleme ${defers(goodRuns)} · careless masa ${shorts(careless)} · erteleme ${defers(careless)} · greedyGood masa ${shorts(v2('greedyGood'))} · erteleme ${defers(v2('greedyGood'))}`)
 }
+{
+  // GAMEPLAY V2 §7.1 weekly move budget (F1): the garage untouched, from Pre-seed on the budget is the one constraint.
+  const preseed = median(goodRuns.map((r) => r.stageDays[1] ?? DAYS))
+  const pm = preseed === null ? null : toMin(preseed)
+  const c5 = median(goodRuns.map((r) => r.conceptsBy5Min)) ?? 0
+  line(`- Pre-seed varış medyanı, iyi botlar: ${fmtMin(preseed)} (hedef ≤ 5 dk) · 5 dk'da kavram medyanı ${c5} (hedef ≥ 3): **${yes(pm !== null && pm <= 5 && c5 >= 3)}**`)
+  const sales = goodRuns.map((r) => r.actionCounts['founderAction:salesCall'] ?? 0)
+  // The worst run counts (no monthly cap in the bot: deals compete for the budget); the late verbs (T15/T17/T19) are
+  // what the budget is meant to compete with, so a miss here stays an open item until they land.
+  const salesMax = Math.max(0, ...sales)
+  line(`- salesCall / koşu, iyi botlar (en çok): ${salesMax} (hedef ≤ 80, bütçe rekabetinden; geç fiiller T15/T17/T19 gelene dek açık): **${yes(salesMax <= 80)}** · medyan ${median(sales) ?? 0} · 80'i aşan ${sales.filter((n) => n > 80).length}/${sales.length}`)
+  const top = median(goodRuns.map((r) => r.topActionShare)) ?? 0
+  line(`- topActionShare, iyi botlar (medyan): ${pct(top, 1)} (hedef ≤ %30): **${yes(top <= 0.3)}**`)
+  const shareAt = (st: number) => median(goodRuns.filter((r) => (r.movesUsedShare[st] ?? 0) > 0).map((r) => r.movesUsedShare[st]!))
+  const inC = shareAt(5)
+  line(`- Series C'de hamle kullanım payı, iyi botlar (medyan): ${inC === null ? '—' : pct(inC, 1)} (ara hedef ≥ %60, nihai ≥ %70 T20): **${yes(inC !== null && inC >= 0.6)}** · Pre-seed → C ${[1, 2, 3, 4, 5].map((st) => { const v = shareAt(st); return v === null ? '—' : pct(v, 1) }).join(' / ')}`)
+}
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)
 

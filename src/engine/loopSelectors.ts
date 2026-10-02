@@ -4,6 +4,7 @@ import * as B from './balance'
 import { ledgerCosts, runway } from './economy'
 import { firstFreeDesk, isFreeDesk } from './office'
 import {
+  DAYS_PER_MONTH,
   DAYS_PER_WEEK,
   type CashProjection,
   type CompanyProfile,
@@ -137,8 +138,7 @@ export function horizon(s: GameState): HorizonItem[] {
   }
   const r = s.round
   if (r?.active) {
-    const acc = Number(s.flags['roundWeekAcc'] ?? 0)
-    out.push({ kind: 'roundClose', day: now + Math.max(0, r.weeksLeft * DAYS_PER_WEEK - acc) })
+    out.push({ kind: 'roundClose', day: roundCloseDay(s) })
   } else if (s.derived.canStartRound) {
     out.push({ kind: 'roundReady', day: now })
   }
@@ -249,4 +249,75 @@ export function targetProfile(stage: number): CompanyProfile {
     morale: 1,
     cash: profileAxis(B.DILIGENCE_RUNWAY_MONTHS / B.PROFILE_RUNWAY_MONTHS),
   }
+}
+
+/** The loan covenant light (GAMEPLAY V2 §6.2): grace, clean, at risk (the next payday counts a breach), breached. */
+export type CovenantLight = 'grace' | 'ok' | 'atRisk' | 'breached'
+export interface CovenantState {
+  light: CovenantLight
+  breaches: number
+  /** Days left of the grace window (> 0 only while light = grace). */
+  graceDays: number
+  /** Days to the next payday, where checkCovenant runs. */
+  checkDays: number
+}
+
+/** The covenant as loop.checkCovenant will judge it on the next payday (runway < covenantRunway; null = profitable). */
+export function covenantState(s: GameState): CovenantState | null {
+  const loan = s.finance.loan
+  if (!loan) return null
+  const day = s.time.day
+  const graceDays = Math.max(0, loan.covenantFromDay - day)
+  const r = s.finance.runway
+  const light: CovenantLight =
+    graceDays > 0 ? 'grace' : loan.breaches > 0 ? 'breached' : r !== null && r < loan.covenantRunway ? 'atRisk' : 'ok'
+  return { light, breaches: loan.breaches, graceDays, checkDays: daysToPayday(day) }
+}
+
+/** Months of runway left on `day` at today's net (null = never runs out); 0 once past the death day. */
+export function runwayAt(s: GameState, day: number): number | null {
+  const death = previewSpend(s).deathDay
+  return death === null ? null : Math.max(0, (death - day) / DAYS_PER_MONTH)
+}
+
+/** Day the open round closes (its weeks left, less the week already under way); today when none runs. */
+function roundCloseDay(s: GameState): number {
+  const r = s.round
+  if (!r?.active) return s.time.day
+  const acc = Number(s.flags['roundWeekAcc'] ?? 0)
+  return s.time.day + Math.max(0, r.weeksLeft * DAYS_PER_WEEK - acc)
+}
+
+/** Runway when the round ends: the open round's close day, or the latest end of one started today (ROUND_WEEKS_MAX weeks). */
+export function roundEndRunway(s: GameState): number | null {
+  return runwayAt(s, s.round?.active ? roundCloseDay(s) : s.time.day + B.ROUND_WEEKS_MAX * DAYS_PER_WEEK)
+}
+
+/** Ad budget steps (off / half / keep / double) around today's budget, or the stage's paid floor when there is none. */
+export const AD_STEP_KEYS = ['off', 'half', 'same', 'double'] as const
+export type AdStepKey = (typeof AD_STEP_KEYS)[number]
+const AD_STEP_MULT: Record<AdStepKey, number> = { off: 0, half: 0.5, same: 1, double: 2 }
+
+/** The steps as amounts setAdBudget accepts (≤ AD_BUDGET_MAX); a step the cap folds onto the one before it is dropped. */
+export function adBudgetSteps(budget: number, stage: number): { key: AdStepKey; amount: number }[] {
+  const base = budget > 0 ? budget : (B.CAC_SPEND_FLOOR[stage] ?? 0)
+  const out: { key: AdStepKey; amount: number }[] = []
+  for (const key of AD_STEP_KEYS) {
+    const amount = Math.min(B.AD_BUDGET_MAX, base * AD_STEP_MULT[key])
+    if (!out.some((o) => o.amount === amount)) out.push({ key, amount })
+  }
+  return out
+}
+
+/** Price multiplier steps (setPrice): seven even steps over PRICE_MIN..PRICE_MAX, ends included. */
+const PRICE_STEP_COUNT = 7
+export const PRICE_STEPS: readonly number[] = Array.from({ length: PRICE_STEP_COUNT }, (_, i) =>
+  i === PRICE_STEP_COUNT - 1 ? B.PRICE_MAX : Number((B.PRICE_MIN + ((B.PRICE_MAX - B.PRICE_MIN) * i) / (PRICE_STEP_COUNT - 1)).toFixed(2)),
+)
+
+/** The price step closest to a multiplier (a save from the slider days may sit between two). */
+export function nearestPriceStep(v: number): number {
+  let best = PRICE_STEPS[0]!
+  for (const p of PRICE_STEPS) if (Math.abs(p - v) < Math.abs(best - v)) best = p
+  return best
 }

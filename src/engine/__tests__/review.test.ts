@@ -139,7 +139,7 @@ describe('sales calls saturate and contracts end (review #20)', () => {
     s = refresh({ ...s, stage: 2, time: { ...s.time, day: 1 } })
     expect(s.derived.salesCall!.factor).toBe(1)
     for (let i = 0; i < B.SALES_CALL_FULL_PER_MONTH; i++) {
-      s = { ...s, founder: { ...s.founder, energy: 100, cooldowns: {} } }
+      s = { ...s, founder: { ...s.founder, energy: 100, cooldowns: {}, moves: { left: 9, weekStart: 1 } } }
       s = api.applyAction(s, { type: 'founderAction', kind: 'salesCall' }).state
       s = api.step(s, B.FOUNDER_ACTION_DEFS.salesCall.durationDays + 0.25)
     }

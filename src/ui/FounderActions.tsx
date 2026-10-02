@@ -114,6 +114,8 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
         ? t('founder.cooldown', { action, d: Math.max(1, Math.ceil(cdEnd - f.day)) })
         : err === 'noEnergy'
           ? t('founder.noEnergy', { action })
+          : err === 'noMoves'
+            ? t('founder.noMoves', { action })
           : err === 'notFound'
             ? t('founder.noProject', { action })
             : kind === 'findUsers' && findText

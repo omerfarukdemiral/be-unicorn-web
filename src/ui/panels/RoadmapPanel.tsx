@@ -1,5 +1,7 @@
-// Yol haritası: the Unicorn yolu as a vertical timeline (PLAN §3.1). One row per stage: office, target valuation,
-// the round that opens it, what it unlocks. The current stage carries the only sentence (how far the next one is).
+// Yol haritası: the Unicorn yolu as a horizontal rail (GAMEPLAY V2 §10.5, §9.4). Passed and current stages show their
+// name, the next one its target, the later ones are silhouettes. Tapping a known stage shows its office, round and what
+// it opens under the rail as icon + number rows. The current stage carries the only sentence (how far the next one is).
+import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ROADMAP_STEPS, STAGES, type StageDef } from '../../content'
 import { useGameStore } from '../../store/gameStore'
@@ -27,27 +29,31 @@ export function RoadmapPanel() {
       company: st.state.meta.companyName,
     })),
   )
+  const [picked, setPicked] = useState<number | null>(null)
   const next = STAGES[s.stage + 1]
-  const gap = next ? Math.max(0, (next.targetValuation ?? 0) - s.valuation) : 0
-  const line = !next ? t('roadmap.won') : s.canStart || gap === 0 ? t('roadmap.ready', { stage: next.name }) : t('roadmap.gap', { stage: next.name, v: money(gap) })
+  const gap = next ? (next.targetValuation ?? 0) - s.valuation : 0
+  const line = !next ? t('roadmap.won') : s.canStart || gap <= 0 ? t('roadmap.ready', { stage: next.name }) : t('roadmap.gap', { stage: next.name, v: money(gap) })
+  const shown = picked !== null && picked <= s.stage + 1 ? picked : s.stage
+  const def = STAGES[shown]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {/* Where you stand: company, stage n/7, the one sentence, progress to the next stage. */}
-      <div className="rounded-card border border-border bg-surface-2/60 p-3">
+      <div className="rounded-card bg-surface-2/60 p-3">
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{s.company}</span>
           <Pill tint="var(--color-brand)" dot="var(--color-brand)">
             {STAGES[s.stage]?.name} · {t('roadmap.step', { n: s.stage + 1 })}
           </Pill>
         </div>
-        <p className="font-text mt-1.5 text-xs text-ink-2">{line}</p>
         {next && (
-          <div className="mt-2 flex items-center gap-2">
-            <Bar value={Math.max(0, Math.min(1, s.progress))} height={6} className="flex-1" />
-            <span className="tabular shrink-0 text-[11px] font-semibold text-ink-2">{t('top.progress', { v: money(s.valuation), target: money(next.targetValuation ?? 0) })}</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="tabular text-[22px] font-semibold leading-tight text-ink">{money(s.valuation)}</span>
+            <span className="tabular text-[13px] font-semibold text-ink-2">/ {money(next.targetValuation ?? 0)}</span>
           </div>
         )}
+        {next && <Bar value={s.progress} height={6} className="mt-1.5" />}
+        <p className="font-text mt-1.5 text-xs text-ink-2">{line}</p>
         {next && s.canStart && (
           <button type="button" onClick={openRound} className="mt-2 inline-flex h-8 items-center gap-1 rounded-control bg-brand px-2.5 text-xs font-semibold text-on-ink transition-colors hover:bg-brand-hover">
             <Icon name="rocket" size={14} />
@@ -56,66 +62,83 @@ export function RoadmapPanel() {
         )}
       </div>
 
-      <ol className="flex flex-col">
+      {/* The rail: one node per stage, the line between them filled once passed. */}
+      <ol className="ui-scroll -mx-1 flex items-start overflow-x-auto px-1 pb-1" aria-label={t('roadmap.step', { n: s.stage + 1 })}>
         {STAGES.map((st, i) => (
-          <StageRow key={st.key} def={st} status={statusOf(i, s.stage)} last={i === STAGES.length - 1} />
+          <StageNode
+            key={st.key}
+            def={st}
+            status={statusOf(i, s.stage)}
+            last={i === STAGES.length - 1}
+            active={i === shown}
+            onPick={i <= s.stage + 1 ? () => setPicked(i) : undefined}
+          />
         ))}
       </ol>
+
+      {def && <StageFacts def={def} />}
     </div>
   )
 }
 
-function StageRow({ def, status, last }: { def: StageDef; status: Status; last: boolean }) {
-  const unlock = ROADMAP_STEPS.find((r) => r.stage === def.index)?.unlock
-  const faint = status === 'later'
+function StageNode({ def, status, last, active, onPick }: { def: StageDef; status: Status; last: boolean; active: boolean; onPick?: () => void }) {
+  const hidden = status === 'later'
   return (
-    <li className="flex gap-3">
-      {/* Rail: node + the line down to the next stage (filled once passed). */}
-      <div className="flex w-7 shrink-0 flex-col items-center">
-        <span
+    <li className="flex min-w-[64px] flex-1 flex-col items-center">
+      <div className="flex w-full items-center">
+        <span className={cx('h-0.5 flex-1', def.index === 0 ? 'bg-transparent' : status === 'later' || status === 'next' ? 'bg-border' : 'bg-brand')} />
+        <button
+          type="button"
+          disabled={!onPick}
+          onClick={onPick}
+          aria-pressed={active}
+          aria-label={hidden ? t('roadmap.silhouette') : def.name}
           className={cx(
-            'grid size-7 shrink-0 place-items-center rounded-full border-2 transition-colors',
+            'grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors',
             status === 'done' && 'border-brand bg-brand text-on-ink',
             status === 'here' && 'border-brand bg-brand-soft text-brand-ink ring-4 ring-brand/15',
             status === 'next' && 'border-brand/50 bg-surface text-brand-ink',
-            status === 'later' && 'border-border-strong bg-surface text-ink-3',
+            hidden && 'border-dashed border-border-strong bg-surface-2 text-ink-3',
+            active && status !== 'here' && 'ring-2 ring-brand/40',
           )}
         >
-          {last ? <Icon name="unicorn" size={15} /> : status === 'done' ? <Icon name="check" size={13} /> : <span className="tabular text-[11px] font-bold">{def.index + 1}</span>}
-        </span>
-        {!last && <span className={cx('my-1 w-0.5 flex-1 rounded-full', status === 'done' ? 'bg-brand' : 'bg-border')} />}
+          {last ? <Icon name="unicorn" size={16} /> : status === 'done' ? <Icon name="check" size={14} /> : hidden ? <Icon name="lock" size={13} /> : <span className="tabular text-[12px] font-bold">{def.index + 1}</span>}
+        </button>
+        <span className={cx('h-0.5 flex-1', last ? 'bg-transparent' : status === 'done' ? 'bg-brand' : 'bg-border')} />
       </div>
-
-      <div className={cx('min-w-0 flex-1', last ? 'pb-1' : 'pb-4', faint && 'opacity-60')}>
-        <div className="flex min-h-7 items-center gap-2">
-          <span className={cx('text-sm font-semibold', status === 'here' ? 'text-brand-ink' : 'text-ink')}>{def.name}</span>
-          {status === 'here' && <Pill tint="var(--color-brand)">{t('roadmap.here')}</Pill>}
-          {status === 'next' && <Pill dot="var(--color-brand)">{t('roadmap.next')}</Pill>}
-          <span className="tabular ml-auto shrink-0 text-xs font-semibold text-ink">{def.targetValuation ? money(def.targetValuation) : ''}</span>
-        </div>
-        <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] leading-snug">
-          <dt className="text-ink-3">
-            <Icon name="building" size={12} className="inline align-[-2px]" />
-          </dt>
-          <dd className="font-text text-ink-2">{def.officeName}</dd>
-          <dt className="text-ink-3">
-            <Icon name="coin" size={12} className="inline align-[-2px]" />
-          </dt>
-          <dd className="font-text tabular text-ink-2">
-            {def.roundAmount && def.roundEquity
-              ? t('roadmap.roundValue', { amount: money(def.roundAmount), equity: Math.round(def.roundEquity * 100) })
-              : t('roadmap.noRound')}
-          </dd>
-          {unlock && (
-            <>
-              <dt className="text-ink-3">
-                <Icon name="key" size={12} className="inline align-[-2px]" />
-              </dt>
-              <dd className="font-text text-ink-2">{unlock}</dd>
-            </>
-          )}
-        </dl>
-      </div>
+      <span className={cx('mt-1 max-w-[72px] truncate text-center text-[11px] font-semibold', status === 'here' ? 'text-brand-ink' : hidden ? 'text-ink-3' : 'text-ink')}>
+        {hidden ? t('roadmap.silhouette') : def.name}
+      </span>
+      <span className="tabular text-center text-[10.5px] font-medium text-ink-2">{def.targetValuation && !hidden ? money(def.targetValuation) : ''}</span>
     </li>
+  )
+}
+
+/** The picked stage as icon + value rows: office, the round that opens it, what it unlocks. */
+function StageFacts({ def }: { def: StageDef }) {
+  const unlock = ROADMAP_STEPS.find((r) => r.stage === def.index)?.unlock
+  return (
+    <dl className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-2.5 py-2 text-[12px] leading-snug">
+      <dt className="text-ink-3">
+        <Icon name="building" size={14} />
+      </dt>
+      <dd className="font-semibold text-ink">{def.officeName}</dd>
+      <dt className="text-ink-3">
+        <Icon name="coin" size={14} />
+      </dt>
+      <dd className="tabular font-semibold text-ink">
+        {def.roundAmount && def.roundEquity
+          ? t('roadmap.roundValue', { amount: money(def.roundAmount), equity: Math.round(def.roundEquity * 100) })
+          : t('roadmap.noRound')}
+      </dd>
+      {unlock && (
+        <>
+          <dt className="text-ink-3">
+            <Icon name="key" size={14} />
+          </dt>
+          <dd className="text-ink-2">{unlock}</dd>
+        </>
+      )}
+    </dl>
   )
 }

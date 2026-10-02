@@ -632,13 +632,15 @@ function rivalFading(s: GameState): boolean {
 
 /** Day the crunch-culture policy was signed. T15: the policy wave writes flags.crunchCultureDay on signing. */
 const CRUNCH_CULTURE_FLAG = 'crunchCultureDay'
+/** Mirrors engine/founder.ts FOUNDER_EXHAUSTED_FLAG (no engine import here: founder.ts imports content). */
+const FOUNDER_EXHAUSTED_FLAG = 'founderExhausted'
 
 /**
  * Energy run dry; or from Seed on, no rest for six months and energy under 40 (cooldowns.rest is the day the last
  * rest ended, rest has no cooldown); or six months under the crunch-culture policy.
  */
 function burningOut(s: GameState): boolean {
-  if (s.founder.energy <= 0) return true
+  if (s.founder.energy <= 0 || s.flags[FOUNDER_EXHAUSTED_FLAG]) return true
   if (s.stage >= 2 && s.founder.energy < 40 && s.time.day - (s.founder.cooldowns.rest ?? 0) >= 180) return true
   const signed = s.flags[CRUNCH_CULTURE_FLAG]
   return typeof signed === 'number' && s.time.day - signed >= 180

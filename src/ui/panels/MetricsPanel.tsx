@@ -2,20 +2,23 @@
 // each with a "pin to the top bar" toggle (max 2, the 3rd evicts the oldest). A pinned card the top bar is drawing
 // shows "Üst barda" instead of its value (one home per number); on phones the pins lead the list with their values.
 // A newly opened gauge (PLAN Hisset → Adlandır → KULLAN) carries a "Yeni" tag and a brand tint for a few seconds.
+// HUD grammar (GAMEPLAY V2 §10.5): a card is one row, name + number (+ spark / bar under it); a long press (or a
+// right click) pins it. The loan sits in the Kasa split: balance, rate, the covenant light and its counter.
 // Never pauses (not a pauseReason).
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { CONCEPT_TITLE, CONCEPTS } from '../../content'
+import { covenantState } from '../../engine/loopSelectors'
 import type { ConceptId, HudWidget } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { metricSources, metricUnlocked, PIN_MAX, pinEvictee, unseenMetrics } from '../../store/metricPins'
 import { cashFlow } from '../cashflow'
-import { money } from '../format'
+import { money, pct } from '../format'
 import { useIsMobile } from '../hooks'
 import { t } from '../i18n'
 import { Icon } from '../icons'
 import { PIN_VISIBLE } from '../layout/tokens'
-import { cx, IconBadge, IconButton, SectionTitle } from '../primitives'
+import { cx, Dot, IconBadge, IconButton, SectionTitle } from '../primitives'
 import { WIDGET_COLOR } from '../theme'
 import { METRIC_CARDS, METRIC_GROUPS, ledgerMoney, usePinnedMetrics, visiblePins, WidgetChip, WIDGETS, type MetricGroup } from '../widgets'
 
@@ -23,6 +26,8 @@ import { METRIC_CARDS, METRIC_GROUPS, ledgerMoney, usePinnedMetrics, visiblePins
 const NEW_TINT_MS = 4000
 const SEEN_AFTER_MS = 1500
 const FOCUS_MS = 1500
+/** Press this long on a row to pin / unpin it. */
+const HOLD_MS = 450
 
 /** The Defter card that opened a gauge (reputation has none: it opens with the first press). */
 function conceptOf(id: HudWidget): ConceptId | undefined {
@@ -117,10 +122,10 @@ export function MetricsPanel({ focus }: { focus?: HudWidget }) {
         )
       })}
 
-      <p className="flex items-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-2.5 text-xs text-ink-2">
+      <div className="flex items-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-2 text-xs text-ink-2">
         <Icon name={lockedCount > 0 ? 'lock' : 'check'} size={14} className="shrink-0 text-ink-3" />
         <span className="font-text">{lockedCount > 0 ? t('metrics.more', { n: lockedCount }) : t('metrics.allOpen')}</span>
-      </p>
+      </div>
     </div>
   )
 }
@@ -139,12 +144,16 @@ function MetricRow({ id, pins, onBar, isNew, focused }: { id: HudWidget; pins: r
   // The hint names the pin the store would really evict (a pin locked in this run goes first, silently).
   const evictee = useGameStore((s) => (pinned ? null : pinEvictee(s.ui.pinnedMetrics, id, s.state.unlockedWidgets)))
   const pinLabel = pinned ? t('metrics.unpin') : evictee ? t('metrics.pinReplace', { old: t(WIDGETS[evictee].labelKey) }) : t('metrics.pin')
+  const togglePin = () => (pinned ? unpinMetric(id) : pinMetric(id))
+  const hold = useHold(def.pinnable ? togglePin : undefined)
 
   return (
     <div
       data-metric={id}
+      title={def.pinnable ? t('metrics.holdTitle') : undefined}
+      {...hold}
       className={cx(
-        'flex items-start gap-1 rounded-control border px-1 py-1 transition-colors duration-500',
+        'flex select-none items-start gap-1 rounded-control border px-0.5 transition-colors duration-500',
         focused ? 'border-brand bg-brand-soft' : isNew ? 'border-brand/30 bg-brand-soft' : 'border-transparent',
       )}
     >
@@ -177,19 +186,71 @@ function MetricRow({ id, pins, onBar, isNew, focused }: { id: HudWidget; pins: r
         )}
       </div>
       {isNew && <span className="mt-2 shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-ink">{t('metrics.new')}</span>}
-      {def.pinnable && (
+      {/* A pinned row shows the pin (tap to unpin); a pinnable one a faint mark (pinning itself is the long press). */}
+      {def.pinnable && !pinned && (
+        <span data-pin-mark="" title={pinLabel} className="grid size-8 shrink-0 place-items-center text-ink-3/60">
+          <Icon name="pin" size={13} />
+        </span>
+      )}
+      {def.pinnable && pinned && (
         <IconButton
           icon="pin"
           label={pinLabel}
-          aria-pressed={pinned}
-          size={mobile ? 44 : 36}
-          onClick={() => (pinned ? unpinMetric(id) : pinMetric(id))}
+          aria-pressed
+          size={mobile ? 44 : 32}
+          onClick={togglePin}
+          // A press here is the button's own tap, never the row's long press (it would toggle twice).
+          onPointerDown={(e) => e.stopPropagation()}
           // Pinned = quiet brand tint (a solid brand disc per row would shout louder than the numbers).
-          className={cx(pinned ? 'bg-brand-soft text-brand-ink hover:bg-brand-soft hover:text-brand-ink' : 'text-ink-3')}
+          className="bg-brand-soft text-brand-ink hover:bg-brand-soft hover:text-brand-ink"
         />
       )}
     </div>
   )
+}
+
+/**
+ * Long press (HOLD_MS) or right click runs `action` once; a tap stays a tap (the concept link, the unpin button).
+ * A touch long press also fires `contextmenu` (Android) and may end in a click: once the timer has run, both are
+ * swallowed until the next press, so one press never pins and unpins, nor opens the concept card under the finger.
+ * Pointer handlers only: no timers left behind when the row goes away mid-press.
+ */
+function useHold(action: (() => void) | undefined) {
+  const timer = useRef<number | null>(null)
+  const fired = useRef(false)
+  const clear = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+  }
+  useEffect(() => clear, [])
+  if (!action) return {}
+  return {
+    onPointerDown: (e: PointerEvent) => {
+      fired.current = false
+      if (e.button !== 0) return
+      clear()
+      timer.current = window.setTimeout(() => {
+        timer.current = null
+        fired.current = true
+        action()
+      }, HOLD_MS)
+    },
+    onPointerUp: clear,
+    onPointerLeave: clear,
+    onPointerCancel: clear,
+    onContextMenu: (e: MouseEvent) => {
+      e.preventDefault()
+      clear()
+      if (fired.current) return
+      fired.current = true
+      action()
+    },
+    onClickCapture: (e: MouseEvent) => {
+      if (!fired.current) return
+      e.preventDefault()
+      e.stopPropagation()
+    },
+  }
 }
 
 /** Bankada / maaş gününe ayrılan / kullanılabilir: the split behind the top bar's Kasa (not pinnable). */
@@ -218,6 +279,55 @@ function CashBreakdown() {
         ))}
       </dl>
       <p className="font-text mt-1.5 pl-9 text-[11px] leading-snug text-ink-2">{t('metrics.cash.note')}</p>
+      <LoanRow />
+    </div>
+  )
+}
+
+/**
+ * The loan (GAMEPLAY V2 §6.2) under the Kasa split, from finance.loan as the engine keeps it: balance, monthly rate,
+ * and the covenant light: grace days left, clean, at risk (runway already under the lender's line: the next payday
+ * counts a breach), or the breach count with the days to the next check (payday).
+ * Amber, never red: a breach is a warning (the one red rule stays with runway / payroll).
+ */
+function LoanRow() {
+  const l = useGameStore(
+    useShallow((s) => {
+      const loan = s.state.finance.loan
+      const c = covenantState(s.state)
+      if (!loan || !c) return null
+      return { balance: loan.balance, rate: loan.rateMonthly, ...c }
+    }),
+  )
+  if (!l) return null
+  const light =
+    l.light === 'grace'
+      ? { color: 'var(--color-ink-3)', text: t('loan.grace', { d: Math.ceil(l.graceDays) }) }
+      : l.light === 'breached'
+        ? { color: 'var(--color-energy)', text: t('loan.warn', { n: l.breaches, d: Math.ceil(l.checkDays) }) }
+        : l.light === 'atRisk'
+          ? { color: 'var(--color-energy)', text: t('loan.risk', { d: Math.ceil(l.checkDays) }) }
+          : { color: 'var(--color-positive)', text: t('loan.ok') }
+  return (
+    <div data-loan="" className="mt-2 border-t border-border pt-1.5 pl-9">
+      <div className="ui-label">{t('loan.title')}</div>
+      <dl className="tabular mt-0.5 grid grid-cols-3 gap-2">
+        <div className="min-w-0">
+          <dt className="text-[10.5px] font-medium leading-tight text-ink-2">{t('loan.balance')}</dt>
+          <dd className="text-[14px] font-semibold leading-tight text-ink">{money(l.balance)}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-[10.5px] font-medium leading-tight text-ink-2">{t('loan.rate')}</dt>
+          <dd className="text-[14px] font-semibold leading-tight text-ink">{pct(l.rate, 1)}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-[10.5px] font-medium leading-tight text-ink-2">{t('loan.covenant')}</dt>
+          <dd data-covenant={l.breaches} data-covenant-risk={l.light === 'atRisk' || undefined} className="flex items-center gap-1 text-[13px] font-semibold leading-tight text-ink">
+            <Dot color={light.color} size={7} />
+            {light.text}
+          </dd>
+        </div>
+      </dl>
     </div>
   )
 }

@@ -1,13 +1,15 @@
-// Ekip: candidate pool (hire by dept) + team list (status, morale, resignation responses).
+// Ekip: candidate pool (hire by dept) + team list (status, morale, resignation responses). HUD grammar (GAMEPLAY V2
+// §10.5): 36px person cards with a 4px gap (no hairline list), salary as the number, every hire carries its CostPreview.
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { DEPTS, type Dept, type Employee } from '../../engine/types'
+import { DEPTS, type Candidate, type Dept, type Employee } from '../../engine/types'
 import { DEPT_TEXT } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
-import { Bar, Button, Chip, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
+import { Bar, Button, Chip, CostPreview, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
+import { useSpendPreview } from '../widgets'
 import { DEPT_COLOR, moraleTone, soft, STATUS_DOT, STATUS_TONE } from '../theme'
 
 type Sub = 'hire' | 'team'
@@ -97,29 +99,44 @@ function HireView() {
       {list.length === 0 ? (
         <Empty text={t('team.noCandidates')} icon="users" />
       ) : (
-        <ul className="flex flex-col divide-y divide-border border-y border-border">
+        <ul className="flex flex-col gap-1">
           {list.map((c) => (
-            <li key={c.id} className="flex items-center gap-3 px-1 py-2.5">
-              <Avatar name={c.name} dept={c.dept} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold">{c.name}</span>
-                  <DeptPill dept={c.dept} />
-                </div>
-                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-2">
-                  <span className="tabular font-semibold text-ink">{t('hud.perMonthPlain', { v: money(c.salary) })}</span>
-                  {showQuality && <QualityStars quality={c.quality} />}
-                  <span>{t('team.expires', { n: Math.max(0, Math.ceil(c.expiresDay - day)) })}</span>
-                </div>
-              </div>
-              <Button tone="primary" size="sm" onClick={() => dispatch({ type: 'hire', candidateId: c.id })}>
-                {t('team.hire')}
-              </Button>
-            </li>
+            <CandidateCard key={c.id} candidate={c} day={day} showQuality={showQuality} onHire={() => dispatch({ type: 'hire', candidateId: c.id })} />
           ))}
         </ul>
       )}
     </div>
+  )
+}
+
+/** One candidate: avatar, name + dept, the salary (the number), days left, the hire commit with its runway preview. */
+function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: Candidate; day: number; showQuality: boolean; onHire: () => void }) {
+  const preview = useSpendPreview(0, c.salary)
+  const left = Math.ceil(c.expiresDay - day)
+  return (
+    <li className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-1.5 py-1">
+      <Avatar name={c.name} dept={c.dept} size={28} />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Dot color={DEPT_COLOR[c.dept].dot} size={6} />
+          <span className="truncate text-[13px] font-semibold">{c.name}</span>
+          {showQuality && <QualityStars quality={c.quality} />}
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
+          <span className="tabular text-[15px] font-semibold leading-tight text-ink">{money(c.salary)}</span>
+          <span className="tabular inline-flex items-center gap-0.5">
+            <Icon name="hourglass" size={11} />
+            {t('horizon.daysShort', { v: left > 0 ? left : 0 })}
+          </span>
+        </div>
+      </div>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <CostPreview preview={preview} />
+        <Button tone="commit" size="sm" onClick={onHire}>
+          {t('team.hire')}
+        </Button>
+      </span>
+    </li>
   )
 }
 
@@ -129,13 +146,17 @@ function TeamList() {
   const sorted = employees.slice().sort((a, b) => Number(b.status === 'leaving') - Number(a.status === 'leaving') || a.dept.localeCompare(b.dept))
   if (sorted.length === 0) return <Empty text={t('team.empty')} icon="users" />
   return (
-    <ul className="flex flex-col divide-y divide-border border-y border-border">
+    <ul className="flex flex-col gap-1">
       {sorted.map((e) => (
-        <li key={e.id} className="py-1">
+        <li key={e.id}>
           {e.status === 'leaving' ? (
             <ResignationCard employee={e} />
           ) : (
-            <button type="button" onClick={() => select({ kind: 'employee', id: e.id })} className="flex w-full items-center gap-3 rounded-control px-1 py-1.5 text-left transition-colors hover:bg-surface-2">
+            <button
+              type="button"
+              onClick={() => select({ kind: 'employee', id: e.id })}
+              className="flex min-h-9 w-full items-center gap-2 rounded-control bg-surface-2/60 px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
+            >
               <EmployeeRow employee={e} />
             </button>
           )}
@@ -148,25 +169,18 @@ function TeamList() {
 export function EmployeeRow({ employee: e }: { employee: Employee }) {
   return (
     <>
-      <Avatar name={e.name} dept={e.dept} />
+      <Avatar name={e.name} dept={e.dept} size={28} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-semibold">{e.name}</span>
-          {e.star && <Icon name="star" size={13} fill="currentColor" className="shrink-0 text-g-equity" />}
-          <DeptPill dept={e.dept} />
-          <Pill className={STATUS_TONE[e.status]} dot={STATUS_DOT[e.status]}>{t(`status.${e.status}`)}</Pill>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Dot color={DEPT_COLOR[e.dept].dot} size={6} />
+          <span className="truncate text-[13px] font-semibold">{e.name}</span>
+          {e.star && <Icon name="star" size={12} fill="currentColor" className="shrink-0 text-g-equity" />}
+          {e.status !== 'working' && <Pill className={STATUS_TONE[e.status]} dot={STATUS_DOT[e.status]}>{t(`status.${e.status}`)}</Pill>}
+          {!e.deskSlotId && <Icon name="desk" size={12} className="shrink-0 text-negative" aria-label={t('team.noSeat')} />}
         </div>
-        <div className="mt-1 flex items-center gap-2">
-          <Bar value={e.morale / 100} tone={moraleTone(e.morale)} height={5} className="max-w-28" />
-          <span className="tabular text-[11px] text-ink-2">{money(e.salary)}</span>
-          {!e.deskSlotId && (
-            <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-ink-2">
-              <Dot color="var(--color-negative)" size={6} />
-              <span className="truncate">{t('team.noSeat')}</span>
-            </span>
-          )}
-        </div>
+        <Bar value={e.morale / 100} tone={moraleTone(e.morale)} height={4} className="mt-1 max-w-28" />
       </div>
+      <span className="tabular shrink-0 text-[15px] font-semibold text-ink">{money(e.salary)}</span>
     </>
   )
 }
@@ -175,7 +189,8 @@ export function EmployeeRow({ employee: e }: { employee: Employee }) {
 export function ResignationCard({ employee: e }: { employee: Employee }) {
   const dispatch = useGameStore((s) => s.dispatch)
   const day = useGameStore((s) => s.state.time.day)
-  const left = e.leaveDay !== undefined ? Math.max(0, Math.ceil(e.leaveDay - day)) : null
+  const days = e.leaveDay !== undefined ? Math.ceil(e.leaveDay - day) : null
+  const left = days !== null && days < 0 ? 0 : days
   const respond = (response: 'raise' | 'talk' | 'letGo') => dispatch({ type: 'respondResignation', employeeId: e.id, response })
   return (
     <div className="rounded-control border border-border bg-surface p-2.5">

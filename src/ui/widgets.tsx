@@ -7,7 +7,8 @@
 // (LAYOUT §4.1: usable cash < 0, runway < 3, morale < 28); other thresholds are amber (energy / energy-ink).
 import type { ComponentType, ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { HudWidget } from '../engine/types'
+import { previewSpend } from '../engine/loopSelectors'
+import type { HudWidget, SpendPreview } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import { canonicalMetric, effectivePins, MERGED_INTO, PINNABLE } from '../store/metricPins'
 import { Icon, type IconName } from './icons'
@@ -91,25 +92,26 @@ export function WidgetChip({
       </div>
     )
   }
+  // Metrikler row (GAMEPLAY V2 §10.5): name on the left, the number on the right (the biggest thing), the sub and the
+  // spark / bar under them. 36px when there is nothing under the row.
   return (
-    <div className={cx('flex min-w-0 items-start gap-2 rounded-control px-2 py-1.5', className)} title={title ?? label}>
-      <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-[7px]" style={{ color: iconTone(color), background: soft(color) }}>
-        <Icon name={icon} size={15} />
-      </span>
-      <div className="min-w-0 flex-1">
+    <div className={cx('min-w-0 rounded-control px-2 py-1', className)} title={title ?? label}>
+      <div className="flex min-h-7 min-w-0 items-center gap-2">
+        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px]" style={{ color: iconTone(color), background: soft(color) }}>
+          <Icon name={icon} size={14} />
+        </span>
         {/* Label never truncates (a cut label loses its meaning): tighter tracking, wraps to 2 lines if needed. */}
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="ui-label line-clamp-2 leading-[14px] tracking-[0.04em]">{label}</span>
-          <StatusMark alert={alert} warn={warn} size={6} />
-        </div>
-        {/* Values stay short (number + unit); the sub wraps under them when the column is narrow.
-            Nothing is ellipsised: touch screens have no tooltip to recover a cut value. */}
-        <div className="tabular mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[15px] font-semibold leading-tight text-ink">
-          <span className="max-w-full break-words">{value}</span>
-          {sub && <span className="max-w-full break-words text-[11px] font-medium text-ink-2">{sub}</span>}
-        </div>
-        {children}
+        <span className="ui-label line-clamp-2 min-w-0 flex-1 leading-[14px] tracking-[0.04em]">{label}</span>
+        <StatusMark alert={alert} warn={warn} size={6} />
+        {/* Values stay short (number + unit). Nothing is ellipsised: touch screens have no tooltip to recover a cut value. */}
+        <span className="tabular shrink-0 text-right text-[15px] font-semibold leading-tight text-ink">{value}</span>
       </div>
+      {(sub || children) && (
+        <div className="ml-8 min-w-0">
+          {sub && <div className="break-words text-right text-[11px] font-medium text-ink-2">{sub}</div>}
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -122,7 +124,8 @@ function StatusMark({ alert, warn, size }: { alert?: boolean; warn?: boolean; si
 
 type Part = LegendPart
 
-function StackBar({ parts }: { parts: Part[] }) {
+/** Thin stacked bar of parts (burn split, valuation parts, morale bands). */
+export function StackBar({ parts }: { parts: readonly Part[] }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0)
   return (
     <div className="mt-1.5 flex h-1 w-full gap-px overflow-hidden rounded-full bg-border">
@@ -136,7 +139,8 @@ function StackBar({ parts }: { parts: Part[] }) {
   )
 }
 
-function Spark({ values, line, color }: { values: number[]; line?: number; color: string }) {
+/** Last 12 values as a 72×18 line; `line` = a dashed reference (e.g. burn under MRR). */
+export function Spark({ values, line, color }: { values: readonly number[]; line?: number; color: string }) {
   const w = 72
   const h = 18
   const pts = values.slice(-12)
@@ -499,6 +503,14 @@ export function visiblePins(pins: readonly HudWidget[], visible: number): HudWid
 /** Pins of this run whose card is unlocked, oldest first (store.ui.pinnedMetrics ∩ unlocked). */
 export function usePinnedMetrics(): HudWidget[] {
   return useGameStore(useShallow((s) => effectivePins(s.ui.pinnedMetrics, s.state.unlockedWidgets)))
+}
+
+/**
+ * The engine's spend preview (§4.4) for a commit button: `cashDelta` leaves now (a purchase: negative), `burnDelta`
+ * joins the monthly burn (a hire, an ad step). Shallow-compared, so a row re-renders only when the numbers move.
+ */
+export function useSpendPreview(cashDelta = 0, burnDelta = 0): SpendPreview {
+  return useGameStore(useShallow((s) => previewSpend(s.state, { cashDelta, burnDelta })))
 }
 
 /**

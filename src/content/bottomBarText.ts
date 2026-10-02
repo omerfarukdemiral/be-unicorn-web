@@ -6,7 +6,7 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
   'bottom.tabs': 'Paneller',
   'dock.metrics': 'Metrikler',
   'founder.energyValue': 'Enerji {v}/100',
-  'founder.energyLow': 'Enerji düşük: dinlenmeden yeni aksiyon zor',
+  'founder.energyLow': 'Enerji düşük: dinlenme vakti',
 
   // Notification strip
   'strip.label': 'Bildirimler',

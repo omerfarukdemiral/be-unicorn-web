@@ -12,6 +12,7 @@ import * as B from './balance'
 import { clamp } from './economy'
 import { scheduleCrisis } from './decisions'
 import { applyMorale, loanOf, syncDebt, unlockTool, unlockWidget } from './effects'
+import { actionEnergy, enterMoveBudget, movesError, spendMoves } from './founder'
 import { relocateOffice } from './office'
 import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
@@ -84,19 +85,24 @@ export function investorGrowth(s: GameState): number {
   return s.derived.momAvg ?? s.derived.momGrowth
 }
 
-/** What a pitch would do right now (the action applies exactly this; 'story' draws inside [min, max]). */
+/**
+ * What a pitch would do right now (the action applies exactly this; 'story' draws inside [min, max]). GAMEPLAY V2 §7.1:
+ * from Pre-seed on every pitch takes a move (the round week is a week the founder cannot sell) and no energy.
+ */
 export function pitchOption(s: GameState, pitch: RoundPitch): PitchOption {
+  const movesOk = movesError(s, B.MOVE_COST.roundPitch) === null
   switch (pitch) {
     case 'metrics':
-      return { pitch, delta: investorGrowth(s) >= growthAsk(s) ? B.PITCH_METRICS_GOOD : B.PITCH_METRICS_BAD, weeks: 0, equity: 0, energy: 0, ok: true }
+      return { pitch, delta: investorGrowth(s) >= growthAsk(s) ? B.PITCH_METRICS_GOOD : B.PITCH_METRICS_BAD, weeks: 0, equity: 0, energy: 0, ok: movesOk }
     case 'story': {
       const rep = (clamp(0, 100, s.stats.reputation) / 100) * B.PITCH_STORY_PER_REP
       const min = B.PITCH_STORY_MIN + rep
       const max = B.PITCH_STORY_MAX + rep
-      return { pitch, delta: (min + max) / 2, min, max, weeks: 0, equity: 0, energy: B.PITCH_STORY_ENERGY, ok: s.founder.energy >= B.PITCH_STORY_ENERGY }
+      const energy = actionEnergy(s, B.PITCH_STORY_ENERGY)
+      return { pitch, delta: (min + max) / 2, min, max, weeks: 0, equity: 0, energy, ok: movesOk && s.founder.energy >= energy }
     }
     case 'coinvestor':
-      return { pitch, delta: 0, weeks: B.PITCH_COINVESTOR_WEEKS, equity: B.PITCH_COINVESTOR_EQUITY, energy: 0, ok: true }
+      return { pitch, delta: 0, weeks: B.PITCH_COINVESTOR_WEEKS, equity: B.PITCH_COINVESTOR_EQUITY, energy: 0, ok: movesOk }
   }
 }
 
@@ -422,9 +428,12 @@ export function roundPitch(s: GameState, pitch: RoundPitch, rng?: Rng): ActionEr
   if (r.pitchDue === undefined) return 'cooldown'
   if (!(ROUND_PITCHES as readonly string[]).includes(pitch)) return 'invalid'
   live(r)
+  const moves = movesError(s, B.MOVE_COST.roundPitch)
+  if (moves) return moves
   const o = pitchOption(s, pitch)
   if (!o.ok) return 'noEnergy'
   s.founder.energy -= o.energy
+  spendMoves(s, B.MOVE_COST.roundPitch)
   if (o.weeks > 0) r.weeksLeft = Math.max(1, r.weeksLeft - o.weeks)
   if (o.equity > 0) r.offer.equity = Math.min(B.ROUND_EQUITY_MAX, r.offer.equity + o.equity)
   // "Hikâye anlat" is a gamble between min and max (reputation lifts both); the others are known in advance.
@@ -451,6 +460,8 @@ export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   s.stageStart = stageBaseline(s)
   s.office = relocateOffice(s.office, stage)
   for (const t of B.STAGE_UNLOCK_TOOLS[stage] ?? []) unlockTool(s, t)
+  // GAMEPLAY V2 §7.1: the move budget starts here, with a full week and a rested founder.
+  if (stage === B.MOVES_FROM_STAGE) enterMoveBudget(s)
   pushActivity(s, 'stageUp', { stage })
   pushEvent(s, { kind: 'stageUp', value: stage })
   if (rng) scheduleCrisis(s, rng)

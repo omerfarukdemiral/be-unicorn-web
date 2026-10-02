@@ -4,7 +4,7 @@ import { learnConcept, minimizeConcept } from './concepts'
 import { answerDecision } from './decisions'
 import { recomputeDerived } from './derive'
 import { applyMorale, unlockTool } from './effects'
-import { startFounderAction } from './founder'
+import { actionEnergy, movesError, spendMoves, startFounderAction } from './founder'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
@@ -117,8 +117,13 @@ const respondResignation: Handler<'respondResignation'> = ({ s }, a) => {
     return null
   }
   if (a.response === 'talk') {
-    if (s.founder.energy < B.TALK_ENERGY) return 'noEnergy'
-    s.founder.energy -= B.TALK_ENERGY
+    // GAMEPLAY V2 §7.1: from Pre-seed on energy is a health gauge, the talk costs a move instead.
+    const energy = actionEnergy(s, B.TALK_ENERGY)
+    if (s.founder.energy < energy) return 'noEnergy'
+    const moves = movesError(s, B.MOVE_COST.talkResignation)
+    if (moves) return moves
+    s.founder.energy -= energy
+    spendMoves(s, B.MOVE_COST.talkResignation)
     e.morale = Math.min(100, e.morale + B.TALK_MORALE)
   } else {
     e.salary = Math.round(e.salary * B.RAISE_FACTOR)

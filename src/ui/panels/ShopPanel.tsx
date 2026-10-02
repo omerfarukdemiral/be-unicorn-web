@@ -1,5 +1,6 @@
 // Mağaza: furniture catalog + ring expansion. "Satın al" places at once: on the tapped slot (slotTarget)
-// or the free slot nearest the center (engine findAutoSlot). No separate placing step.
+// or the free slot nearest the center (engine findAutoSlot). No separate placing step. HUD grammar (GAMEPLAY V2 §10.5):
+// the price is the big number, "Satın al" is a commit with its CostPreview, the description lives in the tooltip.
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 // Pure placement rules shared with the engine (same precedent as FounderActions → founderActionError).
@@ -11,7 +12,8 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
-import { Button, Chip, cx, Dot, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
+import { Button, Chip, CostPreview, cx, Dot, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
+import { useSpendPreview } from '../widgets'
 import { SLOT_ICON, slotTypeStage, soft, stageName } from '../theme'
 
 export function effectTags(e: FurnitureEffects): string[] {
@@ -128,25 +130,19 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
           </p>
         )}
         {bought && (
-          <p role="status" key={bought.key} className="mb-2 flex animate-pop-in items-center gap-1.5 rounded-control border border-border px-3 py-2 text-xs font-semibold text-ink">
+          <div role="status" key={bought.key} className="mb-2 flex animate-pop-in items-center gap-1.5 rounded-control border border-border px-3 py-2 text-xs font-semibold text-ink">
             <Icon name="check" size={14} className="shrink-0 text-positive-ink" />
             {bought.text}
-          </p>
+          </div>
         )}
         {items.length === 0 ? (
           <Empty text={t('shop.empty')} icon="bag" />
         ) : (
           <>
             {ringOffer && (
-              <div className="mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3">
-                <Icon name="building" size={16} className="shrink-0 text-brand-ink" />
-                <span className="min-w-0 flex-1 text-xs font-semibold text-ink">{t('shop.noRoomOpenRing', { n: ringOffer.index, cost: money(ringOffer.openCost) })}</span>
-                <Button size="sm" tone="primary" icon="plus" disabled={cash < ringOffer.openCost} onClick={() => dispatch({ type: 'openRing', ring: ringOffer.index })}>
-                  {t('shop.openRing')}
-                </Button>
-              </div>
+              <RingCta index={ringOffer.index} openCost={ringOffer.openCost} rent={ringOffer.rentPerMonth} cash={cash} onOpen={() => dispatch({ type: 'openRing', ring: ringOffer.index })} />
             )}
-            <ul className="flex flex-col divide-y divide-border border-y border-border">
+            <ul className="flex flex-col gap-1">
               {items.map(({ item, place }) => (
                 <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={place} onBuy={buy} />
               ))}
@@ -177,8 +173,9 @@ function ShopItem({
   const noRoom = !locked && !place.slot
   // No room: offer the next ring when this office has room for the item in a locked ring (rings open in order).
   const next = noRoom && place.roomRing !== null ? place.nextRing : undefined
+  const preview = useSpendPreview(-item.price, item.upkeep ?? 0)
   return (
-    <li className={cx('flex flex-col gap-2 px-1 py-3', locked && 'opacity-55')}>
+    <li title={item.description} className={cx('flex flex-col gap-1.5 rounded-control bg-surface-2/60 px-2 py-2', locked && 'opacity-55')}>
       <div className="flex items-start gap-3">
         <Swatch item={item} locked={locked} />
         <div className="min-w-0 flex-1">
@@ -187,12 +184,11 @@ function ShopItem({
             {item.size === 2 && <Pill className="tabular">2×</Pill>}
             {item.tier > 1 && <Pill className="tabular text-ink">T{item.tier}</Pill>}
           </div>
-          <p className="font-text mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-2">{item.description}</p>
           {!locked && place.targetMisfit && (
-            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-ink">
-              <Icon name="warning" size={12} className="shrink-0 text-negative" />
+            <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-ink">
+              <Icon name="warning" size={12} className="shrink-0 text-energy-ink" />
               {place.slot ? t('shop.targetMisfit', { ring: place.slot.ring }) : t('shop.targetMisfitNoRoom')}
-            </p>
+            </div>
           )}
           <div className="mt-1.5 flex flex-wrap gap-1">
             {effectTags(item.effects).map((tag) => (
@@ -207,11 +203,11 @@ function ShopItem({
         {locked ? (
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-2">
             <Icon name="lock" size={12} />
-            {stageName(Math.max(item.stageUnlock, slotTypeStage(item.slotType)))}
+            {stageName(item.stageUnlock > slotTypeStage(item.slotType) ? item.stageUnlock : slotTypeStage(item.slotType))}
           </span>
         ) : (
           <span className="min-w-0">
-            <span className={cx('tabular text-sm font-semibold', afford ? 'text-ink' : 'text-negative-ink')}>{money(item.price)}</span>
+            <span className={cx('tabular text-[22px] font-semibold leading-none', afford ? 'text-ink' : 'text-ink-3')}>{money(item.price)}</span>
             {item.upkeep ? <span className="tabular ml-1.5 text-[10px] text-ink-2">{t('shop.upkeep', { v: money(item.upkeep) })}</span> : null}
           </span>
         )}
@@ -232,12 +228,32 @@ function ShopItem({
               <span className="text-right text-[11px] font-semibold text-ink-2">{t('shop.noRoomNextStage')}</span>
             )
           ) : (
-            <Button size="sm" tone="primary" icon="bag" disabled={!afford} onClick={() => onBuy(item, place)}>
-              {t('common.buy')}
-            </Button>
+            <span className="flex shrink-0 items-center gap-1.5">
+              <CostPreview preview={preview} />
+              <Button size="sm" tone="commit" icon="bag" disabled={!afford} onClick={() => onBuy(item, place)}>
+                {t('shop.buyGo')}
+              </Button>
+            </span>
           ))}
       </div>
     </li>
+  )
+}
+
+/** Full office: the one "open the next ring" call above the list, a commit with its runway preview like every other. */
+function RingCta({ index, openCost, rent, cash, onOpen }: { index: number; openCost: number; rent: number; cash: number; onOpen: () => void }) {
+  const preview = useSpendPreview(-openCost, rent)
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3">
+      <Icon name="building" size={16} className="shrink-0 text-brand-ink" />
+      <span className="min-w-0 flex-1 text-xs font-semibold text-ink">{t('shop.noRoomOpenRing', { n: index, cost: money(openCost) })}</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <CostPreview preview={preview} />
+        <Button size="sm" tone="commit" icon="plus" disabled={cash < openCost} onClick={onOpen}>
+          {t('shop.openRing')}
+        </Button>
+      </span>
+    </div>
   )
 }
 
@@ -267,21 +283,31 @@ function RingSection() {
         {t('shop.expand')}
       </SectionTitle>
       {next ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-control border border-border p-3">
-          <IconBadge icon="building" size={40} color="var(--color-brand)" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">{t('shop.ringTitle', { n: next.index })}</div>
-            <div className="tabular text-[11px] text-ink-2">
-              {`${t('shop.ringCost', { cost: money(next.openCost) })} · ${t('shop.ringRent', { v: money(next.rentPerMonth) })}`}
-            </div>
-          </div>
-          <Button tone="primary" icon="plus" disabled={cash < next.openCost} onClick={() => dispatch({ type: 'openRing', ring: next.index })}>
-            {t('shop.openRing')}
-          </Button>
-        </div>
+        <RingOffer index={next.index} openCost={next.openCost} rent={next.rentPerMonth} cash={cash} onOpen={() => dispatch({ type: 'openRing', ring: next.index })} />
       ) : (
-        <p className="font-text text-xs text-ink-2">{t('shop.allRingsOpen')}</p>
+        <span className="font-text text-xs text-ink-2">{t('shop.allRingsOpen')}</span>
       )}
+    </div>
+  )
+}
+
+/** The next ring: its cost as the number, the rent under it, the commit with its runway preview. */
+function RingOffer({ index, openCost, rent, cash, onOpen }: { index: number; openCost: number; rent: number; cash: number; onOpen: () => void }) {
+  const preview = useSpendPreview(-openCost, rent)
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-surface-2/60 p-2">
+      <IconBadge icon="building" size={36} color="var(--color-brand)" />
+      <div className="min-w-0 flex-1">
+        <div className="ui-label">{t('shop.ringTitle', { n: index })}</div>
+        <div className="tabular text-[22px] font-semibold leading-tight text-ink">{money(openCost)}</div>
+        <div className="tabular text-[11px] text-ink-2">{t('shop.ringRent', { v: money(rent) })}</div>
+      </div>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <CostPreview preview={preview} />
+        <Button tone="commit" icon="plus" size="sm" disabled={cash < openCost} onClick={onOpen}>
+          {t('shop.openRing')}
+        </Button>
+      </span>
     </div>
   )
 }

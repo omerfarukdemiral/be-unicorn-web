@@ -1,5 +1,6 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
 import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE } from './balance'
+import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt } from './types'
 import { castOf, ensureRivals } from './world'
@@ -60,6 +61,11 @@ const MIGRATIONS: Record<number, Migration> = {
     if (round && typeof round === 'object' && typeof round.strikes !== 'number') round.strikes = 0
     // Stage report cards (§9.3): none on record.
     if (!Array.isArray(st.stageReports)) st.stageReports = []
+    // Move budget (§7.1): a full week from the day of the load (the garage counts as Pre-seed, it has no budget).
+    const founder = st.founder as { moves?: unknown } | undefined
+    if (founder && (!founder.moves || typeof founder.moves !== 'object') && typeof time?.day === 'number' && typeof st.stage === 'number') {
+      founder.moves = { left: movesPerWeek(st as unknown as GameState), weekStart: Math.floor(time.day) }
+    }
     const game = st as unknown as GameState
     if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st

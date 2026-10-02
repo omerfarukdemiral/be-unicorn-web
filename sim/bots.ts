@@ -7,6 +7,7 @@ import {
   balance,
   createEngine,
   createRngState,
+  DAYS_PER_WEEK,
   loanAmount,
   nextCrisis,
   nextLockedRing,
@@ -15,6 +16,7 @@ import {
   type Archetype,
   type Dept,
   type EngineContent,
+  type FounderActionKind,
   type GameEventKind,
   type GameState,
   type NextCrisis,
@@ -220,7 +222,8 @@ export interface BotRun {
   paydayDeferrals: number
   /** Payday desks opened (paydayShort). */
   paydaysShort: number
-  movesUsedShare: number
+  /** GAMEPLAY V2 §7.1: moves spent / moves given over the full weeks of each stage (index = stage; 0 = no week there). */
+  movesUsedShare: number[]
   segmentsOpened: number
   rivalsAcquired: number
   boardQuarters: { hit: number; missed: number }
@@ -578,19 +581,52 @@ function rebalance(c: Ctx, cfg: BotConfig): void {
   if (victim && c.act({ type: 'fire', employeeId: victim.id })) c.mem.rebalanceDay = s.time.day
 }
 
-function founder(c: Ctx, cfg: BotConfig): void {
+/**
+ * Founder moves in priority order. GAMEPLAY V2 §7.1: from Pre-seed on the week's move budget is the constraint, so the
+ * order is what gets the moves; a round keeps one move back for the week's pitch. `careless`: spends the budget on the
+ * first action its routine reaches, keeping nothing for the pitch.
+ */
+function founder(c: Ctx, cfg: BotConfig, careless = false): void {
   const { act } = c
   if (c.s.founder.currentAction) return
   if (c.s.founder.energy < 25) { act({ type: 'founderAction', kind: 'rest' }); return }
+  const reserve = !careless && c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
+  const go = (kind: FounderActionKind): boolean => {
+    const m = c.s.derived.moves
+    if (m && m.left - balance.FOUNDER_ACTION_DEFS[kind].moves < reserve) return false
+    return act({ type: 'founderAction', kind })
+  }
   // GAMEPLAY V2 §4.2: once debt costs a fifth of the speed, a sensible founder takes the month to refactor.
-  if (c.s.techDebt >= REFACTOR_AT_DEBT && act({ type: 'founderAction', kind: 'refactorSprint' })) return
-  if (c.s.round?.active && act({ type: 'founderAction', kind: 'investorCoffee' })) return
-  if (c.s.stats.morale < 50 && act({ type: 'founderAction', kind: 'motivateTeam' })) return
+  if (c.s.techDebt >= REFACTOR_AT_DEBT && go('refactorSprint')) return
+  if (c.s.round?.active && go('investorCoffee')) return
+  if (c.s.stats.morale < 50 && go('motivateTeam')) return
   // Deals saturate within a month (half, then a quarter): a sensible player stops at half.
-  if (cfg.useSalesCalls && (c.s.derived.salesCall?.factor ?? 1) >= 0.5 && act({ type: 'founderAction', kind: 'salesCall' })) return
-  if (c.s.projects.some((p) => p.maturity < 1) && act({ type: 'founderAction', kind: 'talkToUsers' })) return
+  if (cfg.useSalesCalls && (c.s.derived.salesCall?.factor ?? 1) >= 0.5 && go('salesCall')) return
+  if (c.s.projects.some((p) => p.maturity < 1) && go('talkToUsers')) return
   // A sensible player stops once the circle is used up ("tanıdık çevren tükeniyor").
-  if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5) act({ type: 'founderAction', kind: 'findUsers' })
+  if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5 && go('findUsers')) return
+  if (!careless) spareMoves(c, go)
+}
+
+/**
+ * GAMEPLAY V2 §7.1 "use it or lose it": moves that would expire unspent at the week's refill go to the light verbs
+ * (talks feed the next update, a find brings a few users), the least used one first so no single verb crowds the run
+ * (topActionShare). One move is kept back: a founder does not burn the whole week on filler. Pep talks and coffees stay
+ * on their own triggers above: spent as filler they stack morale and reputation and the good bots outrun the rival.
+ */
+const SPARE_VERBS: readonly FounderActionKind[] = ['talkToUsers', 'findUsers']
+const SPARE_KEEP_MOVES = 1
+function spareMoves(c: Ctx, go: (kind: FounderActionKind) => boolean): void {
+  const m = c.s.derived.moves
+  if (!m || m.left <= SPARE_KEEP_MOVES || m.resetDay - c.s.time.day > m.left + 1) return
+  const order = [...SPARE_VERBS].sort((a, b) => (c.mem[`spare:${a}`] ?? 0) - (c.mem[`spare:${b}`] ?? 0))
+  for (const kind of order) {
+    if (kind === 'talkToUsers' && !c.s.projects.length) continue
+    if (go(kind)) {
+      c.mem[`spare:${kind}`] = (c.mem[`spare:${kind}`] ?? 0) + 1
+      return
+    }
+  }
 }
 
 /**
@@ -845,6 +881,10 @@ export function playBot(
   let firstLoanDay: number | null = null
   let roundsFailed = 0
   let roundsClosed = 0
+  const movesUsed = [0, 0, 0, 0, 0, 0, 0]
+  const movesGiven = [0, 0, 0, 0, 0, 0, 0]
+  /** The running budget week as it began: its quota and stage (a mid-week stage-up must not change the quota). */
+  let week = null as { start: number; total: number; stage: number } | null
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -863,7 +903,7 @@ export function playBot(
         furnish(ctx, cfg)
         hiring(ctx, cfg)
         growth(ctx, cfg)
-        founder(ctx, cfg)
+        founder(ctx, cfg, true)
         fundraise(ctx, { ...cfg, roundSize: botRng.pick(['small', 'target', 'large'] as const) }, true)
       }
     } else if (cfg?.afterProfit && profitDay !== null) {
@@ -890,6 +930,17 @@ export function playBot(
     // An autopilot past its first profit does nothing: it is not preparing even though it could.
     const prepOn = preparing(s, cfg) !== null && !(cfg?.afterProfit && profitDay !== null)
     s = api.step(s, 1)
+    // A week closed (the budget refilled): what was spent of it against the quota it began with, booked on the stage
+    // it began in. Only full weeks count (the arrival week on Pre-seed starts mid-week).
+    const view = s.derived.moves
+    const m = s.founder.moves
+    if (view && m && m.weekStart !== week?.start) {
+      if (week && week.start % DAYS_PER_WEEK === 0 && before.founder.moves) {
+        movesUsed[week.stage] = (movesUsed[week.stage] ?? 0) + Math.max(0, week.total - before.founder.moves.left)
+        movesGiven[week.stage] = (movesGiven[week.stage] ?? 0) + week.total
+      }
+      week = { start: m.weekStart, total: view.total, stage: s.stage }
+    }
     if (profitDay === null && s.finance.mrr > 0 && s.finance.net > 0) profitDay = s.time.day
     if ((s.finance.runway ?? 99) < 3) daysRunwayBelow3++
     if (s.rivals?.[0]?.ahead) rivalPassedDays++
@@ -1009,7 +1060,7 @@ export function playBot(
     policiesAdopted: 0,
     paydayDeferrals,
     paydaysShort,
-    movesUsedShare: 0,
+    movesUsedShare: movesGiven.map((g, i) => (g > 0 ? (movesUsed[i] ?? 0) / g : 0)),
     segmentsOpened: 0,
     rivalsAcquired: 0,
     boardQuarters: { hit: 0, missed: 0 },

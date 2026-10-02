@@ -337,6 +337,21 @@ export interface FounderState {
   cooldowns: Partial<Record<FounderActionKind, number>>
   /** Consecutive days with energy < 20 (founder-burnout concept). */
   lowEnergyDays: number
+  /** Weekly move budget (GAMEPLAY V2 §7.1), from Pre-seed on; older saves default lazily (founder.movesOf). */
+  moves?: FounderMoves
+}
+
+/** Moves left this week and the day the week began (refilled on every day % 7 === 0). */
+export interface FounderMoves {
+  left: number
+  weekStart: number
+}
+
+/** The move budget as the bottom bar shows it ("3/4"): left, this week's total, the day it refills. */
+export interface MovesView {
+  left: number
+  total: number
+  resetDay: number
 }
 
 // ---------------------------------------------------------------------------
@@ -531,7 +546,7 @@ export interface PitchOption {
   equity: number
   /** Founder energy it costs. */
   energy: number
-  /** Can be picked now (energy). */
+  /** Can be picked now (energy, and a move from Pre-seed on: GAMEPLAY V2 §7.1). */
   ok: boolean
 }
 
@@ -782,6 +797,8 @@ export interface DerivedMetrics {
   penetration?: number
   /** The next scheduled crisis (GAMEPLAY V2 §5.1): its day, and its id once revealed (hidden = "?" on the horizon). */
   nextCrisis?: NextCrisis
+  /** Founder move budget (GAMEPLAY V2 §7.1); absent in the garage (no budget there). */
+  moves?: MovesView
 }
 
 /** Next crisis on the calendar: the date is known, the id only from CRISIS_TELEGRAPH_DAYS before. */
@@ -1247,7 +1264,7 @@ export interface NewGameOptions {
 export type ActionErrorCode =
   | 'insufficientCash' | 'noFreeSlot' | 'slotOccupied' | 'slotLocked' | 'wrongSlotType'
   | 'ringOrder' | 'noDesk' | 'notUnlocked' | 'cooldown' | 'noEnergy' | 'founderBusy' | 'notFound'
-  | 'roundActive' | 'roundNotReady' | 'gameOver' | 'invalid' | 'engineNotConnected'
+  | 'roundActive' | 'roundNotReady' | 'gameOver' | 'invalid' | 'engineNotConnected' | 'noMoves'
 
 export interface ActionResult {
   state: GameState

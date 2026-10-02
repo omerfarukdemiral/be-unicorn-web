@@ -8,7 +8,7 @@ import { migrate } from '../save'
 import { CRISIS_CARDS, DECISIONS, type DecisionCard } from '../../content/index'
 import { isCardEligible } from '../decisions'
 import { autoPaydayChoice } from '../loop'
-import { owedTotal } from '../loopSelectors'
+import { adBudgetSteps, covenantState, nearestPriceStep, owedTotal, PRICE_STEPS, roundEndRunway, runwayAt } from '../loopSelectors'
 import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type MonthReceipt, type PaydayChoice } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
@@ -364,17 +364,28 @@ describe('save v1 → v2', () => {
 describe('save chain v1 → v4', () => {
   it('a v1 save walks every migration and lands on the current version with v4 defaults', () => {
     const api = createEngine(fakeContent())
-    const v1 = structuredClone(api.step(api.createGame({ seed: 1 }), 65)) as unknown as { meta: Record<string, unknown>; finance: Record<string, unknown> }
+    const v1 = structuredClone(api.step(api.createGame({ seed: 1 }), 65)) as unknown as { meta: Record<string, unknown>; finance: Record<string, unknown>; founder: Record<string, unknown> }
     delete v1.meta.companyName
     delete v1.finance.receipts
     delete v1.finance.netHistory
+    delete v1.founder.moves
     const out = migrate({ version: 1, state: v1 })!
     expect(out.meta.saveVersion).toBe(SAVE_VERSION)
     expect(out.meta.companyName).toBe(DEFAULT_COMPANY_NAME)
     expect(out.finance.receipts).toHaveLength(out.finance.mrrHistory.length)
     expect(out.finance.netHistory).toEqual([])
+    // GAMEPLAY V2 §7.1: a full week of moves from the day of the load.
+    expect(out.founder.moves).toEqual({ left: B.MOVES_PER_WEEK[B.MOVES_FROM_STAGE], weekStart: Math.floor(out.time.day) })
     // The engine keeps playing it (lazy ??= defaults for everything the migration did not touch).
     expect(api.step(out, 30).finance.receipts).toHaveLength(out.finance.mrrHistory.length + 1)
+    // A v4 save from before the budget gets it lazily on its next day, and its first Pre-seed action spends from it.
+    const lazy = { ...structuredClone(out), stage: 1 as const }
+    delete lazy.founder.moves
+    const next = api.step(lazy, 1)
+    expect(next.founder.moves?.left).toBe(B.MOVES_PER_WEEK[1])
+    const acted = api.applyAction(next, { type: 'founderAction', kind: 'findUsers' })
+    expect(acted.ok).toBe(true)
+    expect(acted.state.founder.moves?.left).toBe(B.MOVES_PER_WEEK[1]! - 1)
   })
 
   it('a save from the future is refused', () => {
@@ -581,5 +592,45 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
     const lazy = structuredClone(s)
     delete lazy.finance.deferred
     expect(api.step(lazy, 30).finance.deferred).toBe(0)
+  })
+})
+
+describe('panel selectors (covenant light, round-end runway, ad / price steps)', () => {
+  const base = (): GameState => createEngine(fakeContent()).createGame({ seed: 3 })
+  const withLoan = (s: GameState, over: Partial<NonNullable<GameState['finance']['loan']>>): GameState => ({
+    ...s,
+    finance: {
+      ...s.finance,
+      loan: { principal: 20_000, balance: 20_000, rateMonthly: 0.02, monthsLeft: 12, covenantRunway: 3, covenantFromDay: 0, interestOnlyUntil: 0, breaches: 0, ...over },
+    },
+  })
+
+  it('covenantState: grace → ok / atRisk (runway under the line) → breached; null without a loan', () => {
+    const s = base()
+    expect(covenantState(s)).toBeNull()
+    expect(covenantState(withLoan(s, { covenantFromDay: s.time.day + 40 }))!.light).toBe('grace')
+    expect(covenantState({ ...withLoan(s, {}), finance: { ...withLoan(s, {}).finance, runway: 10 } })!.light).toBe('ok')
+    expect(covenantState({ ...withLoan(s, {}), finance: { ...withLoan(s, {}).finance, runway: null } })!.light).toBe('ok')
+    const risk = covenantState({ ...withLoan(s, {}), finance: { ...withLoan(s, {}).finance, runway: 1 } })!
+    expect(risk.light).toBe('atRisk')
+    expect(risk.checkDays).toBeGreaterThan(0)
+    expect(covenantState(withLoan(s, { breaches: 1 }))!.light).toBe('breached')
+  })
+
+  it('roundEndRunway is runwayAt the latest round end and never negative', () => {
+    const s = base()
+    const end = s.time.day + B.ROUND_WEEKS_MAX * 7
+    expect(roundEndRunway(s)).toEqual(runwayAt(s, end))
+    const r = runwayAt(s, s.time.day + 100_000)
+    expect(r === null || r === 0).toBe(true)
+  })
+
+  it('ad steps fold on the cap and centre on the paid floor with no budget; price steps span the engine range', () => {
+    expect(adBudgetSteps(0, 1).map((x) => x.amount)).toEqual([0, B.CAC_SPEND_FLOOR[1]! / 2, B.CAC_SPEND_FLOOR[1]!, B.CAC_SPEND_FLOOR[1]! * 2])
+    const capped = adBudgetSteps(B.AD_BUDGET_MAX, 6)
+    expect(capped.map((x) => x.key)).toEqual(['off', 'half', 'same'])
+    expect(PRICE_STEPS[0]).toBe(B.PRICE_MIN)
+    expect(PRICE_STEPS[PRICE_STEPS.length - 1]).toBe(B.PRICE_MAX)
+    expect(nearestPriceStep(1.01)).toBe(PRICE_STEPS.reduce((b, p) => (Math.abs(p - 1.01) < Math.abs(b - 1.01) ? p : b)))
   })
 })

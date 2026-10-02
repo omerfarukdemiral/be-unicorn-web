@@ -2,6 +2,8 @@
 // (projected lump), delayed decision effects, release ETAs, the round. The engine lists them (state.derived.horizon).
 // Shown as READABLE TEXT in the notification strip's right slot ("Maaş günü 8 gün · Sürüm ~4 gün"), never as
 // icons stacked on a line; the full list lives in the strip popover (HorizonList).
+// A month waiting on the payday desk (GAMEPLAY V2 §6.1) is not text: a red cash icon + `3g`, the one number, only while
+// the desk is closed (open, time stands still and a countdown would lie); a tap reopens the desk.
 import { useShallow } from 'zustand/react/shallow'
 import type { HorizonItem } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
@@ -10,6 +12,7 @@ import { t } from './i18n'
 import { money } from './format'
 import { cx } from './primitives'
 import { soft } from './theme'
+import { requestOverlay } from './modalQueue'
 import { optionLabel, releaseName } from './loopUi'
 
 /** Identity hue + icon per kind. Payday is neutral ink even when runway is tight: danger lives on Runway (§4.1). */
@@ -72,7 +75,33 @@ function useHorizon() {
       items: s.state.derived.horizon,
       day: s.state.time.day,
       projects: s.state.projects,
+      deskOpen: s.ui.overlay?.kind === 'payday',
     })),
+  )
+}
+
+const isDue = (h: HorizonItem): boolean => h.kind === 'payday' && !!h.due
+
+/**
+ * The desk's countdown: red cash icon + "3g", its own button beside the strip's horizon button (never inside it).
+ * Hidden while the desk is open (time stands still there) or when no month waits.
+ */
+export function HorizonDue() {
+  const { items, day, deskOpen } = useHorizon()
+  const item = items?.find(isDue)
+  if (!item || deskOpen) return null
+  return (
+    <button
+      type="button"
+      data-payday-due=""
+      title={t('desk.dueTitle')}
+      aria-label={t('desk.dueTitle')}
+      onClick={() => requestOverlay({ kind: 'payday' })}
+      className="tabular inline-flex h-full shrink-0 items-center gap-1 rounded-md px-1 text-[13px] font-bold text-negative-ink hover:bg-negative/10"
+    >
+      <Icon name="cash" size={14} />
+      {whenLabel(item.day - day, true)}
+    </button>
   )
 }
 
@@ -95,7 +124,7 @@ function firstOfEachKind(items: readonly HorizonItem[]): HorizonItem[] {
  */
 export function HorizonMini({ max = 3, compact, className }: { max?: number; compact?: boolean; className?: string }) {
   const { items, day, projects } = useHorizon()
-  const list = items ? firstOfEachKind(items) : []
+  const list = items ? firstOfEachKind(items.filter((h) => !isDue(h))) : []
   const first = list[0]
   if (!first) return null
   const name = (id: string | undefined) => projects.find((p) => p.id === id)?.name ?? ''
@@ -129,9 +158,9 @@ export function HorizonMini({ max = 3, compact, className }: { max?: number; com
 
 /** Popover list: every upcoming item in day order, labelled, with its amount. */
 export function HorizonList() {
-  const { items, day, projects } = useHorizon()
+  const { items, day, projects, deskOpen } = useHorizon()
   const name = (id: string | undefined) => projects.find((p) => p.id === id)?.name ?? ''
-  const list = items ? [...items].sort((a, b) => a.day - b.day) : []
+  const list = items ? items.filter((h) => !(deskOpen && isDue(h))).sort((a, b) => a.day - b.day) : []
   if (!list.length) return <p className="px-2 py-1.5 text-xs text-ink-2">{t('horizon.empty')}</p>
   return (
     <ul className="flex flex-col">

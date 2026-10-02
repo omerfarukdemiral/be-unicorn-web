@@ -2,7 +2,7 @@
 import * as B from './balance'
 import * as E from './economy'
 import { loanMonthlyService } from './effects'
-import { findUsersPreview, salesCallPreview } from './founder'
+import { findUsersPreview, movesView, salesCallPreview } from './founder'
 import { horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
@@ -246,5 +246,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.horizon = horizon(s)
   const crisis = nextCrisis(s)
   if (crisis) s.derived.nextCrisis = crisis
+  const moves = movesView(s)
+  if (moves) s.derived.moves = moves
   return o
 }

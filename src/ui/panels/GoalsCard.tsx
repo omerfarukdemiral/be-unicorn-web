@@ -1,13 +1,19 @@
 // Stage goals card (docs/CORE_LOOP.md §4.3): ★ the next stage's valuation (required) + two ☆ optional goals.
 // Plus "Kararın → sonucu": delayed decision effects that have landed, with the option that caused them (§6).
+// HUD grammar (GAMEPLAY V2 §10.5): the valuation formula is a stacked bar of its parts, a ☆ shows its prize as a pill
+// (−1% hisse on the next round), the goal's hint is never rendered.
 import { useShallow } from 'zustand/react/shallow'
+import { GOAL_STAR_EQUITY_DISCOUNT } from '../../engine/balance'
+import type { ValuationBreakdown } from '../../engine/types'
 import { goalsOfStage, STAGES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
-import { money } from '../format'
-import { Bar, cx, SectionTitle } from '../primitives'
+import { fixed, money, pct } from '../format'
+import { Bar, cx, Pill, SectionTitle } from '../primitives'
 import { Icon } from '../icons'
-import { effectSummary, optionLabel, valuationLine } from '../loopUi'
+import { effectSummary, optionLabel } from '../loopUi'
+import { Legend, ramp, WIDGET_COLOR, type LegendPart } from '../theme'
+import { StackBar } from '../widgets'
 
 /** Stable empty list: a fresh `[]` inside a useShallow object would change every snapshot (older saves have no goalsDone). */
 const NONE: readonly string[] = []
@@ -40,12 +46,12 @@ export function GoalsCard() {
                 {money(g.valuation)} / {money(next.targetValuation)}
               </span>
             </div>
-            <Bar className="mt-1.5" height={4} value={Math.max(0, Math.min(1, g.progress))} />
-            {/* Değerleme dökümü: what moves the number (team / users / launches before revenue, then MRR × multiple). */}
-            {g.parts && <p className="tabular font-text mt-1 text-[11px] leading-snug text-ink-2">{valuationLine(g.parts)}</p>}
+            <Bar className="mt-1.5" height={4} value={g.progress} />
+            {/* Değerleme dökümü: what moves the number (launches / users / releases before revenue, then MRR × multiple). */}
+            {g.parts && <ValuationParts parts={g.parts} />}
           </li>
         ) : (
-          <li className="font-text text-xs text-ink-2">{t('goals.final')}</li>
+          <li className="text-xs font-semibold text-ink-2">{t('goals.final')}</li>
         )}
         {goals.map((goal) => {
           const done = g.done.includes(goal.id)
@@ -55,12 +61,38 @@ export function GoalsCard() {
               <span className="min-w-0 flex-1">
                 <span className={cx('block text-[12.5px] font-semibold leading-snug', done ? 'text-positive-ink' : 'text-ink')}>{goal.text}</span>
               </span>
-              {done && <span className="ui-label shrink-0 text-positive-ink">{t('goals.done')}</span>}
+              {done ? (
+                <span className="ui-label shrink-0 text-positive-ink">{t('goals.done')}</span>
+              ) : (
+                <Pill className="tabular shrink-0 text-ink">{t('goals.prize', { v: pct(GOAL_STAR_EQUITY_DISCOUNT) })}</Pill>
+              )}
             </li>
           )
         })}
       </ul>
     </section>
+  )
+}
+
+/** The valuation as a stacked bar of what builds it (engine valuationParts); the amounts in the legend. */
+function ValuationParts({ parts: v }: { parts: ValuationBreakdown }) {
+  const R = ramp(WIDGET_COLOR.cash)
+  const list: LegendPart[] =
+    v.mode === 'pre'
+      ? [
+          { value: v.launchedValue, color: R[0], label: t('goals.part.launched') },
+          { value: v.usersValue, color: R[1], label: t('goals.part.users') },
+          { value: v.releasesValue, color: R[2], label: t('goals.part.releases') },
+        ]
+      : [
+          { value: v.total - v.preFade, color: R[0], label: t('goals.part.mrr', { x: fixed(v.multiple, 1) }) },
+          { value: v.preFade, color: R[3], label: t('goals.part.fade') },
+        ]
+  return (
+    <div className="mt-1" aria-label={t('goals.parts')}>
+      <StackBar parts={list} />
+      <Legend parts={list.filter((x) => x.value > 0)} format={money} className="mt-1" />
+    </div>
   )
 }
 

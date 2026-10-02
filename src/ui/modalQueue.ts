@@ -9,6 +9,8 @@ interface ModalQueue {
   queue: Overlay[]
   push(o: Overlay): void
   shift(): Overlay | undefined
+  /** Removes every queued overlay of this kind; true when there was one. */
+  drop(kind: Overlay['kind']): boolean
   clear(): void
 }
 
@@ -19,6 +21,12 @@ export const useModalQueue = create<ModalQueue>()((set, get) => ({
     const [head, ...rest] = get().queue
     set({ queue: rest })
     return head
+  },
+  drop(kind) {
+    const q = get().queue
+    if (!q.some((o) => o.kind === kind)) return false
+    set({ queue: q.filter((o) => o.kind !== kind) })
+    return true
   },
   clear: () => set({ queue: [] }),
 }))

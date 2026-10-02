@@ -19,7 +19,7 @@ import { soft } from '../theme'
 import { useExclusiveExpander } from '../hooks'
 import { activityText, ActivityHistory } from '../ActivityLine'
 import { errorText, usePlacing } from '../Feedback'
-import { HorizonList, HorizonMini } from '../Horizon'
+import { HorizonDue, HorizonList, HorizonMini } from '../Horizon'
 import { momentLook, MomentLine, momentText, useMomentSource, type Moment } from '../Moments'
 import { NextStepChip, useNextStep } from '../NextStepChip'
 import {
@@ -340,6 +340,7 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
         {hasHorizon && (
           <>
             <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
+            <HorizonDue />
             <button type="button" onClick={() => setMore((o) => !o)} className="flex h-full min-w-0 max-w-[40%] shrink items-center rounded-md px-1 hover:bg-surface-2" aria-label={t('strip.more')}>
               {mobile ? (
                 <HorizonMini compact />

@@ -3,7 +3,7 @@ import { ENTERPRISE_NAMES } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
 import type { Rng } from './rng'
-import type { ActionErrorCode, FindUsersPreview, FounderActionKind, GameState, SalesCallPreview } from './types'
+import { DAYS_PER_WEEK, type ActionErrorCode, type FindUsersPreview, type FounderActionKind, type FounderMoves, type GameState, type MovesView, type SalesCallPreview } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
 
 /** Flag: "Elle kullanıcı bul" uses this month (reset on month end). */
@@ -71,6 +71,82 @@ export function refactorDebtCut(s: GameState): number {
   return Math.min(Math.max(0, s.techDebt), B.REFACTOR_DEBT_BASE + s.employees.filter((e) => e.dept === 'eng').length)
 }
 
+// ---------------------------------------------------------------------------
+// Weekly move budget (GAMEPLAY V2 §7.1)
+// ---------------------------------------------------------------------------
+
+/** Flag: energy ran dry under the move budget (the founder-burnout thread reads it); cleared by a finished rest. */
+export const FOUNDER_EXHAUSTED_FLAG = 'founderExhausted'
+
+/** From Pre-seed on the move budget is the founder's one constraint (the garage keeps energy and cooldowns). */
+export function onMoveBudget(s: GameState): boolean {
+  return s.stage >= B.MOVES_FROM_STAGE
+}
+
+/** This week's moves at the current stage (the garage counts as Pre-seed: arriving there mid-week finds a full week). */
+export function movesPerWeek(s: GameState): number {
+  const table = B.MOVES_PER_WEEK
+  return table[Math.max(B.MOVES_FROM_STAGE, s.stage)] ?? table[table.length - 1]!
+}
+
+/** The budget, defaulted lazily for older saves (a full week from today). Mutates: engine paths only. */
+export function movesOf(s: GameState): FounderMoves {
+  return (s.founder.moves ??= { left: movesPerWeek(s), weekStart: Math.floor(s.time.day) })
+}
+
+/** Read-only view of the moves left (UI-safe: no lazy write). */
+export function movesLeft(s: GameState): number {
+  return s.founder.moves?.left ?? movesPerWeek(s)
+}
+
+/** 'noMoves' when a verb costing `cost` moves does not fit this week (never in the garage). */
+export function movesError(s: GameState, cost: number): ActionErrorCode | null {
+  if (!onMoveBudget(s) || cost <= 0) return null
+  return movesLeft(s) < cost ? 'noMoves' : null
+}
+
+/** Takes `cost` moves off the week (call after movesError passed). */
+export function spendMoves(s: GameState, cost: number): void {
+  if (!onMoveBudget(s) || cost <= 0) return
+  const m = movesOf(s)
+  m.left = Math.max(0, m.left - cost)
+}
+
+/** Energy an action really costs: its price in the garage, nothing once the move budget runs the founder. */
+export function actionEnergy(s: GameState, energy: number): number {
+  return onMoveBudget(s) ? 0 : energy
+}
+
+/** Daily: a new week refills the budget (and older saves get theirs). */
+export function refillMoves(s: GameState, day: number): void {
+  if (day % DAYS_PER_WEEK === 0) s.founder.moves = { left: movesPerWeek(s), weekStart: day }
+  else movesOf(s)
+}
+
+/**
+ * Arriving on the budget (Pre-seed): the garage's leftovers do not follow the founder in. Energy, frozen from now on
+ * between rests, starts full (else a garage spent to 0 would raise the exhaustion flag on day one) and the garage
+ * cooldowns are cleared (the budget ignores them; refactorSprint does not exist yet).
+ */
+export function enterMoveBudget(s: GameState): void {
+  s.founder.energy = B.ENERGY_MAX
+  s.founder.lowEnergyDays = 0
+  s.founder.cooldowns = {}
+  s.founder.moves = { left: movesPerWeek(s), weekStart: Math.floor(s.time.day) }
+}
+
+/** derived.moves: left / total / the day it refills; none in the garage. */
+export function movesView(s: GameState): MovesView | undefined {
+  if (!onMoveBudget(s)) return undefined
+  return { left: movesLeft(s), total: movesPerWeek(s), resetDay: (Math.floor(s.time.day / DAYS_PER_WEEK) + 1) * DAYS_PER_WEEK }
+}
+
+/** Cooldown after an action: the garage's own, none on the budget (refactorSprint keeps its month-long one). */
+function cooldownDays(s: GameState, kind: FounderActionKind): number {
+  const def = B.FOUNDER_ACTION_DEFS[kind]
+  return onMoveBudget(s) && kind !== 'refactorSprint' ? 0 : def.cooldownDays
+}
+
 /** A project the founder can talk to users about: the least mature one (after 1.0 talks feed the next update). */
 function talkTarget(s: GameState, targetId?: string) {
   return s.projects.find((x) => x.id === targetId) ?? s.projects.find((x) => x.maturity < 1) ?? s.projects[0]
@@ -82,8 +158,11 @@ export function founderActionError(s: GameState, kind: FounderActionKind): Actio
   if (s.stage < def.stage) return 'notUnlocked'
   if (s.founder.currentAction) return 'founderBusy'
   const cd = s.founder.cooldowns[kind]
-  if (cd !== undefined && s.time.day < cd) return 'cooldown'
-  if (s.founder.energy < def.energy) return 'noEnergy'
+  // On the move budget a cooldown left over from the garage no longer holds (refactorSprint's month still does).
+  if (cd !== undefined && s.time.day < cd && (!onMoveBudget(s) || kind === 'refactorSprint')) return 'cooldown'
+  if (s.founder.energy < actionEnergy(s, def.energy)) return 'noEnergy'
+  const moves = movesError(s, def.moves)
+  if (moves) return moves
   if (kind === 'talkToUsers' && s.projects.length === 0) return 'notFound'
   // No debt to pay back: the sprint would only cost the month.
   if (kind === 'refactorSprint' && s.techDebt < 1) return 'notFound'
@@ -100,7 +179,8 @@ export function startFounderAction(s: GameState, kind: FounderActionKind, target
     if (!p) return 'notFound'
     target = p.id
   }
-  s.founder.energy -= def.energy
+  s.founder.energy -= actionEnergy(s, def.energy)
+  spendMoves(s, def.moves)
   s.founder.currentAction = { kind, startDay: s.time.day, endDay: s.time.day + def.durationDays, ...(target !== undefined ? { targetId: target } : {}) }
   pushActivity(s, 'founderActionStarted', { action: kind })
   pushEvent(s, { kind: 'founderActionStarted', refId: kind })
@@ -111,9 +191,8 @@ export function startFounderAction(s: GameState, kind: FounderActionKind, target
 export function completeFounderAction(s: GameState, rng: Rng): void {
   const run = s.founder.currentAction
   if (!run) return
-  const def = B.FOUNDER_ACTION_DEFS[run.kind]
   s.founder.currentAction = undefined
-  s.founder.cooldowns[run.kind] = s.time.day + def.cooldownDays
+  s.founder.cooldowns[run.kind] = s.time.day + cooldownDays(s, run.kind)
   const params: Record<string, string | number> = { action: run.kind }
   switch (run.kind) {
     case 'findUsers': {
@@ -167,18 +246,22 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
       break
     }
     case 'rest':
+      delete s.flags[FOUNDER_EXHAUSTED_FLAG]
       break
   }
   pushActivity(s, 'founderActionDone', params)
   pushEvent(s, { kind: 'founderActionDone', refId: run.kind, ...(typeof params.value === 'number' ? { value: params.value } : {}) })
 }
 
-/** Continuous energy regen; rest regenerates faster. */
+/** Continuous energy regen; rest regenerates faster. On the move budget only rest refills it (a health gauge). */
 export function regenEnergy(s: GameState, dtDays: number): void {
-  const rate = s.founder.currentAction?.kind === 'rest' ? B.REST_REGEN_PER_DAY : s.founder.currentAction ? 0 : B.ENERGY_REGEN_PER_DAY
+  const idle = onMoveBudget(s) ? 0 : B.ENERGY_REGEN_PER_DAY
+  const rate = s.founder.currentAction?.kind === 'rest' ? B.REST_REGEN_PER_DAY : s.founder.currentAction ? 0 : idle
   s.founder.energy = clamp(0, B.ENERGY_MAX, s.founder.energy + rate * dtDays)
 }
 
-export function dailyFounder(s: GameState): void {
+export function dailyFounder(s: GameState, day: number): void {
   s.founder.lowEnergyDays = s.founder.energy < B.LOW_ENERGY ? s.founder.lowEnergyDays + 1 : 0
+  if (onMoveBudget(s) && s.founder.energy <= 0) s.flags[FOUNDER_EXHAUSTED_FLAG] = true
+  refillMoves(s, day)
 }

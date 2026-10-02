@@ -59,6 +59,7 @@ export function WidgetChip({
   title,
   variant,
   className,
+  goal,
 }: {
   icon: IconName
   /** Gauge hue (WIDGET_COLOR[id]). */
@@ -74,6 +75,8 @@ export function WidgetChip({
   title?: string
   variant?: WidgetVariant
   className?: string
+  /** Guidance goal (docs/GAMEPLAY_V2.md §11): 0–1 of the way to the step's target, drawn as a notch under the value. */
+  goal?: number
 }) {
   if (variant === 'bar') {
     // Top-bar pin: icon tile + label over value, one line each, 40px tall. No sub, no bars (the card has them).
@@ -88,6 +91,7 @@ export function WidgetChip({
             <StatusMark alert={alert} warn={warn} size={5} />
           </div>
           <div className="tabular mt-0.5 truncate text-sm font-semibold leading-4 text-ink">{value}</div>
+          {goal !== undefined && <GoalNotch goal={goal} color={color} className="mt-0.5 w-14" />}
         </div>
       </div>
     )
@@ -106,12 +110,24 @@ export function WidgetChip({
         {/* Values stay short (number + unit). Nothing is ellipsised: touch screens have no tooltip to recover a cut value. */}
         <span className="tabular shrink-0 text-right text-[15px] font-semibold leading-tight text-ink">{value}</span>
       </div>
-      {(sub || children) && (
+      {(sub || children || goal !== undefined) && (
         <div className="ml-8 min-w-0">
           {sub && <div className="break-words text-right text-[11px] font-medium text-ink-2">{sub}</div>}
+          {goal !== undefined && <GoalNotch goal={goal} color={color} className="ml-auto mt-1 w-20" />}
           {children}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Goal notch (§11): a 2px track with the way so far and a tick at the target, under the gauge's value. */
+export function GoalNotch({ goal, color, className }: { goal: number; color: string; className?: string }) {
+  const g = Math.max(0, Math.min(1, goal))
+  return (
+    <div aria-hidden="true" className={cx('relative h-0.5 rounded-full', className)} style={{ background: soft(color, 18) }}>
+      <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${g * 100}%`, background: color }} />
+      <span className="absolute -top-[3px] right-0 h-2 w-0.5 rounded-full bg-brand" />
     </div>
   )
 }

@@ -21,6 +21,7 @@ import {
   type GameState,
   type NextCrisis,
   type PaydayChoice,
+  type PolicyId,
   type ProjectCategory,
   type RoundPitch,
   type RoundSize,
@@ -86,6 +87,11 @@ export interface BotConfig {
    * the ads and skips the founder's pay; 'halfPay' (greedyGood) pays salaries only half to keep the cash working.
    */
   desk?: 'good' | 'halfPay'
+  /**
+   * GAMEPLAY V2 §7.2 growth / craft policies signed in this order once each opens (survival ones go by runway, see
+   * signPolicies). Careless signs nothing.
+   */
+  policyPlan: readonly PolicyId[]
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -104,6 +110,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     minRunwayToHire: 5, teamCap: [3, 7, 11, 18, 30, 40, 40], adAggression: 0.25, minLtvCac: 2, price: 1.25,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
+    policyPlan: ['remote-first', 'quality-gate', 'profit-share'],
   },
   // Aggressive hiring, ads, earliest rounds.
   vcRocket: {
@@ -112,6 +119,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5, price: 1,
     roundEagerness: 1, roundSize: 'large', weakPitch: 'coinvestor', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
+    policyPlan: ['hire-fast', 'crunch-culture', 'ads-first'],
   },
   // One project, high price, small senior team, enterprise deals.
   niche: {
@@ -120,6 +128,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     minRunwayToHire: 4, teamCap: [4, 8, 11, 18, 28, 36, 36], adAggression: 0.2, minLtvCac: 2, price: 1.5,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
+    policyPlan: ['remote-first', 'profit-share', 'quality-gate'],
   },
   // Many projects, eng/ops heavy.
   platform: {
@@ -128,6 +137,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.45, minLtvCac: 1.5, price: 1.1,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
+    policyPlan: ['hire-fast', 'remote-first', 'ads-first'],
   },
 }
 
@@ -218,6 +228,8 @@ export interface BotRun {
   /** The same from the first payday with runway < 3 months. */
   survivedNearDeath3: boolean | null
   policiesAdopted: number
+  /** Policies signed over the run, in order (GAMEPLAY V2 §7.2; the "dominant strategy" probe counts distinct ids). */
+  policiesSigned: PolicyId[]
   /** Payday desks (§6.1) closed with something left owed (answered or defaulted). */
   paydayDeferrals: number
   /** Payday desks opened (paydayShort). */
@@ -283,7 +295,7 @@ const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
 /** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
 const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT_KINDS, 'founderActionDone', 'hired', 'visitorArrived', 'stageUp'])
 /** Bot actions that count as a meaningful player move (not background knob-twiddling like ad/price/assign). */
-const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem'])
+const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy'])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -579,6 +591,33 @@ function rebalance(c: Ctx, cfg: BotConfig): void {
   if (worst === 'eng' && s.derived.capacity - balance.CAPACITY_PER_ENG < s.stats.users * 1.2) return
   const victim = s.employees.filter((e) => e.dept === worst).sort((a, b) => a.quality - b.quality)[0]
   if (victim && c.act({ type: 'fire', employeeId: victim.id })) c.mem.rebalanceDay = s.time.day
+}
+
+/**
+ * GAMEPLAY V2 §7.2 policies, before the founder's verbs take the week's moves. Survival from runway < SURVIVAL_RUNWAY,
+ * the mildest first; layoff-round only below LAYOFF_RUNWAY with a crisis on the horizon (the last resort). Then the
+ * archetype's growth / craft plan, and management once the team is big enough. A round keeps its pitch move.
+ */
+const SURVIVAL_RUNWAY = 6
+const LAYOFF_RUNWAY = 2
+const SURVIVAL_ORDER: readonly PolicyId[] = ['lean-office', 'founder-no-pay', 'salary-freeze', 'deferred-pay']
+function signPolicies(c: Ctx, cfg: BotConfig): void {
+  const view = c.s.derived.policies
+  if (!view?.available.length || c.s.time.day < view.nextSignDay) return
+  const m = c.s.derived.moves
+  const reserve = c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
+  if (m && m.left - balance.MOVE_COST.adoptPolicy < reserve) return
+  const open = (id: PolicyId) => view.available.includes(id)
+  const runway = c.s.finance.runway ?? 99
+  const nc = nextCrisis(c.s)
+  const stormNear = nc !== undefined && nc.day - c.s.time.day <= balance.CRISIS_HORIZON_DAYS
+  // The last resort comes first when it is due: the milder laws (and their cooldown) would keep it out for months.
+  const pick =
+    (runway < LAYOFF_RUNWAY && stormNear && open('layoff-round') ? 'layoff-round' : undefined) ??
+    (runway < SURVIVAL_RUNWAY ? SURVIVAL_ORDER.find(open) : undefined) ??
+    cfg.policyPlan.find(open) ??
+    (open('management') ? 'management' : undefined)
+  if (pick) c.act({ type: 'adoptPolicy', policyId: pick })
 }
 
 /**
@@ -920,6 +959,7 @@ export function playBot(
       rebalance(ctx, cfg)
       hiring(ctx, cfg)
       growth(ctx, cfg)
+      signPolicies(ctx, cfg)
       founder(ctx, cfg)
       fundraise(ctx, cfg)
     } else if (kind === 'random') {
@@ -1057,7 +1097,8 @@ export function playBot(
     crisisNearDeath: crises.filter((k) => k.minRunway < 2).length,
     survivedNearDeath: firstNearDeath === null ? null : !(failed && s.time.day - firstNearDeath < 180),
     survivedNearDeath3: firstNearDeath3 === null ? null : !(failed && s.time.day - firstNearDeath3 < 180),
-    policiesAdopted: 0,
+    policiesAdopted: s.policies?.adopted.length ?? 0,
+    policiesSigned: [...(s.policies?.adopted ?? [])],
     paydayDeferrals,
     paydaysShort,
     movesUsedShare: movesGiven.map((g, i) => (g > 0 ? (movesUsed[i] ?? 0) / g : 0)),

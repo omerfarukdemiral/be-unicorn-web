@@ -3,25 +3,27 @@ import * as B from './balance'
 import { learnConcept, minimizeConcept } from './concepts'
 import { answerDecision } from './decisions'
 import { recomputeDerived } from './derive'
-import { applyMorale, unlockTool } from './effects'
+import { applyEffects, applyMorale, unlockTool } from './effects'
 import { actionEnergy, movesError, spendMoves, startFounderAction } from './founder'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
-import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
+import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
 import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
   FOUNDER_SLOT_ID,
+  POLICY_IDS,
   PROJECT_CATEGORIES,
   type Action,
   type ActionErrorCode,
   type ActionOf,
   type ActionResult,
   type GameState,
+  type PolicyId,
   type Slot,
 } from './types'
-import { clone, furnitureById, incCounter, newId, pushActivity, pushEvent, type EngineContent } from './util'
+import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, type EngineContent } from './util'
 
 export type { Action, ActionType, ActionOf, TimedAction, ActionResult, ActionErrorCode } from './types'
 
@@ -74,10 +76,11 @@ function deskError(s: GameState, slot: Slot | undefined): ActionErrorCode | null
   return null
 }
 
-const fire: Handler<'fire'> = ({ s }, a) => {
+const fire: Handler<'fire'> = ({ s, content }, a) => {
   const e = removeEmployee(s, a.employeeId)
   if (!e) return 'notFound'
-  s.stats.cash -= e.salary * B.SEVERANCE_MONTHS
+  // layoff-round (§7.2): once signed, nobody gets severance again.
+  s.stats.cash -= e.salary * B.SEVERANCE_MONTHS * policyMult(s, content, 'severance')
   applyMorale(s, B.FIRE_TEAM_MORALE)
   incCounter(s, 'fires')
   pushActivity(s, 'fired', { name: e.name, id: e.id })
@@ -374,6 +377,54 @@ const resolvePaydayH: Handler<'resolvePayday'> = ({ s, content }, a) => {
   return null
 }
 
+// ---------------------------------------------------------------------------
+// Company policies (GAMEPLAY V2 §7.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a policy cannot be signed now, or null: 'invalid' (unknown, already signed, or closed by a signed one),
+ * 'notUnlocked' (before POLICY_MIN_STAGE, its lock holds, or a payLater one with no round ahead), 'cooldown' (POLICY_SIGN_COOLDOWN_DAYS since the last),
+ * 'noMoves' (one move, §7.1). Pure: the lawbook's button and the action use the same answer.
+ */
+export function policyError(s: GameState, content: EngineContent, id: PolicyId): ActionErrorCode | null {
+  const policy = (POLICY_IDS as readonly string[]).includes(id) ? content.policies?.find((p) => p.id === id) : undefined
+  if (!policy) return 'invalid'
+  const adopted = s.policies?.adopted ?? []
+  if (adopted.includes(id) || policy.excludes?.some((x) => adopted.includes(x))) return 'invalid'
+  if (content.policies?.some((p) => adopted.includes(p.id) && p.excludes?.includes(id))) return 'invalid'
+  if (s.stage < B.POLICY_MIN_STAGE || (policy.effect.payLater && !payLaterOpen(s))) return 'notUnlocked'
+  let open = false
+  try {
+    open = policy.unlock(s) === true
+  } catch {
+    open = false
+  }
+  if (!open) return 'notUnlocked'
+  if (s.time.day < (s.policies?.lastSignedDay ?? B.POLICY_NEVER_SIGNED) + B.POLICY_SIGN_COOLDOWN_DAYS) return 'cooldown'
+  return movesError(s, B.MOVE_COST.adoptPolicy)
+}
+
+/**
+ * Signs a policy, for good: it joins the multipliers at once (derive), a survival one marks every later round's equity
+ * and the radar's team axis; layoff-round lets its share of the team go, onSign effects land, flagDay is stamped.
+ */
+const adoptPolicyH: Handler<'adoptPolicy'> = ({ s, content }, a) => {
+  const err = policyError(s, content, a.policyId)
+  if (err) return err
+  const policy = content.policies!.find((p) => p.id === a.policyId)!
+  const book = policiesOf(s)
+  book.adopted.push(policy.id)
+  book.lastSignedDay = s.time.day
+  if (policy.tree === 'survival') book.survival = (book.survival ?? 0) + 1
+  spendMoves(s, B.MOVE_COST.adoptPolicy)
+  const fx = policy.effect
+  if (fx.flagDay) s.flags[fx.flagDay] = Math.floor(s.time.day)
+  if (fx.layoff) layoff(s, content, fx.layoff)
+  if (fx.onSign) applyEffects(s, content, fx.onSign, `policy:${policy.id}`)
+  pushEvent(s, { kind: 'policyAdopted', refId: policy.id })
+  return null
+}
+
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
   fire,
@@ -397,4 +448,5 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   startRound: startRoundH,
   roundPitch: roundPitchH,
   resolvePayday: resolvePaydayH,
+  adoptPolicy: adoptPolicyH,
 }

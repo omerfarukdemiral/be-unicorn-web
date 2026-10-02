@@ -1,4 +1,5 @@
 // Projeler: 6 categories to start, active projects with maturity (MVP ≥ 0.2) and assignments.
+// No project yet: a ghost slot breathes where the first one will sit (guidance as an object, docs/GAMEPLAY_V2.md §11).
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_CATEGORIES, type Project, type ProjectCategory } from '../../engine/types'
@@ -7,7 +8,7 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { pct } from '../format'
-import { Bar, Button, cx, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
+import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
 
 /** Turkish project name from content, unique within the run. */
@@ -51,7 +52,7 @@ export function ProjectsPanel() {
       <div>
         <SectionTitle>{t('projects.active')}</SectionTitle>
         {projects.length === 0 ? (
-          <Empty text={t('projects.empty')} icon="rocket" />
+          <GhostSlot />
         ) : (
           <ul className="flex flex-col divide-y divide-border border-y border-border">
             {projects.map((p) => (
@@ -83,6 +84,19 @@ export function ProjectsPanel() {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The empty place of the first project: dashed, the rocket as a silhouette, one slow breath (no flash). */
+function GhostSlot() {
+  return (
+    <div className="flex min-h-14 items-center gap-2.5 rounded-control border border-dashed border-brand/50 bg-brand-soft/40 px-3">
+      {/* Only the icon breathes: a scaled full-width block would spill over the panel's edges. */}
+      <span className="grid shrink-0 animate-breathe place-items-center">
+        <Icon name="rocket" size={22} className="text-brand-ink opacity-50" />
+      </span>
+      <span className="font-text text-xs font-semibold text-ink-2">{t('projects.empty')}</span>
     </div>
   )
 }

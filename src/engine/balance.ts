@@ -385,6 +385,19 @@ export const MOVES_PER_WEEK: readonly number[] = [0, 3, 3, 4, 4, 5, 5]
 export const MOVE_COST = { roundPitch: 1, refactorSprint: 2, talkResignation: 1, renewContract: 1, acquireRival: 2, adoptPolicy: 1, openSegment: 1 } as const
 export type MoveVerb = keyof typeof MOVE_COST
 
+/**
+ * GAMEPLAY V2 §7.2 company policies (Kanun Kitabı): from POLICY_MIN_STAGE, one signature per POLICY_SIGN_COOLDOWN_DAYS,
+ * never revoked. Every survival signature adds POLICY_SURVIVAL_EQUITY to each later round's equity and takes
+ * POLICY_SURVIVAL_TEAM off the radar's team axis (creeping normality made visible). 'resign' × k raises the quitting
+ * morale bar by RESIGN_RISK_MORALE × (k − 1) points. lastSignedDay of a fresh / older run: POLICY_NEVER_SIGNED.
+ */
+export const POLICY_MIN_STAGE = 1
+export const POLICY_SIGN_COOLDOWN_DAYS = 30
+export const POLICY_SURVIVAL_EQUITY = 0.005
+export const POLICY_SURVIVAL_TEAM = 0.1
+export const RESIGN_RISK_MORALE = 8
+export const POLICY_NEVER_SIGNED = -999
+
 export const FOUNDER_ACTION_DEFS: Readonly<Record<FounderActionKind, FounderActionDef>> = {
   findUsers: { stage: 0, durationDays: 1, energy: 12, cooldownDays: 1, moves: 1 },
   talkToUsers: { stage: 0, durationDays: 1, energy: 10, cooldownDays: 3, moves: 1 },

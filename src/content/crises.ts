@@ -3,6 +3,7 @@
 // stage and applies `effects(s, severity)` on the day; the card (category 'crisis') comes first that day.
 // Early crises touch the cash: a % shock is not felt by a cash-rich company.
 import type { EffectBundle, GameState, ModifierKind } from '../engine/types'
+import { REMOTE_FIRST_FLAG } from './policies'
 import type { CrisisDef, DecisionCard } from './types'
 
 /** A timed modifier at `severity`: 1 + (v − 1) × severity (§5.1). */
@@ -78,10 +79,11 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
       },
       {
         label: 'Uzaktan çalışmaya geç',
-        // T15: opens the 'remote-first' policy once policies exist; until then part of the office cost back (a share
-        // of the cash, so it scales with the company) and a slower quarter.
-        tradeoff: { gain: 'Kasa +%4', cost: 'Üretim −%10, 90 gün' },
-        effects: { cashPercent: 0.04, morale: -3, modifiers: [{ kind: 'production', value: 0.9, days: 90 }] },
+        // GAMEPLAY V2 §7.2: opens the 'remote-first' policy before Seed (rent × 0.6 for good, once signed). Part of the
+        // office cost comes back too (a share of the cash, so it scales), so the calendar's repeat from Seed on, when the
+        // policy is open anyway, still pays; the move itself costs a slower quarter.
+        tradeoff: { gain: 'Kasa +%4, uzaktan yasası açılır', cost: 'Üretim −%10, 90 gün' },
+        effects: { cashPercent: 0.04, setFlag: REMOTE_FIRST_FLAG, morale: -3, modifiers: [{ kind: 'production', value: 0.9, days: 90 }] },
         reflection: 'Ofis bir araçtır; kira, ekibin işine yaradığı kadar değerlidir.',
         conceptId: 'burn',
       },

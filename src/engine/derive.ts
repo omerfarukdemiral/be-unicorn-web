@@ -3,11 +3,11 @@ import * as B from './balance'
 import * as E from './economy'
 import { loanMonthlyService } from './effects'
 import { findUsersPreview, movesView, salesCallPreview } from './founder'
-import { horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
+import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
-import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId, type ValuationBreakdown } from './types'
-import { modifierMult, moraleModifierSum, type EngineContent } from './util'
+import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectId, type ValuationBreakdown } from './types'
+import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
 
 export interface Outputs {
   perEmployee: Record<string, number>
@@ -32,9 +32,9 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
   const fx = officeEffects(s, content)
   const deptCounts = perDept(0)
   for (const e of s.employees) deptCounts[e.dept] += 1
-  const coord = E.coordination(s.employees.length, fx.hasMeetingRoom)
+  const coord = E.coordination(s.employees.length, fx.hasMeetingRoom, policyMult(s, content, 'coordination'))
   const cluster = clusteredEmployees(s)
-  const prodMod = modifierMult(s, 'production')
+  const prodMod = modifierMult(s, 'production') * policyMult(s, content, 'production')
   const perEmployee: Record<string, number> = {}
   const deptOutput = perDept(0)
   for (const e of s.employees) {
@@ -91,7 +91,7 @@ export function averageLaunchedMaturity(s: GameState): number {
 }
 
 /** Global morale target without per-desk auras. Unclamped: clamp only after adding the aura. */
-export function globalMoraleTarget(s: GameState, o: Outputs, overload: number): number {
+export function globalMoraleTarget(s: GameState, content: EngineContent, o: Outputs, overload: number): number {
   return E.moraleTargetRaw({
     auras: 0,
     decisionBonus: moraleModifierSum(s),
@@ -100,7 +100,58 @@ export function globalMoraleTarget(s: GameState, o: Outputs, overload: number): 
     overload,
     coordinationPenalty: (1 - o.coordination) * B.COORDINATION_MORALE_FACTOR,
     wagesOwed: s.flags['wagesOwed'] === true,
+    policies: policySum(s, content, 'moraleTarget'),
   })
+}
+
+/**
+ * Monthly payroll after the policies (GAMEPLAY V2 §7.2): 'salary' multipliers scale it; the part a payLater policy
+ * (deferred-pay) holds back is not paid now but owed until the next round close (`later`).
+ */
+export function payroll(s: GameState, content: EngineContent): { paid: number; later: number } {
+  const raw = s.employees.reduce((a, e) => a + e.salary, 0)
+  let full = raw
+  let held = 1
+  const later = payLaterOpen(s)
+  for (const p of adoptedPolicies(s, content)) {
+    const m = p.effect.mult?.salary ?? 1
+    if (p.effect.payLater) held *= later ? m : 1
+    else full *= m
+  }
+  return { paid: full * held, later: full * (1 - held) }
+}
+
+/** The Kanun Kitabı now (state.derived.policies): what can be signed, and the totals content-free paths read. */
+export function policiesView(s: GameState, content: EngineContent, later: number): PoliciesView {
+  const st = s.policies
+  const adopted: PolicyId[] = [...(st?.adopted ?? [])]
+  const signed = adoptedPolicies(s, content)
+  const nextSignDay = (st?.lastSignedDay ?? B.POLICY_NEVER_SIGNED) + B.POLICY_SIGN_COOLDOWN_DAYS
+  const available: PolicyId[] = []
+  if (s.stage >= B.POLICY_MIN_STAGE) {
+    for (const p of content.policies ?? []) {
+      if (adopted.includes(p.id) || p.excludes?.some((x) => adopted.includes(x)) || signed.some((q) => q.excludes?.includes(p.id))) continue
+      if (p.effect.payLater && !payLaterOpen(s)) continue
+      let ok = false
+      try {
+        ok = p.unlock(s) === true
+      } catch {
+        ok = false
+      }
+      if (ok) available.push(p.id)
+    }
+  }
+  const mult: Partial<Record<PolicyKind, number>> = {}
+  // A payLater salary cut with no round ahead holds nothing back (payroll), so the view's salary leaves it out too.
+  for (const p of signed) {
+    for (const [k, v] of Object.entries(p.effect.mult ?? {}) as [PolicyKind, number][]) {
+      if (k === 'salary' && p.effect.payLater && !payLaterOpen(s)) continue
+      mult[k] = (mult[k] ?? 1) * v
+    }
+  }
+  // Content order is the lawbook's; keep the ids' canonical order for the view.
+  available.sort((a, b) => POLICY_IDS.indexOf(a) - POLICY_IDS.indexOf(b))
+  return { available, adopted, nextSignDay, mult, movesBonus: policySum(s, content, 'movesBonus'), burnAsk: policySum(s, content, 'burnAsk'), payLater: later }
 }
 
 export function employeeMoraleTarget(s: GameState, content: EngineContent, e: Employee, globalTarget: number): number {
@@ -114,12 +165,12 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const o = computeOutputs(s, content)
   const avgMat = averageLaunchedMaturity(s)
   // GAMEPLAY V2 §6.1: deferred infra or an eviction leaves fewer servers for a while.
-  const cap = E.capacity(o.deptCounts.eng, o.fx.capacityMult * modifierMult(s, 'capacity'))
+  const cap = E.capacity(o.deptCounts.eng, o.fx.capacityMult * modifierMult(s, 'capacity') * policyMult(s, content, 'capacity'))
   const over = E.overload(s.stats.users, cap)
 
   // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
   const rivalShare = E.rivalShareTotal(s.rivals)
-  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu')
+  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu')
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
   const anyLaunched = s.projects.some((p) => p.launched)
@@ -129,8 +180,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   // ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
   const tam = E.marketTam(s.stage)
   const pen = E.penetration(s.stats.users, tam)
-  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac')
-  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic')
+  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac')
+  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic')
   const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)
   const manualNow = Number(s.flags['manualThisMonth'] ?? 0)
   const manualLast = Number(s.flags['manualLastMonth'] ?? 0)
@@ -139,12 +190,15 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const churn =
     E.churnPerMonth(o.deptOutput.ops, over, avgMat, pen, s.techDebt) *
     E.priceChurnFactor(s.finance.priceMultiplier, daysSincePrice) *
-    modifierMult(s, 'churn')
+    modifierMult(s, 'churn') *
+    policyMult(s, content, 'churn')
 
-  const salaries = s.employees.reduce((a, e) => a + e.salary, 0)
-  const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent')
-  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult) + o.fx.upkeep
-  const living = E.founderLiving(s.stage)
+  // GAMEPLAY V2 §7.2: the policies scale payroll, rent, infra and the founder's pay; the ledger accrues what is left.
+  const pay = payroll(s, content)
+  const salaries = pay.paid
+  const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent') * policyMult(s, content, 'rent')
+  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep
+  const living = E.founderLiving(s.stage) * policyMult(s, content, 'founderPay')
   const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living)
   const net = mrr - burn
 
@@ -196,11 +250,11 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget, founder: living }
   s.finance.net = net
   // Runway counts what payday will take: cash already earmarked for accrued costs is not runway, and the loan's
-  // monthly service is a cost like any other (GAMEPLAY V2 §6.2).
-  s.finance.runway = E.runway(s.stats.cash - owedCosts(s), net - loanMonthlyService(s))
+  // monthly service is a cost like any other (GAMEPLAY V2 §6.2); deferred-pay's held wages are owed too (§7.2).
+  s.finance.runway = E.runway(s.stats.cash - owedCosts(s) - heldWages(s), net - loanMonthlyService(s))
   s.finance.valuation = valuation
 
-  const gTarget = globalMoraleTarget(s, o, over)
+  const gTarget = globalMoraleTarget(s, content, o, over)
   const targets = s.employees.map((e) => employeeMoraleTarget(s, content, e, gTarget))
   const moraleTarget = targets.length ? targets.reduce((a, b) => a + b, 0) / targets.length : E.clamp(0, 100, gTarget)
 
@@ -232,6 +286,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     // GAMEPLAY V2 §6.3: a failed round closes the door for ROUND_RETRY_DAYS.
     canStartRound: s.gameOver === undefined && s.stage < B.LAST_STAGE - 1 && !(s.round?.active ?? false) && roundWindowOpen(valuation, target) && roundRetryIn(s) === 0,
   }
+  // First: the move budget, the founder's energy and the round's burn ask read these totals (no content there).
+  s.derived.policies = policiesView(s, content, pay.later)
   const goalsDone = s.goalsDone ?? []
   const stars = (content.goals ?? []).filter((g) => g.stage === s.stage && goalsDone.includes(g.id)).length
   const rv = roundView(s, stars)

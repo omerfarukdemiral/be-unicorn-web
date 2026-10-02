@@ -79,6 +79,14 @@ export function owedTotal(s: GameState): number {
   return (l ? ledgerCosts(l) : 0) + (p ? ledgerCosts(p.ledger) : 0) + (s.finance.deferred ?? 0)
 }
 
+/**
+ * Wages deferred-pay holds back until the next round close (GAMEPLAY V2 §7.2). Not due on payday (so neither the
+ * payday lump nor the bankruptcy clock counts them), but spoken for: runway and the cash projection subtract them.
+ */
+export function heldWages(s: GameState): number {
+  return s.policies?.owed ?? 0
+}
+
 /** Days until the next payday (1..30) from `day`. */
 export function daysToPayday(day: number): number {
   const next = (Math.floor(day / B.PAYDAY_EVERY_DAYS) + 1) * B.PAYDAY_EVERY_DAYS
@@ -127,7 +135,7 @@ export function horizon(s: GameState): HorizonItem[] {
     if (rate <= 0) continue
     if (p.maturity >= 1) {
       // The next update: its work left at today's speed, but not before the update cool-down ends.
-      const eta = Math.max(now + Math.max(0, B.RELEASE_UPDATE_SIZE - (p.updateProgress ?? 0)) / rate, lastUpdateDay(s, p.id) + B.RELEASE_UPDATE_MIN_DAYS)
+      const eta = Math.max(now + Math.max(0, B.RELEASE_UPDATE_SIZE - (p.updateProgress ?? 0)) / rate, lastUpdateDay(s, p.id) + B.RELEASE_UPDATE_MIN_DAYS * (s.derived.policies?.mult.releaseGap ?? 1))
       if (eta <= end) out.push({ kind: 'release', day: eta, projectId: p.id, level: B.RELEASE_THRESHOLDS.length, update: (p.updates ?? 0) + 1 })
       continue
     }
@@ -170,7 +178,7 @@ function cashCore(s: GameState, cashDelta: number, burnDelta: number): CashCore 
   return {
     now,
     first: now + daysToPayday(now),
-    free: s.stats.cash - owedTotal(s) + cashDelta,
+    free: s.stats.cash - owedTotal(s) - heldWages(s) + cashDelta,
     net: s.finance.net - burnDelta,
   }
 }
@@ -196,6 +204,14 @@ export function previewSpend(s: GameState, delta: { cashDelta?: number; burnDelt
   return { runwayNow: s.finance.runway, runwayAfter: runway(c.free, c.net), deathDay, paydayShort: deathDay === c.first }
 }
 
+/**
+ * A cost line as the month will burn it after the signed policies (GAMEPLAY V2 §7.2): the UI's previews (a ring's
+ * rent, a hire's salary) pass the raw amount here, so CostPreview and the payday ledger agree after a signature.
+ */
+export function policyCost(s: GameState, kind: 'rent' | 'salary', amount: number): number {
+  return amount * (s.derived.policies?.mult[kind] ?? 1)
+}
+
 /** Cash after each of the next `months` paydays at today's net, and the death day (same core as previewSpend). */
 export function cashProjection(s: GameState, months = 12): CashProjection {
   const c = cashCore(s, 0, 0)
@@ -214,7 +230,7 @@ const stageValue = (list: readonly number[], stage: number): number => list[Math
  * Company radar (§14.2), each axis 0–PROFILE_MAX where 1 = what the stage expects: product (average maturity),
  * growth (3-month MoM vs the diligence ask; null before revenue), efficiency (burn multiple vs the diligence ask;
  * null before revenue and before Seed, where it is not asked; not burning = full),
- * team (head count), morale (vs the diligence floor), cash (runway months; profitable = full).
+ * team (head count, less the survival policies' mark), morale (vs the diligence floor), cash (runway months; profitable = full).
  */
 export function companyProfile(s: GameState): CompanyProfile {
   const st = s.stage
@@ -223,7 +239,8 @@ export function companyProfile(s: GameState): CompanyProfile {
     product: s.projects.length ? profileAxis(s.derived.avgMaturity / stageValue(B.PROFILE_PRODUCT_EXPECT, st)) : null,
     growth: s.finance.mrr >= B.PRE_REVENUE_MRR ? profileAxis((s.derived.momAvg ?? s.derived.momGrowth) / stageValue(B.DILIGENCE_MOM, st)) : null,
     efficiency: efficiencyAxis(s),
-    team: profileAxis(s.employees.length / stageValue(B.PROFILE_TEAM_EXPECT, st)),
+    // Creeping normality (§7.2): every survival policy signed takes POLICY_SURVIVAL_TEAM off for good.
+    team: profileAxis(s.employees.length / stageValue(B.PROFILE_TEAM_EXPECT, st) - (s.policies?.survival ?? 0) * B.POLICY_SURVIVAL_TEAM),
     morale: profileAxis(s.stats.morale / B.DILIGENCE_MORALE),
     cash: rw === null ? B.PROFILE_MAX : profileAxis(rw / B.PROFILE_RUNWAY_MONTHS),
   }

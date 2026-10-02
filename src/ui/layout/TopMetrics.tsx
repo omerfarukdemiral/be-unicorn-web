@@ -2,8 +2,11 @@
 // Each value has ONE home here (docs/LAYOUT.md §2): Kasa shows usable money + the daily NET flow only
 // (monthly net → Metrikler › Kâr tahmini, burn → Metrikler › Yakıt, runway → its own chip).
 // Red only for real danger (§4.1): runway < 3, usable cash < 0 / missed payroll, morale < 28. Other thresholds amber.
-import type { ReactNode } from 'react'
+// HUD grammar (docs/GAMEPLAY_V2.md §10.4, §11): a finished founder action pops the gauge it fed once (a find → Kullanıcı) (`pop-once`), and
+// the garage's "users" step draws a goal notch under Kullanıcı (guidance.ts).
+import { useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import type { FounderActionKind } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
@@ -11,8 +14,29 @@ import { fixed, money, num, signedMoney } from '../format'
 import { cx } from '../primitives'
 import { iconTone, soft, WIDGET_COLOR } from '../theme'
 import { useTween } from '../time'
-import { ledgerMoney, runwayTone } from '../widgets'
+import { GoalNotch, ledgerMoney, runwayTone } from '../widgets'
 import { cashFlow } from '../cashflow'
+import { useFreshEvents } from '../loopUi'
+import { guidedGoal } from '../guidance'
+
+/** Counts finished founder actions of `kinds` (a fresh count re-keys the value: one `pop-once`). */
+function useActionPop(kinds: readonly FounderActionKind[]): number {
+  const [n, setN] = useState(0)
+  useFreshEvents((events) => {
+    if (events.some((e) => e.kind === 'founderActionDone' && kinds.includes(e.refId as FounderActionKind))) setN((v) => v + 1)
+  })
+  return n
+}
+
+/** The value, popped once per count (0 = never popped: no animation on mount). */
+function Pop({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <span key={n} className={cx('inline-block origin-left', n > 0 && 'animate-pop-once')}>
+      {children}
+    </span>
+  )
+}
+
 
 /** full = label + value (desktop ≥1280); tight = value only, sub under it (1024–1279); mobile = 44px cells. */
 export type MetricDensity = 'full' | 'tight' | 'mobile'
@@ -41,6 +65,7 @@ export function BarChip({
   mark = null,
   density,
   title,
+  ariaValue,
   className,
   children,
 }: {
@@ -52,6 +77,8 @@ export function BarChip({
   mark?: Mark
   density: MetricDensity
   title?: string
+  /** Spoken value when `value` is not a plain string (a popped value). */
+  ariaValue?: string
   className?: string
   children?: ReactNode
 }) {
@@ -60,7 +87,7 @@ export function BarChip({
     <div
       className={cx('relative flex min-w-0 items-center gap-2 rounded-control', mobile ? 'h-11 gap-1.5 px-1.5' : 'h-10 px-2', className)}
       title={title ?? label}
-      aria-label={typeof value === 'string' ? `${label}: ${value}` : undefined}
+      aria-label={ariaValue !== undefined ? `${label}: ${ariaValue}` : typeof value === 'string' ? `${label}: ${value}` : undefined}
     >
       <span
         aria-hidden="true"
@@ -103,6 +130,10 @@ export function BarChip({
 // ---------------------------------------------------------------------------
 // Kasa
 // ---------------------------------------------------------------------------
+
+/** Founder actions whose return lands on a gauge: a find is users. A sales call's contract is MRR, which has no
+ *  gauge up here (its floating number says "/ay"), so nothing pops for it. */
+const USERS_ACTIONS: readonly FounderActionKind[] = ['findUsers']
 
 /**
  * Kasa: usable money (cash − what payday already owes, tweened) + "net −$270/gün" on the sub line. No floating
@@ -174,6 +205,8 @@ export function RunwayChip({ density }: { density: MetricDensity }) {
 
 export function UsersChip({ density }: { density: MetricDensity }) {
   const { users, overload } = useGameStore(useShallow((s) => ({ users: s.state.stats.users, overload: s.state.derived.overload })))
+  const goal = useGameStore((s) => guidedGoal(s.state, 'users'))
+  const pop = useActionPop(USERS_ACTIONS)
   const over = overload > 0
   return (
     <BarChip
@@ -183,8 +216,13 @@ export function UsersChip({ density }: { density: MetricDensity }) {
       label={t('hud.users')}
       mark={over ? 'warn' : null}
       title={over ? `${t('top.usersTitle', { v: num(users) })}\n${t('top.usersOverload')}` : t('top.usersTitle', { v: num(users) })}
-      value={num(users)}
-    />
+      value={<Pop n={pop}>{num(users)}</Pop>}
+      ariaValue={num(users)}
+    >
+      {goal !== null && (
+        <GoalNotch goal={goal} color={WIDGET_COLOR.users} className={cx(density === 'mobile' ? 'w-full min-w-6 max-w-14' : 'w-14', density === 'full' ? 'mt-px' : 'mt-[5px]')} />
+      )}
+    </BarChip>
   )
 }
 

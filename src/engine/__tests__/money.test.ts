@@ -344,6 +344,14 @@ describe('save v3 → v4 (GAMEPLAY V2 §3.1: loan, strikes, stage reports)', () 
     const lazy = api.step({ ...s, finance: { ...s.finance, debt: 20_000 } }, 30)
     expect(lazy.finance.loan!.principal).toBe(20_000)
   })
+
+  it('company policies (§7.2): an old save starts with none signed and no cooldown', () => {
+    const api = createEngine(fakeContent())
+    const v3 = structuredClone(api.step(api.createGame({ seed: 1 }), 40)) as unknown as Record<string, unknown>
+    delete v3.policies
+    expect(migrate({ version: 3, state: v3 })!.policies).toEqual({ adopted: [], lastSignedDay: B.POLICY_NEVER_SIGNED })
+    expect(B.POLICY_NEVER_SIGNED).toBe(-999)
+  })
 })
 
 describe('save v1 → v2', () => {

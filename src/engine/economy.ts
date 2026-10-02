@@ -15,11 +15,14 @@ export function personOutput(baseOutput: number, deskQuality: number, morale: nu
   return baseOutput * deskQuality * moraleMultiplier(morale) * adjacencyBonus * quality
 }
 
-/** ekip > 10 → × (1 − 0.015 × (ekip − 10)), en fazla −%30; toplantı odası kaybı yarıya indirir (GAMEPLAY V2 §4.2). */
-export function coordination(teamSize: number, hasMeetingRoom: boolean): number {
+/**
+ * ekip > 10 → × (1 − 0.015 × (ekip − 10)), en fazla −%30; toplantı odası kaybı yarıya indirir (GAMEPLAY V2 §4.2).
+ * `lossMult`: the policies' coordination multiplier (management × 0.5, remote-first × 1.3; §7.2), never past the floor.
+ */
+export function coordination(teamSize: number, hasMeetingRoom: boolean, lossMult = 1): number {
   if (teamSize <= B.COORDINATION_TEAM_FREE) return 1
   const loss = Math.min(1 - B.COORDINATION_MIN, B.COORDINATION_PER_PERSON * (teamSize - B.COORDINATION_TEAM_FREE))
-  return 1 - loss * (hasMeetingRoom ? B.COORDINATION_ROOM_FACTOR : 1)
+  return 1 - Math.min(1 - B.COORDINATION_MIN, loss * (hasMeetingRoom ? B.COORDINATION_ROOM_FACTOR : 1) * lossMult)
 }
 
 // §5.3 Product ----------------------------------------------------------------
@@ -177,6 +180,8 @@ export interface MoraleTargetInput {
   coordinationPenalty: number
   /** Salaries deferred at the payday desk are still owed (GAMEPLAY V2 §6.1): −WAGES_OWED_MORALE_TARGET until paid. */
   wagesOwed?: boolean
+  /** Σ of the signed policies' morale terms (GAMEPLAY V2 §7.2: salary-freeze −4, profit-share +6…). */
+  policies?: number
 }
 
 /** Unclamped target: sum every term first, clamp once at the end (PLAN §5.7). */
@@ -189,11 +194,12 @@ export function moraleTargetRaw(i: MoraleTargetInput): number {
     (i.cashNegative ? B.MORALE_NEGATIVE_CASH : 0) -
     B.MORALE_OVERLOAD * i.overload -
     i.coordinationPenalty -
-    (i.wagesOwed ? B.WAGES_OWED_MORALE_TARGET : 0)
+    (i.wagesOwed ? B.WAGES_OWED_MORALE_TARGET : 0) +
+    (i.policies ?? 0)
   )
 }
 
-/** hedef = 60 + auralar + kararlar + kitaplık − 40 (kasa<0) − 15 × aşırıYük − koordinasyonCezası (− 10 maaş borcu), clamped to 0–100. */
+/** hedef = 60 + auralar + kararlar + kitaplık − 40 (kasa<0) − 15 × aşırıYük − koordinasyonCezası (− 10 maaş borcu) + politikalar, clamped to 0–100. */
 export function moraleTarget(i: MoraleTargetInput): number {
   return clamp(0, 100, moraleTargetRaw(i))
 }

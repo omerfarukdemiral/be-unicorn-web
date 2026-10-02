@@ -36,12 +36,6 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.round': 'Tur penceresi açık',
   'step.roundWait': 'Tur sürüyor: haftalık pitch’i seç',
   'step.grow': 'Değerlemeyi büyüt · {v} / {t}',
-  'step.go.projects': 'Projeler',
-  'step.go.shop': 'Mağaza',
-  'step.go.team': 'Ekip',
-  'step.go.growth': 'Büyüme',
-  'step.go.act': 'Yap',
-  'step.go.start': 'Başlat',
 
   // Horizon strip
   'horizon.span': '6 hafta',

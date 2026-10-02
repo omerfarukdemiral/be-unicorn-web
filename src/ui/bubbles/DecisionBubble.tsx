@@ -1,5 +1,6 @@
-// Decision bubble (PLAN §6.3): non-blocking. Question + options with visible trade-off,
-// then a one-sentence reflection with a link to the related Defter card.
+// Decision bubble (PLAN §6.3): non-blocking. Question + options with visible trade-off, then what the choice did as
+// numbers (effectSummary) + a book icon to the related Defter card; the reflection sentence is the tooltip
+// (docs/GAMEPLAY_V2.md §11). One reading line per bubble: the question is the only paragraph.
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { DecisionCardId } from '../../engine/types'
@@ -11,6 +12,7 @@ import { cx, Dot, IconBadge, IconButton } from '../primitives'
 import { useIsMobile } from '../hooks'
 import { openConceptCard } from '../uiActions'
 import { conceptTitle } from '../panels/JournalPanel'
+import { effectSummary } from '../loopUi'
 import { npcLabel } from './speaker'
 
 export const REFLECTION_MS = 12_000
@@ -58,30 +60,31 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
   )
 }
 
-/** Reflection line after a choice (non-judgmental) + Defter link. */
+/** After a choice: the choice, its numbers (Oxanium) and a book icon to the Defter card. The sentence is the tooltip. */
 export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionCard; optionIndex: number; onClose?: () => void }) {
   const opt = card.options[optionIndex]
   if (!opt) return null
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="flex items-center gap-2.5" title={opt.reflection}>
       <IconBadge icon="sparkle" size={32} color="var(--color-kind-concept)" />
       <div className="min-w-0 flex-1">
-        <div className="ui-label">{t('decision.youChose', { v: opt.label })}</div>
-        <p className="font-text mt-0.5 text-sm leading-snug text-ink">{opt.reflection}</p>
-        {opt.conceptId && (
-          <button
-            type="button"
-            onClick={() => {
-              onClose?.()
-              if (opt.conceptId) openConceptCard(opt.conceptId)
-            }}
-            className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
-          >
-            <Icon name="book" size={13} className="text-kind-concept" />
-            {t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
-          </button>
-        )}
+        <div className="ui-label truncate">{t('decision.youChose', { v: opt.label })}</div>
+        <div className="tabular mt-0.5 text-[15px] font-semibold leading-snug text-ink">{effectSummary(opt.effects)}</div>
       </div>
+      {opt.conceptId && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose?.()
+            if (opt.conceptId) openConceptCard(opt.conceptId)
+          }}
+          title={t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
+          aria-label={t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
+          className="grid size-9 shrink-0 place-items-center rounded-control text-kind-concept transition-colors hover:bg-surface-2 max-md:size-11"
+        >
+          <Icon name="book" size={18} />
+        </button>
+      )}
       {onClose && <IconButton icon="close" label={t('common.close')} onClick={onClose} size={44} />}
     </div>
   )

@@ -154,6 +154,7 @@
   --animate-breathe: breathe 1.6s ease-in-out infinite;
   --animate-count: count 300ms ease-out;
   --animate-ambient: ambient 3s ease-in-out both;
+  --animate-rise-float: rise-float 700ms ease-out both;
   --animate-wiggle: wiggle 1.6s ease-in-out infinite;
   --animate-danger-pulse: danger-pulse 1.6s ease-in-out infinite;
   --animate-attention: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both, attention 700ms ease-in-out 260ms 3;
@@ -197,6 +198,13 @@
     0% { opacity: 0; transform: translateY(4px) scale(0.95); }
     10%, 85% { opacity: 1; transform: none; }
     100% { opacity: 0; transform: translateY(-4px); }
+  }
+  /* A founder action's result ("+3 kullanıcı") lifts off its slot and fades: 700 ms, matches FLOAT_MS. */
+  @keyframes rise-float {
+    0% { opacity: 0; transform: translateY(4px); }
+    15% { opacity: 1; transform: translateY(0); }
+    70% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-14px); }
   }
   /* Screen frame: a faint glow runs along the viewport edge once per game day while time flows. */
   @keyframes frame-beat {

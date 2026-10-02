@@ -87,6 +87,15 @@ export const INITIAL_WIDGETS: readonly HudWidget[] = ['cash', 'users', 'morale']
 export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView', 'refactor'] as const
 export type ToolId = (typeof TOOL_IDS)[number]
 
+/** Company policies, the Kanun Kitabı (GAMEPLAY V2 §7.2): signed once, never revoked. Effects live in content/policies.ts. */
+export const POLICY_IDS = [
+  'salary-freeze', 'founder-no-pay', 'lean-office', 'deferred-pay', 'layoff-round',
+  'hire-fast', 'ads-first', 'crunch-culture',
+  'quality-gate', 'remote-first', 'profit-share',
+  'management',
+] as const
+export type PolicyId = (typeof POLICY_IDS)[number]
+
 // ---------------------------------------------------------------------------
 // Ids (plain strings, documented for readability)
 // ---------------------------------------------------------------------------
@@ -799,6 +808,8 @@ export interface DerivedMetrics {
   nextCrisis?: NextCrisis
   /** Founder move budget (GAMEPLAY V2 §7.1); absent in the garage (no budget there). */
   moves?: MovesView
+  /** The Kanun Kitabı (GAMEPLAY V2 §7.2). */
+  policies?: PoliciesView
 }
 
 /** Next crisis on the calendar: the date is known, the id only from CRISIS_TELEGRAPH_DAYS before. */
@@ -975,6 +986,43 @@ export interface StageBaseline {
   minRunway?: number
 }
 
+/**
+ * The Kanun Kitabı (GAMEPLAY V2 §7.2): policies signed, oldest first (never revoked), and the day of the last signature
+ * (POLICY_SIGN_COOLDOWN_DAYS between two). Older saves default lazily to {adopted: [], lastSignedDay: -999}.
+ */
+export interface PolicyState {
+  adopted: PolicyId[]
+  lastSignedDay: number
+  /** Survival policies signed: each adds POLICY_SURVIVAL_EQUITY to every round's equity for good. Missing = 0. */
+  survival?: number
+  /** Wages held back by 'deferred-pay' since the last round close (paid out when the next round closes). Missing = 0. */
+  owed?: number
+}
+
+/**
+ * Policy multipliers and additive terms (GAMEPLAY V2 §7.2). 'salary' scales the payroll, 'founderPay' the founder's
+ * living cost, 'severance' a fire's severance, 'resign' the resignation risk (the quitting morale bar), 'energyRegen'
+ * the founder's energy regen, 'coordination' the coordination loss, 'releaseGap' the days between two updates.
+ */
+export type PolicyKind = ModifierKind | 'salary' | 'infra' | 'energyRegen' | 'coordination' | 'founderPay' | 'severance' | 'resign' | 'releaseGap'
+
+/** The Kanun Kitabı as the engine computed it (state.derived.policies), and the totals content-free paths read. */
+export interface PoliciesView {
+  /** Can be signed now: unlocked, not signed, not excluded by a signed one (the cooldown is nextSignDay). */
+  available: PolicyId[]
+  adopted: PolicyId[]
+  /** First day the next signature is allowed. */
+  nextSignDay: number
+  /** Product of the signed policies' multipliers per kind (missing = 1). */
+  mult: Partial<Record<PolicyKind, number>>
+  /** Weekly moves added (or taken: management) by the signed policies. */
+  movesBonus: number
+  /** Burn multiple the investor tolerates on top of the stage's ask (profit-share). */
+  burnAsk: number
+  /** Monthly wages 'deferred-pay' holds back (owed until the next round close). */
+  payLater: number
+}
+
 /** A stage's report card (GAMEPLAY V2 §9.3), written when the stage is left (round close, Unicorn). */
 export interface StageReport {
   stage: StageIndex
@@ -1085,6 +1133,8 @@ export type GameEventKind =
   | 'paydayAutoResolved'
   /** Third rent deferral: the company is moved out (capacity × EVICTION_CAPACITY, value = the moving cost). */
   | 'eviction'
+  /** A policy was signed (GAMEPLAY V2 §7.2; refId = PolicyId). */
+  | 'policyAdopted'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1199,6 +1249,8 @@ export interface GameState {
   rivals?: Rival[]
   /** Stage report cards (GAMEPLAY V2 §9.3), oldest first (at most STAGE_REPORTS_MAX). Older saves: []. */
   stageReports?: StageReport[]
+  /** Company policies (GAMEPLAY V2 §7.2); older saves default lazily (util.policiesOf). */
+  policies?: PolicyState
 }
 
 // ---------------------------------------------------------------------------
@@ -1239,6 +1291,9 @@ export type Action =
   | { type: 'roundPitch'; pitch: RoundPitch }
   /** The payday desk's answer (GAMEPLAY V2 §6.1); only while finance.pendingPayday waits. */
   | { type: 'resolvePayday'; choice: PaydayChoice }
+  // Company
+  /** Signs a policy of the Kanun Kitabı (GAMEPLAY V2 §7.2): one move, irreversible. */
+  | { type: 'adoptPolicy'; policyId: PolicyId }
 
 export type ActionType = Action['type']
 export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>

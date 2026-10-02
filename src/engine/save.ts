@@ -1,5 +1,5 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE } from './balance'
+import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
 import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt } from './types'
@@ -66,6 +66,8 @@ const MIGRATIONS: Record<number, Migration> = {
     if (founder && (!founder.moves || typeof founder.moves !== 'object') && typeof time?.day === 'number' && typeof st.stage === 'number') {
       founder.moves = { left: movesPerWeek(st as unknown as GameState), weekStart: Math.floor(time.day) }
     }
+    // Company policies (§7.2): none signed; the first signature is not held by a cooldown.
+    if (!st.policies || typeof st.policies !== 'object') st.policies = { adopted: [], lastSignedDay: POLICY_NEVER_SIGNED }
     const game = st as unknown as GameState
     if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st

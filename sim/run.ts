@@ -3,7 +3,7 @@
 // Delivery gate (docs/GAMEPLAY_V2.md §3 md.8): npm run sim -- --seeds 12 --quick 1 --days 3000
 import { writeFileSync } from 'node:fs'
 import { CONTENT } from '../src/content/index'
-import { ARCHETYPES, SECONDS_PER_DAY, balance } from '../src/engine/index'
+import { ARCHETYPES, POLICY_IDS, SECONDS_PER_DAY, balance } from '../src/engine/index'
 import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
@@ -490,7 +490,10 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   crit('Careless iflas (D1 tabanı)', band(careless.filter(failedRun).length, careless.length, 0.3, 1))
   crit('İyi bot iflas (D1: ≤ 1/24 seed başına)', band(goodRuns.filter(failedRun).length, goodRuns.length, 0, 1 / 24))
   const near = goodRuns.filter((r) => r.survivedNearDeath3 !== null)
-  crit('Yakın ölüm yaşayan iyi botların 180 gün sonra hayatta olanı (runway < 3)', band(near.filter((r) => r.survivedNearDeath3).length, near.length, 0.5, 1))
+  // No good run came near death: the line measures nothing, so it is not a pass (n shown either way).
+  const label = 'Yakın ölüm yaşayan iyi botların 180 gün sonra hayatta olanı (runway < 3; F2 ara bant, nihai ≥ %60 T20)'
+  if (near.length === 0) line(`- ${label}: n = 0, ölçülmedi: **HAYIR**`)
+  else crit(label, band(near.filter((r) => r.survivedNearDeath3).length, near.length, 0.55, 1), ` · n = ${near.length}`)
   const shorts = (runs: BotRun[]) => runs.reduce((a, r) => a + r.paydaysShort, 0)
   const defers = (runs: BotRun[]) => runs.reduce((a, r) => a + r.paydayDeferrals, 0)
   line(`- Bilgi (maaş masası): iyi botlar masa ${shorts(goodRuns)} · erteleme ${defers(goodRuns)} · careless masa ${shorts(careless)} · erteleme ${defers(careless)} · greedyGood masa ${shorts(v2('greedyGood'))} · erteleme ${defers(v2('greedyGood'))}`)
@@ -511,6 +514,17 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   const shareAt = (st: number) => median(goodRuns.filter((r) => (r.movesUsedShare[st] ?? 0) > 0).map((r) => r.movesUsedShare[st]!))
   const inC = shareAt(5)
   line(`- Series C'de hamle kullanım payı, iyi botlar (medyan): ${inC === null ? '—' : pct(inC, 1)} (ara hedef ≥ %60, nihai ≥ %70 T20): **${yes(inC !== null && inC >= 0.6)}** · Pre-seed → C ${[1, 2, 3, 4, 5].map((st) => { const v = shareAt(st); return v === null ? '—' : pct(v, 1) }).join(' / ')}`)
+}
+{
+  // GAMEPLAY V2 §7.2 company policies (F2): survival keeps the near-dead alive; no single law dominates.
+  const signed = new Set(goodRuns.flatMap((r) => r.policiesSigned))
+  line(`- Baskın strateji (bilgi): iyi botların en az bir koşuda imzaladığı politika ${signed.size}/${POLICY_IDS.length} (hedef ≥ 8): **${yes(signed.size >= 8)}** · hiç imzalanmayan: ${POLICY_IDS.filter((id) => !signed.has(id)).join(', ') || '—'}`)
+  const per = (runs: BotRun[]) => median(runs.map((r) => r.policiesAdopted)) ?? 0
+  const count = (id: string) => goodRuns.filter((r) => r.policiesSigned.includes(id as BotRun['policiesSigned'][number])).length
+  line(`- Politika / koşu (medyan): iyi ${per(goodRuns)} · greedyGood ${per(v2('greedyGood'))} · careless ${per(careless)} (hedef 0) · imzalayan koşu: ${POLICY_IDS.map((id) => `${id} ${count(id)}`).join(' · ')}`)
+  // §7.2 meant no law to be mandatory: one every good run signs is a balance warning (T20).
+  const always = POLICY_IDS.filter((id) => goodRuns.length > 0 && count(id) === goodRuns.length)
+  line(`- Zorunlu politika yok (bilgi, denge T20): her iyi koşunun imzaladığı ${always.join(', ') || '—'}: **${yes(always.length === 0)}**`)
 }
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)

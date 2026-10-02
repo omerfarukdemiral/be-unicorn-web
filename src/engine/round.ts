@@ -68,11 +68,19 @@ export function roundAmountFor(s: GameState, target: StageIndex, months: number)
   return roundAmountParts(s, target, months).amount
 }
 
-/** Equity sold for a size; each ☆ stage goal takes GOAL_STAR_EQUITY_DISCOUNT off. */
-export function roundEquityFor(target: StageIndex, size: RoundSize, stars: number): number {
+/**
+ * Equity sold for a size; each ☆ stage goal takes GOAL_STAR_EQUITY_DISCOUNT off. `extra`: what the survival policies
+ * signed so far add for good (policyEquity, GAMEPLAY V2 §7.2).
+ */
+export function roundEquityFor(target: StageIndex, size: RoundSize, stars: number, extra = 0): number {
   const base = B.ROUND_EQUITY[target]
   if (base == null) return 0
-  return Math.max(0.02, base * B.ROUND_SIZE_EQUITY[size] - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT)
+  return Math.max(0.02, base * B.ROUND_SIZE_EQUITY[size] - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT) + Math.max(0, extra)
+}
+
+/** Creeping normality (§7.2): POLICY_SURVIVAL_EQUITY more equity in every round per survival policy ever signed. */
+export function policyEquity(s: GameState): number {
+  return (s.policies?.survival ?? 0) * B.POLICY_SURVIVAL_EQUITY
 }
 
 /** MoM growth the investor asks for at the current stage (× 'diligenceMom' modifiers: investor winter, §5.1). */
@@ -106,9 +114,10 @@ export function pitchOption(s: GameState, pitch: RoundPitch): PitchOption {
   }
 }
 
-/** Burn multiple the investor accepts at the current stage (99 before Seed: not asked). */
+/** Burn multiple the investor accepts at the current stage (99 before Seed: not asked), + profit-share's tolerance (§7.2). */
 export function burnAsk(s: GameState): number {
-  return B.DILIGENCE_BM[s.stage] ?? B.DILIGENCE_BM[B.DILIGENCE_BM.length - 1]!
+  const ask = B.DILIGENCE_BM[s.stage] ?? B.DILIGENCE_BM[B.DILIGENCE_BM.length - 1]!
+  return ask >= B.BURN_MULTIPLE_MAX ? ask : ask + (s.derived?.policies?.burnAsk ?? 0)
 }
 
 /**
@@ -262,7 +271,7 @@ export function roundView(s: GameState, stars: number): RoundView | undefined {
     const downFactor = offerFactor(price, diligence, 0, 0)
     view.sizes = ROUND_SIZES.map((size): RoundSizeOption => {
       const amount = roundAmountFor(s, targetStage, B.ROUND_RUNWAY_MONTHS[size])
-      const equity = roundEquityFor(targetStage, size, stars)
+      const equity = roundEquityFor(targetStage, size, stars, policyEquity(s))
       const o: RoundSizeOption = { size, months: B.ROUND_RUNWAY_MONTHS[size], amount, offer: Math.round(amount * view.factor), equity }
       if (down) {
         const downAmount = amount * B.DOWN_ROUND_AMOUNT
@@ -303,7 +312,7 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
   if (B.ROUND_AMOUNT[target] == null || B.ROUND_EQUITY[target] == null || targetValuation == null) return 'roundNotReady'
   const months = B.ROUND_RUNWAY_MONTHS[size]
   const baseAmount = roundAmountFor(s, target, months) * (down ? B.DOWN_ROUND_AMOUNT : 1)
-  const equity = down ? downEquity(roundEquityFor(target, size, stars)) : roundEquityFor(target, size, stars)
+  const equity = down ? downEquity(roundEquityFor(target, size, stars, policyEquity(s))) : roundEquityFor(target, size, stars, policyEquity(s))
   const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
   const diligence = diligenceNow(s)
   const r: RoundState = {
@@ -512,6 +521,12 @@ export function closeRound(s: GameState, content: EngineContent, rng: Rng): void
   }
   syncDebt(s)
   s.stats.cash += r.offer.amount - repay
+  // GAMEPLAY V2 §7.2 deferred-pay: the wages held back since the last close are paid out of the new money.
+  const owed = s.policies?.owed ?? 0
+  if (owed > 0 && s.policies) {
+    s.stats.cash -= owed
+    s.policies.owed = 0
+  }
   s.stats.equity = clamp(0.01, 1, s.stats.equity * (1 - r.offer.equity))
   applyMorale(s, B.ROUND_CLOSE_MORALE)
   s.stats.reputation = clamp(0, 100, s.stats.reputation + B.ROUND_CLOSE_REPUTATION)

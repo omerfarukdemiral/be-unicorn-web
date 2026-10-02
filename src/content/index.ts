@@ -19,6 +19,7 @@ import { METRICS_TEXT } from './metricsText'
 import { ONLINE_TEXT } from './onlineText'
 import { HUD_TEXT } from './hudText'
 import { GOALS, goalsOfStage } from './goals'
+import { POLICIES, REMOTE_FIRST_FLAG } from './policies'
 
 /**
  * Every decision card: the rolled ones, the thread steps and secret cards (GAMEPLAY V2 §9.2) + the crisis cards the
@@ -37,6 +38,7 @@ export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }
 export { GOALS, goalsOfStage }
 export { CRISES, CRISIS_CARDS }
 export { THREAD_CARDS, SECRET_CARDS, TEASERS }
+export { POLICIES, REMOTE_FIRST_FLAG }
 export {
   ACTION_ERROR_TEXT,
   ARCHETYPE_TEXT,
@@ -69,4 +71,5 @@ export const CONTENT: ContentBundle = {
   uiText: UI_TEXT,
   goals: GOALS,
   crises: CRISES,
+  policies: POLICIES,
 }

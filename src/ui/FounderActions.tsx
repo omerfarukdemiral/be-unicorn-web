@@ -1,18 +1,21 @@
-// Active founder actions (PLAN §4.4): energy, cooldown rings, stage locks, saturation "½".
-// The logic lives here (`useFounderActions`); the bottom bar draws it (layout/FounderBar.tsx, docs/LAYOUT.md §1):
-// labelled chips on desktop (icon + short label), icons on phones; one neutral shape, the hue only on the icon.
+// Active founder actions as ability slots (docs/GAMEPLAY_V2.md §10.4): energy and cooldown in the garage, the weekly
+// move budget from Pre-seed (§7.1), stage locks as grey silhouettes with the stage pill + teaser (§9.4), saturation "½".
+// The logic lives here (`useFounderActions`); the bottom bar draws it (layout/FounderBar.tsx): one 44px square per
+// action, the hue only on the icon, the name only in the tooltip.
 // Colours (docs/LAYOUT.md §4.1): low energy is a WARNING (energy / energy-ink), never red.
-import { useRef } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { FOUNDER_ACTION_DEFS } from '../engine/balance'
 import { founderActionError, refactorDebtCut } from '../engine/founder'
-import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind } from '../engine/types'
-import { STAGES } from '../content'
+import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind, type MovesView } from '../engine/types'
+import { STAGES, TEASERS } from '../content'
 import { panelSelection, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
-import { Bar, cx, Ring } from './primitives'
+import { Bar, cx } from './primitives'
 import { money } from './format'
 import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone } from './theme'
+import { guidedSlot } from './guidance'
 
 /** "+3–6", or "+1" when both ends are the same (never "+1–1"). */
 function range(a: number, b: number, f: (v: number) => string = String): string {
@@ -20,6 +23,8 @@ function range(a: number, b: number, f: (v: number) => string = String): string 
 }
 
 export const LOW_ENERGY = 20
+/** Ms a tapped locked slot keeps its teaser up (touch has no hover). */
+export const PEEK_MS = 2600
 
 export interface FounderActionView {
   kind: FounderActionKind
@@ -31,14 +36,24 @@ export interface FounderActionView {
   /** 0–1 of the cooldown left. */
   cdFrac: number
   saturated: boolean
-  /** Long label (tooltip, aria): the action + why it is unavailable or what it returns. */
+  /** Moves it takes this week (0 in the garage or for a free action). */
+  moves: number
+  /** The week's moves do not cover it: still tappable, the engine answers "Haftaya". */
+  outOfMoves: boolean
+  /** The next step points here (the slot breathes, GAMEPLAY V2 §11). */
+  guided: boolean
+  /** Locked: the stage that opens it (the pill). */
+  stageName: string
+  /** Slot name (≤ 2 words, tooltip only). */
+  name: string
+  /** Long label (aria): the action + why it is unavailable or what it returns. */
   label: string
-  /** Short visible hover tip. */
+  /** Tooltip line under the name: the return preview, or the teaser of the stage that opens a locked slot. */
   tip: string
   run: () => void
 }
 
-export function useFounderActions(): { energy: number; low: boolean; actions: FounderActionView[] } {
+export function useFounderActions(): { energy: number; low: boolean; moves: MovesView | undefined; day: number; actions: FounderActionView[] } {
   const f = useGameStore(
     useShallow((s) => ({
       energy: s.state.founder.energy,
@@ -77,10 +92,12 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
   const refactorText = t('founder.refactorSprint.preview', { n: refactorCut })
   // Talking on a finished product feeds the next update (engine founder.ts), not maturity.
   const allDone = useGameStore((s) => s.state.projects.length > 0 && s.state.projects.every((p) => p.maturity >= 1))
+  const moves = useGameStore(useShallow((s) => s.state.derived.moves))
+  const guided = useGameStore((s) => guidedSlot(s.state))
   const dispatch = useGameStore((s) => s.dispatch)
   const selection = useGameStore(useShallow((s) => panelSelection(s.ui.panel)))
   const projects = useGameStore(useShallow((s) => s.state.projects))
-  // Remember when each cooldown started so the ring can show the fraction left.
+  // Remember when each cooldown started so the slot line can show the fraction left.
   const cdStart = useRef<Partial<Record<FounderActionKind, { start: number; end: number }>>>({})
 
   const run = (kind: FounderActionKind) => {
@@ -107,9 +124,11 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
     const runFrac = running && f.current ? (f.day - f.current.startDay) / Math.max(0.01, f.current.endDay - f.current.startDay) : 0
     const err = errors[kind]
     const disabled = locked || f.over || cdFrac > 0 || (busy && !running) || (!running && err !== null)
+    const outOfMoves = !locked && !f.over && !busy && err === 'noMoves'
+    const stageName = STAGES[unlockStage]?.name ?? ''
     const action = t(`founder.${kind}`)
     const label = locked
-      ? t('founder.lockedAt', { action, stage: STAGES[unlockStage]?.name ?? '' })
+      ? t('founder.lockedAt', { action, stage: stageName })
       : cdFrac > 0 && cdEnd !== undefined
         ? t('founder.cooldown', { action, d: Math.max(1, Math.ceil(cdEnd - f.day)) })
         : err === 'noEnergy'
@@ -128,80 +147,159 @@ export function useFounderActions(): { energy: number; low: boolean; actions: Fo
                     ? `${action}: ${refactorText}`
                     : `${action}: ${t(`founder.${kind}.desc`)}`
     const tip = locked
-      ? label
-      : kind === 'findUsers' && findText
-        ? findText
-        : kind === 'salesCall' && salesText
-          ? salesText
+      ? (TEASERS[(unlockStage - 1) as keyof typeof TEASERS] ?? '')
+      : kind === 'findUsers' && find
+        ? t('slot.findTip', { r: findRange })
+        : kind === 'salesCall' && sales
+          ? t('slot.salesTip', { r: range(sales.min, sales.max, money) })
           : kind === 'refactorSprint'
-            ? refactorText
-            : action
+            ? t('slot.debtCut', { n: refactorCut })
+            : ''
     const saturated = !locked && ((kind === 'findUsers' && findSaturated) || (kind === 'salesCall' && salesSaturated))
-    return { kind, locked, disabled, running, runFrac, cdFrac, saturated, label, tip, run: () => run(kind) }
+    return {
+      kind,
+      locked,
+      disabled,
+      running,
+      runFrac,
+      cdFrac,
+      saturated,
+      moves: moves ? FOUNDER_ACTION_DEFS[kind].moves : 0,
+      outOfMoves,
+      guided: guided === kind && !locked,
+      stageName,
+      name: t(`slot.${kind}`),
+      label,
+      tip,
+      run: () => run(kind),
+    }
   })
-  return { energy: f.energy, low: f.energy < LOW_ENERGY, actions }
+  return { energy: f.energy, low: f.energy < LOW_ENERGY, moves, day: f.day, actions }
 }
 
+/** Slot size (px): 44 everywhere (the phone row is 44 tall; touch targets stay ≥ 44, docs/GAMEPLAY_V2.md §10.4). */
+export const SLOT = 44
+
 /**
- * One action. `chip`: h40 icon + short label (desktop bottom bar); `icon`: 44 round icon (phones, landscape).
- * One neutral family (docs/DESIGN.md: neutral surfaces + indicator colour): every action, available or not, is the
- * same surface-2 shape; the action's hue is only on its icon. Running / cooldown = one 2px line along the bottom
- * edge (chip) or a ring (icon); a locked action keeps the same shape with a lock icon. `tipAlign` keeps tips on screen.
+ * One ability slot (docs/GAMEPLAY_V2.md §10.4): a 44px square, icon 22 in the action's hue, the move cost top right
+ * (on the budget), saturation "½" top left, running / cooldown as a 2px line along the bottom edge. No visible label:
+ * the name (≤ 2 words) lives in the tooltip. Locked = grey silhouette + lock + the unlocking stage's pill; a tap shows
+ * the teaser and opens nothing. `tipAlign` keeps tips on screen. `floats`: numbers rising above the slot.
+ * Exported pieces are pure props (no store): FloatingNumber.test.tsx renders a slot to a string.
  */
-export function FounderActionButton({ a, variant, tipAlign = 'center' }: { a: FounderActionView; variant: 'chip' | 'icon'; tipAlign?: 'left' | 'center' }) {
+export function FounderSlot({
+  a,
+  tipAlign = 'center',
+  floats,
+  onPeek,
+}: {
+  a: FounderActionView
+  tipAlign?: 'left' | 'center'
+  floats?: ReactNode
+  /** Phones: the row scrolls (it would clip the tip), so the bar shows a tapped locked slot's tip itself. */
+  onPeek?: (a: FounderActionView) => void
+}) {
   const hue = FOUNDER_COLOR[a.kind]
-  const chip = variant === 'chip'
-  const size = chip ? 40 : 44
   const idle = a.disabled && !a.running
   const frac = a.running ? a.runFrac : a.cdFrac > 0 && !a.locked ? 1 - a.cdFrac : null
+  const [peek, setPeek] = useState(false)
+  useEffect(() => {
+    if (!peek) return
+    const id = window.setTimeout(() => setPeek(false), PEEK_MS)
+    return () => window.clearTimeout(id)
+  }, [peek])
+  const onClick = () => {
+    // Locked: show what opens it, never a panel. Out of moves: the engine answers ("Haftaya", strip 2.6 s).
+    if (a.locked) return onPeek ? onPeek(a) : setPeek(true)
+    if (a.outOfMoves) return a.run()
+    if (!a.disabled) a.run()
+  }
   return (
-    <button
-      type="button"
-      onClick={a.run}
-      disabled={a.disabled}
-      aria-label={a.label}
-      title={chip ? undefined : a.label}
-      className={cx(
-        'group relative inline-flex shrink-0 items-center justify-center border border-border bg-surface-2 transition-colors',
-        chip ? 'gap-1.5 rounded-control pl-2.5 pr-3' : 'rounded-full',
-        a.running && 'border-border-strong',
-        !a.disabled && 'hover:border-border-strong hover:bg-surface active:scale-[0.97]',
-        idle && 'bg-transparent',
-      )}
-      style={{ height: size, ...(chip ? null : { width: size }) }}
-    >
-      {!chip && frac !== null && <Ring value={a.running ? a.runFrac : a.cdFrac} size={size} stroke={2} tone={a.running ? hue : 'var(--color-ink-3)'} />}
-      <Icon
-        name={a.locked ? 'lock' : FOUNDER_ICON[a.kind]}
-        size={chip ? 18 : 20}
-        className={cx('shrink-0', idle && 'text-ink-3')}
-        style={idle ? undefined : { color: iconTone(hue) }}
-      />
-      {chip && <span className={cx('whitespace-nowrap text-[13px] font-semibold', idle ? 'text-ink-3' : 'text-ink')}>{t(`founder.short.${a.kind}`)}</span>}
-      {chip && frac !== null && (
-        // The one progress treatment on chips: a 2px line along the bottom edge (running in the hue, cooldown in ink).
-        <span aria-hidden="true" className="absolute inset-x-2 bottom-[3px] h-[2px] overflow-hidden rounded-full bg-border">
-          <span className="block h-full rounded-full" style={{ width: `${Math.round(frac * 100)}%`, background: a.running ? hue : 'var(--color-ink-3)' }} />
-        </span>
-      )}
-      {a.saturated && (
-        // Saturated: a small amber "½" so the diminishing return is visible before the click.
-        <span aria-hidden="true" className="tabular absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-energy-ink px-0.5 text-[9px] font-bold leading-none text-on-ink">
-          ½
-        </span>
-      )}
-      {chip && (
+    <span className="relative inline-flex shrink-0">
+      {floats}
+      <button
+        type="button"
+        onClick={onClick}
+        aria-disabled={a.disabled || undefined}
+        aria-label={a.label}
+        data-slot={a.kind}
+        className={cx(
+          'group relative grid shrink-0 place-items-center rounded-control border transition-colors',
+          a.locked ? 'border-dashed border-border-strong bg-transparent' : 'border-border bg-surface-2',
+          a.running && 'border-border-strong',
+          !a.disabled && 'hover:border-border-strong hover:bg-surface active:scale-[0.96]',
+          idle && !a.locked && 'bg-transparent',
+          a.guided && !a.disabled && 'animate-breathe border-brand',
+        )}
+        style={{ width: SLOT, height: SLOT }}
+      >
+        <Icon
+          name={FOUNDER_ICON[a.kind]}
+          size={a.locked ? 18 : 22}
+          className={cx('shrink-0', a.locked ? '-mt-2.5 text-ink-3 opacity-40' : idle && 'text-ink-3')}
+          style={idle ? undefined : { color: iconTone(hue) }}
+        />
+        {a.locked && (
+          <>
+            <span aria-hidden="true" className="absolute right-0.5 top-0.5 text-ink-2">
+              <Icon name="lock" size={11} />
+            </span>
+            {/* The stage that opens it: a small pill along the bottom edge (inside: the phone row clips). */}
+            <span aria-hidden="true" className="tabular absolute bottom-[3px] left-1/2 max-w-[40px] -translate-x-1/2 truncate whitespace-nowrap rounded-full bg-surface-2 px-1 text-[8px] font-bold uppercase leading-3 text-ink-2">
+              {a.stageName}
+            </span>
+          </>
+        )}
+        {!a.locked && a.moves > 0 && (
+          // Move cost (GAMEPLAY V2 §7.1): Oxanium figure in the top-right corner.
+          <span aria-hidden="true" className={cx('tabular absolute right-[3px] top-[2px] text-[10px] font-bold leading-none', a.outOfMoves ? 'text-ink-3' : 'text-ink-2')}>
+            {a.moves}
+          </span>
+        )}
+        {frac !== null && (
+          // The one progress treatment: a 2px line along the bottom edge (running in the hue, cooldown in ink).
+          <span aria-hidden="true" className="absolute inset-x-1.5 bottom-[3px] h-[2px] overflow-hidden rounded-full bg-border">
+            <span className="block h-full rounded-full" style={{ width: `${Math.round(frac * 100)}%`, background: a.running ? hue : 'var(--color-ink-3)' }} />
+          </span>
+        )}
+        {a.saturated && (
+          // Saturated: a small amber "½" so the diminishing return is visible before the click.
+          <span aria-hidden="true" className="tabular absolute -left-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-energy-ink px-0.5 text-[9px] font-bold leading-none text-on-ink">
+            ½
+          </span>
+        )}
         <span
           role="tooltip"
           className={cx(
-            'pointer-events-none absolute bottom-[calc(100%+8px)] z-10 hidden max-w-[320px] whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[11px] font-semibold text-on-ink shadow-pop group-hover:block group-focus-visible:block',
+            'pointer-events-none absolute bottom-[calc(100%+8px)] z-20 max-w-[280px] flex-col gap-0.5 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-left text-[11px] font-semibold text-on-ink shadow-pop group-hover:flex group-focus-visible:flex',
+            peek ? 'flex' : 'hidden',
             tipAlign === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2',
           )}
         >
-          {a.tip}
+          <span>{a.name}</span>
+          {a.tip && <span className="tabular font-medium opacity-80">{a.tip}</span>}
+        </span>
+      </button>
+    </span>
+  )
+}
+
+/** Weekly moves (GAMEPLAY V2 §7.1, from Pre-seed): pips + "3/4"; the refill day in the title. Empty week = ink-3. */
+export function MovesMeter({ moves, day, compact }: { moves: MovesView; day: number; compact?: boolean }) {
+  const d = Math.max(1, Math.ceil(moves.resetDay - day))
+  const title = t('moves.title', { l: moves.left, t: moves.total, d })
+  const empty = moves.left <= 0
+  return (
+    <div className="flex shrink-0 items-center gap-1.5" title={title} aria-label={title}>
+      {!compact && (
+        <span aria-hidden="true" className="flex items-center gap-[3px]">
+          {Array.from({ length: moves.total }, (_, i) => (
+            <span key={i} className={cx('h-3 w-1.5 rounded-[2px]', i < moves.left ? 'bg-brand' : 'bg-border')} />
+          ))}
         </span>
       )}
-    </button>
+      <span className={cx('tabular text-[13px] font-semibold', empty ? 'text-ink-3' : 'text-ink')}>{t('moves.count', { l: moves.left, t: moves.total })}</span>
+    </div>
   )
 }
 

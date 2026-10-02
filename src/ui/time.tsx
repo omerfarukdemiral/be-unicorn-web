@@ -197,7 +197,8 @@ export function PauseVeil() {
   )
 }
 
-/** One clear call on a paused start: the stage goal + a big Başlat (Space / 1 / 2 / 3 work too). Centred in the
+/** One clear call on a paused start: the stage goal as a number, one sentence and a big Başlat (Space / 1 / 2 / 3 work
+ * too; docs/GAMEPLAY_V2.md §10.1 D1-D2: the number is the biggest thing, the sentence the only one). Centred in the
  * scene area between the bars (store.ui.sceneInset, viewport px: hence `fixed`). */
 export function StartCall() {
   const mobile = useIsMobile()
@@ -213,17 +214,19 @@ export function StartCall() {
   // Phones: an open sheet (Liderlik, Yol haritası…) owns the screen; the top bar's play button still starts time.
   if (!s.show || (mobile && s.panelOpen)) return null
   const next = STAGES[s.stage + 1]
-  const goal = next?.targetValuation ? t('time.startGoal', { stage: STAGES[s.stage]?.name ?? '', v: money(next.targetValuation) }) : null
   return (
     <div className="pointer-events-none fixed left-0 z-10 grid place-items-center px-4" style={{ top: inset.top, right: inset.right, bottom: inset.bottom }}>
-      <div className="pointer-events-auto flex w-full max-w-[340px] animate-pop-in flex-col items-center gap-3 rounded-card border border-border bg-surface/95 p-5 text-center shadow-pop">
-        {goal && (
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2 py-1 text-xs font-semibold text-brand-ink">
-            <Icon name="flag" size={13} />
-            {goal}
-          </span>
-        )}
-        <p className="text-base font-semibold leading-tight text-ink">{t('time.startTitle')}</p>
+      <div className="pointer-events-auto flex w-full max-w-[320px] animate-pop-in flex-col items-center gap-3 rounded-card border border-border bg-surface/95 p-5 text-center shadow-pop">
+        {next?.targetValuation ? (
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="ui-label inline-flex items-center gap-1 text-brand-ink">
+              <Icon name="flag" size={12} />
+              {t('start.goalLabel', { stage: STAGES[s.stage]?.name ?? '' })}
+            </span>
+            <span className="tabular text-[28px] font-bold leading-none text-ink">{money(next.targetValuation)}</span>
+          </div>
+        ) : null}
+        <p className="text-[15px] font-semibold leading-tight text-ink-2">{t('time.startTitle')}</p>
         <button
           type="button"
           onClick={() => dispatch({ type: 'setSpeed', speed: 1 })}

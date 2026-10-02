@@ -3,7 +3,6 @@
 export const TIME_TEXT: Record<string, string> = {
   'time.start': 'Başlat',
   'time.startTitle': 'Hazır olunca zamanı başlat',
-  'time.startGoal': '{stage} hedefi: {v} değerleme',
   'time.startKey': 'ya da Space',
   'time.paused': 'Duraklatıldı',
   'time.pausedShort': 'Durdu',

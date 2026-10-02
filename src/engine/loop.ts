@@ -7,7 +7,7 @@ import { applyMorale, loanOf, syncDebt } from './effects'
 import { lastUpdateDay, owedTotal } from './loopSelectors'
 import { yearlyRaises } from './people'
 import { DAYS_PER_MONTH, type GameState, type MonthLedger, type MonthReceipt, type PaydayChoice, type PendingPayday, type Project, type ReleaseEntry } from './types'
-import { newId, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
+import { newId, policiesOf, policyMult, policySum, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 import { directorOf, graceAfterMissedPayroll } from './world'
 
 const emptyLedger = (): MonthLedger => ({ revenue: 0, salaries: 0, rent: 0, infra: 0, ads: 0, founder: 0 })
@@ -34,6 +34,12 @@ export function accrueMonth(s: GameState, dt: number): void {
   l.ads += bb.ads * k
   l.founder = (l.founder ?? 0) + (bb.founder ?? 0) * k
   s.stats.cash += revenue
+  // GAMEPLAY V2 §7.2 deferred-pay: the wages held back are owed, paid when the next round closes.
+  const later = s.derived.policies?.payLater ?? 0
+  if (later > 0) {
+    const p = policiesOf(s)
+    p.owed = (p.owed ?? 0) + later * k
+  }
 }
 
 /**
@@ -63,8 +69,11 @@ export function payday(s: GameState, content: EngineContent): void {
   // On the desk before the covenant check: the month waiting is still owed, so runway judges it as a paid month would.
   const desk: PendingPayday | null = short ? { day: Math.floor(s.time.day), ledger: l, deferredBefore, interest: loan.interest, runwayBefore } : null
   if (desk) s.finance.pendingPayday = desk
-  // The month is paid at the old salaries; a raise earned today shows on the next receipt.
-  yearlyRaises(s)
+  // The month is paid at the old salaries; a raise earned today shows on the next receipt (salary-freeze: none).
+  yearlyRaises(s, content)
+  // crunch-culture (§7.2): the month's shortcuts land as tech debt.
+  const debt = policySum(s, content, 'techDebtMonthly')
+  if (debt > 0) s.techDebt = (s.techDebt ?? 0) + debt
   recomputeDerived(s, content)
   // A covenant call is principal leaving today: it goes on the receipt with the instalment (the receipt reconciles).
   loan.repay += checkCovenant(s, content)
@@ -468,10 +477,12 @@ function ship(s: GameState, content: EngineContent, p: Project, level: number, u
 /**
  * Release moment: a project passing a maturity threshold ships a version (MVP, then 40/60/80/100%) and a user
  * wave walks in; MRR jumps with it. After 1.0 its builders ship updates (RELEASE_UPDATE_SIZE of work, at most one per
- * RELEASE_UPDATE_MIN_DAYS), so the beat keeps coming in every stage. A project seen for the first time (old save) is
+ * RELEASE_UPDATE_MIN_DAYS × the policies' releaseGap), so the beat keeps coming in every stage. A project seen for the first time (old save) is
  * set silently.
  */
 export function checkReleases(s: GameState, content: EngineContent): void {
+  // quality-gate (§7.2): updates come further apart.
+  const gap = B.RELEASE_UPDATE_MIN_DAYS * policyMult(s, content, 'releaseGap')
   for (const p of s.projects) {
     const lvl = releaseLevel(p.maturity)
     if (p.releaseLevel === undefined) {
@@ -484,7 +495,7 @@ export function checkReleases(s: GameState, content: EngineContent): void {
       continue
     }
     if (p.maturity < 1 || (p.updateProgress ?? 0) < B.RELEASE_UPDATE_SIZE - 1e-9) continue
-    if (s.time.day - lastUpdateDay(s, p.id) < B.RELEASE_UPDATE_MIN_DAYS) continue
+    if (s.time.day - lastUpdateDay(s, p.id) < gap) continue
     p.updateProgress = 0
     p.updates = (p.updates ?? 0) + 1
     ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s), p.updates)

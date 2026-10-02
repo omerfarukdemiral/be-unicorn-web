@@ -83,10 +83,14 @@ export function onMoveBudget(s: GameState): boolean {
   return s.stage >= B.MOVES_FROM_STAGE
 }
 
-/** This week's moves at the current stage (the garage counts as Pre-seed: arriving there mid-week finds a full week). */
+/**
+ * This week's moves at the current stage (the garage counts as Pre-seed: arriving there mid-week finds a full week),
+ * plus the signed policies' bonus (crunch-culture +1, management −1; GAMEPLAY V2 §7.2), at least 1.
+ */
 export function movesPerWeek(s: GameState): number {
   const table = B.MOVES_PER_WEEK
-  return table[Math.max(B.MOVES_FROM_STAGE, s.stage)] ?? table[table.length - 1]!
+  const base = table[Math.max(B.MOVES_FROM_STAGE, s.stage)] ?? table[table.length - 1]!
+  return Math.max(1, base + (s.derived?.policies?.movesBonus ?? 0))
 }
 
 /** The budget, defaulted lazily for older saves (a full week from today). Mutates: engine paths only. */
@@ -253,11 +257,14 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
   pushEvent(s, { kind: 'founderActionDone', refId: run.kind, ...(typeof params.value === 'number' ? { value: params.value } : {}) })
 }
 
-/** Continuous energy regen; rest regenerates faster. On the move budget only rest refills it (a health gauge). */
+/**
+ * Continuous energy regen; rest regenerates faster. On the move budget only rest refills it (a health gauge). The signed
+ * policies slow it (founder-no-pay, crunch-culture × 0.7; GAMEPLAY V2 §7.2).
+ */
 export function regenEnergy(s: GameState, dtDays: number): void {
   const idle = onMoveBudget(s) ? 0 : B.ENERGY_REGEN_PER_DAY
   const rate = s.founder.currentAction?.kind === 'rest' ? B.REST_REGEN_PER_DAY : s.founder.currentAction ? 0 : idle
-  s.founder.energy = clamp(0, B.ENERGY_MAX, s.founder.energy + rate * dtDays)
+  s.founder.energy = clamp(0, B.ENERGY_MAX, s.founder.energy + rate * dtDays * (s.derived?.policies?.mult.energyRegen ?? 1))
 }
 
 export function dailyFounder(s: GameState, day: number): void {

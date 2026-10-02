@@ -1,7 +1,7 @@
 // Bottom bar + the notification strip above it (docs/LAYOUT.md §1.2, §1.4, §3, §6).
-// Desktop: one full-width bar h56 (EDGE 8 from the sides and the bottom): founder energy + labelled actions on the
-// left, panel tabs on the right (labels drop to icons below a 1240px bar, container query). The strip (h40, content
-// max 760, centred) sits 8px above it, left of the panel when the panel is open.
+// Desktop: one full-width bar h56 (EDGE 8 from the sides and the bottom): founder energy + moves + 44px ability slots
+// on the left (names only in tooltips, docs/GAMEPLAY_V2.md §10.4), panel tabs on the right (labels only on a ≥1280px
+// screen). The strip (h40, content max 760, centred) sits 8px above it, left of the panel when the panel is open.
 // Phone: the bar has two rows (actions 44 + tabs 48 = h104); with the sheet open only the tab row stays (h56) and the
 // strip floats 8px above the sheet (it then takes no part in the scene inset). Landscape phone: one row h52, 44px
 // tabs, a side panel (no sheet) and the strip overlaying the scene's bottom edge (no reserved slot).
@@ -50,7 +50,8 @@ export function BottomBar({ layout, sheetOpen = false }: { layout: 'desktop' | '
   return (
     <nav
       aria-label={t('bottom.label')}
-      className="@container ui-card pointer-events-auto flex items-center justify-between gap-4 bg-surface/95 p-2 backdrop-blur-sm"
+      // 5px top/bottom + the 1px hairline: the 44px slots fit the 56px bar (BAR_H unchanged, so is the scene inset).
+      className="@container ui-card pointer-events-auto flex items-center justify-between gap-4 bg-surface/95 px-2 py-[5px] backdrop-blur-sm"
       style={{ height: BAR_H }}
     >
       <FounderBar variant="bar" className="min-w-0" />

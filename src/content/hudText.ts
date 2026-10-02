@@ -8,6 +8,10 @@ export const HUD_TEXT: Record<string, string> = {
   'achv.discovery': 'Keşif',
   'achv.discoveryEmpty': 'Yakında açılır',
 
+  // Guidance (§11): the step chip's count, the paused start's goal label (the number is the value)
+  'step.count': '{i}/{n}',
+  'start.goalLabel': '{stage} hedefi',
+
   // Settings > shortcuts
   'shortcut.achievements': 'Kazanımlar',
   'shortcut.stats': 'İstatistik',

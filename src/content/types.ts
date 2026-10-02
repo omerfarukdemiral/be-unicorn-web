@@ -14,6 +14,8 @@ import type {
   MilestoneId,
   NpcRole,
   OfficeLineId,
+  PolicyId,
+  PolicyKind,
   PostMortemCode,
   ProjectCategory,
   SlotType,
@@ -132,6 +134,65 @@ export interface CrisisDef {
    * state for sizes (rent, burn).
    */
   effects: (s: GameState, severity: number) => EffectBundle
+}
+
+// ---------------------------------------------------------------------------
+// Company policies / Kanun Kitabı (GAMEPLAY V2 §7.2)
+// ---------------------------------------------------------------------------
+
+/** 'org': the management policy (no tree of its own; it opens with the head count). */
+export type PolicyTree = 'growth' | 'craft' | 'survival' | 'org'
+
+/** What a signed policy does, for good. Every term is optional; the engine multiplies / adds over the signed ones. */
+export interface PolicyEffect {
+  mult?: Partial<Record<PolicyKind, number>>
+  /** Added to the morale target. */
+  moraleTarget?: number
+  /** Weekly moves added (negative: taken). */
+  movesBonus?: number
+  /** Candidates added to the hiring pool. */
+  candidates?: number
+  /** Ceiling on a new candidate's quality (salary-freeze: no stars apply). */
+  qualityCap?: number
+  /** No yearly market raise (GAMEPLAY V2 §4.2). */
+  noRaises?: true
+  /** Tech debt added every payday. */
+  techDebtMonthly?: number
+  /** Burn multiple the investor tolerates on top of the stage's ask (due diligence). */
+  burnAsk?: number
+  /** The 'salary' multiplier is wages held back, not saved: owed and paid when the next round closes. */
+  payLater?: true
+  /** Share of the team let go on signing (lowest quality first). */
+  layoff?: number
+  /** One-off effects on signing (reputation, a timed morale target…). */
+  onSign?: EffectBundle
+  /** Flag set to the signing day (threads read it, e.g. crunch-culture → founder-burnout). */
+  flagDay?: string
+}
+
+/** A policy's lock: 'runway' below `value` months, 'stage' / 'team' / 'profitMonths' at least `value`; 'crisis' adds an
+ * earlier way in (lease-hike's remote option). */
+export interface PolicyLock {
+  metric: 'runway' | 'stage' | 'team' | 'profitMonths'
+  value: number
+  crisis?: string
+}
+
+export interface Policy {
+  id: PolicyId
+  tree: PolicyTree
+  tier: 1 | 2 | 3
+  /** Name, ≤ 6 words. */
+  name: string
+  /** What it does, ≤ 12 words (the lawbook card). */
+  text: string
+  /** Pure: can it be signed now. */
+  unlock: (s: GameState) => boolean
+  /** The lock as a number for the lawbook card (runway below / stage at least / team at least / profit months). */
+  lock: PolicyLock
+  /** Signed together never: either one closes the other. */
+  excludes?: readonly PolicyId[]
+  effect: PolicyEffect
 }
 
 // ---------------------------------------------------------------------------
@@ -309,4 +370,6 @@ export interface ContentBundle {
   goals?: readonly StageGoal[]
   /** Crisis calendar pool (GAMEPLAY V2 §5.1); optional so engine fakes run without it. */
   crises?: readonly CrisisDef[]
+  /** Company policies, the Kanun Kitabı (GAMEPLAY V2 §7.2); optional so engine fakes run without it. */
+  policies?: readonly Policy[]
 }

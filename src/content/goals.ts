@@ -1,5 +1,6 @@
 // Optional stage goals (☆, docs/CORE_LOOP.md §4.3): two per stage, never punished when missed.
 // One uses the stage's new verb, one looks at quality. The ★ goal is always the next stage's valuation.
+// `hint` is ≤ 8 words and not rendered (GAMEPLAY V2 §10.5); the field stays for the type.
 // Each reached ☆ takes 1 point off the equity sold in the next round (engine balance GOAL_STAR_EQUITY_DISCOUNT).
 import type { GameState, StageBaseline } from '../engine/types'
 import type { StageGoal } from './types'
@@ -27,7 +28,7 @@ export const GOALS: readonly StageGoal[] = [
     id: 'preseed-v2',
     stage: 1,
     text: 'Bu aşamada 2 sürüm çıkar',
-    hint: 'Sürümler ve güncellemeler kullanıcı dalgası getirir: ekibi ürüne ata.',
+    hint: 'Sürümler kullanıcı dalgası getirir: ekibi ürüne ata.',
     check: (s, b) => releasesSince(s, b) >= 2,
   },
   {
@@ -86,14 +87,14 @@ export const GOALS: readonly StageGoal[] = [
     id: 'c-profit',
     stage: 5,
     text: 'MRR’ı %50 büyüt ve kâra geç',
-    hint: 'Aylık gelir gideri geçince şirket kendi ayakları üstünde durur.',
+    hint: 'Gelir gideri geçince kasa erimez.',
     check: (s, b) => s.finance.mrr >= Math.max(1, b.mrr * 1.5) && s.finance.net > 0,
   },
   {
     id: 'c-full',
     stage: 5,
     text: 'Yeni bir ürünü %60 olgunluğa taşı',
-    hint: 'Bu aşamada başlayan bir ürün, şirketin tek ürüne bağlı olmadığını gösterir.',
+    hint: 'İkinci ürün, tek ürüne bağlı olmadığını gösterir.',
     check: (s, b) => newProjectAt(s, b, 0.6),
   },
 ]

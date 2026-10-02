@@ -68,6 +68,16 @@ export function nextStep(s: GameState): NextStep {
   return step('grow', { progress: clamp01(s.derived.stageProgress), ...(target !== null ? { target } : {}) })
 }
 
+/**
+ * Costs owed right now: the month's ledger, a month waiting on the payday desk and what the desk deferred
+ * (GAMEPLAY V2 §6.1). Runway and the cash projection count all of it: runway does not lie about deferrals.
+ */
+export function owedTotal(s: GameState): number {
+  const l = s.finance.ledger
+  const p = s.finance.pendingPayday
+  return (l ? ledgerCosts(l) : 0) + (p ? ledgerCosts(p.ledger) : 0) + (s.finance.deferred ?? 0)
+}
+
 /** Days until the next payday (1..30) from `day`. */
 export function daysToPayday(day: number): number {
   const next = (Math.floor(day / B.PAYDAY_EVERY_DAYS) + 1) * B.PAYDAY_EVERY_DAYS
@@ -83,7 +93,7 @@ export function nextCrisis(s: GameState): NextCrisis | undefined {
 
 /**
  * The next HORIZON_DAYS: paydays with their projected lump, delayed decision effects (with the source card),
- * release ETAs at today's build speed, the round close and a ready round. Sorted by day. The next crisis looks
+ * release ETAs at today's build speed, the round close and a ready round, the payday desk's last day. Sorted by day. The next crisis looks
  * further (CRISIS_HORIZON_DAYS): "?" until its reveal, then its id.
  */
 export function horizon(s: GameState): HorizonItem[] {
@@ -91,8 +101,7 @@ export function horizon(s: GameState): HorizonItem[] {
   const end = now + B.HORIZON_DAYS
   const out: HorizonItem[] = []
   const burn = s.finance.burn
-  const l = s.finance.ledger
-  const owed = l ? ledgerCosts(l) : 0
+  const owed = owedTotal(s)
   let pay = now + daysToPayday(now)
   let first = true
   while (pay <= end + 1e-9) {
@@ -133,6 +142,9 @@ export function horizon(s: GameState): HorizonItem[] {
   } else if (s.derived.canStartRound) {
     out.push({ kind: 'roundReady', day: now })
   }
+  // §6.1: the desk's countdown (the UI shows it only while the desk is closed).
+  const desk = s.finance.pendingPayday
+  if (desk) out.push({ kind: 'payday', due: true, day: desk.day + B.PAYDAY_DECIDE_DAYS, amount: Math.max(0, owedTotal(s) - s.stats.cash) })
   const crisis = nextCrisis(s)
   if (crisis && crisis.day <= now + B.CRISIS_HORIZON_DAYS) {
     out.push({ kind: 'crisis', day: crisis.day, hidden: crisis.hidden, ...(crisis.id !== undefined ? { crisisId: crisis.id } : {}) })
@@ -154,12 +166,11 @@ interface CashCore {
 }
 
 function cashCore(s: GameState, cashDelta: number, burnDelta: number): CashCore {
-  const l = s.finance.ledger
   const now = s.time.day
   return {
     now,
     first: now + daysToPayday(now),
-    free: s.stats.cash - (l ? ledgerCosts(l) : 0) + cashDelta,
+    free: s.stats.cash - owedTotal(s) + cashDelta,
     net: s.finance.net - burnDelta,
   }
 }

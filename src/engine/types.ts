@@ -108,9 +108,10 @@ export const FOUNDER_SLOT_ID: SlotId = 'founder'
 
 /**
  * GAMEPLAY V2 §5.1 (additive): 'multipleCap' scales the stage's multiple ceiling, 'diligenceMom' the MoM the investor
- * asks for (investor winter); 'capacity' is reserved for the payday desk (§6.1).
+ * asks for (investor winter); 'capacity' scales the servers' capacity (payday desk: infra deferred, eviction; §6.1);
+ * 'rent' scales the rent (landlord-notice).
  */
-export type ModifierKind = 'churn' | 'arpu' | 'production' | 'morale' | 'cac' | 'organic' | 'roundSpeed' | 'multipleCap' | 'diligenceMom' | 'capacity'
+export type ModifierKind = 'churn' | 'arpu' | 'production' | 'morale' | 'cac' | 'organic' | 'roundSpeed' | 'multipleCap' | 'diligenceMom' | 'capacity' | 'rent'
 
 /** Temporary multiplier living in state until `untilDay`. */
 export interface TimedModifier {
@@ -558,6 +559,32 @@ export interface MonthLedger {
   founder?: number
 }
 
+/** GAMEPLAY V2 §6.1: what the payday desk does with each line of a month it cannot pay. Ads cannot be deferred. */
+export interface PaydayChoice {
+  salaries: 'full' | 'half' | 'defer'
+  rent: 'pay' | 'defer'
+  infra: 'pay' | 'defer'
+  /** 'cut' pays this month's ads and sets the budget to 0 from now on. */
+  ads: 'pay' | 'cut'
+  /** 'skip': the founder takes nothing this month (owed like a deferral, and it costs energy). */
+  founder: 'pay' | 'skip'
+}
+
+/** A payday that cash could not cover (§6.1): the month waits on the desk for PAYDAY_DECIDE_DAYS. */
+export interface PendingPayday {
+  /** The payday (game day). */
+  day: number
+  /** The month's costs, still owed (a new ledger accrues the next month meanwhile). */
+  ledger: MonthLedger
+  /** finance.deferred before this payday (paid back with DEFER_INTEREST once cash allows). */
+  deferredBefore: number
+  /** Loan service already taken on the payday (it goes on the receipt when the month closes). */
+  interest?: number
+  loanRepay?: number
+  /** Runway after the previous payday (the receipt's runwayBefore). */
+  runwayBefore?: number | null
+}
+
 /** Month receipt ("ay fişi"): what the month earned and what payday paid, in one line. */
 export interface MonthReceipt {
   /** 0-based index of the month that just closed. */
@@ -574,6 +601,8 @@ export interface MonthReceipt {
   /** Loan interest and principal repaid on this payday (GAMEPLAY V2 §6.2); missing = no loan. */
   interest?: number
   loanRepay?: number
+  /** Owed after this payday (GAMEPLAY V2 §6.1, deferred costs + their interest); missing = nothing owed. */
+  deferred?: number
   /** Costs paid on payday (salaries + rent + infra + ads + founder + loan service). */
   paid: number
   /** revenue − paid. */
@@ -678,6 +707,10 @@ export interface FinanceState {
   netHistory?: number[]
   /** Day the last round closed (v4; idle-cash penalty grace). Undefined = none on record. */
   lastRoundCloseDay?: number
+  /** A payday cash could not cover, waiting on the desk (GAMEPLAY V2 §6.1). */
+  pendingPayday?: PendingPayday
+  /** Costs deferred at the payday desk, owed (counted in owed costs and runway); older saves default lazily to 0. */
+  deferred?: number
 }
 
 /** Main variables (PLAN §5.1). Per-project maturity lives on Project. */
@@ -876,8 +909,13 @@ export interface HorizonItem {
   kind: HorizonKind
   /** Game day it lands (estimate for releases and round close). */
   day: number
-  /** Payday: projected costs. */
+  /** Payday: projected costs (the desk's deadline: the shortfall). */
   amount?: number
+  /**
+   * Payday: the payday desk's last day before its default order applies (GAMEPLAY V2 §6.1). A flag on 'payday', not a
+   * kind of its own, until the horizon UI has a row for it.
+   */
+  due?: boolean
   cardId?: DecisionCardId
   optionIndex?: number
   noteKey?: string
@@ -1022,6 +1060,14 @@ export type GameEventKind =
   | 'loanRepaid'
   /** The investor walked away (GAMEPLAY V2 §6.3; value = the round's target stage). */
   | 'roundFailed'
+  /** Payday cash cannot cover the month (GAMEPLAY V2 §6.1; value = the shortfall): the payday desk opens. */
+  | 'paydayShort'
+  /** The desk was answered (value = deferred after it). */
+  | 'paydayResolved'
+  /** The desk was left PAYDAY_DECIDE_DAYS: the default order paid what it could (value = deferred after it). */
+  | 'paydayAutoResolved'
+  /** Third rent deferral: the company is moved out (capacity × EVICTION_CAPACITY, value = the moving cost). */
+  | 'eviction'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1174,6 +1220,8 @@ export type Action =
   | { type: 'startRound'; size?: RoundSize; down?: boolean }
   /** This week's pitch of the running round (docs/CORE_LOOP.md §4.3). */
   | { type: 'roundPitch'; pitch: RoundPitch }
+  /** The payday desk's answer (GAMEPLAY V2 §6.1); only while finance.pendingPayday waits. */
+  | { type: 'resolvePayday'; choice: PaydayChoice }
 
 export type ActionType = Action['type']
 export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>

@@ -647,3 +647,37 @@ describe('stage report cards (GAMEPLAY V2 §9.3)', () => {
     expect(won.stageReports!.length).toBeLessThanOrEqual(B.STAGE_REPORTS_MAX)
   })
 })
+
+describe('payday desk on the loop (GAMEPLAY V2 §6.1)', () => {
+  it('the desk is deterministic: the same short payday stepped in one go or day by day ends the same', () => {
+    const eve = api.step(withTeam(3), 29.5)
+    const short = { ...eve, stats: { ...eve.stats, cash: eve.finance.ledger!.salaries * 0.6 } }
+    const once = api.step(short, 5)
+    let daily = short
+    for (let i = 0; i < 10; i++) daily = api.step(daily, 0.5)
+    expect(once.finance.pendingPayday).toBeUndefined()
+    expect(daily.finance.deferred).toBeCloseTo(once.finance.deferred!, 6)
+    expect(daily.stats.cash).toBeCloseTo(once.stats.cash, 6)
+    expect(daily.finance.receipts!.length).toBe(once.finance.receipts!.length)
+  })
+
+  it('the desk deadline is on the horizon only while a month waits on the desk', () => {
+    const eve = api.step(withTeam(3), 29.5)
+    expect(horizon(eve).some((h) => (h.kind === 'payday' && h.due))).toBe(false)
+    const desk = api.step({ ...eve, stats: { ...eve.stats, cash: eve.finance.ledger!.salaries * 0.6 } }, 1)
+    const due = horizon(desk).find((h) => (h.kind === 'payday' && h.due))!
+    expect(due.day - desk.time.day).toBeGreaterThan(0)
+    expect(due.day - desk.time.day).toBeLessThanOrEqual(B.PAYDAY_DECIDE_DAYS)
+    expect(due.amount).toBeGreaterThan(0)
+  })
+
+  it('landlord-notice: the engine-queued card within the text budgets, never rolled', () => {
+    const card = CRISIS_CARDS.find((c) => c.id === B.LANDLORD_CARD_ID)!
+    const words = (t: string) => t.trim().split(/\s+/).length
+    expect(card.category).toBe('crisis')
+    expect(card.condition?.(api.createGame({ seed: 1 }))).toBe(false)
+    expect(words(card.question)).toBeLessThanOrEqual(12)
+    for (const o of card.options) expect(words(o.label)).toBeLessThanOrEqual(5)
+    expect(card.options[0]!.effects.modifiers).toEqual([{ kind: 'rent', value: 1.5, days: 180 }])
+  })
+})

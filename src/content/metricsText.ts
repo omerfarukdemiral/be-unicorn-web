@@ -2,7 +2,6 @@
 // Merged into UI_TEXT by the content barrel (index.ts). `hud.*` keys here only ADD wording; the money words follow
 // one definition: Yakıt = the month's total cost, Kâr tahmini = Gelir − Yakıt, Kasa shows the daily net.
 export const METRICS_TEXT: Record<string, string> = {
-  'metrics.intro': 'Öğrendiğin her kavram buraya bir gösterge ekler. En fazla ikisini üst bara sabitleyebilirsin.',
   'metrics.group.pinned': 'Sabitli',
   'metrics.group.money': 'Para',
   'metrics.group.growth': 'Büyüme',
@@ -24,15 +23,15 @@ export const METRICS_TEXT: Record<string, string> = {
   'metrics.cash.bank': 'Bankada',
   'metrics.cash.owed': 'Maaş gününe ayrılan',
   'metrics.cash.usable': 'Kullanılabilir',
-  'metrics.cash.note': 'Üst bardaki Kasa, bankadaki paradan maaş gününe biriken giderler düşülmüş halidir. Altındaki “net/gün” = (Gelir − Yakıt) ÷ 30.',
+  'metrics.cash.note': 'Kasa = bankada − maaş gününe ayrılan',
 
   // One money vocabulary (docs/LAYOUT.md §2.3).
   'hud.netPerDay': 'net {v}/gün',
   'hud.netPerMonth': '{v}/ay',
   'hud.burnSub': 'maaş + kira + kurucu + altyapı + reklam',
-  'hud.burnTitle': 'Yakıt: bir ayın toplam gideri (maaş + kira + kurucu + altyapı + reklam). Gelir düşülmez; gelir düşülmüş hali Kâr tahmini.',
+  'hud.burnTitle': 'Yakıt: ayın toplam gideri, gelir düşülmeden',
   'hud.profitFormula': 'Gelir {mrr} − Yakıt {burn}',
-  'hud.profitTitle': 'Kâr tahmini: aylık Gelir − Yakıt. Eksideyse kasa her ay bu kadar erir.',
+  'hud.profitTitle': 'Kâr tahmini: aylık Gelir − Yakıt',
   'burn.founder': 'Kurucu',
 
   // Merged cards.

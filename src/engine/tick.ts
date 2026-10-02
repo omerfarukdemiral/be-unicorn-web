@@ -6,7 +6,7 @@ import * as E from './economy'
 import { evaluateConcepts } from './concepts'
 import { applyDefaultDecision, applyDueEffects, fireCalendar, maybeShowDecision } from './decisions'
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
-import { accrueMonth, amortizeTechDebt, checkGoals, checkReleases, payday } from './loop'
+import { accrueMonth, amortizeTechDebt, checkGoals, checkPaydayDesk, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
 import { completeFounderAction, dailyFounder, expireContracts, regenEnergy } from './founder'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
@@ -104,6 +104,8 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   s.candidates = s.candidates.filter((c) => c.expiresDay > s.time.day)
   if (day % DAYS_PER_WEEK === 0) fillCandidates(s, content, rng)
   applyDueEffects(s, content)
+  // GAMEPLAY V2 §6.1: a payday desk left unanswered for PAYDAY_DECIDE_DAYS applies the default order.
+  checkPaydayDesk(s, content)
   checkMilestones(s)
   if (day % DAYS_PER_MONTH === 0) {
     monthEnd(s)

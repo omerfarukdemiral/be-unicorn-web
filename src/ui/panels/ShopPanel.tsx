@@ -121,7 +121,6 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
             )
           })}
         </div>
-        {!target && <p className="font-text mb-2 text-[11px] leading-snug text-ink-2">{t('shop.autoHint')}</p>}
         {filter !== 'all' && slotTypeStage(filter) > stage && (
           <p className="font-text mb-2 flex items-center gap-1.5 text-xs text-ink-2">
             <Icon name="lock" size={14} />

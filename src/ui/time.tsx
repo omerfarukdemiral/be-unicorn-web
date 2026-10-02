@@ -89,7 +89,7 @@ export function useRecentSlowdown(): boolean {
 
 /** Focus pause (the game holds time while a card is read), as opposed to the player's own pause. */
 export function isFocusHold(hold: TimeHold): hold is PauseReason {
-  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer'
+  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer' || hold === 'payday'
 }
 
 /**
@@ -233,7 +233,6 @@ export function StartCall() {
           {t('time.start')}
           {!mobile && <kbd className="ml-1 rounded-[6px] border border-on-ink/40 px-1.5 py-0.5 text-[11px] font-semibold opacity-85">Space</kbd>}
         </button>
-        <p className="font-text text-[12px] leading-snug text-ink-2">{t('time.startHint')}</p>
       </div>
     </div>
   )

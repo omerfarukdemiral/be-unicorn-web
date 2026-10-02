@@ -10,15 +10,15 @@ export const TOP_BAR_TEXT: Record<string, string> = {
   // Round: one small chip in the stage section (the only home of the round clock).
   'top.round': 'Tur {w}/{t} hf',
   'top.roundShort': '{w}/{t}',
-  'top.roundTitle': 'Tur sürüyor: {v} hafta kaldı. Büyüme › Tur’da takip et.',
+  'top.roundTitle': 'Tur sürüyor: {v} hafta kaldı',
   'top.roundStart': 'Tur başlat',
   'top.roundStartShort': 'Tur',
   // Kasa: usable money + the daily NET flow (always with the word "net").
   'top.netPerDay': 'net {v}/gün',
   'top.netPerDayShort': 'net {v}/g',
   'top.dateShort': 'A{m}·G{d}',
-  'top.cashTitle': 'Kullanılabilir para {v}. Kasada {bank}; maaş gününe {owed} ayrıldı. Her gün net akış kadar değişir; maaş günü ödeme kasadan çıkar.',
-  'top.cashTitleNoOwed': 'Kullanılabilir para {v}. Her gün net akış kadar değişir.',
+  'top.cashTitle': 'Kullanılabilir {v} · kasada {bank} · ayrılan {owed}',
+  'top.cashTitleNoOwed': 'Kullanılabilir para {v}',
   'top.debt': 'Borç: {v}',
   'top.bankrupt': 'Maaş ödenemedi: iflasa {v} gün',
   // Runway: months the usable money lasts at this burn.

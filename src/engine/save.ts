@@ -52,6 +52,9 @@ const MIGRATIONS: Record<number, Migration> = {
     if (debtFin && !debtFin.loan && typeof debtFin.debt === 'number' && debtFin.debt > 0 && typeof time?.day === 'number') {
       debtFin.loan = newLoan(time.day, debtFin.debt, LOAN_LEGACY_RATE, LOAN_LEGACY_MONTHS, LOAN_LEGACY_COVENANT)
     }
+    // Payday desk (§6.1): nothing deferred, no month waiting on the desk.
+    const deskFin = finance as { deferred?: unknown } | undefined
+    if (deskFin && typeof deskFin.deferred !== 'number') deskFin.deferred = 0
     // Rounds can fail (§6.3): a running round starts with no strikes; its snapshot is taken on the next week.
     const round = st.round as { strikes?: unknown } | undefined
     if (round && typeof round === 'object' && typeof round.strikes !== 'number') round.strikes = 0

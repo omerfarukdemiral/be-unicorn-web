@@ -3,7 +3,7 @@ import * as B from './balance'
 import * as E from './economy'
 import { loanMonthlyService } from './effects'
 import { findUsersPreview, salesCallPreview } from './founder'
-import { horizon, nextCrisis, nextStep } from './loopSelectors'
+import { horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, type Dept, type Employee, type GameState, type ProjectId, type ValuationBreakdown } from './types'
@@ -79,10 +79,9 @@ export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, numbe
   return rates
 }
 
-/** Costs accrued since the last payday (still to be paid). */
+/** Costs still to be paid: accrued since the last payday, a month on the payday desk, deferrals (GAMEPLAY V2 §6.1). */
 export function owedCosts(s: GameState): number {
-  const l = s.finance.ledger
-  return l ? E.ledgerCosts(l) : 0
+  return owedTotal(s)
 }
 
 export function averageLaunchedMaturity(s: GameState): number {
@@ -100,6 +99,7 @@ export function globalMoraleTarget(s: GameState, o: Outputs, overload: number): 
     cashNegative: s.stats.cash < 0,
     overload,
     coordinationPenalty: (1 - o.coordination) * B.COORDINATION_MORALE_FACTOR,
+    wagesOwed: s.flags['wagesOwed'] === true,
   })
 }
 
@@ -113,7 +113,8 @@ export function employeeMoraleTarget(s: GameState, content: EngineContent, e: Em
 export function recomputeDerived(s: GameState, content: EngineContent): Outputs {
   const o = computeOutputs(s, content)
   const avgMat = averageLaunchedMaturity(s)
-  const cap = E.capacity(o.deptCounts.eng, o.fx.capacityMult)
+  // GAMEPLAY V2 §6.1: deferred infra or an eviction leaves fewer servers for a while.
+  const cap = E.capacity(o.deptCounts.eng, o.fx.capacityMult * modifierMult(s, 'capacity'))
   const over = E.overload(s.stats.users, cap)
 
   // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
@@ -141,7 +142,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     modifierMult(s, 'churn')
 
   const salaries = s.employees.reduce((a, e) => a + e.salary, 0)
-  const rent = E.rent(s.stage, openExtraRingCount(s.office))
+  const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent')
   const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult) + o.fx.upkeep
   const living = E.founderLiving(s.stage)
   const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living)

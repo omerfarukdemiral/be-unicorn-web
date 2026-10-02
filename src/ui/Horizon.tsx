@@ -23,9 +23,17 @@ export const HORIZON_KIND: Record<HorizonItem['kind'], { icon: IconName; color: 
   crisis: { icon: 'warning', color: 'var(--color-g-burn)' },
 }
 
+/** A month waiting on the payday desk (§6.1) is the one payday that is danger: red, with its countdown. */
+const PAYDAY_DUE = { icon: 'cash' as IconName, color: 'var(--color-negative)' }
+
+export function horizonKindOf(h: HorizonItem): { icon: IconName; color: string } {
+  return h.kind === 'payday' && h.due ? PAYDAY_DUE : HORIZON_KIND[h.kind]
+}
+
 export function horizonLabel(h: HorizonItem, projectName: (id: string | undefined) => string): string {
   switch (h.kind) {
     case 'payday':
+      if (h.due) return t('horizon.paydayDue', { v: `−${money(h.amount ?? 0)}` })
       return t('horizon.payday', { v: `−${money(h.amount ?? 0)}` })
     case 'delayed': {
       const label = optionLabel(h.cardId, h.optionIndex)
@@ -54,6 +62,7 @@ function crisisName(h: HorizonItem): string {
 }
 
 export function horizonItemText(h: HorizonItem, days: number, short = false): string {
+  if (h.kind === 'payday' && h.due) return t('horizon.item.paydayDue', { d: whenLabel(days, short) })
   return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short), ...(h.kind === 'crisis' ? { v: crisisName(h) } : {}) })
 }
 
@@ -67,13 +76,14 @@ function useHorizon() {
   )
 }
 
-/** One item per kind, nearest first (two paydays / three releases would only repeat the same word). */
+/** One item per kind, nearest first (two paydays / three releases would only repeat the same word); the desk's deadline is its own kind. */
 function firstOfEachKind(items: readonly HorizonItem[]): HorizonItem[] {
-  const seen = new Set<HorizonItem['kind']>()
+  const seen = new Set<string>()
   const out: HorizonItem[] = []
   for (const h of [...items].sort((a, b) => a.day - b.day)) {
-    if (seen.has(h.kind)) continue
-    seen.add(h.kind)
+    const key = h.kind === 'payday' && h.due ? 'paydayDue' : h.kind
+    if (seen.has(key)) continue
+    seen.add(key)
     out.push(h)
   }
   return out
@@ -91,7 +101,7 @@ export function HorizonMini({ max = 3, compact, className }: { max?: number; com
   const name = (id: string | undefined) => projects.find((p) => p.id === id)?.name ?? ''
   const title = list.map((h) => `${whenLabel(h.day - day)} · ${horizonLabel(h, name)}`).join('\n')
   if (compact) {
-    const k = HORIZON_KIND[first.kind]
+    const k = horizonKindOf(first)
     return (
       <span className={cx('tabular inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-ink', className)} title={title}>
         <span className="grid size-5 shrink-0 place-items-center rounded-md" style={{ color: k.color, background: soft(k.color, 14) }}>
@@ -126,7 +136,7 @@ export function HorizonList() {
   return (
     <ul className="flex flex-col">
       {list.map((h, i) => {
-        const k = HORIZON_KIND[h.kind]
+        const k = horizonKindOf(h)
         return (
           <li key={`${h.kind}-${i}-${Math.round(h.day)}`} className="flex items-center gap-2 px-2 py-1.5">
             <span className="grid size-6 shrink-0 place-items-center rounded-[7px]" style={{ color: k.color, background: soft(k.color, 14) }}>

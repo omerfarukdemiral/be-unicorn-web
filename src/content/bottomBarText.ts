@@ -25,6 +25,7 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
 
   // Horizon (readable text, nearest first): "Maaş günü 8 gün · Sürüm ~4 gün"
   'horizon.item.payday': 'Maaş günü {d}',
+  'horizon.item.paydayDue': 'Maaş kararı {d}',
   'horizon.item.release': 'Sürüm ~{d}',
   'horizon.item.roundClose': 'Tur kapanışı ~{d}',
   'horizon.item.delayed': 'Karar etkisi {d}',

@@ -47,6 +47,31 @@ Bu belge Defter kartları (Kazanımlar) için yazıldı. Balon, karar kartı ve 
 
 Balon ile Ne? aynı şeyi iki kez söylemez. Balon hissi taşır, Ne? adı koyar, Kural eylemi söyler.
 
+
+### 3.1 Arayüz metni bütçeleri (GAMEPLAY V2 §3 md.5, §11)
+
+Ekranda aynı anda tek okunacak cümle. Açıklama paragrafı yazılmaz; sayı `derived`'dan gösterilir, metin yalnız adını koyar.
+
+| Yüzey | Anahtar | Bütçe |
+|---|---|---|
+| Balon (ofis lafı, kavram balonu) | `OFFICE_LINES`, `bubble` | ≤ 12 kelime |
+| Karar kartı sorusu | `CONTENT.decisions[].question` | ≤ 12 |
+| Seçenek etiketi | `options[].label` | ≤ 5 |
+| Yansıma | `options[].reflection` | ≤ 10 |
+| Panel cümlesi | tek `<p>` | ≤ 12 |
+| Sıradaki adım çipi | `step.*` | ≤ 6 |
+| Tooltip / ipucu | `*Title`, `*Hint`, `*note` | ≤ 8 |
+| Ufuk öğesi | `horizon.*` | ≤ 6 |
+| Teaser | `TEASERS` | ≤ 6 |
+| Aşama hedefi ipucu (render edilmez) | `StageGoal.hint` | ≤ 8 |
+| Buton | `common.*`, `step.go.*`, fiil butonları | ≤ 2 |
+| Boş durum | `*.empty`, `*Empty` | ≤ 4 |
+| Açıklama paragrafı | `*.intro`, `*.reward` | yok |
+
+`src/content/__tests__/textBudget.test.ts` bu tabloyu (balon `text.test.ts`'te; yansıma ve panel cümlesi elle) ve `src/ui` içinde `t('…')` ile çağrılan her anahtarın `UI_TEXT`'te olduğunu denetler. `t()` eksik anahtarda ham anahtarı döndürür: anahtar silinirken kullanım satırı aynı değişiklikte silinir.
+
+Korunanlar (kasa psikolojisi, kısaltılmaz): ay fişi, runwayLow / bankrupt uyarıları, ufuk metni, karar sorusu + kazanç/bedel çipleri, Defter kartı içeriği, ofis lafları.
+
 ---
 
 ## 4. Yasak kalıplar

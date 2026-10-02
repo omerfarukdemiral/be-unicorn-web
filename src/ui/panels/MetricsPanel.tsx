@@ -92,8 +92,7 @@ export function MetricsPanel({ focus }: { focus?: HudWidget }) {
 
   return (
     <div ref={root} className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-2">
-        <p className="font-text text-xs leading-relaxed text-ink-2">{t('metrics.intro')}</p>
+      <div className="flex justify-end">
         <span className="tabular shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink-2">{t('metrics.pinnedCount', { n: pins.length, max: PIN_MAX })}</span>
       </div>
 

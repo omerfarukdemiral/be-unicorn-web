@@ -18,6 +18,7 @@ import {
   type GameEventKind,
   type GameState,
   type NextCrisis,
+  type PaydayChoice,
   type ProjectCategory,
   type RoundPitch,
   type RoundSize,
@@ -78,6 +79,11 @@ export interface BotConfig {
   prepareCrisis?: boolean
   /** GAMEPLAY V2 §6.2: 'always' takes every loan offered (greedyGood); default: only on runway < 3 up to Series A. */
   loans?: 'always'
+  /**
+   * GAMEPLAY V2 §6.1 payday desk: 'good' (default) pays salaries in full when it can, then infra, defers the rent, cuts
+   * the ads and skips the founder's pay; 'halfPay' (greedyGood) pays salaries only half to keep the cash working.
+   */
+  desk?: 'good' | 'halfPay'
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -134,7 +140,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
 export const V2_BOTS: Record<V2BotKind, BotConfig> = {
   coaster: { ...BOTS.bootstrap, kind: 'coaster', afterProfit: 'coast' },
   idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', afterProfit: 'idle' },
-  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false, loans: 'always' },
+  greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false, loans: 'always', desk: 'halfPay' },
   burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
 }
@@ -185,6 +191,8 @@ export interface BotRun {
   stageMinRunway: number[]
   /** Paydays with runway < 2 months, per stage. */
   nearDeathPaydays: number[]
+  /** Paydays with runway < 3 months, per stage (the good bots' near death, GAMEPLAY V2 §15). */
+  nearDeathPaydays3: number[]
   daysRunwayBelow3: number
   /** First profitable payday came before Series B. */
   profitBeforeB: boolean
@@ -205,8 +213,13 @@ export interface BotRun {
   crisisNearDeath: number
   /** Alive ≥ 180 days after the first near-death payday (null = never near death). */
   survivedNearDeath: boolean | null
+  /** The same from the first payday with runway < 3 months. */
+  survivedNearDeath3: boolean | null
   policiesAdopted: number
+  /** Payday desks (§6.1) closed with something left owed (answered or defaulted). */
   paydayDeferrals: number
+  /** Payday desks opened (paydayShort). */
+  paydaysShort: number
   movesUsedShare: number
   segmentsOpened: number
   rivalsAcquired: number
@@ -328,6 +341,8 @@ function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig
 function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: DecisionPolicy = 'best', loans = false): void {
   const { act, content } = c
   for (let i = 0; i < 5 && c.s.concepts.active; i++) if (!act({ type: 'openConcept', conceptId: c.s.concepts.active.id })) break
+  // GAMEPLAY V2 §6.1: the payday desk is answered the day it opens (a careless player at random).
+  if (c.s.finance.pendingPayday) act({ type: 'resolvePayday', choice: cfg ? deskChoice(c.s, cfg) : randomDesk(rng) })
   const active = c.s.decisions.active
   const card = active && content.decisions.find((c) => c.id === active.cardId)
   if (card) {
@@ -344,6 +359,41 @@ function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: Decision
   }
   for (const e of c.s.employees) {
     if (e.status === 'leaving') act({ type: 'respondResignation', employeeId: e.id, response: 'talk' }) || act({ type: 'respondResignation', employeeId: e.id, response: 'raise' })
+  }
+}
+
+/**
+ * The good desk (§6.1): salaries in full when the cash covers them (else half, else deferred), then infra, the rent
+ * deferred (paid when what is left covers it and an eviction is one deferral away), ads cut, the founder's pay skipped
+ * unless it still fits. 'halfPay' pays salaries half even when it could pay in full.
+ */
+function deskChoice(s: GameState, cfg: BotConfig): PaydayChoice {
+  const l = s.finance.pendingPayday!.ledger
+  let left = s.stats.cash
+  const fits = (v: number): boolean => {
+    if (left < v) return false
+    left -= v
+    return true
+  }
+  const salaries = cfg.desk !== 'halfPay' && fits(l.salaries) ? 'full' : fits(l.salaries / 2) ? 'half' : 'defer'
+  const infra = fits(l.infra) ? 'pay' : 'defer'
+  // Ads are paid either way ('cut' only stops the next months).
+  left -= l.ads
+  const evictionNext = Number(s.flags['rentDeferredMonths'] ?? 0) + 1 >= balance.EVICTION_MONTHS
+  const rent = evictionNext && fits(l.rent) ? 'pay' : 'defer'
+  const founder = fits(l.founder ?? 0) ? 'pay' : 'skip'
+  return { salaries, rent, infra, ads: 'cut', founder }
+}
+
+/** Careless desk: every line at random (no rng = the first answer of each line). */
+function randomDesk(rng?: Rng): PaydayChoice {
+  const pick = <T>(xs: readonly T[]): T => (rng ? rng.pick(xs) : xs[0]!)
+  return {
+    salaries: pick(['full', 'half', 'defer'] as const),
+    rent: pick(['pay', 'defer'] as const),
+    infra: pick(['pay', 'defer'] as const),
+    ads: pick(['pay', 'cut'] as const),
+    founder: pick(['pay', 'skip'] as const),
   }
 }
 
@@ -772,11 +822,15 @@ export function playBot(
   let coastBumps = 0
   const stageMinRunway = [99, 99, 99, 99, 99, 99, 99]
   const nearDeathPaydays = [0, 0, 0, 0, 0, 0, 0]
+  const nearDeathPaydays3 = [0, 0, 0, 0, 0, 0, 0]
   let daysRunwayBelow3 = 0
   let firstProfitStage: number | null = null
   let profitPaydays = 0
   let paydays = 0
   let firstNearDeath: number | null = null
+  let firstNearDeath3: number | null = null
+  let paydayDeferrals = 0
+  let paydaysShort = 0
   let peakValuation = 0
   const techDebtByStage: (number | null)[] = [null, null, null, null, null, null, null]
   const penetrationByStage = [0, 0, 0, 0, 0, 0, 0]
@@ -859,6 +913,8 @@ export function playBot(
       }
       if (e.kind === 'loanCalled') loanCalled++
       if (e.kind === 'roundFailed') roundsFailed++
+      if (e.kind === 'paydayShort') paydaysShort++
+      if ((e.kind === 'paydayResolved' || e.kind === 'paydayAutoResolved') && (e.value ?? 0) > 0.5) paydayDeferrals++
       if (e.kind === 'roundClosed') roundsClosed++
       if (e.kind === 'crisis') crises.push({ day: e.day, stage: s.stage, prepared: prepOn, minRunway: 99, eventId: e.id })
       if (e.kind === 'payday') {
@@ -873,6 +929,10 @@ export function playBot(
         if (rw < 2) {
           nearDeathPaydays[s.stage] = (nearDeathPaydays[s.stage] ?? 0) + 1
           firstNearDeath ??= s.time.day
+        }
+        if (rw < 3) {
+          nearDeathPaydays3[s.stage] = (nearDeathPaydays3[s.stage] ?? 0) + 1
+          firstNearDeath3 ??= s.time.day
         }
         if ((s.finance.lastReceipt?.net ?? -1) >= 0) {
           profitPaydays++
@@ -930,6 +990,7 @@ export function playBot(
     topActionShare: topShare(actionCounts),
     stageMinRunway,
     nearDeathPaydays,
+    nearDeathPaydays3,
     daysRunwayBelow3,
     profitBeforeB: firstProfitStage !== null && firstProfitStage < 4,
     profitPaydays,
@@ -944,8 +1005,10 @@ export function playBot(
     crisesFired: crises.length,
     crisisNearDeath: crises.filter((k) => k.minRunway < 2).length,
     survivedNearDeath: firstNearDeath === null ? null : !(failed && s.time.day - firstNearDeath < 180),
+    survivedNearDeath3: firstNearDeath3 === null ? null : !(failed && s.time.day - firstNearDeath3 < 180),
     policiesAdopted: 0,
-    paydayDeferrals: 0,
+    paydayDeferrals,
+    paydaysShort,
     movesUsedShare: 0,
     segmentsOpened: 0,
     rivalsAcquired: 0,

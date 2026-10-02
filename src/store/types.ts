@@ -43,10 +43,12 @@ export type StatsTab = 'money' | 'growth' | 'team' | 'profile'
 /**
  * Centered surfaces. Move scene / post-mortem / victory are blocking modals (they pause the game). The center screens
  * (CENTER_KINDS: statistics, Kanun Kitabı, Pazar haritası) sit in the CenterFrame between the bars and never pause:
- * time keeps flowing while the player reads (docs/GAMEPLAY_V2.md §14.1).
+ * time keeps flowing while the player reads (docs/GAMEPLAY_V2.md §14.1). The payday desk (§6.1) holds time only while
+ * it is open AND a month waits on it (its own `payday` pause, not `modal`); "Sonra" closes it and time flows.
  */
 export type Overlay =
   | { kind: 'moveScene' }
+  | { kind: 'payday' }
   | { kind: 'postMortem' }
   | { kind: 'victory' }
   | { kind: 'stats'; tab?: StatsTab }
@@ -73,9 +75,10 @@ export interface SceneInset {
  * Automatic focus pauses: a blocking modal (never a center screen), an unanswered decision card open in the panel or
  * expanded in the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, or the round offer /
  * weekly pitch open in Büyüme > Tur (`offer`: panel `{kind:'growth', section:'round'}` while a size choice or pitch
- * waits). Shop / team / projects / growth panels never pause; a concept arriving (badge only) never pauses.
+ * waits), or the payday desk open while finance.pendingPayday waits (`payday`, GAMEPLAY V2 §3 md.6).
+ * Shop / team / projects / growth panels never pause; a concept arriving (badge only) never pauses.
  */
-export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer'
+export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday'
 
 /** 0 = far (whole office), 1 = default, 2 = close. */
 export type ZoomLevel = 0 | 1 | 2

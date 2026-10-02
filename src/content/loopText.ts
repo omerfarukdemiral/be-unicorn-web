@@ -8,24 +8,24 @@ export const LOOP_TEXT: Record<string, string> = {
   'time.reasonShort.concept': 'Defter',
   'time.reasonShort.modal': 'Ekran',
   'time.reasonShort.offer': 'Teklif',
+  'time.reasonShort.payday': 'Maaş',
   'time.slowed': 'Önemli an · 1×’e yavaşladı',
   'time.frame.still': 'Zaman durdu',
-  'time.frame.focus': 'Okurken zaman durur',
   'time.frame.running': 'Zaman {v}× akıyor',
 
   // Kasa: costs pile up until payday
   'cash.owed': 'Maaş gününe {d} gün · {v} ayrıldı · kasada {c}',
   'cash.paid': '−{v} ödendi',
-  'cash.availableTitle': 'Kullanılabilir para: kasadaki paradan maaş gününe biriken giderler düşülmüş hali. Her gün erir; maaş günü asıl ödeme yapılır.',
+  'cash.availableTitle': 'Kasadan maaş gününe ayrılan düşülmüş para',
   'cash.runwayShort': 'runway {v} ay',
   'cash.owedShort': 'Maaşa {d} gün',
-  'cash.paydayTitle': 'Maaş, kira ve altyapı ayın 1’inde tek kalemde ödenir. Gelir her gün kasaya akar.',
+  'cash.paydayTitle': 'Maaş, kira, altyapı ayın 1’inde ödenir',
 
   // Next step chip
   'step.label': 'Sıradaki adım',
   'step.start': 'Zamanı başlat (Space)',
   'step.startTouch': 'Zamanı başlat',
-  'step.traction': 'Kullanıcı ve sürüm topla · {v} / {t}',
+  'step.traction': 'Kullanıcı ve sürüm · {v}/{t}',
   'step.idea': 'Bir ürün fikri seç',
   'step.findUsers': 'Elle ilk kullanıcıları bul',
   'step.desk': 'Ekip için önce bir masa al',
@@ -33,7 +33,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.launch': 'MVP’yi yayına çıkar · {v}',
   'step.users': '{v} kullanıcıya ulaş · {t} hedef',
   'step.revenue': 'İlk gelir: {v} / {t} MRR',
-  'step.round': 'Tur penceresi açık: şimdi mi, biraz daha mı?',
+  'step.round': 'Tur penceresi açık',
   'step.roundWait': 'Tur sürüyor: haftalık pitch’i seç',
   'step.grow': 'Değerlemeyi büyüt · {v} / {t}',
   'step.go.projects': 'Projeler',
@@ -44,9 +44,9 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.go.start': 'Başlat',
 
   // Horizon strip
-  'horizon.title': 'Ufuk',
   'horizon.span': '6 hafta',
   'horizon.payday': 'Maaş günü {v}',
+  'horizon.paydayDue': 'Ödenmemiş maaş {v}',
   'horizon.delayed': '“{v}” kararının etkisi',
   'horizon.delayedNote': 'Kararının etkisi geliyor',
   'horizon.release': '{project} {level} yayını (tahmini)',
@@ -72,7 +72,6 @@ export const LOOP_TEXT: Record<string, string> = {
   'receipt.runwayMove': '{a} → {b}',
   'receipt.growth': 'büyüme {v} → {m}×',
   'receipt.preRevenue': 'gelir öncesi değerleme',
-  'receipt.open': 'Ayrıntı için Büyüme paneli',
   'receipt.compact': 'Maaş günü {v} · Net {n}',
   'receipt.infinite': '∞',
 
@@ -96,7 +95,6 @@ export const LOOP_TEXT: Record<string, string> = {
   // Stage goals
   'goals.title': 'Aşama hedefleri',
   'goals.main': '{stage} değerlemesi',
-  'goals.reward': 'Her ☆ hedef, sonraki turda satılan hisseden 1 puan düşer. Kaçırmanın cezası yok.',
   'goals.done': 'Tamam',
   'goals.final': 'Son düzlük: 1 milyar dolar değerleme.',
   'goals.stars': '☆ {a}/{b}',
@@ -104,7 +102,7 @@ export const LOOP_TEXT: Record<string, string> = {
   // Kararın → sonucu
   'outcome.title': 'Kararın → sonucu',
   'outcome.line': '“{option}” seçiminden: {effects}',
-  'outcome.empty': 'Gecikmeli karar etkileri geldikçe burada görünür.',
+  'outcome.empty': 'Gecikmeli etki yok',
   'outcome.day': '{d}. gün',
 
   // Effect summary pieces
@@ -125,17 +123,17 @@ export const LOOP_TEXT: Record<string, string> = {
 
   // Round window, size choice, live offer, due diligence, weekly pitch (docs/CORE_LOOP.md §4.3)
   'round.notReady': 'Değerleme hedefin %60’ına gelince açılır.',
-  'round.metricsMatter': 'Teklif her hafta metriklere göre değişir: değerleme, runway, 3 aylık büyüme, moral.',
+  'round.metricsMatter': 'Teklif her hafta metriklere göre değişir.',
   'round.windowTitle': '{stage} turu',
   'round.windowClosed': 'Pencere {v} değerlemede açılır',
   'round.windowOpen': 'Pencere açık: şimdi mi, biraz daha mı?',
   'round.windowProgress': 'Değerleme {v} / pencere {w}',
   'round.priceNow': 'Değerleme hedefin {p} kadarı → teklif çarpanı ×{f}',
-  'round.priceHint': 'Fiyatın yarısı turu başlattığın gün kilitlenir: erken başlarsan güvendesin ama teklif küçük kalır. Beklersen teklif büyür, runway erir.',
+  'round.priceHint': 'Erken başlarsan fiyat kilitlenir, beklersen teklif büyür.',
   'round.takesWeeksRange': 'Tur {a}–{b} hafta sürer, kasa beklemez.',
   'round.runwayShort': 'Runway {r} ay: tur {w} haftaya kadar sürebilir, köprü krediye ya da ödenemeyen maaşa gidebilir.',
   'round.preMoney': 'Teklifin ima ettiği değer',
-  'round.preMoneyHint': 'Teklif ÷ satılan hisse. Bugünkü değerlemen {v}; yatırımcı bir sonraki aşamanın fiyatını öder.',
+  'round.preMoneyHint': 'Teklif ÷ satılan hisse · değerlemen {v}',
   'round.pitchAvg': 'Yatırımcı izlenimi (pitch ortalaması, boş hafta 0): {v} · sınır ±{c}',
   'round.sizeTitle': 'Tur büyüklüğü',
   'round.size.small': 'Küçük',
@@ -144,7 +142,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'round.sizeMonths': '{v} ay runway',
   'round.sizeAmount': '≈ {v}',
   'round.sizeEquity': '{v} hisse',
-  'round.sizeHint': 'Tutar yeni burn’e göre ölçülür: daha çok runway, daha çok hisse.',
+  'round.sizeHint': 'Daha çok runway, daha çok hisse.',
   'round.startSize': 'Turu başlat · {v}',
   'round.liveOffer': 'Canlı teklif',
   'round.liveMove': 'Son hafta: {a} → {b}',

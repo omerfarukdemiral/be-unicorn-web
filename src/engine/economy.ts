@@ -175,6 +175,8 @@ export interface MoraleTargetInput {
   cashNegative: boolean
   overload: number
   coordinationPenalty: number
+  /** Salaries deferred at the payday desk are still owed (GAMEPLAY V2 §6.1): −WAGES_OWED_MORALE_TARGET until paid. */
+  wagesOwed?: boolean
 }
 
 /** Unclamped target: sum every term first, clamp once at the end (PLAN §5.7). */
@@ -186,11 +188,12 @@ export function moraleTargetRaw(i: MoraleTargetInput): number {
     i.bookshelf -
     (i.cashNegative ? B.MORALE_NEGATIVE_CASH : 0) -
     B.MORALE_OVERLOAD * i.overload -
-    i.coordinationPenalty
+    i.coordinationPenalty -
+    (i.wagesOwed ? B.WAGES_OWED_MORALE_TARGET : 0)
   )
 }
 
-/** hedef = 60 + auralar + kararlar + kitaplık − 40 (kasa<0) − 15 × aşırıYük − koordinasyonCezası, clamped to 0–100. */
+/** hedef = 60 + auralar + kararlar + kitaplık − 40 (kasa<0) − 15 × aşırıYük − koordinasyonCezası (− 10 maaş borcu), clamped to 0–100. */
 export function moraleTarget(i: MoraleTargetInput): number {
   return clamp(0, 100, moraleTargetRaw(i))
 }

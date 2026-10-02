@@ -48,7 +48,7 @@ export const ONLINE_TEXT: Record<string, string> = {
   'lb.notOnBoard': 'Henüz tabloda değilsin. İlk maaş gününde girersin.',
   'lb.signedOut': 'Çevrimdışı oynuyorsun. Tabloya girmek için giriş yap.',
   'lb.offline': 'Sunucuya ulaşılamıyor. Tablo birazdan döner.',
-  'lb.empty': 'Tablo boş. İlk unicorn sen ol.',
+  'lb.empty': 'İlk unicorn sen ol',
   'lb.updated': '{v} sn önce güncellendi',
   'lb.updatedNow': 'Az önce güncellendi',
   'lb.live': 'Canlı',

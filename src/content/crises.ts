@@ -188,4 +188,31 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
       },
     ],
   },
+  {
+    // GAMEPLAY V2 §6.1: the payday desk deferred the rent a second time (engine queues it: LANDLORD_CARD_ID; it takes
+    // the shared card budget). A third deferral is the eviction, whatever is picked here.
+    ...calendarOnly,
+    id: 'landlord-notice',
+    stage: 0,
+    speaker: 'accountant',
+    question: 'Ev sahibi ihtar çekti: kira ya artar ya taşınırsınız.',
+    defaultOption: 0,
+    defaultAfterDays: 7,
+    options: [
+      {
+        label: 'Zamlı kirayla kal',
+        tradeoff: { gain: 'Ekip yerinde kalır', cost: 'Kira ×1.5, 6 ay' },
+        effects: { modifiers: [{ kind: 'rent', value: 1.5, days: 180 }] },
+        reflection: 'Ertelenen kira faiziyle geri döner.',
+        conceptId: 'burn',
+      },
+      {
+        label: 'Küçük yere taşın',
+        tradeoff: { gain: 'Kira artmaz', cost: 'Yarım aylık gider, üretim −%15' },
+        effects: { cashBurnMonths: -0.5, morale: -3, modifiers: [{ kind: 'production', value: 0.85, days: 45 }] },
+        reflection: 'Taşınmak ucuz görünür; kaybolan haftalar sayılmaz.',
+        conceptId: 'burn',
+      },
+    ],
+  },
 ]

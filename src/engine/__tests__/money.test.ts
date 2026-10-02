@@ -1,12 +1,15 @@
 // Phase 3 (docs/CORE_LOOP.md §5, §10 Faz 3): money constraint, stage multiple cap, unanswered card default,
-// delayed effects inside the horizon, rescue loan → debt, v1 → v2 save migration; GAMEPLAY V2 §6.2 the loan.
+// delayed effects inside the horizon, rescue loan → debt, v1 → v2 save migration; GAMEPLAY V2 §6.2 the loan,
+// §6.1 the payday desk.
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { createEngine } from '../index'
 import { migrate } from '../save'
-import { DECISIONS, type DecisionCard } from '../../content/index'
+import { CRISIS_CARDS, DECISIONS, type DecisionCard } from '../../content/index'
 import { isCardEligible } from '../decisions'
-import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type MonthReceipt } from '../types'
+import { autoPaydayChoice } from '../loop'
+import { owedTotal } from '../loopSelectors'
+import { COMPANY_NAME_MAX, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type MonthReceipt, type PaydayChoice } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
 describe('garage money (S1-b)', () => {
@@ -396,5 +399,187 @@ describe('company name (save v3)', () => {
     const out = migrate({ version: 2, state: v2 })!
     expect(out.meta.companyName).toBe(DEFAULT_COMPANY_NAME)
     expect(out.meta.saveVersion).toBe(SAVE_VERSION)
+  })
+})
+
+describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
+  const LANDLORD = CRISIS_CARDS.find((c) => c.id === B.LANDLORD_CARD_ID)!
+  const api = createEngine(fakeContent({ decisions: [LANDLORD] }))
+  const ALL_PAID: PaydayChoice = { salaries: 'full', rent: 'pay', infra: 'pay', ads: 'pay', founder: 'pay' }
+
+  /** A garage with two engineers on day 0 and a full till until the eve of payday. */
+  function team(): GameState {
+    let s = api.createGame({ seed: 4 })
+    s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
+    for (let i = 0; i < 2; i++) {
+      s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
+      const c = s.candidates.find((x) => x.dept === 'eng') ?? s.candidates[0]!
+      s = api.applyAction(s, { type: 'hire', candidateId: c.id }).state
+    }
+    return api.step({ ...s, stats: { ...s.stats, cash: 1_000_000 } }, 29.5)
+  }
+
+  /** Payday with `cash(state)` in the till (set half a day before it). */
+  function payWith(s: GameState, cash: (s: GameState) => number, finance: Partial<GameState['finance']> = {}): GameState {
+    return api.step({ ...s, stats: { ...s.stats, cash: cash(s) }, finance: { ...s.finance, ...finance } }, 0.6)
+  }
+  const salaries = (s: GameState) => s.finance.ledger!.salaries
+  const resolve = (s: GameState, choice: PaydayChoice) => api.applyAction(s, { type: 'resolvePayday', choice })
+
+  it('cash 0.6 × salaries → the month waits on the desk (paydayShort); nothing but the loan service leaves', () => {
+    const eve = team()
+    const sal = salaries(eve)
+    const s = payWith(eve, () => 0.6 * sal)
+    expect(s.finance.pendingPayday).toBeDefined()
+    expect(s.finance.pendingPayday!.ledger.salaries).toBeGreaterThanOrEqual(sal)
+    expect(s.events.filter((e) => e.kind === 'paydayShort')).toHaveLength(1)
+    expect(s.events.some((e) => e.kind === 'payday')).toBe(false)
+    expect(s.finance.payrollMissed).toBeFalsy()
+    expect(s.stats.cash).toBeGreaterThan(0.6 * sal - 1)
+    // The month is still owed: runway counts it, and the desk's last day is on the horizon.
+    expect(owedTotal(s)).toBeGreaterThanOrEqual(sal)
+    expect(s.derived.horizon!.find((h) => h.kind === 'payday' && h.due)!.day).toBe(s.finance.pendingPayday!.day + B.PAYDAY_DECIDE_DAYS)
+    // Nothing waits on the desk any more → notFound; ads cannot be deferred (type and engine).
+    // @ts-expect-error ads: 'defer' is not a PaydayChoice
+    expect(resolve(s, { ...ALL_PAID, ads: 'defer' }).error).toBe('invalid')
+    expect(api.applyAction(eve, { type: 'resolvePayday', choice: ALL_PAID }).error).toBe('notFound')
+  })
+
+  it('half salaries: every morale −8, the target −10 while owed, half deferred, the clock starts', () => {
+    const s = payWith(team(), (x) => 0.6 * salaries(x))
+    const sal = s.finance.pendingPayday!.ledger.salaries
+    const before = s.employees.map((e) => e.morale)
+    const r = resolve(s, { salaries: 'half', rent: 'pay', infra: 'pay', ads: 'pay', founder: 'skip' })
+    expect(r.ok).toBe(true)
+    const out = r.state
+    out.employees.forEach((e, i) => expect(e.morale).toBeCloseTo(Math.max(0, before[i]! + B.PAYDAY_HALF_MORALE), 6))
+    expect(out.finance.pendingPayday).toBeUndefined()
+    // The founder's skipped pay is not owed.
+    const owed = sal / 2
+    expect(out.finance.deferred).toBeCloseTo(owed, 0)
+    expect(out.finance.payrollMissed).toBe(true)
+    expect(out.finance.lastReceipt!.deferred).toBeCloseTo(owed, 0)
+    expect(out.events.some((e) => e.kind === 'paydayResolved')).toBe(true)
+    // The target term: the same company with the wages paid aims 10 points higher.
+    const paid = api.applyAction({ ...out, flags: { ...out.flags, wagesOwed: false } }, { type: 'setSpeed', speed: 0 }).state
+    expect(paid.derived.moraleTarget - out.derived.moraleTarget).toBeCloseTo(B.WAGES_OWED_MORALE_TARGET, 6)
+    // The skipped founder pay costs energy.
+    expect(out.founder.energy).toBe(Math.max(0, s.founder.energy + B.FOUNDER_SKIP_ENERGY))
+  })
+
+  it('left unanswered for 3 days: the default order (salaries → infra → rent → founder → ads), one P0 event', () => {
+    const s = payWith(team(), (x) => 0.6 * salaries(x))
+    const expected = autoPaydayChoice(s)
+    expect(expected).toEqual({ salaries: 'half', infra: 'pay', rent: expected.rent, founder: expected.founder, ads: expected.ads })
+    const l = s.finance.pendingPayday!.ledger
+    let t = api.step(s, B.PAYDAY_DECIDE_DAYS - 1)
+    expect(t.finance.pendingPayday).toBeDefined()
+    t = api.step(t, 1)
+    expect(t.finance.pendingPayday).toBeUndefined()
+    expect(t.events.filter((e) => e.kind === 'paydayAutoResolved')).toHaveLength(1)
+    const owed = l.salaries / 2 + (expected.rent === 'defer' ? l.rent : 0)
+    expect(t.finance.deferred).toBeCloseTo(owed, 0)
+    expect(t.finance.payrollMissed).toBe(true)
+  })
+
+  it('owed above 1 month of gross burn starts the clock even with everything paid and cash ≥ 0', () => {
+    const eve = team()
+    const month = owedTotal(eve) + eve.finance.burn / 60
+    const s = payWith(eve, () => month + 100, { deferred: eve.finance.burn * 1.5 })
+    expect(s.finance.pendingPayday).toBeDefined()
+    const out = resolve(s, ALL_PAID).state
+    expect(out.stats.cash).toBeGreaterThanOrEqual(0)
+    expect(out.finance.deferred!).toBeGreaterThan(B.DEFER_CAP_MONTHS * out.finance.burn)
+    expect(out.finance.payrollMissed).toBe(true)
+    // Under the cap with salaries paid: no clock.
+    const small = payWith(eve, () => month + 100, { deferred: eve.finance.burn * 0.3 })
+    expect(resolve(small, ALL_PAID).state.finance.payrollMissed).toBeFalsy()
+  })
+
+  it('rent: the 2nd deferral brings landlord-notice, the 3rd the eviction (capacity × 0.5 + moving cost)', () => {
+    const s = payWith(team(), (x) => 0.6 * salaries(x))
+    const deferRent: PaydayChoice = { ...ALL_PAID, salaries: 'half', rent: 'defer' }
+    const second = resolve({ ...s, flags: { ...s.flags, rentDeferredMonths: 1 } }, deferRent).state
+    expect(second.flags['rentDeferredMonths']).toBe(2)
+    expect(second.decisions.queue).toContain(B.LANDLORD_CARD_ID)
+    expect(second.events.some((e) => e.kind === 'eviction')).toBe(false)
+    const third = resolve({ ...s, flags: { ...s.flags, rentDeferredMonths: 2 } }, deferRent).state
+    const ev = third.events.find((e) => e.kind === 'eviction')!
+    expect(ev.value).toBeCloseTo(s.finance.pendingPayday!.ledger.rent * B.EVICTION_MOVE_RENT_MONTHS, 6)
+    expect(ev.value).toBeGreaterThan(0)
+    expect(third.modifiers.some((m) => m.kind === 'capacity' && m.value === B.EVICTION_CAPACITY)).toBe(true)
+    expect(third.flags['rentDeferredMonths']).toBeUndefined()
+    // Moved on the notice (option 'Küçük yere taşın'): a new landlord, the next deferral is the first again.
+    const noticeDay = Number(second.flags['landlordNoticeDay'])
+    const moved: GameState = {
+      ...s,
+      flags: { ...s.flags, rentDeferredMonths: 2, landlordNoticeDay: noticeDay },
+      decisions: { ...s.decisions, history: [...s.decisions.history, { cardId: B.LANDLORD_CARD_ID, optionIndex: B.LANDLORD_MOVE_OPTION, day: noticeDay }] },
+    }
+    const after = resolve(moved, deferRent).state
+    expect(after.events.some((e) => e.kind === 'eviction')).toBe(false)
+    expect(after.flags['rentDeferredMonths']).toBe(1)
+  })
+
+  it('infra: deferred once → capacity × 0.7 for 30 days; twice in a row → × 0.4', () => {
+    const s = payWith(team(), (x) => 0.6 * salaries(x))
+    const deferInfra: PaydayChoice = { ...ALL_PAID, salaries: 'half', infra: 'defer' }
+    const once = resolve(s, deferInfra).state
+    const capMods = (x: GameState) => x.modifiers.filter((m) => m.kind === 'capacity')
+    expect(capMods(once).map((m) => m.value)).toEqual([0.7])
+    expect(capMods(once)[0]!.untilDay).toBeCloseTo(s.time.day + B.INFRA_DEFER_DAYS, 6)
+    const twice = resolve({ ...s, flags: { ...s.flags, infraDeferStreak: 1 } }, deferInfra).state
+    expect(capMods(twice).map((m) => m.value)).toEqual([0.4])
+    // A cut still running when the next month is deferred is replaced, not multiplied (never below 0.4).
+    expect(capMods(resolve({ ...once, finance: { ...once.finance, pendingPayday: s.finance.pendingPayday } }, deferInfra).state).map((m) => m.value)).toEqual([0.4])
+    const full = resolve(s, { ...deferInfra, infra: 'pay' }).state
+    expect(twice.derived.capacity).toBeLessThan(full.derived.capacity)
+    // Ads 'cut': this month paid, the budget is 0 from now on.
+    expect(resolve({ ...s, finance: { ...s.finance, adBudget: 500 } }, { ...ALL_PAID, ads: 'cut' }).state.finance.adBudget).toBe(0)
+  })
+
+  it('runway counts the deferred: owed costs come off the cash', () => {
+    const eve = team()
+    const recompute = (x: GameState) => api.applyAction(x, { type: 'setSpeed', speed: 0 }).state
+    const a = recompute(eve)
+    const b = recompute({ ...eve, finance: { ...eve.finance, deferred: 50_000 } })
+    expect(owedTotal(b) - owedTotal(a)).toBeCloseTo(50_000, 6)
+    expect(b.finance.runway!).toBeLessThan(a.finance.runway!)
+    expect(a.finance.runway! - b.finance.runway!).toBeCloseTo(50_000 / -(a.finance.net - 0), 3)
+  })
+
+  it('a profitable company never sees the desk (regression: no paydayShort while in profit)', () => {
+    let s = api.createGame({ seed: 6 })
+    s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
+    s = api.step({ ...s, projects: s.projects.map((p) => ({ ...p, maturity: 1, launched: true, releaseLevel: 5 })), stats: { ...s.stats, users: 3000, cash: 2_000 } }, 1)
+    expect(s.finance.net).toBeGreaterThan(0)
+    let shorts = 0
+    let paydays = 0
+    let seen = s.events[s.events.length - 1]?.id ?? 0
+    // Every payday while the company is in profit (a garage with a fixed user base drifts out of it in time).
+    for (let d = 0; d < 365 && s.finance.net > 0; d++) {
+      s = api.step(s, 1)
+      for (const e of s.events) {
+        if (e.id <= seen) continue
+        if (e.kind === 'paydayShort') shorts++
+        if (e.kind === 'payday') paydays++
+      }
+      seen = s.events[s.events.length - 1]?.id ?? seen
+    }
+    expect(paydays).toBeGreaterThanOrEqual(3)
+    expect(shorts).toBe(0)
+    expect(s.finance.deferred).toBe(0)
+  })
+
+  it('an old save has nothing deferred and no desk (migration and the lazy default)', () => {
+    const s = api.step(api.createGame({ seed: 1 }), 40)
+    const v3 = structuredClone(s) as unknown as { finance: Record<string, unknown> }
+    delete v3.finance.deferred
+    const out = migrate({ version: 3, state: v3 })!
+    expect(out.finance.deferred).toBe(0)
+    expect(out.finance.pendingPayday).toBeUndefined()
+    const lazy = structuredClone(s)
+    delete lazy.finance.deferred
+    expect(api.step(lazy, 30).finance.deferred).toBe(0)
   })
 })

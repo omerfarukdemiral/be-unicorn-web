@@ -479,6 +479,22 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
     `${name}: kredi ${runs.filter((r) => r.loansTaken > 0).length}/${runs.length} · çağrı ${runs.reduce((a, r) => a + r.loanCalled, 0)} · düşen tur ${runs.reduce((a, r) => a + r.roundsFailed, 0)} · down round ${runs.reduce((a, r) => a + r.downRounds, 0)}`
   line(`- Bilgi: ${info('careless', careless)} · ${info('greedyGood', v2('greedyGood'))} · iplik adımı / koşu (iyi, medyan) ${median(goodRuns.map((r) => r.threadSteps)) ?? 0}`)
 }
+{
+  // GAMEPLAY V2 §6.1 payday desk (D1): near death is common, rarely fatal for a good policy; careless dies of it.
+  const reachedSeed = (runs: BotRun[]) => runs.filter((r) => r.stageDays[2] != null)
+  const nearIn = (r: BotRun, key: 'nearDeathPaydays' | 'nearDeathPaydays3') => [2, 3, 4].some((st) => (r[key][st] ?? 0) > 0)
+  const goodSeed = reachedSeed(goodRuns)
+  crit('Yakın ölüm iyi bot (maaş günü runway < 3, Seed/A/B; ara bant, nihai ≥ %40 T20)', band(goodSeed.filter((r) => nearIn(r, 'nearDeathPaydays3')).length, goodSeed.length, 0.3, 1))
+  const carelessSeed = reachedSeed(careless)
+  crit('Yakın ölüm careless (maaş günü runway < 2, Seed/A/B)', band(carelessSeed.filter((r) => nearIn(r, 'nearDeathPaydays')).length, carelessSeed.length, 0.4, 1))
+  crit('Careless iflas (D1 tabanı)', band(careless.filter(failedRun).length, careless.length, 0.3, 1))
+  crit('İyi bot iflas (D1: ≤ 1/24 seed başına)', band(goodRuns.filter(failedRun).length, goodRuns.length, 0, 1 / 24))
+  const near = goodRuns.filter((r) => r.survivedNearDeath3 !== null)
+  crit('Yakın ölüm yaşayan iyi botların 180 gün sonra hayatta olanı (runway < 3)', band(near.filter((r) => r.survivedNearDeath3).length, near.length, 0.5, 1))
+  const shorts = (runs: BotRun[]) => runs.reduce((a, r) => a + r.paydaysShort, 0)
+  const defers = (runs: BotRun[]) => runs.reduce((a, r) => a + r.paydayDeferrals, 0)
+  line(`- Bilgi (maaş masası): iyi botlar masa ${shorts(goodRuns)} · erteleme ${defers(goodRuns)} · careless masa ${shorts(careless)} · erteleme ${defers(careless)} · greedyGood masa ${shorts(v2('greedyGood'))} · erteleme ${defers(v2('greedyGood'))}`)
+}
 line()
 line(`_Süre: ${((Date.now() - t0) / 1000).toFixed(1)} sn · \`npm run sim -- --seeds ${SEEDS} --days ${DAYS}\`_`)
 

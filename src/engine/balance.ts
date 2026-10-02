@@ -515,6 +515,36 @@ export const LOAN_LEGACY_RATE = 0.02
 export const LOAN_LEGACY_MONTHS = 12
 export const LOAN_LEGACY_COVENANT = 1
 
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §6.1: the payday desk (a month cash cannot cover)
+// ---------------------------------------------------------------------------
+/** Deferred costs are paid back × (1 + this) on a later payday. */
+export const DEFER_INTEREST = 0.05
+/** Owed (deferred) above this many months of gross burn starts the bankruptcy clock: no living on deferrals. */
+export const DEFER_CAP_MONTHS = 1
+/** The desk waits this many days, then the default order (salaries → infra → rent → founder → ads) pays what it can. */
+export const PAYDAY_DECIDE_DAYS = 3
+/** Every employee's morale on half / deferred salaries. */
+export const PAYDAY_HALF_MORALE = -8
+export const PAYDAY_DEFER_MORALE = -15
+/** Morale target while salaries are owed (a one-off delta would melt back in two weeks; this term stays until paid). */
+export const WAGES_OWED_MORALE_TARGET = 10
+/** Founder energy when the founder skips their own pay. */
+export const FOUNDER_SKIP_ENERGY = -20
+/** Infra deferred: server capacity × this for INFRA_DEFER_DAYS; the second month in a row × the second value. */
+export const INFRA_DEFER_CAPACITY: readonly number[] = [0.7, 0.4]
+export const INFRA_DEFER_DAYS = 30
+/** Rent deferred this many months: the landlord's notice (card), then eviction. */
+export const LANDLORD_NOTICE_MONTHS = 2
+export const EVICTION_MONTHS = 3
+export const LANDLORD_CARD_ID = 'landlord-notice'
+/** The landlord-notice option that moves to a smaller place (the rent deferral count starts over). */
+export const LANDLORD_MOVE_OPTION = 1
+/** Eviction: capacity × this for EVICTION_DAYS, plus the moving cost (EVICTION_MOVE_RENT_MONTHS of the month's rent). */
+export const EVICTION_CAPACITY = 0.5
+export const EVICTION_DAYS = 60
+export const EVICTION_MOVE_RENT_MONTHS = 2
+
 /** GAMEPLAY V2 §9.3: stage report cards kept (one per stage left). */
 export const STAGE_REPORTS_MAX = 7
 

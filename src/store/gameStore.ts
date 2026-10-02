@@ -1,7 +1,7 @@
 // zustand store: the only bridge between the pure engine and render/ui.
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by the effective speed
 // (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card,
-// round offer / pitch; a center screen never holds it).
+// round offer / pitch, the payday desk open on a waiting month; a center screen never holds it).
 // After each tick: a new concept goes straight to the Kazanımlar badge (no scene bubble), an interrupting event closes
 // the center screen, and at 4× an important moment slows the run to 1× (docs/GAMEPLAY_V2.md §3.6, §12).
 import { create } from 'zustand'
@@ -19,16 +19,10 @@ const MAX_DAYS_PER_TICK = 4
 const NO_INSET = { top: 0, right: 0, bottom: 0 }
 
 /**
- * Cash-tension events the engine does not emit yet (docs/GAMEPLAY_V2.md §5, §6): listed here as plain strings so the
- * store rules are ready; the engine waves add them to GameEventKind.
- */
-type PendingEventKind = 'paydayShort' | 'crisis'
-
-/**
  * Events that interrupt a center screen: it closes so no card or payday desk is hidden behind it (and 4× drops to 1×).
  * docs/GAMEPLAY_V2.md §3.6.
  */
-const INTERRUPTS: readonly (GameEventKind | PendingEventKind)[] = [
+const INTERRUPTS: readonly GameEventKind[] = [
   'decisionShown',
   'paydayShort',
   'crisis',
@@ -39,11 +33,13 @@ const INTERRUPTS: readonly (GameEventKind | PendingEventKind)[] = [
   'roundFailed',
   'loanCalled',
 ]
-export const INTERRUPT_EVENT_KINDS: ReadonlySet<string> = new Set<string>(INTERRUPTS)
+export const INTERRUPT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(INTERRUPTS)
 
 /** Events that are worth watching at 1×: at 4× they slow the run down (never pause). */
-export const IMPORTANT_EVENT_KINDS: ReadonlySet<string> = new Set<GameEventKind | PendingEventKind>([
+export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
   ...INTERRUPTS,
+  // A crisis showing what it is (GAMEPLAY V2 §5.1): the player plans around it.
+  'crisisRevealed',
   'projectLaunched',
   'milestone',
   'bankruptWarning',
@@ -162,9 +158,17 @@ export function offerWaiting(s: GameState): boolean {
   return s.derived.canStartRound && !s.gameOver
 }
 
-/** The open overlay when it is a blocking modal; null for none or a center screen (time flows under those). */
+/**
+ * The open overlay when it is a blocking modal; null for none, a center screen (time flows under those) or the payday
+ * desk (it holds time through its own `payday` reason, only while a month waits on it).
+ */
 export function blockingOverlay(ui: Pick<UiState, 'overlay'>): Overlay | null {
-  return ui.overlay && !CENTER_KINDS.has(ui.overlay.kind) ? ui.overlay : null
+  return ui.overlay && !CENTER_KINDS.has(ui.overlay.kind) && ui.overlay.kind !== 'payday' ? ui.overlay : null
+}
+
+/** GAMEPLAY V2 §6.1: the payday desk is open on a month waiting on it (the `payday` pause). */
+export function paydayDeskOpen(ui: Pick<UiState, 'overlay'>, state?: GameState): boolean {
+  return ui.overlay?.kind === 'payday' && !!state?.finance.pendingPayday && !state.gameOver
 }
 
 /** True when a center screen (statistics, Kanun Kitabı, Pazar haritası) is open. */
@@ -184,7 +188,13 @@ export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisi
   if ((p?.kind === 'decision' && p.answered === undefined) || ui.decisionExpanded) r.push('decision')
   if (p?.kind === 'journal' && p.conceptId) r.push('concept')
   if (p?.kind === 'growth' && p.section === 'round' && state && offerWaiting(state)) r.push('offer')
+  if (paydayDeskOpen(ui, state)) r.push('payday')
   return r
+}
+
+/** The payday desk stays open only while a month waits on it (answered or defaulted → it closes). */
+function withDesk(ui: UiState, state: GameState): UiState {
+  return ui.overlay?.kind === 'payday' && !state.finance.pendingPayday ? { ...ui, overlay: null } : ui
 }
 
 /** Recomputes ui.pauseReasons after a panel/overlay/state change; keeps the old UiState when nothing changed. */
@@ -311,7 +321,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
     const starts = action.type === 'setSpeed' && action.speed > 0 && !get().ui.runStarted
     // A round choice made (size picked, pitch sent) ends the `offer` pause: pause reasons follow the new state.
-    set((s) => ({ state: res.state, ui: withAutoPins(withPause(starts ? { ...s.ui, runStarted: true } : s.ui, res.state), state, res.state) }))
+    // The payday desk closes once its month is answered (`payday` pause ends with it).
+    set((s) => ({ state: res.state, ui: withAutoPins(withPause(withDesk(starts ? { ...s.ui, runStarted: true } : s.ui, res.state), res.state), state, res.state) }))
     retargetEmptiedDetail(action, res.state)
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
@@ -331,7 +342,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const next = step(state, chunks * FIXED_STEP_DAYS)
     if (next === state) return
     // A pitch falling due with the Tur section open pauses right away (`offer`).
-    set((s) => ({ state: next, ui: withAutoPins(withPause(s.ui, next), state, next) }))
+    set((s) => ({ state: next, ui: withAutoPins(withPause(withDesk(s.ui, next), next), state, next) }))
     if (next.gameOver && !state.gameOver) {
       onGameOver(next)
       return
@@ -435,7 +446,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   toggleCenter(kind) {
     const { ui, openOverlay, closeOverlay } = get()
     if (ui.overlay?.kind === kind) closeOverlay()
-    else if (!blockingOverlay(ui)) openOverlay({ kind })
+    // Neither a blocking modal nor the payday desk is replaced by a center screen.
+    else if (!blockingOverlay(ui) && ui.overlay?.kind !== 'payday') openOverlay({ kind })
   },
   closeOverlay: () =>
     set((s) => {

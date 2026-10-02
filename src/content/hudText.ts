@@ -62,4 +62,27 @@ export const HUD_TEXT: Record<string, string> = {
 
   // Notification strip: items folded over the daily budget (count on the ⌃ button)
   'strip.digest': '+{n}',
+
+  // Discovery grid (§9.2, §12): seen cards over all cards, thread names, secret cell
+  'codex.title': 'Keşif',
+  'codex.count': '{n}/{total}',
+  'codex.threads': 'İplikler',
+  'codex.threadDone': 'Tamamlandı',
+  'codex.secret': 'Gizli kart',
+  'codex.locked': '?',
+  'codex.empty': 'Henüz kart yok',
+  'codex.thread.mentor': 'Mentor',
+  'codex.thread.investor': 'Yatırımcı',
+  'codex.thread.customer': 'Müşteri',
+  'codex.thread.rival': 'Rakip',
+  'codex.thread.press': 'Basın',
+  'codex.step': '{n}/{total} adım',
+
+  // Rival (§8.2, §9.4): stage-line notch, the one strip item, the market row
+  'rival.unknown': 'Adsız rakip',
+  'rival.notchTitle': '{name} · değerleme {v}',
+  'rival.passed': '{name} seni geçti',
+  'rival.share': 'Pay {p}',
+  'rival.ahead': 'Önde',
+  'rival.behind': 'Geride',
 }

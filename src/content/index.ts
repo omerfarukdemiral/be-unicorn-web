@@ -4,6 +4,8 @@ import { STAGES } from './stages'
 import { CONCEPTS } from './concepts'
 import { DECISIONS as CARD_DECISIONS } from './decisions'
 import { CRISES, CRISIS_CARDS } from './crises'
+import { SECRET_CARDS, THREAD_CARDS } from './threads'
+import { TEASERS } from './teasers'
 import { FURNITURE } from './furniture'
 import { OFFICE_LINES } from './officeLines'
 import { EMPLOYEE_NAMES, ENTERPRISE_NAMES, NPC_NAMES, PROJECT_NAMES } from './names'
@@ -18,8 +20,11 @@ import { ONLINE_TEXT } from './onlineText'
 import { HUD_TEXT } from './hudText'
 import { GOALS, goalsOfStage } from './goals'
 
-/** Every decision card: the rolled ones + the crisis cards the calendar brings (GAMEPLAY V2 §5.1). */
-const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...CRISIS_CARDS]
+/**
+ * Every decision card: the rolled ones, the thread steps and secret cards (GAMEPLAY V2 §9.2) + the crisis cards the
+ * calendar brings (§5.1). At most 65 in all (§3 md.11).
+ */
+const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...CRISIS_CARDS]
 
 /** strings.ts + feature tables (time flow, core loop, V2 HUD). One flat key → text dictionary. */
 const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT, ...HUD_TEXT }
@@ -31,6 +36,7 @@ export { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_
 export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }
 export { GOALS, goalsOfStage }
 export { CRISES, CRISIS_CARDS }
+export { THREAD_CARDS, SECRET_CARDS, TEASERS }
 export {
   ACTION_ERROR_TEXT,
   ARCHETYPE_TEXT,

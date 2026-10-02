@@ -8,7 +8,7 @@ import { startFounderAction } from './founder'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
-import { starsOfStage } from './loop'
+import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
 import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
@@ -360,6 +360,15 @@ const startRoundH: Handler<'startRound'> = ({ s, rng, content }, a) => startRoun
 
 const roundPitchH: Handler<'roundPitch'> = ({ s, rng }, a) => roundPitch(s, a.pitch, rng)
 
+/** GAMEPLAY V2 §6.1: the payday desk's answer; nothing waits on the desk → notFound. */
+const resolvePaydayH: Handler<'resolvePayday'> = ({ s, content }, a) => {
+  if (!s.finance.pendingPayday) return 'notFound'
+  if (!isPaydayChoice(a.choice)) return 'invalid'
+  resolvePayday(s, content, a.choice)
+  pushEvent(s, { kind: 'paydayResolved', value: s.finance.deferred ?? 0 })
+  return null
+}
+
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
   fire,
@@ -382,4 +391,5 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   answerDecision: answerDecisionH,
   startRound: startRoundH,
   roundPitch: roundPitchH,
+  resolvePayday: resolvePaydayH,
 }

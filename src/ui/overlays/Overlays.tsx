@@ -20,7 +20,6 @@ import { OverlayFrame } from './OverlayFrame'
 export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
   const stage = useGameStore((s) => s.state.stage)
   const def = STAGES[stage]
-  const prev = STAGES[stage - 1]
   return (
     <OverlayFrame onClose={onClose}>
       <div className="flex flex-col items-center gap-4 p-6 text-center">
@@ -33,8 +32,6 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
           <Label>{t('move.kicker', { stage: def?.name ?? '' })}</Label>
           <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t('round.moveTitle')}</h2>
           <p className="mt-0.5 text-base font-semibold text-ink">{def?.officeName}</p>
-          {def?.tagline && <p className="font-text mt-1 text-sm text-ink-2">{def.tagline}</p>}
-          {prev && <p className="font-text mt-1 text-sm text-ink-2">{t('move.from', { office: prev.officeName })}</p>}
         </div>
         {def && (
           <div className="w-full rounded-control border border-border px-4 py-3 text-left">
@@ -42,7 +39,6 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
             <p className="font-text mt-0.5 text-sm font-medium text-ink">{def.unlocksText}</p>
           </div>
         )}
-        <p className="font-text text-xs text-ink-2">{t('round.moveBody')}</p>
         <Button tone="primary" className="w-full" onClick={onClose} autoFocus>
           {t('move.go')}
         </Button>

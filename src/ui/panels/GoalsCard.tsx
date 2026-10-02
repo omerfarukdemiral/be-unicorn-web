@@ -54,14 +54,12 @@ export function GoalsCard() {
               <Icon name={done ? 'check' : 'star'} size={14} className={cx('mt-0.5 shrink-0', done ? 'text-positive-ink' : 'text-ink-3')} />
               <span className="min-w-0 flex-1">
                 <span className={cx('block text-[12.5px] font-semibold leading-snug', done ? 'text-positive-ink' : 'text-ink')}>{goal.text}</span>
-                <span className="font-text block text-[11px] leading-snug text-ink-2">{goal.hint}</span>
               </span>
               {done && <span className="ui-label shrink-0 text-positive-ink">{t('goals.done')}</span>}
             </li>
           )
         })}
       </ul>
-      {goals.length > 0 && <p className="font-text mt-1.5 text-[11px] leading-snug text-ink-3">{t('goals.reward')}</p>}
     </section>
   )
 }

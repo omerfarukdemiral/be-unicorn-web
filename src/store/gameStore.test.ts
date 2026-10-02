@@ -13,6 +13,7 @@ import {
   effectiveSpeed,
   hasImportantMoment,
   hasInterrupt,
+  IMPORTANT_EVENT_KINDS,
   offerWaiting,
   panelSelection,
   pauseReasonsOf,
@@ -878,12 +879,74 @@ describe('center screens (docs/GAMEPLAY_V2.md §14.3)', () => {
     expect(store().state.time.day).toBeGreaterThan(day)
   })
 
-  it('interrupting events: cards, the round window, cash tension (engine kinds still to come); not a hire or a release', () => {
+  it('interrupting events: cards, the round window, cash tension (real engine kinds); not a hire or a release', () => {
     const s = store().state
     for (const k of ['decisionShown', 'roundWindow', 'payrollMissed', 'paydayShort', 'crisis', 'roundFailed', 'loanCalled']) {
       expect(hasInterrupt(s, withEvent(k)), k).toBe(true)
       expect(hasImportantMoment(s, withEvent(k)), k).toBe(true)
     }
     for (const k of ['hired', 'release', 'payday', 'goalDone', 'conceptQueued']) expect(hasInterrupt(s, withEvent(k)), k).toBe(false)
+    // A crisis showing what it is slows 4× down but does not close the screen.
+    expect(hasImportantMoment(s, withEvent('crisisRevealed'))).toBe(true)
+    expect(hasInterrupt(s, withEvent('crisisRevealed'))).toBe(false)
+    expect(IMPORTANT_EVENT_KINDS.has('paydayShort')).toBe(true)
+  })
+})
+
+describe('payday desk (docs/GAMEPLAY_V2.md §6.1, §3 md.6)', () => {
+  beforeEach(() => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+  })
+  afterEach(() => store().closeOverlay())
+
+  /** The store's run with a month waiting on the desk (the engine's own short payday, see money.test). */
+  function withDesk(): GameState {
+    const s = store().state
+    const ledger = { revenue: 0, salaries: 0, rent: 300, infra: 20, ads: 0, founder: 1_200 }
+    const state: GameState = { ...s, stats: { ...s.stats, cash: 500 }, finance: { ...s.finance, pendingPayday: { day: Math.floor(s.time.day), ledger, deferredBefore: 0 } } }
+    useGameStore.setState({ state })
+    return state
+  }
+  const desk: Overlay = { kind: 'payday' }
+
+  it('pendingPayday + the desk open → the `payday` pause (not `modal`), and the day stands still', () => {
+    const state = withDesk()
+    store().openOverlay(desk)
+    expect(store().ui.pauseReasons).toEqual(['payday'])
+    expect(pauseReasonsOf({ overlay: desk, panel: null }, state)).toEqual(['payday'])
+    expect(blockingOverlay(store().ui)).toBeNull()
+    expect(effectiveSpeed(store())).toBe(0)
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY)
+    expect(store().state.time.day).toBe(day)
+    // A center screen does not replace the desk.
+    store().toggleCenter('stats')
+    expect(store().ui.overlay).toEqual(desk)
+  })
+
+  it('"Sonra": the desk closed → no pause, the tick moves the day on (the 3-day countdown runs)', () => {
+    const state = withDesk()
+    store().openOverlay(desk)
+    store().closeOverlay()
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(pauseReasonsOf({ overlay: null, panel: null }, state)).toEqual([])
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY)
+    expect(store().state.time.day).toBeCloseTo(day + 1, 6)
+    expect(store().state.finance.pendingPayday).toBeDefined()
+    // The desk open with nothing waiting on it holds nothing.
+    expect(pauseReasonsOf({ overlay: desk, panel: null }, { ...state, finance: { ...state.finance, pendingPayday: undefined } })).toEqual([])
+  })
+
+  it('resolvePayday: the month closes, the desk with it, the pause ends', () => {
+    withDesk()
+    store().openOverlay(desk)
+    const res = store().dispatch({ type: 'resolvePayday', choice: { salaries: 'full', rent: 'pay', infra: 'pay', ads: 'pay', founder: 'skip' } })
+    expect(res.ok).toBe(true)
+    expect(store().state.finance.pendingPayday).toBeUndefined()
+    expect(store().ui.overlay).toBeNull()
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(1)
   })
 })

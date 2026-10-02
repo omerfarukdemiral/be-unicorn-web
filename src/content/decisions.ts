@@ -1,8 +1,10 @@
-// PLAN §6.3 decision cards, v1 set (52) + the one-time angel (GAMEPLAY V2 §5.2). No card scolds the player; every option shows gain / cost.
+// PLAN §6.3 decision cards + the one-time angel (GAMEPLAY V2 §5.2). No card scolds the player; every option shows gain / cost.
+// GAMEPLAY V2 §3 md.11 / §9.2: the thread cards (threads.ts) came in and as many weak cards went out (the deck stays at
+// its size): the ones a thread step now tells better, the rare ones and the late cards every run used to drain.
 // Effect notes for the engine:
 //   - modifiers.value is a multiplier, except kind 'morale' where it is an additive morale-target bonus.
 //   - cashPercent stays within ±0.25 here; engine caps again.
-//   - Flags set by cards: rushedProject, starHire, vcHeavy, bootstrapLean, nichePath, platformPath.
+//   - Flags set by cards: rushedProject, starHire, nichePath, platformPath (+ rivalBuyIntent, threads.ts).
 //   - Loans (GAMEPLAY V2 §6.2) are `effects.loan` terms; the engine sizes them on the burn and closes every loan offer
 //     while one runs (one loan only).
 //   - Rival cards read flags.rivalPressure (0–1), maintained by the engine.
@@ -19,9 +21,14 @@ const rivalPressure = (s: GameState): number => {
   const v = s.flags['rivalPressure']
   return typeof v === 'number' ? v : 0
 }
+/**
+ * Rival thread step 3 (GAMEPLAY V2 §9.2) comes at Series A, after the rival is born: a named rival is enough there
+ * (the lead's pressure fades once the player outgrows its anchor).
+ */
+const rivalNear = (s: GameState): boolean => rivalPressure(s) >= 0.35 || (s.rivals?.length ?? 0) > 0
 
 export const DECISIONS: readonly DecisionCard[] = [
-  // =========================================================== Garaj (7)
+  // =========================================================== Garaj (3)
   {
     id: 'early-focus',
     stage: 0,
@@ -45,31 +52,6 @@ export const DECISIONS: readonly DecisionCard[] = [
         effects: { reputation: 2, modifiers: [mod('production', 0.9, 20)] },
         reflection: 'Denemek öğretir, ama hız bölünür.',
         conceptId: 'focus',
-      },
-    ],
-  },
-  {
-    id: 'early-channel',
-    stage: 0,
-    maxStage: 1,
-    category: 'normal',
-    speaker: 'mentor',
-    question: 'İlk kullanıcıları nereden bulacağız? Bir kanal seçmen lazım.',
-    condition: (s) => s.stats.users < 30,
-    options: [
-      {
-        label: 'Topluluklarda tek tek konuş',
-        tradeoff: { gain: 'Sadık kullanıcı, düşük churn', cost: 'Kurucu enerjisi' },
-        effects: { users: 8, energy: -15, modifiers: [mod('churn', 0.85, 30)] },
-        reflection: 'Tek tek kazanılan kullanıcı, ürünü en iyi anlatandır.',
-        conceptId: 'dont-scale',
-      },
-      {
-        label: 'Küçük bir reklam dene',
-        tradeoff: { gain: 'Hızlı ziyaretçi', cost: '$600 ve çabuk giden kullanıcı' },
-        effects: { cash: -600, users: 25, modifiers: [mod('churn', 1.2, 30)] },
-        reflection: 'Reklam kapıyı açar, kalmalarını ürün sağlar.',
-        conceptId: 'pmf',
       },
     ],
   },
@@ -98,56 +80,6 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
   {
-    id: 'early-burnout',
-    stage: 0,
-    maxStage: 1,
-    category: 'normal',
-    speaker: 'cofounder',
-    question: 'Haftalardır gece yarısına kadar çalışıyorsun. Biraz dinlensen mi?',
-    condition: (s) => s.founder.energy < 60,
-    options: [
-      {
-        label: 'İki gün dinlen',
-        tradeoff: { gain: 'Enerji dolar', cost: 'İş iki gün yavaşlar' },
-        effects: { energy: 40, modifiers: [mod('production', 0.85, 3)] },
-        reflection: 'Dinlenmiş kurucu daha iyi karar verir.',
-        conceptId: 'founder-burnout',
-      },
-      {
-        label: 'Devam et',
-        tradeoff: { gain: 'Hız korunur', cost: 'Enerji daha da düşer' },
-        effects: { energy: -15, maturity: 0.03 },
-        delayed: { days: 14, effects: { morale: -5 }, note: 'Yorgunluk ekibe de yansıdı.' },
-        reflection: 'Tempo bir süre taşır, sonra faturasını keser.',
-        conceptId: 'founder-burnout',
-      },
-    ],
-  },
-  {
-    id: 'early-feedback',
-    stage: 0,
-    maxStage: 1,
-    category: 'normal',
-    speaker: 'customer',
-    question: 'İlk kullanıcılardan biri ürünü sert eleştirdi. Ne yapalım?',
-    options: [
-      {
-        label: 'Görüntülü görüşme ayarla',
-        tradeoff: { gain: 'Ürün olgunlaşır', cost: 'Kurucu enerjisi' },
-        effects: { maturity: 0.05, energy: -10 },
-        reflection: 'Sert eleştiri, bedava danışmanlıktır.',
-        conceptId: 'pmf',
-      },
-      {
-        label: 'Teşekkür et, listeye ekle',
-        tradeoff: { gain: 'Zaman kaybı yok', cost: 'İçgörü yüzeyde kalır' },
-        effects: { reputation: 2 },
-        reflection: 'Her geri bildirim aynı derinlikte dinlenemez.',
-        conceptId: 'pmf',
-      },
-    ],
-  },
-  {
     id: 'early-equity-split',
     stage: 0,
     maxStage: 1,
@@ -172,33 +104,8 @@ export const DECISIONS: readonly DecisionCard[] = [
       },
     ],
   },
-  {
-    id: 'friends-family',
-    stage: 0,
-    maxStage: 1,
-    category: 'normal',
-    speaker: 'mentor',
-    question: 'Ailen ve arkadaşların küçük bir destek teklif ediyor. Alalım mı?',
-    condition: needsCash,
-    options: [
-      {
-        label: 'Kabul et',
-        tradeoff: { gain: '+$8K kasa', cost: '%3 hisse ve ilişki baskısı' },
-        effects: { cash: 8000, equity: -0.03 },
-        reflection: 'Yakınlardan gelen para da bir sözleşmedir.',
-        conceptId: 'dilution',
-      },
-      {
-        label: 'Nazikçe reddet',
-        tradeoff: { gain: 'Hisse ve ilişki korunur', cost: 'Kasa aynı kalır' },
-        effects: { morale: 2 },
-        reflection: 'Daha kısa runway, daha az yük demek olabilir.',
-        conceptId: 'runway',
-      },
-    ],
-  },
 
-  // =========================================================== Pre-seed (7)
+  // =========================================================== Pre-seed (3)
   {
     id: 'angel-1',
     stage: 1,
@@ -222,81 +129,6 @@ export const DECISIONS: readonly DecisionCard[] = [
         effects: { reputation: 2 },
         reflection: 'Beklemek de bir müzakere pozisyonudur.',
         conceptId: 'safe',
-      },
-    ],
-  },
-  {
-    id: 'accelerator-invite',
-    stage: 1,
-    maxStage: 2,
-    category: 'normal',
-    speaker: 'mentor',
-    question: 'Bir hızlandırıcı programdan davet geldi. Mentorluk ve ağ var, karşılığı %6 hisse.',
-    condition: needsCash,
-    options: [
-      {
-        label: 'Katıl',
-        tradeoff: { gain: '+$25K, itibar, daha hızlı tur', cost: '%6 hisse' },
-        effects: { cash: 25_000, equity: -0.06, reputation: 8, modifiers: [mod('roundSpeed', 1.2, 90)] },
-        reflection: 'Ağ, hisseyle ödenen bir hızlandırıcıdır.',
-        conceptId: 'dilution',
-      },
-      {
-        label: 'Kendi yolumuza devam',
-        tradeoff: { gain: 'Hisse ve odak sende', cost: 'Ağ ve mentorluk yok' },
-        effects: { morale: 3, setFlag: 'bootstrapLean' },
-        reflection: 'Bağımsızlık yavaş ama sağlam bir patikadır.',
-        conceptId: 'default-alive',
-      },
-    ],
-  },
-  {
-    id: 'grant-opportunity',
-    stage: 1,
-    maxStage: 2,
-    category: 'normal',
-    speaker: 'accountant',
-    question: 'Ar-Ge hibesi başvurusu açıldı. Dosya hazırlamak iki hafta sürer.',
-    condition: needsCash,
-    options: [
-      {
-        label: 'Başvur',
-        tradeoff: { gain: '2 ay sonra +$30K', cost: 'İki hafta yavaş ürün' },
-        effects: { modifiers: [mod('production', 0.85, 14)] },
-        delayed: { days: 60, effects: { cash: 30_000 }, note: 'Hibe onaylandı: +$30K.' },
-        reflection: 'Hisse vermeyen para, sabır ister.',
-        conceptId: 'runway',
-      },
-      {
-        label: 'Ürüne odaklan',
-        tradeoff: { gain: 'Hız korunur', cost: 'Bedava para kaçar' },
-        effects: { maturity: 0.03 },
-        reflection: 'Her fırsat, odaktan daha değerli değildir.',
-        conceptId: 'focus',
-      },
-    ],
-  },
-  {
-    id: 'key-hire',
-    stage: 1,
-    maxStage: 2,
-    category: 'normal',
-    speaker: 'cofounder',
-    question: 'Çok iyi bir mühendis ilgileniyor ama maaşı bütçenin üstünde. Ne dersin?',
-    options: [
-      {
-        label: 'Hisse opsiyonuyla al',
-        tradeoff: { gain: 'Güçlü ekip, hızlı ürün', cost: '%2 hisse' },
-        effects: { equity: -0.02, modifiers: [mod('production', 1.15, 60)] },
-        reflection: 'Doğru kişi, hisseyi değerli kılar.',
-        conceptId: 'hire-bar',
-      },
-      {
-        label: 'Bütçeye sadık kal',
-        tradeoff: { gain: 'Burn sabit kalır', cost: 'Bu yetenek kaçar' },
-        effects: { morale: 1 },
-        reflection: 'Disiplinli bütçe de bir strateji.',
-        conceptId: 'burn',
       },
     ],
   },
@@ -332,30 +164,6 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
   {
-    id: 'advisor-equity',
-    stage: 1,
-    maxStage: 2,
-    category: 'normal',
-    speaker: 'mentor',
-    question: 'Tanınmış bir isim danışmanın olmak istiyor. Karşılığında %2 hisse istiyor.',
-    options: [
-      {
-        label: 'Kabul et',
-        tradeoff: { gain: 'İtibar ve daha hızlı tur', cost: '%2 hisse' },
-        effects: { equity: -0.02, reputation: 10, modifiers: [mod('roundSpeed', 1.15, 120)] },
-        reflection: 'Doğru isim kapıları açar, hisse de kalıcıdır.',
-        conceptId: 'dilution',
-      },
-      {
-        label: 'Ücretli danışmanlık öner',
-        tradeoff: { gain: 'Hisse korunur', cost: '$1.5K nakit' },
-        effects: { cash: -1500, reputation: 4 },
-        reflection: 'Nakit pahalı ama hisseden ucuz olabilir.',
-        conceptId: 'dilution',
-      },
-    ],
-  },
-  {
     id: 'pmf-hypothesis-width',
     stage: 1,
     maxStage: 2,
@@ -384,81 +192,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
 
-  // =========================================================== Seed (10)
-  {
-    id: 'seed-termsheet',
-    stage: 2,
-    maxStage: 3,
-    category: 'normal',
-    speaker: 'investor',
-    question: 'Term sheet geldi, bir de yönetim kurulu gözlemcisi istiyorlar.',
-    condition: (s) => s.round?.active === true,
-    options: [
-      {
-        label: 'Gözlemciyi kabul et',
-        tradeoff: { gain: 'Tur 2 hafta hızlanır', cost: 'Kararlarda şeffaflık baskısı' },
-        effects: { roundWeeks: -2, reputation: 3 },
-        reflection: 'Şeffaflık, güvenin para birimidir.',
-        conceptId: 'fundraise-time',
-      },
-      {
-        label: 'Sadece parayı konuş',
-        tradeoff: { gain: 'Kontrol sende', cost: 'Tur 1 hafta uzar' },
-        effects: { roundWeeks: 1 },
-        reflection: 'Kontrolü korumak zaman alabilir.',
-        conceptId: 'fundraise-time',
-      },
-    ],
-  },
-  {
-    id: 'press-launch',
-    stage: 2,
-    maxStage: 3,
-    category: 'normal',
-    speaker: 'journalist',
-    question: 'Bir teknoloji sitesi haber yapmak istiyor. Lansmanı şimdi mi duyuralım?',
-    options: [
-      {
-        label: 'Hemen duyur',
-        tradeoff: { gain: 'Kullanıcı dalgası', cost: 'Sunucu ve churn riski' },
-        effects: { users: 100, usersPercent: 0.2, reputation: 6, modifiers: [mod('churn', 1.2, 30)] },
-        reflection: 'Haber kullanıcı getirir, kalmalarını ürün sağlar.',
-        conceptId: 'churn',
-      },
-      {
-        label: 'Ürün oturunca',
-        tradeoff: { gain: 'Kalıcı kullanıcı', cost: 'İlgi soğuyabilir' },
-        effects: {},
-        delayed: { days: 30, effects: { users: 60, reputation: 4 }, note: 'Ertelenen haber yayında.' },
-        reflection: 'Doğru zamanlama, haberin ömrünü uzatır.',
-        conceptId: 'pmf',
-      },
-    ],
-  },
-  {
-    id: 'negative-review',
-    stage: 2,
-    maxStage: 3,
-    category: 'normal',
-    speaker: 'journalist',
-    question: 'Popüler bir forumda ürün hakkında sert bir yorum yayılıyor.',
-    options: [
-      {
-        label: 'Açıkça yanıtla ve düzelt',
-        tradeoff: { gain: 'İtibar toparlanır', cost: 'Ekip bir hafta buna döner' },
-        effects: { reputation: 4, modifiers: [mod('production', 0.85, 7), mod('churn', 0.95, 30)] },
-        reflection: 'Açık yanıt, eleştireni bile savunucuya çevirebilir.',
-        conceptId: 'churn',
-      },
-      {
-        label: 'Yorum yapma, işine bak',
-        tradeoff: { gain: 'Odak bozulmaz', cost: 'İtibar biraz düşer' },
-        effects: { reputation: -5 },
-        reflection: 'Sessizlik de bir mesajdır, herkes aynı okumaz.',
-        conceptId: 'churn',
-      },
-    ],
-  },
+  // =========================================================== Seed (4)
   {
     id: 'pricing-change',
     stage: 2,
@@ -480,30 +214,6 @@ export const DECISIONS: readonly DecisionCard[] = [
         effects: { modifiers: [mod('arpu', 1.07, 90)] },
         reflection: 'Yumuşak geçiş, güveni korur.',
         conceptId: 'pricing',
-      },
-    ],
-  },
-  {
-    id: 'feature-request-flood',
-    stage: 2,
-    maxStage: 3,
-    category: 'normal',
-    speaker: 'customer',
-    question: 'Kullanıcılar onlarca özellik istiyor. Hepsine yetişemeyiz.',
-    options: [
-      {
-        label: 'En çok isteneni yap',
-        tradeoff: { gain: 'Kullanıcı memnuniyeti', cost: 'Yol haritası kayar' },
-        effects: { maturity: 0.02, modifiers: [mod('churn', 0.9, 45)] },
-        reflection: 'Dinlemek iyidir, her isteği ürün yapmak şart değil.',
-        conceptId: 'feature-vs-product',
-      },
-      {
-        label: 'Vizyona sadık kal',
-        tradeoff: { gain: 'Ürün tutarlı kalır', cost: 'Bazı kullanıcılar küser' },
-        effects: { maturity: 0.05, modifiers: [mod('churn', 1.05, 30)] },
-        reflection: 'Net bir vizyon, bazı hayırlar gerektirir.',
-        conceptId: 'feature-vs-product',
       },
     ],
   },
@@ -557,56 +267,6 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
   {
-    id: 'hiring-bar-vs-speed',
-    stage: 2,
-    maxStage: 3,
-    category: 'normal',
-    speaker: 'cofounder',
-    question: 'Açık pozisyonlar bekliyor. Çıtayı düşürüp hızlı mı alalım?',
-    options: [
-      {
-        label: 'Hızlı al',
-        tradeoff: { gain: 'Ekip hızla büyür', cost: 'Kalite ve moral riski' },
-        effects: { modifiers: [mod('production', 1.1, 30)] },
-        delayed: { days: 45, effects: { morale: -6 }, note: 'Aceleyle kurulan ekipte uyum sorunu çıktı.' },
-        reflection: 'Hız bugün kazandırır, uyum yarın sorulur.',
-        conceptId: 'hire-bar',
-      },
-      {
-        label: 'Çıtayı koru',
-        tradeoff: { gain: 'Güçlü ve uyumlu ekip', cost: 'Büyüme yavaşlar' },
-        effects: { morale: 4, modifiers: [mod('production', 0.95, 30)] },
-        reflection: 'Doğru kişiyi beklemek, yanlışı çıkarmaktan kolaydır.',
-        conceptId: 'hire-bar',
-      },
-    ],
-  },
-  {
-    id: 'd7-retention-drop',
-    stage: 2,
-    maxStage: 3,
-    category: 'normal',
-    speaker: 'engineer',
-    question: 'Yeni kullanıcıların çoğu ilk haftada bırakıyor. Karşılama akışı mı sorunlu?',
-    condition: (s) => s.stats.users > 200,
-    options: [
-      {
-        label: 'Karşılamayı yeniden tasarla',
-        tradeoff: { gain: 'Tutunma belirgin artar', cost: 'İki hafta yeni özellik yok' },
-        effects: { modifiers: [mod('churn', 0.8, 60), mod('production', 0.9, 14)] },
-        reflection: 'İlk hafta, kullanıcının kalıp kalmayacağına karar verdiği yerdir.',
-        conceptId: 'churn',
-      },
-      {
-        label: 'Hatırlatma e-postası ekle',
-        tradeoff: { gain: 'Hızlı ve ucuz', cost: 'Etkisi sınırlı' },
-        effects: { modifiers: [mod('churn', 0.93, 30)] },
-        reflection: 'Küçük dokunuşlar da bir şeyleri değiştirir.',
-        conceptId: 'churn',
-      },
-    ],
-  },
-  {
     id: 'server-crash',
     stage: 2,
     maxStage: 3,
@@ -632,104 +292,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
 
-  // =========================================================== Series A (10)
-  {
-    id: 'vc-board-seat',
-    stage: 3,
-    maxStage: 4,
-    category: 'normal',
-    speaker: 'investor',
-    question: 'Yatırımcı yönetim kurulunda koltuk istiyor.',
-    options: [
-      {
-        label: 'Koltuğu ver',
-        tradeoff: { gain: 'Ağ, deneyim, hızlı turlar', cost: 'Kontrol paylaşılır' },
-        effects: { reputation: 6, setFlag: 'vcHeavy', modifiers: [mod('roundSpeed', 1.2, 180)] },
-        reflection: 'Yönetim kurulu hem ayna hem direksiyondur.',
-        conceptId: 'cap-table-health',
-      },
-      {
-        label: 'Gözlemci statüsü öner',
-        tradeoff: { gain: 'Kontrol sende', cost: 'İlişki biraz soğur' },
-        effects: { reputation: -2 },
-        reflection: 'Kontrolü korumak da meşru bir tercihtir.',
-        conceptId: 'cap-table-health',
-      },
-    ],
-  },
-  {
-    id: 'ad-spend-temptation',
-    stage: 3,
-    maxStage: 4,
-    category: 'normal',
-    speaker: 'mentor',
-    question: 'Reklam bütçesini ikiye katlarsak büyüme uçacak gibi görünüyor.',
-    options: [
-      {
-        label: 'İkiye katla',
-        tradeoff: { gain: 'Hızlı kullanıcı artışı', cost: 'Kasa hızla erir' },
-        effects: { cashPercent: -0.08, usersPercent: 0.15, modifiers: [mod('churn', 1.1, 30)] },
-        reflection: 'Reklam hızlandırır, ekonomisi tutarsa.',
-        conceptId: 'ltv-cac',
-      },
-      {
-        label: "Önce LTV:CAC'a bak",
-        tradeoff: { gain: 'Para boşa gitmez', cost: 'Büyüme yavaş' },
-        effects: { queueConcept: 'ltv-cac', modifiers: [mod('organic', 1.05, 30)] },
-        reflection: 'Hesabı önce yapmak, sonra düzeltmekten ucuzdur.',
-        conceptId: 'ltv-cac',
-      },
-    ],
-  },
-  {
-    id: 'growth-hack',
-    stage: 3,
-    maxStage: 4,
-    category: 'normal',
-    speaker: 'engineer',
-    question: 'Bir büyüme hilesi buldum: davet edene ödül. Hızlı ama sınırda.',
-    options: [
-      {
-        label: 'Hemen dene',
-        tradeoff: { gain: 'Hızlı kullanıcı', cost: 'Kalitesiz kullanıcı, churn' },
-        effects: { usersPercent: 0.12, modifiers: [mod('churn', 1.2, 45)] },
-        reflection: 'Hızlı gelen kullanıcı, hızlı gidebilir.',
-        conceptId: 'organic-vs-paid',
-      },
-      {
-        label: 'Referans programını düzgün kur',
-        tradeoff: { gain: 'Kalıcı organik büyüme', cost: 'Bir ay sürer' },
-        effects: {},
-        delayed: { days: 30, effects: { modifiers: [mod('organic', 1.2, 90)] }, note: 'Referans programı yayında.' },
-        reflection: 'Kullanıcının kullanıcı getirmesi, en sağlam kanaldır.',
-        conceptId: 'organic-vs-paid',
-      },
-    ],
-  },
-  {
-    id: 'viral-tiktok',
-    stage: 3,
-    maxStage: 4,
-    category: 'normal',
-    speaker: 'journalist',
-    question: 'Bir videomuz viral oldu! Sunucular zorlanmaya başladı.',
-    options: [
-      {
-        label: 'Anı yakala, kapasite kirala',
-        tradeoff: { gain: 'Büyük kullanıcı dalgası', cost: 'Altyapı faturası' },
-        effects: { cashPercent: -0.05, usersPercent: 0.25, reputation: 5 },
-        reflection: 'Şans hazırlıklı olana uğrar, faturası da gelir.',
-        conceptId: 'organic-vs-paid',
-      },
-      {
-        label: 'Bekleme listesi aç',
-        tradeoff: { gain: 'Merak ve kalite', cost: 'Bazıları vazgeçer' },
-        effects: { usersPercent: 0.1, reputation: 8 },
-        reflection: 'Kıtlık da bir pazarlama dilidir.',
-        conceptId: 'organic-vs-paid',
-      },
-    ],
-  },
+  // =========================================================== Series A (3)
   {
     id: 'technical-debt-vote',
     stage: 3,
@@ -805,139 +368,8 @@ export const DECISIONS: readonly DecisionCard[] = [
       },
     ],
   },
-  {
-    id: 'b2b-opportunity',
-    stage: 3,
-    maxStage: 4,
-    category: 'normal',
-    speaker: 'customer',
-    question: 'Büyük bir şirket ürünümüzü kurumsal olarak kullanmak istiyor.',
-    condition: needsCash,
-    options: [
-      {
-        label: 'Anlaş',
-        tradeoff: { gain: 'Büyük, düzenli gelir', cost: 'Özel talepler gelecek' },
-        effects: { cashPercent: 0.1, queueCard: 'custom-feature-trap' },
-        reflection: 'Büyük müşteri büyük gelir, büyük beklenti getirir.',
-        conceptId: 'concentration',
-      },
-      {
-        label: 'Bireysel kullanıcıya odaklan',
-        tradeoff: { gain: 'Ürün sade kalır', cost: 'Büyük gelir kaçar' },
-        effects: { morale: 2 },
-        reflection: 'Odak bazen para bırakmak demektir.',
-        conceptId: 'focus',
-      },
-    ],
-  },
-  {
-    id: 'custom-feature-trap',
-    stage: 3,
-    maxStage: 5,
-    category: 'normal',
-    speaker: 'customer',
-    question: 'Kurumsal müşteri sadece kendisi için bir özellik istiyor.',
-    weight: 0.5,
-    options: [
-      {
-        label: 'Olduğu gibi yap',
-        tradeoff: { gain: 'Müşteri mutlu', cost: 'Ürün dağılır, borç birikir' },
-        effects: { cashPercent: 0.05, techDebt: 6, modifiers: [mod('production', 0.9, 30)] },
-        reflection: 'Tek müşteriye özel kod, herkesin bakım yüküdür.',
-        conceptId: 'feature-vs-product',
-      },
-      {
-        label: 'Herkese açık özellik yap',
-        tradeoff: { gain: 'Tüm kullanıcılar faydalanır', cost: 'Müşteri bekler' },
-        effects: { maturity: 0.03 },
-        reflection: 'Özel isteği genel değere çevirmek bir ustalıktır.',
-        conceptId: 'feature-vs-product',
-      },
-      {
-        label: 'Nazikçe reddet',
-        tradeoff: { gain: 'Odak korunur', cost: 'Müşteri gidebilir' },
-        effects: { cashPercent: -0.03 },
-        reflection: 'Hayır demek, ürünü korumanın bir yoludur.',
-        conceptId: 'feature-vs-product',
-      },
-    ],
-  },
-  {
-    id: 'blitzscale-pressure',
-    stage: 3,
-    maxStage: 4,
-    category: 'normal',
-    speaker: 'investor',
-    question: 'Yatırımcılar "pazarı hemen kapla" diyor. Hızla büyümeli miyiz?',
-    options: [
-      {
-        label: 'Gaza bas',
-        tradeoff: { gain: 'Hızlı büyüme', cost: 'Burn ve kaos' },
-        effects: { usersPercent: 0.15, cashPercent: -0.1, setFlag: 'vcHeavy', modifiers: [mod('morale', -4, 60)] },
-        reflection: 'Hız pazarı kazandırabilir, kaosu da beraberinde getirir.',
-        conceptId: 'premature-scaling',
-      },
-      {
-        label: 'Sağlıklı tempoda büyü',
-        tradeoff: { gain: 'Kontrollü büyüme', cost: 'Yatırımcı sabırsızlanır' },
-        effects: { reputation: -2, morale: 3, setFlag: 'bootstrapLean' },
-        reflection: 'Kendi temposunu bilen şirket, uzun koşar.',
-        conceptId: 'premature-scaling',
-      },
-    ],
-  },
 
-  // =========================================================== Series B (7)
-  {
-    id: 'enterprise-rfp',
-    stage: 4,
-    maxStage: 5,
-    category: 'normal',
-    speaker: 'customer',
-    question: 'Bir holding ihale açtı. Kazanmak aylar sürebilir.',
-    condition: needsCash,
-    options: [
-      {
-        label: 'Teklif hazırla',
-        tradeoff: { gain: 'Büyük kurumsal müşteri', cost: 'Ekip bir ay meşgul' },
-        effects: { modifiers: [mod('production', 0.9, 30)] },
-        delayed: { days: 45, effects: { cashPercent: 0.1, reputation: 5 }, note: 'İhaleyi kazandık!' },
-        reflection: 'Kurumsal satış sabır ister, sonra düzenli öder.',
-        conceptId: 'compliance',
-      },
-      {
-        label: 'Pas geç',
-        tradeoff: { gain: 'Odak korunur', cost: 'Büyük fırsat kaçar' },
-        effects: { morale: 1 },
-        reflection: 'Her ihale kazanılmaya değmez.',
-        conceptId: 'focus',
-      },
-    ],
-  },
-  {
-    id: 'whale-churn',
-    stage: 4,
-    maxStage: 5,
-    category: 'normal',
-    speaker: 'accountant',
-    question: 'En büyük müşterimiz sözleşmeyi yenilemeyebilir.',
-    options: [
-      {
-        label: 'İndirimle tut',
-        tradeoff: { gain: 'Gelir korunur', cost: 'Marj düşer' },
-        effects: { modifiers: [mod('arpu', 0.95, 90)] },
-        reflection: 'Tutmak kazanmaktan ucuzdur, bağımlılığı da uzatır.',
-        conceptId: 'concentration',
-      },
-      {
-        label: 'Riski dağıt, yeni müşteri ara',
-        tradeoff: { gain: 'Bağımlılık azalır', cost: 'Kısa vadede gelir kaybı' },
-        effects: { cashPercent: -0.05, modifiers: [mod('organic', 1.1, 60)] },
-        reflection: 'Dağılmış gelir, rahat uyku demektir.',
-        conceptId: 'concentration',
-      },
-    ],
-  },
+  // =========================================================== Series B (4)
   {
     id: 'gdpr-audit',
     stage: 4,
@@ -1044,37 +476,14 @@ export const DECISIONS: readonly DecisionCard[] = [
       },
     ],
   },
-  {
-    id: 'market-downturn',
-    stage: 4,
-    maxStage: 5,
-    category: 'normal',
-    speaker: 'investor',
-    question: 'Piyasa soğudu, yatırımcılar temkinli. Planı değiştirelim mi?',
-    options: [
-      {
-        label: 'Tasarrufa geç',
-        tradeoff: { gain: 'Runway uzar', cost: 'Büyüme ve moral düşer' },
-        effects: { cashPercent: 0.05, morale: -4, modifiers: [mod('production', 0.9, 60)] },
-        reflection: 'Soğuk piyasada hayatta kalan, sonra büyür.',
-        conceptId: 'default-alive',
-      },
-      {
-        label: 'Planında kal',
-        tradeoff: { gain: 'Momentum korunur', cost: 'Sonraki tur zorlaşır' },
-        effects: { modifiers: [mod('roundSpeed', 0.8, 90)] },
-        reflection: 'Momentum değerlidir, runway ile birlikte.',
-        conceptId: 'fundraise-time',
-      },
-    ],
-  },
 
-  // =========================================================== Series C (5)
+  // =========================================================== Series C (3; acquisition-offer = investor thread step 5)
   {
     id: 'acquisition-offer',
     stage: 5,
     category: 'normal',
     speaker: 'investor',
+    thread: { id: 'investor', step: 5 },
     question: 'Büyük bir şirket bizi satın almak istiyor. Rakam cazip.',
     options: [
       {
@@ -1090,30 +499,6 @@ export const DECISIONS: readonly DecisionCard[] = [
         effects: { morale: 5 },
         reflection: 'Hedefi bilen, cazip teklife de hayır diyebilir.',
         conceptId: 'no-single-path',
-      },
-    ],
-  },
-  {
-    id: 'strategic-investor',
-    stage: 5,
-    category: 'normal',
-    speaker: 'investor',
-    question: 'Sektörün devi stratejik yatırım yapmak istiyor.',
-    condition: needsCash,
-    options: [
-      {
-        label: 'Yatırımı al',
-        tradeoff: { gain: 'Nakit ve dağıtım gücü', cost: '%3 hisse, rakipler çekinir' },
-        effects: { cashPercent: 0.12, equity: -0.03, modifiers: [mod('organic', 1.2, 90)] },
-        reflection: 'Stratejik para, stratejik bağ da getirir.',
-        conceptId: 'concentration',
-      },
-      {
-        label: 'Bağımsız kal',
-        tradeoff: { gain: 'Tarafsızlık', cost: 'Ek para yok' },
-        effects: { reputation: 3 },
-        reflection: 'Tarafsız kalmak, herkesle çalışma özgürlüğüdür.',
-        conceptId: 'concentration',
       },
     ],
   },
@@ -1141,36 +526,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
   {
-    id: 'founder-burnout',
-    stage: 5,
-    category: 'normal',
-    speaker: 'cofounder',
-    question: 'Aylardır izin yapmadın. Ekip senin için endişeli.',
-    options: [
-      {
-        label: 'Bir hafta izin yap',
-        tradeoff: { gain: 'Enerji ve bakış açısı', cost: 'Bir hafta sensiz' },
-        effects: { energy: 50, modifiers: [mod('production', 0.9, 7)] },
-        reflection: 'Şirket sensiz bir hafta dayanabiliyorsa, iyi kurmuşsun.',
-        conceptId: 'founder-burnout',
-      },
-      {
-        label: 'Yetki devret',
-        tradeoff: { gain: 'Yük hafifler', cost: 'Bazı kararlar senden çıkar' },
-        effects: { energy: 25, morale: 4 },
-        reflection: 'Devretmek, ekibe güvenin görünür halidir.',
-        conceptId: 'founder-burnout',
-      },
-      {
-        label: 'Devam et',
-        tradeoff: { gain: 'Hız korunur', cost: 'Tükenme riski' },
-        effects: { energy: -10 },
-        reflection: 'Maratonda da molalar vardır.',
-        conceptId: 'founder-burnout',
-      },
-    ],
-  },
-  {
+    // Not a thread step: the investor thread shows one card per stage, so a second step 5 would hide the exit offer.
     id: 'ipo-vs-stay-private',
     stage: 5,
     category: 'normal',
@@ -1289,7 +645,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     defaultAfterDays: 14,
     options: [
       {
-        label: 'Can simidini al',
+        label: 'Uzatılan simidi al',
         tradeoff: { gain: 'İki aylık gider kasada', cost: '%5 hisse' },
         effects: { cashBurnMonths: 2, equity: -0.05 },
         reflection: 'İkinci şans bir kez gelir; zamanı iyi kullan.',
@@ -1305,14 +661,16 @@ export const DECISIONS: readonly DecisionCard[] = [
     ],
   },
 
-  // =========================================================== Rakip (3, pressure ≥ 0.35)
+  // =========================================================== Rakip (3, a rival in the market; rival thread step 3, up to Series A)
   {
     id: 'rival-price-war',
     stage: 2,
+    maxStage: 3,
     category: 'rival',
     speaker: 'customer',
+    thread: { id: 'rival', step: 3 },
     question: 'Rakip fiyatını yarıya indirdi. Kullanıcılar soruyor.',
-    condition: (s) => rivalPressure(s) >= 0.35,
+    condition: rivalNear,
     options: [
       {
         label: 'Fiyatı düşür',
@@ -1333,10 +691,12 @@ export const DECISIONS: readonly DecisionCard[] = [
   {
     id: 'rival-talent-raid',
     stage: 2,
+    maxStage: 3,
     category: 'rival',
     speaker: 'cofounder',
+    thread: { id: 'rival', step: 3 },
     question: 'Rakip ekibimizden iki kişiye teklif götürmüş.',
-    condition: (s) => rivalPressure(s) >= 0.35 && s.derived.teamSize >= 4,
+    condition: (s) => rivalNear(s) && s.derived.teamSize >= 4,
     options: [
       {
         label: 'Tutma primi ver',
@@ -1357,10 +717,12 @@ export const DECISIONS: readonly DecisionCard[] = [
   {
     id: 'rival-copycat-feature',
     stage: 2,
+    maxStage: 3,
     category: 'rival',
     speaker: 'engineer',
+    thread: { id: 'rival', step: 3 },
     question: 'Rakip en sevilen özelliğimizi birebir kopyaladı.',
-    condition: (s) => rivalPressure(s) >= 0.35,
+    condition: rivalNear,
     options: [
       {
         label: 'Hemen karşılık ver',

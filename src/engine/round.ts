@@ -18,7 +18,7 @@ import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
 import { ROUND_PITCHES, ROUND_SIZES } from './types'
 import { incCounter, modifierMult, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
-import { ensureRivals, markRivalAnchor } from './world'
+import { ensureRivals, markRivalAnchor, openAutoSegments, rivalOut } from './world'
 
 const WEEK_ACC = 'roundWeekAcc'
 /** Flag: the stage whose round window already announced itself (one roundWindow event per stage). */
@@ -34,7 +34,7 @@ function targetValuationOf(target: StageIndex): number | null {
 }
 
 /**
- * Burn a round is sized on: salaries + rent + infra + founder living + ads, where ads count at most what the last
+ * Burn a round is sized on: salaries + rent + infra + founder living + segment upkeep + ads, where ads count at most what the last
  * payday actually paid for them. A budget raised for an instant before "Turu başlat" (and dropped after) buys nothing,
  * and the live offer re-sizes every week, so hiring or firing around the start does not stick either.
  */
@@ -42,7 +42,7 @@ export function roundBurn(s: GameState): number {
   const bb = s.finance.burnBreakdown
   const paidAds = s.finance.lastReceipt?.ads ?? 0
   const ads = Math.min(Math.max(0, bb.ads), Math.max(0, paidAds))
-  return Math.max(0, bb.salaries + bb.rent + bb.infra + (bb.founder ?? 0) + ads)
+  return Math.max(0, bb.salaries + bb.rent + bb.infra + (bb.founder ?? 0) + (bb.expansion ?? 0) + ads)
 }
 
 export type RoundAmountBy = 'floor' | 'burn' | 'ceiling'
@@ -476,6 +476,8 @@ export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   if (rng) scheduleCrisis(s, rng)
   ensureRivals(s, rng)
   markRivalAnchor(s)
+  // GAMEPLAY V2 §8.1: the stage's automatic segment (smb at Seed) opens and ramps in.
+  openAutoSegments(s)
 }
 
 /**
@@ -486,7 +488,7 @@ export function pushStageReport(s: GameState, content: EngineContent): void {
   const from = s.stageStart?.stage === s.stage ? s.stageStart.day : 0
   const done = s.goalsDone ?? []
   const threadIds = new Set(content.decisions.filter((c) => c.thread).map((c) => c.id))
-  const lead = s.rivals?.[0]
+  const lead = s.rivals?.[0] && !rivalOut(s.rivals[0]) ? s.rivals[0] : undefined
   const report: StageReport = {
     stage: s.stage,
     days: Math.round(s.time.day - from),

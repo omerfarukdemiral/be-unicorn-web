@@ -28,8 +28,8 @@ export const ROUND_AMOUNT: readonly (number | null)[] = [null, 150_000, 800_000,
 export const STAGE_UNLOCK_TOOLS: Readonly<Partial<Record<number, readonly ToolId[]>>> = {
   1: ['capTableView'],
   // Seed's price control is unlocked by the `pricing` concept (Hisset → Adlandır → Kullan).
-  3: ['adBudget', 'refactor'],
-  4: ['enterpriseSales'],
+  3: ['adBudget', 'refactor', 'segments'],
+  4: ['enterpriseSales', 'mna'],
 }
 export const ROUND_EQUITY: readonly (number | null)[] = [null, 0.1, 0.15, 0.18, 0.15, 0.12, null]
 
@@ -132,13 +132,42 @@ export const CAC_SPEND_EXP = 1.5
 export const CAC_SPEND_FLOOR: readonly number[] = [500, 2_000, 10_000, 50_000, 250_000, 1_000_000, 1_000_000]
 export const CAC_SATURATION_K = 3
 export const ORGANIC_PEN_FLOOR = 0.1
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §8.1: a finite market (segments in content/markets.ts; penetration = users / Σ open segments)
+// ---------------------------------------------------------------------------
+/** An opened segment joins the TAM linearly over this many days (no overnight jump in reach). */
+export const MARKET_RAMP_DAYS = 60
 /**
- * [GAMEPLAY V2 §4.3, §8.1] Cumulative market size by stage until the segments of §8 land: penetration = users / this.
- * [DENGE ≠ GAMEPLAY V2 §8.1 × 4: 2K/2K/12K/62K/262K/712K/712K] At the §8.1 sizes (exit pen ≈ 0.7) the channels die
- * long before the exit ((1 − pen) / (1 + 3 pen²) ≈ 0.12 at 0.7) and users settle where inflow = churn: no good bot got
- * past Series C (sim). Interim ×4 (exit pen 0.1–0.2); E1 re-derives the real segment sizes with openSegment.
+ * [DENGE ≠ GAMEPLAY V2 §8.1 × 1] Users a segment really adds = its content size × this. At × 1 (exit pen ≈ 0.3, the §4.3
+ * channel terms (1 − pen) / (1 + 3 pen²) and churn × (1 + 0.5 pen) hold users where inflow = churn) 1/48 good bots
+ * reached Unicorn in 100 min (sim T17); × 2 brings them back to ~84 min at exit pen ≈ 0.15. Interim like B2's × 4: the
+ * open decision is §4.3's saturation curve vs §8.1's exit pen 0.5–0.9 (T20).
  */
-export const MARKET_FALLBACK_TAM: readonly number[] = [8_000, 8_000, 48_000, 248_000, 1_048_000, 2_848_000, 2_848_000]
+export const MARKET_SIZE_SCALE = 2
+/** Penetration at which the horizon shows 'saturation' (ads go to waste; time for the next segment). */
+export const MARKET_SATURATION_PEN = 0.7
+
+// ---------------------------------------------------------------------------
+// GAMEPLAY V2 §8.2: buying a rival (acquireRival, from Series B)
+// ---------------------------------------------------------------------------
+export const ACQUIRE_MIN_STAGE: StageIndex = 4
+/** Price = rival MRR × 12 × the player's multiple × this. */
+export const ACQUIRE_PRICE_FACTOR = 0.8
+/** The rival's users that stay: share × TAM × this. */
+export const ACQUIRE_USERS_SHARE = 0.6
+/** Merging two codebases and two teams: debt, morale, and production × ACQUIRE_PRODUCTION for ACQUIRE_PRODUCTION_DAYS. */
+export const ACQUIRE_TECH_DEBT = 15
+export const ACQUIRE_MORALE = -8
+export const ACQUIRE_PRODUCTION = 0.85
+export const ACQUIRE_PRODUCTION_DAYS = 60
+/** The rival thread's "Teklif hazırla" (flags.rivalBuyIntent): the prepared offer prices the next purchase × this. */
+export const ACQUIRE_INTENT_FLAG = 'rivalBuyIntent'
+export const ACQUIRE_INTENT_DISCOUNT = 0.85
+/** The rival thread's rival-dies (flags.rivalGone): the lead closes down and leaves the market (world.leadGone). */
+export const RIVAL_GONE_FLAG = 'rivalGone'
+/** The market verbs' tools: a save from before them gets those of the stages it reached (world.marketTools). */
+export const MARKET_TOOLS: readonly ToolId[] = ['segments', 'mna']
 
 // ---------------------------------------------------------------------------
 // Revenue (PLAN §5.5)

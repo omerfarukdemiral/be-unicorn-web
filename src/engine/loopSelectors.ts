@@ -3,6 +3,7 @@
 import * as B from './balance'
 import { ledgerCosts, runway } from './economy'
 import { firstFreeDesk, isFreeDesk } from './office'
+import { rivalOut } from './world'
 import {
   DAYS_PER_MONTH,
   DAYS_PER_WEEK,
@@ -102,7 +103,7 @@ export function nextCrisis(s: GameState): NextCrisis | undefined {
 
 /**
  * The next HORIZON_DAYS: paydays with their projected lump, delayed decision effects (with the source card),
- * release ETAs at today's build speed, the round close and a ready round, the payday desk's last day. Sorted by day. The next crisis looks
+ * release ETAs at today's build speed, the round close and a ready round, the payday desk's last day, a saturated market. Sorted by day. The next crisis looks
  * further (CRISIS_HORIZON_DAYS): "?" until its reveal, then its id.
  */
 export function horizon(s: GameState): HorizonItem[] {
@@ -153,6 +154,8 @@ export function horizon(s: GameState): HorizonItem[] {
   // §6.1: the desk's countdown (the UI shows it only while the desk is closed).
   const desk = s.finance.pendingPayday
   if (desk) out.push({ kind: 'payday', due: true, day: desk.day + B.PAYDAY_DECIDE_DAYS, amount: Math.max(0, owedTotal(s) - s.stats.cash) })
+  // GAMEPLAY V2 §8.1: a market ≥ 70% full is a storm already here (ads go to waste): today, until a segment opens.
+  if ((s.derived.penetration ?? 0) >= B.MARKET_SATURATION_PEN) out.push({ kind: 'saturation', day: now })
   const crisis = nextCrisis(s)
   if (crisis && crisis.day <= now + B.CRISIS_HORIZON_DAYS) {
     out.push({ kind: 'crisis', day: crisis.day, hidden: crisis.hidden, ...(crisis.id !== undefined ? { crisisId: crisis.id } : {}) })
@@ -337,4 +340,15 @@ export function nearestPriceStep(v: number): number {
   let best = PRICE_STEPS[0]!
   for (const p of PRICE_STEPS) if (Math.abs(p - v) < Math.abs(best - v)) best = p
   return best
+}
+
+/** The lead rival's notch on the current stage link (§9.4), on the scale of derived.stageProgress. Null before a rival, once it is out (bought/closed) and at the last stage. Kept on the side of the fill its `ahead` (MRR race) says. */
+export function rivalNotch(s: GameState): { at: number; ahead: boolean; valuation: number; name: string } | null {
+  const lead = s.rivals?.[0]
+  const target = B.STAGE_TARGET_VALUATION[s.stage + 1]
+  if (!lead || rivalOut(lead) || !target) return null
+  const raw = lead.valuation / target
+  const own = s.derived.stageProgress
+  const ahead = !!lead.ahead
+  return { at: ahead ? Math.max(raw, own) : Math.min(raw, own), ahead, valuation: lead.valuation, name: lead.name }
 }

@@ -1,10 +1,31 @@
 // World flavour: milestones, ambient office bubbles, visitors, month-end bookkeeping, archetype.
 import type { OfficeLine, OfficeLineTrigger } from '../content/index'
+import { MARKET_SEGMENTS, segmentDef } from '../content/markets'
 import { NPC_NAMES, RIVAL_NAMES } from '../content/names'
 import * as B from './balance'
-import { clamp } from './economy'
+import { clamp, segmentRamp } from './economy'
+import { applyMorale } from './effects'
+import { movesError, spendMoves } from './founder'
 import type { Rng } from './rng'
-import { NPC_ROLES, DEPTS, DAYS_PER_WEEK, type Archetype, type DirectorState, type GameState, type MilestoneId, type NpcRole, type Rival } from './types'
+import {
+  NPC_ROLES,
+  DEPTS,
+  DAYS_PER_WEEK,
+  MARKET_SEGMENT_IDS,
+  type ActionErrorCode,
+  type AcquisitionView,
+  type Archetype,
+  type DirectorState,
+  type GameState,
+  type MarketSegmentId,
+  type MarketState,
+  type MarketView,
+  type MilestoneId,
+  type NpcRole,
+  type Rival,
+  type SegmentView,
+  type ToolId,
+} from './types'
 import { incCounter, modifierMult, newId, pushActivity, pushEvent, uniquePush, type EngineContent } from './util'
 
 export function hitMilestone(s: GameState, id: MilestoneId, value?: number): boolean {
@@ -58,11 +79,12 @@ export function updateRivalPressure(s: GameState): void {
   s.cast ??= castOf()
   updateDirector(s)
   ensureRivals(s)
+  leadGone(s)
   anchorPendingRivals(s)
   const rivals = s.rivals ?? []
-  if (Math.floor(s.time.day) % DAYS_PER_WEEK === 0) for (const r of rivals) weeklyShare(s, r)
+  if (Math.floor(s.time.day) % DAYS_PER_WEEK === 0) for (const r of rivals) if (!rivalOut(r)) weeklyShare(s, r)
   checkLeadPassed(s)
-  const lead = rivals[0]
+  const lead = rivals[0] && !rivalOut(rivals[0]) ? rivals[0] : undefined
   const own = Math.max(1, s.finance.valuation)
   const ratio = lead ? Math.min(B.RIVAL_PRESSURE_RATIO_MAX, lead.valuation / own) : 0
   const p = clamp(0, 1, rivals.reduce((a, r) => a + r.strength * r.share, 0) + B.RIVAL_PRESSURE_VALUATION * ratio)
@@ -167,7 +189,7 @@ function anchorPendingRivals(s: GameState): void {
   if (typeof day !== 'number') return
   delete s.flags[ANCHOR_FLAG]
   ;(s.rivals ?? []).forEach((r, i) => {
-    if (i > 0 && r.bornDay < day) return
+    if (rivalOut(r) || (i > 0 && r.bornDay < day)) return
     anchorRival(s, r, i === 0 ? B.RIVAL_START_RATIO : B.RIVAL_FOLLOWER_RATIO)
   })
 }
@@ -193,6 +215,20 @@ function spawnRival(s: GameState, rng?: Rng): Rival {
   rivals.push(r)
   pushEvent(s, { kind: 'rivalBorn', refId: r.id })
   return r
+}
+
+/** Out of the market: bought by the player, or closed down (the rival thread's rival-dies). */
+export function rivalOut(r: Rival): boolean {
+  return r.acquiredDay !== undefined || r.goneDay !== undefined
+}
+
+/** The rival thread closed the lead down (flags.rivalGone, rival-dies): it leaves the market with its share. */
+function leadGone(s: GameState): void {
+  const lead = s.rivals?.[0]
+  if (!lead || rivalOut(lead) || s.flags[B.RIVAL_GONE_FLAG] === undefined) return
+  lead.goneDay = Math.floor(s.time.day)
+  lead.share = 0
+  lead.ahead = false
 }
 
 /**
@@ -230,6 +266,7 @@ function rivalsMonthEnd(s: GameState): void {
   const pace = B.RIVAL_TEMPO_ASK[Math.min(B.RIVAL_TEMPO_ASK.length - 1, s.stage)]!
   const tempo = 1 + pace * rivalAsk(s) * (1 + B.RIVAL_TEMPO_PRESSURE * directorOf(s).pressure)
   for (const r of rivals) {
+    if (rivalOut(r)) continue
     const before = r.strength
     const target = rivalStrengthTarget(s, r)
     r.strength = Math.round((before + (target - before) * B.RIVAL_STRENGTH_LERP) * 100) / 100
@@ -246,12 +283,154 @@ function rivalsMonthEnd(s: GameState): void {
  */
 function checkLeadPassed(s: GameState): void {
   const lead = s.rivals?.[0]
-  if (!lead) return
+  if (!lead || rivalOut(lead)) return
   const own = s.finance.mrr
   if (!lead.ahead && lead.mrr > 0 && lead.mrr > own) {
     lead.ahead = true
     pushEvent(s, { kind: 'rivalPassed', refId: lead.id, value: lead.valuation })
   } else if (lead.ahead && own > lead.mrr * B.RIVAL_PASS_RESET) lead.ahead = false
+}
+
+// ---------------------------------------------------------------------------
+// Market (GAMEPLAY V2 §8.1): segments open, ramp in, never close; rivals can be bought (§8.2)
+// ---------------------------------------------------------------------------
+
+/** Segments a company at `stage` has open without having bought any: the automatic ones up to it. */
+function autoSegments(stage: number, openedDay: number): MarketState['segments'] {
+  return MARKET_SEGMENTS.filter((m) => m.auto && m.stage <= stage).map((m) => ({ id: m.id, size: segmentSize(m.size), openedDay, upkeep: 0 }))
+}
+
+/** Users a segment adds: its content size × MARKET_SIZE_SCALE. */
+export function segmentSize(contentSize: number): number {
+  return Math.round(contentSize * B.MARKET_SIZE_SCALE)
+}
+
+/**
+ * The market of a save from before segments (§3.1 "aşamaya göre otomatik segmentler açık"): the automatic ones up to
+ * its stage and the ones of the stages it has already left (a Series B save is sized as one that opened midmarket),
+ * fully ramped and with no upkeep (nothing was paid for them). The current stage's verb stays the player's.
+ */
+export function defaultMarket(stage: number, day: number): MarketState {
+  const segments = MARKET_SEGMENTS.filter((m) => m.auto ? m.stage <= stage : m.stage < stage).map((m) => ({ id: m.id, size: segmentSize(m.size), openedDay: day - B.MARKET_RAMP_DAYS, upkeep: 0 }))
+  return { segments }
+}
+
+/** The market; older saves default lazily by stage (with the market tools of the stages reached, §3.1). */
+export function marketOf(s: GameState): MarketState {
+  if (!s.market) {
+    for (const t of marketTools(s.stage)) uniquePush(s.unlockedTools, t)
+    s.market = defaultMarket(s.stage, Math.floor(s.time.day))
+  }
+  return s.market
+}
+
+/** The market verbs' tools ('segments', 'mna') a company at `stage` has: a save from before them gets them on load. */
+export function marketTools(stage: number): ToolId[] {
+  const out: ToolId[] = []
+  for (let i = 0; i <= stage; i++) for (const t of B.STAGE_UNLOCK_TOOLS[i] ?? []) if (B.MARKET_TOOLS.includes(t)) out.push(t)
+  return out
+}
+
+/** Stage arrival: the automatic segments of the new stage open (smb at Seed) and ramp in. */
+export function openAutoSegments(s: GameState): void {
+  const m = marketOf(s)
+  for (const seg of autoSegments(s.stage, Math.floor(s.time.day))) if (!m.segments.some((x) => x.id === seg.id)) m.segments.push(seg)
+}
+
+/** Monthly upkeep of the opened segments (the receipt's "Pazar" line). */
+export function marketUpkeep(s: GameState): number {
+  return (s.market?.segments ?? []).reduce((a, m) => a + m.upkeep, 0)
+}
+
+/**
+ * Why openSegment would fail, or null (pure: the market map and the action share it): unknown or open already →
+ * invalid; automatic (it opens with its stage) → notUnlocked; before its stage, the 'segments' tool, enterpriseSales or the ops it needs → notUnlocked;
+ * cash → insufficientCash; one move (§7.1) → noMoves.
+ */
+export function segmentError(s: GameState, id: MarketSegmentId): ActionErrorCode | null {
+  const def = (MARKET_SEGMENT_IDS as readonly string[]).includes(id) ? segmentDef(id) : undefined
+  if (!def) return 'invalid'
+  if ((s.market?.segments ?? []).some((m) => m.id === id)) return 'invalid'
+  if (def.auto) return 'notUnlocked'
+  if (s.stage < def.stage || !s.unlockedTools.includes('segments')) return 'notUnlocked'
+  if (def.needsTool && !s.unlockedTools.includes(def.needsTool)) return 'notUnlocked'
+  if (def.needsOps !== undefined && s.employees.filter((e) => e.dept === 'ops').length < def.needsOps) return 'notUnlocked'
+  if (s.stats.cash < def.cost) return 'insufficientCash'
+  return movesError(s, B.MOVE_COST.openSegment)
+}
+
+/** Opens a segment (call after segmentError passed): its cost now, its upkeep from the next ledger day, a 60-day ramp. */
+export function openSegment(s: GameState, id: MarketSegmentId): void {
+  const def = segmentDef(id)!
+  s.stats.cash -= def.cost
+  spendMoves(s, B.MOVE_COST.openSegment)
+  const size = segmentSize(def.size)
+  marketOf(s).segments.push({ id, size, openedDay: Math.floor(s.time.day), upkeep: def.upkeep })
+  pushEvent(s, { kind: 'segmentOpened', refId: id, value: size })
+}
+
+/** What a rival costs: its MRR × 12 × the player's multiple × 0.8 (× the prepared offer's discount, §9.2 thread). */
+export function acquirePrice(s: GameState, r: Rival): number {
+  const intent = s.flags[B.ACQUIRE_INTENT_FLAG] && r === s.rivals?.[0] ? B.ACQUIRE_INTENT_DISCOUNT : 1
+  return Math.round(Math.max(0, r.mrr) * 12 * s.derived.valuationMultiple * B.ACQUIRE_PRICE_FACTOR * intent)
+}
+
+/** Users a rival brings: its share × TAM × ACQUIRE_USERS_SHARE. */
+export function acquireUsers(s: GameState, r: Rival): number {
+  return Math.round(r.share * (s.derived.tam ?? 0) * B.ACQUIRE_USERS_SHARE)
+}
+
+/** Why acquireRival would fail, or null: not in the market → notFound; before Series B / 'mna' → notUnlocked; cash; two moves. */
+export function acquireError(s: GameState, id: string): ActionErrorCode | null {
+  const r = (s.rivals ?? []).find((x) => x.id === id)
+  if (!r || rivalOut(r)) return 'notFound'
+  if (s.stage < B.ACQUIRE_MIN_STAGE || !s.unlockedTools.includes('mna')) return 'notUnlocked'
+  if (s.stats.cash < acquirePrice(s, r)) return 'insufficientCash'
+  return movesError(s, B.MOVE_COST.acquireRival)
+}
+
+/**
+ * Buys a rival (call after acquireError passed): the price now; its users come over (share × TAM × 0.6), its share
+ * goes to 0 for good; two codebases and two teams merge: tech debt, morale, production × 0.85 for 60 days.
+ */
+export function acquireRival(s: GameState, id: string): void {
+  const r = s.rivals!.find((x) => x.id === id)!
+  const price = acquirePrice(s, r)
+  s.stats.cash -= price
+  s.stats.users += acquireUsers(s, r)
+  r.share = 0
+  r.acquiredDay = Math.floor(s.time.day)
+  r.ahead = false
+  s.techDebt = (s.techDebt ?? 0) + B.ACQUIRE_TECH_DEBT
+  applyMorale(s, B.ACQUIRE_MORALE)
+  s.modifiers.push({ id: newId(s, 'mod'), kind: 'production', value: B.ACQUIRE_PRODUCTION, untilDay: s.time.day + B.ACQUIRE_PRODUCTION_DAYS, source: 'acquireRival' })
+  if (r === s.rivals![0]) delete s.flags[B.ACQUIRE_INTENT_FLAG]
+  spendMoves(s, B.MOVE_COST.acquireRival)
+  pushEvent(s, { kind: 'rivalAcquired', refId: r.id, value: price })
+}
+
+/** The market map (derived.market): every segment open or as a silhouette, and the rivals still to be bought. */
+export function marketView(s: GameState): MarketView {
+  const open = s.market?.segments ?? []
+  const day = s.time.day
+  const segments: SegmentView[] = MARKET_SEGMENTS.map((def) => {
+    const seg = open.find((m) => m.id === def.id)
+    return {
+      id: def.id,
+      stage: def.stage,
+      size: segmentSize(def.size),
+      cost: def.cost,
+      upkeep: def.upkeep,
+      open: seg !== undefined,
+      ramp: seg ? segmentRamp(seg.openedDay, day) : 0,
+      auto: def.auto,
+      error: segmentError(s, def.id),
+    }
+  })
+  const rivals: AcquisitionView[] = (s.rivals ?? [])
+    .filter((r) => !rivalOut(r))
+    .map((r) => ({ id: r.id, price: acquirePrice(s, r), users: acquireUsers(s, r), error: acquireError(s, r.id) }))
+  return { segments, rivals }
 }
 
 /** Archetype from play style, detected once from Series A on (no-single-path concept). */

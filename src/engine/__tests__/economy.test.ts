@@ -71,10 +71,12 @@ describe('§5.4 users', () => {
     expect(E.techDebtSpeed(15)).toBeCloseTo(1 - 15 * B.TECH_DEBT_PER_POINT)
     expect(E.techDebtSpeed(500)).toBe(B.TECH_DEBT_MIN_SPEED)
   })
-  it('market: penetration = users / MARKET_FALLBACK_TAM, clamped 0–1', () => {
-    expect(E.marketTam(3)).toBe(B.MARKET_FALLBACK_TAM[3])
-    expect(E.penetration(B.MARKET_FALLBACK_TAM[3]! / 2, E.marketTam(3))).toBeCloseTo(0.5)
-    expect(E.penetration(1e9, E.marketTam(3))).toBe(1)
+  it('market: tam = Σ open segment × ramp; penetration = users / tam, clamped 0–1', () => {
+    const segs = [{ size: 1000, openedDay: 0 }, { size: 600, openedDay: 30 }]
+    expect(E.marketTam(segs, 60)).toBe(1300)
+    expect(E.marketTam(segs, 90)).toBe(1600)
+    expect(E.penetration(800, 1600)).toBeCloseTo(0.5)
+    expect(E.penetration(1e9, 1600)).toBe(1)
     expect(E.penetration(10, 0)).toBe(0)
   })
   it('CAC saturates with spend (super-linear) and with the market (1 + 3 × pen²)', () => {

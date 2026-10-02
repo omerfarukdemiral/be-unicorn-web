@@ -8,6 +8,7 @@ import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
+import { marketOf, marketUpkeep, marketView } from './world'
 
 export interface Outputs {
   perEmployee: Record<string, number>
@@ -176,9 +177,9 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const anyLaunched = s.projects.some((p) => p.launched)
   const mrr = anyLaunched ? E.mrr(s.stats.users, arpu, enterpriseMrr) : enterpriseMrr
 
-  // GAMEPLAY V2 §4.3: a finite market (fallback TAM until §8's segments) saturates both channels and lifts churn;
-  // ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
-  const tam = E.marketTam(s.stage)
+  // GAMEPLAY V2 §4.3, §8.1: a finite market (Σ open segments, each ramping in) saturates both channels and lifts
+  // churn; ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
+  const tam = E.marketTam(marketOf(s).segments, s.time.day)
   const pen = E.penetration(s.stats.users, tam)
   const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac')
   const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic')
@@ -199,7 +200,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent') * policyMult(s, content, 'rent')
   const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep
   const living = E.founderLiving(s.stage) * policyMult(s, content, 'founderPay')
-  const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living)
+  const expansion = marketUpkeep(s)
+  const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living, expansion)
   const net = mrr - burn
 
   const hist = s.finance.mrrHistory
@@ -247,7 +249,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.stats.churn = churn
   s.finance.mrr = mrr
   s.finance.burn = burn
-  s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget, founder: living }
+  s.finance.burnBreakdown = { salaries, rent, infra, ads: s.finance.adBudget, founder: living, ...(expansion > 0 ? { expansion } : {}) }
   s.finance.net = net
   // Runway counts what payday will take: cash already earmarked for accrued costs is not runway, and the loan's
   // monthly service is a cost like any other (GAMEPLAY V2 §6.2); deferred-pay's held wages are owed too (§7.2).
@@ -296,6 +298,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.salesCall = salesCallPreview(s)
   s.derived.tam = tam
   s.derived.penetration = pen
+  // After tam and the multiple: the market map prices segments and rivals with them.
+  s.derived.market = marketView(s)
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)

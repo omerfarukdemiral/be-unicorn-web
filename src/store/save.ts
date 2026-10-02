@@ -3,6 +3,7 @@
 import { deserialize, serialize } from '../engine'
 import { HUD_WIDGETS, type GameState, type HudWidget } from '../engine/types'
 import { cleanMetricIds, PIN_MAX } from './metricPins'
+import type { Codex } from './types'
 
 export const SAVE_KEY = 'be-unicorn:save'
 export const PROFILE_KEY = 'be-unicorn:profile'
@@ -10,6 +11,8 @@ export const PROFILE_KEY = 'be-unicorn:profile'
 export const UI_KEY = 'be-unicorn:ui'
 /** When the local save was last written and for which account (cloud sync picks the newer of local and cloud). */
 export const SAVE_META_KEY = 'be-unicorn:save-meta'
+/** Keşif (docs/GAMEPLAY_V2.md §9.2): cards seen and threads done over every run; never part of the game save. */
+export const CODEX_KEY = 'be-unicorn:codex'
 
 export interface SaveMeta {
   /** Date.now() of the last local write. */
@@ -129,6 +132,28 @@ export function readUiSave(): Partial<UiSave> {
 export function writeUiSave(u: UiSave): void {
   try {
     storage()?.setItem(UI_KEY, JSON.stringify({ v: 1, pinnedMetrics: u.pinnedMetrics, seenMetrics: u.seenMetrics, pinTouched: u.pinTouched, seenGoals: u.seenGoals }))
+  } catch {
+    /* ignore */
+  }
+}
+
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+
+/** The Keşif record; empty when missing, unreadable or blocked (never throws). */
+export function readCodex(): Codex {
+  try {
+    const raw = storage()?.getItem(CODEX_KEY)
+    if (!raw) return { seenCards: [], threadsDone: [] }
+    const p = JSON.parse(raw) as Partial<Record<keyof Codex, unknown>> | null
+    return { seenCards: strings(p?.seenCards), threadsDone: strings(p?.threadsDone) }
+  } catch {
+    return { seenCards: [], threadsDone: [] }
+  }
+}
+
+export function writeCodex(c: Codex): void {
+  try {
+    storage()?.setItem(CODEX_KEY, JSON.stringify({ seenCards: c.seenCards, threadsDone: c.threadsDone }))
   } catch {
     /* ignore */
   }

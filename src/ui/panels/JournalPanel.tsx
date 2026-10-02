@@ -1,16 +1,19 @@
 // Kazanımlar (top-bar book icon, K; docs/GAMEPLAY_V2.md §12): ☆ stage goals, the concept shelf (one book per learned
-// card, plus the concepts waiting to be read) and Keşif (hidden / thread cards, filled by a later wave).
+// card, plus the concepts waiting to be read) and Keşif: every thread step and secret card as a cell, a silhouette
+// until seen in some run ("23/64" over those cells; store ui.codex, outside the engine, §9.2).
 // Opening it clears the goals part of the badge.
 import { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { CONCEPT_IDS, type ConceptId } from '../../engine/types'
-import { useGameStore, waitingConcepts } from '../../store/gameStore'
-import { Icon } from '../icons'
+import { CONCEPT_IDS, type ConceptId, type NpcRole } from '../../engine/types'
+import { DECISIONS, THREAD_IDS, type DecisionCard, type ThreadId } from '../../content'
+import { codexCount, useGameStore, waitingConcepts } from '../../store/gameStore'
+import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx, Empty, SectionTitle } from '../primitives'
-import { readableOn } from '../theme'
+import { readableOn, soft } from '../theme'
 import { conceptById, openConceptCard } from '../uiActions'
 import { NotebookCard } from '../NotebookCard'
+import { castName } from '../bubbles/speaker'
 import { GoalsCard } from './GoalsCard'
 
 const PER_SHELF = 9
@@ -100,10 +103,84 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
           ))}
         </div>
       </section>
-      <section>
-        <SectionTitle>{t('achv.discovery')}</SectionTitle>
-        <Empty text={t('achv.discoveryEmpty')} icon="sparkle" />
-      </section>
+      <DiscoveryGrid />
     </div>
+  )
+}
+
+/** Thread → the role who carries it (the cast name labels the row) and its hue. */
+const THREAD_LOOK: Record<ThreadId, { role: NpcRole | null; icon: IconName; color: string }> = {
+  mentor: { role: 'mentor', icon: 'compass', color: 'var(--color-kind-concept)' },
+  investor: { role: 'investor', icon: 'handshake', color: 'var(--color-g-equity)' },
+  customer: { role: 'customer', icon: 'users', color: 'var(--color-g-users)' },
+  rival: { role: null, icon: 'flag', color: 'var(--color-kind-decision)' },
+  press: { role: 'journalist', icon: 'megaphone', color: 'var(--color-g-retention)' },
+}
+
+/** Each thread's cards in step order (branches side by side), and the secret cards. */
+const THREAD_CARDS: Record<ThreadId, DecisionCard[]> = Object.fromEntries(
+  THREAD_IDS.map((id) => [id, DECISIONS.filter((d) => d.thread?.id === id).sort((a, b) => (a.thread?.step ?? 0) - (b.thread?.step ?? 0))]),
+) as Record<ThreadId, DecisionCard[]>
+const SECRET_CARDS: DecisionCard[] = DECISIONS.filter((d) => d.secret)
+
+/** Keşif (§9.2, §12): one row per thread (seen steps filled, the rest silhouettes) + the secret row; "23/64" on top. */
+function DiscoveryGrid() {
+  const codex = useGameStore((s) => s.ui.codex)
+  const cast = useGameStore((s) => s.state.cast)
+  const { n, total } = codexCount(codex)
+  const seen = (id: string) => codex.seenCards.includes(id)
+  return (
+    <section>
+      <SectionTitle right={<span className="tabular text-[11px] font-semibold text-ink-2">{t('codex.count', { n, total })}</span>}>{t('achv.discovery')}</SectionTitle>
+      <div className="flex flex-col gap-1">
+        {THREAD_IDS.map((id) => {
+          const look = THREAD_LOOK[id]
+          const cards = THREAD_CARDS[id]
+          const done = codex.threadsDone.includes(id)
+          const label = look.role ? `${t(`codex.thread.${id}`)} · ${castName({ cast }, look.role)}` : t(`codex.thread.${id}`)
+          return (
+            <div key={id} className="flex min-h-9 items-center gap-2">
+              <span className="font-text w-28 shrink-0 truncate text-xs font-medium text-ink-2" title={label}>
+                {label}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                {cards.map((c) => (
+                  <Cell key={c.id} seen={seen(c.id)} icon={look.icon} color={look.color} />
+                ))}
+              </div>
+              {done && (
+                <span title={t('codex.threadDone')} className="shrink-0 text-positive">
+                  <Icon name="check" size={14} />
+                </span>
+              )}
+            </div>
+          )
+        })}
+        <div className="flex min-h-9 items-center gap-2">
+          <span className="font-text w-28 shrink-0 truncate text-xs font-medium text-ink-2">{t('codex.secret')}</span>
+          <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+            {SECRET_CARDS.map((c) => (
+              <Cell key={c.id} seen={seen(c.id)} icon="sparkle" color="var(--color-brand)" secret />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** A card cell: filled tile once seen, a dashed silhouette before ("?" for a secret). */
+function Cell({ seen, icon, color, secret }: { seen: boolean; icon: IconName; color: string; secret?: boolean }) {
+  if (seen) {
+    return (
+      <span className="grid size-6 place-items-center rounded-[6px]" style={{ color, background: soft(color, 16) }}>
+        <Icon name={icon} size={13} />
+      </span>
+    )
+  }
+  return (
+    <span aria-hidden="true" className="grid size-6 place-items-center rounded-[6px] border border-dashed border-border-strong text-[10px] font-bold text-ink-3">
+      {secret ? t('codex.locked') : null}
+    </span>
   )
 }

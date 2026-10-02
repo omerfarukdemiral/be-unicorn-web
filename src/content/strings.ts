@@ -65,6 +65,8 @@ export const TOOL_TEXT: Record<ToolId, { name: string; description: string }> = 
   enterpriseSales: { name: 'Kurumsal satış', description: 'Büyük müşterilerle sözleşme yap.' },
   capTableView: { name: 'Cap table', description: 'Şirketin kimde ne kadar olduğunu gör.' },
   refactor: { name: 'Refactor', description: 'Teknik borcu bir sprintte erit.' },
+  segments: { name: 'Pazar haritası', description: 'Yeni pazar aç, büyüme alanı kazan.' },
+  mna: { name: 'Satın alma', description: 'Rakibi al, kullanıcıları seninle gelsin.' },
 }
 
 export const SLOT_TYPE_TEXT: Record<SlotType, { name: string; description: string }> = {
@@ -367,7 +369,6 @@ const BASE_TEXT: Record<string, string> = {
   'journal.title': 'Kazanımlar',
   'journal.what': 'Ne?',
   'journal.where': 'Sen nerede gördün?',
-  'journal.rule': 'Kural',
   'journal.count': '{n}/{total}',
   'journal.empty': 'Defter boş',
   'journal.shelf': 'Kavramlar',
@@ -403,7 +404,6 @@ const BASE_TEXT: Record<string, string> = {
   'round.offer': 'Teklif: {amount} karşılığı {equity}',
   'round.inProgress': 'Tur görüşmesi sürüyor',
   'round.closed': 'Tur kapandı!',
-  'round.moveTitle': 'Yeni ofise taşınıyoruz',
 
   // Units
   'unit.months': '{v} ay',
@@ -414,10 +414,7 @@ const BASE_TEXT: Record<string, string> = {
 
   // Game over
   'gameOver.bankruptTitle': 'Şirket kapandı',
-  'gameOver.bankruptBody': 'Kasa 60 gün ekside kaldı.',
   'gameOver.teamLostTitle': 'Ekip dağıldı',
-  'gameOver.teamLostBody': 'Şirkette kimse kalmadı.',
-  'gameOver.reasonsTitle': 'Post-mortem: üç kör nokta',
   'gameOver.xp': '+{v} Kurucu XP',
   'gameOver.xpHint': 'Sonraki oyunda başlangıç kasan %{v} daha fazla.',
   'gameOver.retry': 'Yeniden kur',
@@ -476,17 +473,12 @@ const BASE_TEXT: Record<string, string> = {
   'round.runwayNow': 'Şu anki runway: {v} ay.',
   'round.coffeeHint': 'Yatırımcıyla kahve içmek turu kısaltır.',
   'move.kicker': 'Yeni aşama: {stage}',
-  'move.unlocks': 'Açılan yeni şey',
   'move.go': 'İçeri gir',
   'pm.sub': '{stage} · {m}. ay',
-  'pm.yourNumber': 'Senin sayın: {v}',
-  'pm.xpHint': 'Toplam Kurucu XP: {total}',
-  'pm.failureIsData': 'Bu bir veri noktası, kimlik değil.',
   'victory.kicker': '1 milyar dolar',
   'victory.valuation': 'Değerleme',
   'victory.team': 'Ekip',
   'victory.learned': 'Öğrenilen ders',
-  'victory.archetype': 'Yolun: {v}',
   'victory.again': 'Yeniden kur',
   'settings.language': 'Dil',
   'settings.sound': 'Ses',
@@ -569,5 +561,8 @@ export const UI_TEXT: Record<string, string> = {
   // Crisis calendar (GAMEPLAY V2 §5.1): "? · 58g" until the reveal, then "Yatırımcı kışı · 12g".
   'horizon.item.crisis': '{v} · {d}',
   'horizon.crisisHidden': '?',
+  // Market (GAMEPLAY V2 §8.1): penetration ≥ 70%, reklam boşa gider.
+  'horizon.item.saturation': 'Pazar doydu',
+  'horizon.saturation': 'Pazar doydu',
   ...Object.fromEntries(CRISES.map((c) => [`crisis.${c.id}`, c.name])),
 }

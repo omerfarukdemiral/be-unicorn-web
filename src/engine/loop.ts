@@ -33,6 +33,8 @@ export function accrueMonth(s: GameState, dt: number): void {
   l.infra += bb.infra * k
   l.ads += bb.ads * k
   l.founder = (l.founder ?? 0) + (bb.founder ?? 0) * k
+  // GAMEPLAY V2 §8.1: the opened segments' upkeep (absent until the first one is bought: older ledgers stay as they were).
+  if (bb.expansion) l.expansion = (l.expansion ?? 0) + bb.expansion * k
   s.stats.cash += revenue
   // GAMEPLAY V2 §7.2 deferred-pay: the wages held back are owed, paid when the next round closes.
   const later = s.derived.policies?.payLater ?? 0
@@ -109,6 +111,7 @@ function closeMonth(s: GameState, content: EngineContent, l: MonthLedger, m: Mon
     infra: l.infra,
     ads: l.ads,
     founder: l.founder ?? 0,
+    ...(l.expansion ? { expansion: l.expansion } : {}),
     ...(m.interest > 0 || m.repay > 0 ? { interest: m.interest, loanRepay: m.repay } : {}),
     ...(deferred > 0 ? { deferred } : {}),
     paid: m.paid,
@@ -221,7 +224,8 @@ export function resolvePayday(s: GameState, content: EngineContent, choice: Payd
     deferAdd += l.rent
     deferRent(s, content, l.rent)
   }
-  paid += l.ads
+  // Ads and the segments' upkeep (GAMEPLAY V2 §8.1) cannot be deferred.
+  paid += l.ads + (l.expansion ?? 0)
   if (choice.ads === 'cut') s.finance.adBudget = 0
   if (choice.founder === 'pay') paid += l.founder ?? 0
   // Skipped, not owed: the founder lives on nothing this month and it costs energy.
@@ -391,6 +395,7 @@ function pushReceipt(s: GameState, r: MonthReceipt): void {
   if (r.valuation !== undefined) out.valuation = Math.round(r.valuation)
   if (r.equity !== undefined) out.equity = ratio(r.equity)
   if (r.reputation !== undefined) out.reputation = Math.round(r.reputation)
+  if (r.expansion) out.expansion = Math.round(r.expansion)
   if (r.debt) out.debt = Math.round(r.debt)
   if (r.interest) out.interest = Math.round(r.interest)
   if (r.loanRepay) out.loanRepay = Math.round(r.loanRepay)

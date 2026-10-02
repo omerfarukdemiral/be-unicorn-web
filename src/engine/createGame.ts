@@ -7,7 +7,7 @@ import { fillCandidates } from './people'
 import { Rng, createRngState } from './rng'
 import { COMPANY_NAME_MAX, COMPANY_NAME_MIN, DEFAULT_COMPANY_NAME, DEPTS, INITIAL_WIDGETS, SAVE_VERSION, type Dept, type GameState, type NewGameOptions } from './types'
 import { stageBaseline, type EngineContent } from './util'
-import { castOf } from './world'
+import { castOf, defaultMarket } from './world'
 
 function perDept(v: number): Record<Dept, number> {
   const o = {} as Record<Dept, number>
@@ -91,6 +91,8 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
     director: { pressure: B.DIRECTOR_PRESSURE_DEFAULT, graceUntil: 0 },
     // GAMEPLAY V2 §8.2: the lead rival is born on arriving at Seed.
     rivals: [],
+    // GAMEPLAY V2 §8.1: the garage sells to its early adopters (the 'early' segment, already there).
+    market: defaultMarket(0, 0),
   }
   const rng = new Rng(s.rng)
   fillCandidates(s, content, rng, true)

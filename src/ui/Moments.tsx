@@ -3,7 +3,8 @@
 // live in the top bar (docs/GAMEPLAY_V2.md §12 D9).
 // They are items of the ONE notification strip: `useMomentSource` turns fresh engine events into moments,
 // `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
-import type { MonthReceipt } from '../engine/types'
+// The receipt ends on one teaser: the next storm on the horizon, "→ 12g · Yatırımcı kışı" ("?" until revealed, §5.1).
+import type { GameState, MonthReceipt } from '../engine/types'
 import type { Panel } from '../store/types'
 import type { IconName } from './icons'
 import { t } from './i18n'
@@ -13,9 +14,25 @@ import { effectSummary, optionLabel, releaseName, useFreshEvents } from './loopU
 import { momentPanel } from './momentRules'
 
 export type Moment =
-  | { key: number; kind: 'receipt'; receipt: MonthReceipt }
+  | { key: number; kind: 'receipt'; receipt: MonthReceipt; next?: ReceiptTeaser }
   | { key: number; kind: 'release'; project: string; level: number; update?: number; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
+
+/** The receipt's teaser: days to the next crisis on the horizon and its name ("?" while hidden). */
+export interface ReceiptTeaser {
+  days: number
+  name: string
+}
+
+/** The next crisis the engine put on the horizon (within CRISIS_HORIZON_DAYS), or undefined. */
+export function receiptTeaser(s: Pick<GameState, 'derived' | 'time'>): ReceiptTeaser | undefined {
+  const c = s.derived.horizon?.find((h) => h.kind === 'crisis')
+  if (!c) return undefined
+  const name = c.hidden || !c.crisisId ? t('horizon.crisisHidden') : t(`crisis.${c.crisisId}`)
+  return { days: Math.max(0, Math.round(c.day - s.time.day)), name }
+}
+
+const teaserText = (n: ReceiptTeaser): string => t('receipt.next', { d: t('horizon.daysShort', { v: n.days }), v: n.name })
 
 /** Calls `onMoments` with the moments hidden in fresh engine events (skips a loaded run's history). */
 export function useMomentSource(onMoments: (add: Moment[]) => void): void {
@@ -23,7 +40,8 @@ export function useMomentSource(onMoments: (add: Moment[]) => void): void {
     const add: Moment[] = []
     for (const e of events) {
       if (e.kind === 'payday' && s.finance.lastReceipt) {
-        add.push({ key: e.id, kind: 'receipt', receipt: s.finance.lastReceipt })
+        const next = receiptTeaser(s)
+        add.push({ key: e.id, kind: 'receipt', receipt: s.finance.lastReceipt, ...(next ? { next } : {}) })
       } else if (e.kind === 'release') {
         const r = s.releases?.find((x) => x.id === e.refId)
         if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), users: r.users, mrr: r.mrr })
@@ -67,7 +85,8 @@ export function momentText(m: Moment): string {
     case 'receipt': {
       const r = m.receipt
       const runway = receiptRunway(r)
-      return t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: runway ? ` · ${t('receipt.runway')} ${runway}` : '' })
+      const line = t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: runway ? ` · ${t('receipt.runway')} ${runway}` : '' })
+      return m.next ? `${line} · ${teaserText(m.next)}` : line
     }
     case 'release':
       return t('strip.release', { project: m.project, level: releaseName(m.level, m.update), u: Math.round(m.users), m: money(m.mrr) })
@@ -93,6 +112,7 @@ export function MomentLine({ m }: { m: Moment }) {
             {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-ink')}>{sgn(r.net)}</span> · {t('strip.paid')} {neg(r.paid)}
             {runway && ` · ${t('receipt.runway')} ${runway}`}
           </span>
+          {m.next && <span className="font-semibold" style={{ color: 'var(--color-g-burn)' }}> · {teaserText(m.next)}</span>}
         </span>
       )
     }

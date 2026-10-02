@@ -2,8 +2,9 @@
 import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
 import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
-import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt } from './types'
-import { castOf, ensureRivals } from './world'
+import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt, type ToolId } from './types'
+import { castOf, defaultMarket, ensureRivals, marketTools } from './world'
+import { uniquePush } from './util'
 
 export interface SaveFile {
   version: number
@@ -68,6 +69,13 @@ const MIGRATIONS: Record<number, Migration> = {
     }
     // Company policies (§7.2): none signed; the first signature is not held by a cooldown.
     if (!st.policies || typeof st.policies !== 'object') st.policies = { adopted: [], lastSignedDay: POLICY_NEVER_SIGNED }
+    // Market (§8.1): the segments a company at its stage would have open (the automatic ones and those of the stages
+    // already left), fully ramped and free; the current stage's segment is the player's verb.
+    // The market tools of the stages reached come with it ('segments' from A, 'mna' from B: enterStage hands them out).
+    if ((!st.market || typeof st.market !== 'object') && typeof st.stage === 'number' && typeof time?.day === 'number') {
+      st.market = defaultMarket(st.stage, Math.floor(time.day))
+      if (Array.isArray(st.unlockedTools)) for (const tool of marketTools(st.stage)) uniquePush(st.unlockedTools as ToolId[], tool)
+    }
     const game = st as unknown as GameState
     if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st

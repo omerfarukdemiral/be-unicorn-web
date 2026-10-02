@@ -4,8 +4,11 @@
 // icons stacked on a line; the full list lives in the strip popover (HorizonList).
 // A month waiting on the payday desk (GAMEPLAY V2 §6.1) is not text: a red cash icon + `3g`, the one number, only while
 // the desk is closed (open, time stands still and a countdown would lie); a tap reopens the desk.
+// A known storm (§5.1) is a "?" tile with its countdown ("? · 58g") until CRISIS_TELEGRAPH_DAYS, then its own icon and
+// name. A loan in covenant trouble (§6.2) shows the days to the next check beside the desk's countdown.
 import { useShallow } from 'zustand/react/shallow'
-import type { HorizonItem } from '../engine/types'
+import { covenantState } from '../engine'
+import type { CrisisId, HorizonItem } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
@@ -24,13 +27,39 @@ export const HORIZON_KIND: Record<HorizonItem['kind'], { icon: IconName; color: 
   roundReady: { icon: 'rocket', color: 'var(--color-positive)' },
   // A known storm, not danger: brick identity hue, never --color-negative (one red rule).
   crisis: { icon: 'warning', color: 'var(--color-g-burn)' },
+  // The market is saturated (§8.1): users hue, not a warning.
+  saturation: { icon: 'pie', color: 'var(--color-g-users)' },
 }
 
 /** A month waiting on the payday desk (§6.1) is the one payday that is danger: red, with its countdown. */
 const PAYDAY_DUE = { icon: 'cash' as IconName, color: 'var(--color-negative)' }
 
+/** A revealed crisis wears its own icon (content/crises.ts ids); an unknown id keeps the storm sign. */
+const CRISIS_ICON: Readonly<Partial<Record<CrisisId, IconName>>> = {
+  'lease-hike': 'building',
+  'cac-war': 'megaphone',
+  'key-account-renewal': 'handshake',
+  'investor-winter': 'trend',
+  'market-correction': 'bars',
+}
+
 export function horizonKindOf(h: HorizonItem): { icon: IconName; color: string } {
-  return h.kind === 'payday' && h.due ? PAYDAY_DUE : HORIZON_KIND[h.kind]
+  if (h.kind === 'payday' && h.due) return PAYDAY_DUE
+  if (h.kind === 'crisis' && !h.hidden && h.crisisId) return { icon: CRISIS_ICON[h.crisisId] ?? HORIZON_KIND.crisis.icon, color: HORIZON_KIND.crisis.color }
+  return HORIZON_KIND[h.kind]
+}
+
+/** True while a crisis is a date without a name: its tile is a "?" instead of an icon. */
+const unknownCrisis = (h: HorizonItem): boolean => h.kind === 'crisis' && (!!h.hidden || !h.crisisId)
+
+/** An item's tile: its kind's icon in its hue, a "?" for a crisis not revealed yet. */
+export function HorizonTile({ h, size = 24 }: { h: HorizonItem; size?: number }) {
+  const k = horizonKindOf(h)
+  return (
+    <span className="grid shrink-0 place-items-center rounded-[7px]" style={{ width: size, height: size, color: k.color, background: soft(k.color, 14) }}>
+      {unknownCrisis(h) ? <span className="text-[11px] font-bold leading-none">{t('horizon.crisisHidden')}</span> : <Icon name={k.icon} size={Math.round(size * 0.54)} />}
+    </span>
+  )
 }
 
 export function horizonLabel(h: HorizonItem, projectName: (id: string | undefined) => string): string {
@@ -50,6 +79,8 @@ export function horizonLabel(h: HorizonItem, projectName: (id: string | undefine
       return t('horizon.roundReady')
     case 'crisis':
       return crisisName(h)
+    case 'saturation':
+      return t('horizon.saturation')
   }
 }
 
@@ -105,6 +136,35 @@ export function HorizonDue() {
   )
 }
 
+/**
+ * The covenant countdown (§6.2): while the next payday counts a breach (or one was counted), the scale icon + days to
+ * that check. Identity hue, never red (the red belongs to runway and the payday clock). A tap opens the Kasa dökümü.
+ */
+export function HorizonLoan() {
+  const c = useGameStore(useShallow((s) => {
+    const cv = covenantState(s.state)
+    return cv && (cv.light === 'atRisk' || cv.light === 'breached') ? { days: cv.checkDays, breaches: cv.breaches } : null
+  }))
+  if (!c) return null
+  const d = Math.max(0, Math.round(c.days))
+  // Once a breach is counted the tooltip says how many ("İhlal 1 · 12g"), the same line as Metrikler's loan row.
+  const title = c.breaches > 0 ? t('loan.warn', { n: c.breaches, d }) : t('loan.dueTitle', { d })
+  return (
+    <button
+      type="button"
+      data-loan-due=""
+      title={title}
+      aria-label={title}
+      onClick={() => useGameStore.getState().openPanel({ kind: 'metrics', focus: 'burnBreakdown' }, { root: true })}
+      className="tabular inline-flex h-full shrink-0 items-center gap-1 rounded-md px-1 text-[13px] font-bold hover:bg-surface-2"
+      style={{ color: 'var(--color-g-burn)' }}
+    >
+      <Icon name="scale" size={14} />
+      {whenLabel(c.days, true)}
+    </button>
+  )
+}
+
 /** One item per kind, nearest first (two paydays / three releases would only repeat the same word); the desk's deadline is its own kind. */
 function firstOfEachKind(items: readonly HorizonItem[]): HorizonItem[] {
   const seen = new Set<string>()
@@ -130,12 +190,9 @@ export function HorizonMini({ max = 3, compact, className }: { max?: number; com
   const name = (id: string | undefined) => projects.find((p) => p.id === id)?.name ?? ''
   const title = list.map((h) => `${whenLabel(h.day - day)} · ${horizonLabel(h, name)}`).join('\n')
   if (compact) {
-    const k = horizonKindOf(first)
     return (
       <span className={cx('tabular inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-ink', className)} title={title}>
-        <span className="grid size-5 shrink-0 place-items-center rounded-md" style={{ color: k.color, background: soft(k.color, 14) }}>
-          <Icon name={k.icon} size={12} />
-        </span>
+        <HorizonTile h={first} size={20} />
         <span className="truncate">{horizonItemText(first, first.day - day, true)}</span>
       </span>
     )
@@ -148,6 +205,8 @@ export function HorizonMini({ max = 3, compact, className }: { max?: number; com
         {shown.map((h, i) => (
           <span key={`${h.kind}-${i}`}>
             {i > 0 && <span className="text-ink-3"> · </span>}
+            {/* A revealed crisis carries its icon in the line ("⚑ Reklam savaşı · 12 gün"); "?" is its own sign. */}
+            {h.kind === 'crisis' && !unknownCrisis(h) && <Icon name={horizonKindOf(h).icon} size={13} className="mr-0.5 inline-block align-[-2px]" style={{ color: HORIZON_KIND.crisis.color }} />}
             <span className={cx(i === 0 && 'font-semibold text-ink')}>{horizonItemText(h, h.day - day)}</span>
           </span>
         ))}
@@ -165,12 +224,9 @@ export function HorizonList() {
   return (
     <ul className="flex flex-col">
       {list.map((h, i) => {
-        const k = horizonKindOf(h)
         return (
           <li key={`${h.kind}-${i}-${Math.round(h.day)}`} className="flex items-center gap-2 px-2 py-1.5">
-            <span className="grid size-6 shrink-0 place-items-center rounded-[7px]" style={{ color: k.color, background: soft(k.color, 14) }}>
-              <Icon name={k.icon} size={13} />
-            </span>
+            <HorizonTile h={h} />
             <span className="tabular w-12 shrink-0 text-xs font-semibold text-ink">{whenLabel(h.day - day)}</span>
             <span className="font-text min-w-0 flex-1 truncate text-xs text-ink-2">{horizonLabel(h, name)}</span>
           </li>

@@ -11,6 +11,7 @@ import {
   loanAmount,
   nextCrisis,
   nextLockedRing,
+  previewSpend,
   serialize,
   type Action,
   type Archetype,
@@ -238,6 +239,8 @@ export interface BotRun {
   movesUsedShare: number[]
   segmentsOpened: number
   rivalsAcquired: number
+  /** Times the horizon started showing 'saturation' (market ≥ 70% full, GAMEPLAY V2 §8.1). */
+  saturationSeen: number
   boardQuarters: { hit: number; missed: number }
   renewals: { offered: number; kept: number }
   refactors: number
@@ -295,7 +298,7 @@ const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
 /** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
 const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT_KINDS, 'founderActionDone', 'hired', 'visitorArrived', 'stageUp'])
 /** Bot actions that count as a meaningful player move (not background knob-twiddling like ad/price/assign). */
-const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy'])
+const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival'])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -745,6 +748,52 @@ function growth(c: Ctx, cfg: BotConfig): void {
   }
 }
 
+/**
+ * Cash left after a one-off spend covers `months` of runway: months of net burn while burning; a profitable company
+ * keeps the same months of a quarter of its gross burn (a profit can turn into a loss with the next storm).
+ */
+const CUSHION_BURN_SHARE = 0.25
+function affordsWithRunway(s: GameState, cost: number, upkeep: number, months: number): boolean {
+  const after = previewSpend(s, { cashDelta: -cost, burnDelta: upkeep })
+  if (after.runwayAfter !== null) return after.runwayAfter >= months
+  return s.stats.cash - cost >= months * CUSHION_BURN_SHARE * (s.finance.burn + upkeep)
+}
+
+/**
+ * GAMEPLAY V2 §8.1 expansion: a segment is opened once the bank holds its cost plus EXPAND_RUNWAY months of runway
+ * after it (its upkeep counted). From EXPAND_PRIORITY_PEN on it comes before furniture and hires (the market is the
+ * wall now); below, after them. The autopilots (coaster, idleAfterProfit) never expand.
+ */
+const EXPAND_RUNWAY = 6
+export const EXPAND_PRIORITY_PEN = 0.5
+function expand(c: Ctx, cfg: BotConfig): void {
+  if (cfg.afterProfit) return
+  const m = c.s.derived.moves
+  const reserve = c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
+  if (m && m.left - balance.MOVE_COST.openSegment < reserve) return
+  for (const seg of c.s.derived.market?.segments ?? []) {
+    if (seg.error !== null || !affordsWithRunway(c.s, seg.cost, seg.upkeep, EXPAND_RUNWAY)) continue
+    if (c.act({ type: 'openSegment', id: seg.id })) return
+  }
+}
+
+/**
+ * GAMEPLAY V2 §8.2 boardroom (Series B on): a rival is bought when ACQUIRE_RUNWAY months of runway stay after its price;
+ * the one bringing the most users per dollar first. The autopilots never buy.
+ */
+const ACQUIRE_RUNWAY = 9
+function boardroom(c: Ctx, cfg: BotConfig): void {
+  if (cfg.afterProfit || c.s.stage < balance.ACQUIRE_MIN_STAGE) return
+  const m = c.s.derived.moves
+  const reserve = c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
+  if (m && m.left - balance.MOVE_COST.acquireRival < reserve) return
+  const deals = (c.s.derived.market?.rivals ?? []).filter((r) => r.error === null && r.users > 0).sort((a, b) => b.users / Math.max(1, b.price) - a.users / Math.max(1, a.price))
+  for (const r of deals) {
+    if (!affordsWithRunway(c.s, r.price, 0, ACQUIRE_RUNWAY)) continue
+    if (c.act({ type: 'acquireRival', id: r.id })) return
+  }
+}
+
 /** Days without new progress after which a bot takes the open round window. */
 const STALL_DAYS = 60
 
@@ -924,6 +973,8 @@ export function playBot(
   const movesGiven = [0, 0, 0, 0, 0, 0, 0]
   /** The running budget week as it began: its quota and stage (a mid-week stage-up must not change the quota). */
   let week = null as { start: number; total: number; stage: number } | null
+  let saturationSeen = 0
+  let saturated = false
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -955,10 +1006,14 @@ export function playBot(
       }
     } else if (cfg) {
       housekeeping(ctx, cfg, undefined, policy)
+      const crowded = (s.derived.penetration ?? 0) >= EXPAND_PRIORITY_PEN
+      if (crowded) expand(ctx, cfg)
       furnish(ctx, cfg)
       rebalance(ctx, cfg)
       hiring(ctx, cfg)
       growth(ctx, cfg)
+      if (!crowded) expand(ctx, cfg)
+      boardroom(ctx, cfg)
       signPolicies(ctx, cfg)
       founder(ctx, cfg)
       fundraise(ctx, cfg)
@@ -984,6 +1039,9 @@ export function playBot(
     if (profitDay === null && s.finance.mrr > 0 && s.finance.net > 0) profitDay = s.time.day
     if ((s.finance.runway ?? 99) < 3) daysRunwayBelow3++
     if (s.rivals?.[0]?.ahead) rivalPassedDays++
+    const sat = (s.derived.horizon ?? []).some((h) => h.kind === 'saturation')
+    if (sat && !saturated) saturationSeen++
+    saturated = sat
     peakValuation = Math.max(peakValuation, s.finance.valuation)
     for (let st = prev + 1; st <= s.stage; st++) stageDays[st] = Math.round(s.time.day)
     // Dead time inside a round: gap between world beats while the round runs.
@@ -1102,8 +1160,9 @@ export function playBot(
     paydayDeferrals,
     paydaysShort,
     movesUsedShare: movesGiven.map((g, i) => (g > 0 ? (movesUsed[i] ?? 0) / g : 0)),
-    segmentsOpened: 0,
-    rivalsAcquired: 0,
+    segmentsOpened: actionCounts['openSegment'] ?? 0,
+    rivalsAcquired: actionCounts['acquireRival'] ?? 0,
+    saturationSeen,
     boardQuarters: { hit: 0, missed: 0 },
     renewals: { offered: 0, kept: 0 },
     refactors: s.counters.refactors ?? 0,

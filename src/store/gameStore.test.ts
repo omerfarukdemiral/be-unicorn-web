@@ -1,15 +1,29 @@
 // Integration: store ⇄ engine ⇄ content. M2/M3 chain: hire → desk → sit & work → project → users; 10 min in the garage.
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CONCEPTS, FURNITURE } from '../content'
-import { balance } from '../engine'
+import { CONCEPTS, CONTENT, FURNITURE, NPC_TEXT, TEASERS } from '../content'
+import { balance, createGame } from '../engine'
 import { promoteConcept } from '../engine/concepts'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY } from '../engine/types'
-import type { GameEvent, GameState, HudWidget } from '../engine/types'
+import { winRun } from '../engine/endgame'
+import { pushStageReport } from '../engine/round'
+import { CONCEPT_IDS, FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY } from '../engine/types'
+import type { GameEvent, GameState, HorizonItem, HudWidget, StageIndex, StageReport } from '../engine/types'
+import { castName, npcLabel, speakerName } from '../ui/bubbles/speaker'
+import { horizonItemText, horizonKindOf } from '../ui/Horizon'
+import { t } from '../ui/i18n'
+import { admit, dailyBudget } from '../ui/layout/stripRules'
+import { rivalPassedItems } from '../ui/layout/NotificationStrip'
+import { NotebookCard } from '../ui/NotebookCard'
+import { MoveSceneOverlay, VictoryOverlay } from '../ui/overlays/Overlays'
+import { JournalPanel } from '../ui/panels/JournalPanel'
 import { autoPin, effectivePins, PIN_MAX, pinEvictee, unseenMetrics } from './metricPins'
-import { readUiSave, UI_KEY } from './save'
+import { CODEX_KEY, readCodex, readUiSave, UI_KEY, writeCodex } from './save'
 import {
   achievementsBadge,
   blockingOverlay,
+  codexAfter,
+  codexCount,
   effectiveSpeed,
   hasImportantMoment,
   hasInterrupt,
@@ -948,5 +962,188 @@ describe('payday desk (docs/GAMEPLAY_V2.md §6.1, §3 md.6)', () => {
     expect(store().ui.overlay).toBeNull()
     expect(store().ui.pauseReasons).toEqual([])
     expect(effectiveSpeed(store())).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Curiosity surfaces and overlays (docs/GAMEPLAY_V2.md §9.4, §10.6): Keşif record, rival line, cast, report cards
+// ---------------------------------------------------------------------------
+
+/** Words a player reads in rendered markup: tokens with two letters or more (numbers and signs are not words). */
+function visibleWords(html: string): number {
+  const text = html.replace(/<[^>]*>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ')
+  return text.split(/\s+/).filter((w) => /\p{L}{2,}/u.test(w)).length
+}
+
+/**
+ * Server render of the store's CURRENT state: zustand's server snapshot reads the initial state object, so its state
+ * and ui are swapped in for the render and put back after.
+ */
+function ssr(el: Parameters<typeof renderToStaticMarkup>[0]): string {
+  const initial = useGameStore.getInitialState()
+  const keep = { state: initial.state, ui: initial.ui }
+  Object.assign(initial, { state: store().state, ui: store().ui })
+  try {
+    return renderToStaticMarkup(el)
+  } finally {
+    Object.assign(initial, keep)
+  }
+}
+
+const throwingStorage = {
+  getItem: () => {
+    throw new Error('blocked')
+  },
+  setItem: () => {
+    throw new Error('blocked')
+  },
+  removeItem: () => {
+    throw new Error('blocked')
+  },
+}
+
+describe('Keşif record (be-unicorn:codex, §9.2)', () => {
+  beforeEach(() => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  const shown = (s: GameState, refId: string): GameState => {
+    const id = (s.events[s.events.length - 1]?.id ?? 0) + 1
+    return { ...s, events: [...s.events, { id, day: s.time.day, kind: 'decisionShown', refId }] }
+  }
+
+  it('a card shown is seen once; a thread is done only on its last step', () => {
+    const s = store().state
+    const empty = { seenCards: [], threadsDone: [] }
+    const a = codexAfter(empty, s, shown(s, 'mentor-coffee'))
+    expect(a).toEqual({ seenCards: ['mentor-coffee'], threadsDone: [] })
+    expect(codexAfter(a, s, shown(s, 'mentor-coffee'))).toBe(a)
+    const b = codexAfter(a, s, shown(s, 'mentor-your-way'))
+    expect(b.threadsDone).toEqual(['mentor'])
+    // Nothing new: the same object (no write, no render).
+    expect(codexAfter(b, s, s)).toBe(b)
+    expect(codexCount(b)).toEqual({ n: 2, total: CONTENT.decisions.filter((d) => d.thread || d.secret).length })
+  })
+
+  it('a throwing localStorage never breaks reading, writing, ticking or the Keşif render', () => {
+    vi.stubGlobal('localStorage', throwingStorage)
+    expect(readCodex()).toEqual({ seenCards: [], threadsDone: [] })
+    expect(() => writeCodex({ seenCards: ['x'], threadsDone: [] })).not.toThrow()
+    expect(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })).not.toThrow()
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    // Through days of play (cards come, afterStep writes the record into the blocked storage).
+    expect(() => play(240)).not.toThrow()
+    const html = ssr(createElement(JournalPanel))
+    expect(html).toContain(t('achv.discovery'))
+    expect(html).toContain(t('codex.count', codexCount(store().ui.codex)))
+  })
+
+  it('codex lives outside keptUi: a new run reads it back from storage', () => {
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    writeCodex({ seenCards: ['mentor-coffee'], threadsDone: [] })
+    expect(mem.has(CODEX_KEY)).toBe(true)
+    store().newGame({ seed: 8, founderXp: 0, runIndex: 1 })
+    expect(store().ui.codex.seenCards).toEqual(['mentor-coffee'])
+  })
+})
+
+describe('strip: the one rival line (§9.4, D9)', () => {
+  it('rivalPassed is one P2 line per rival, de-duplicated for 30 days by the daily budget', () => {
+    const rivals = [{ id: 'r1', name: 'Nova', bornDay: 0, strength: 0.5, share: 0.1, mrr: 0, valuation: 1, momentum: 0 as const }]
+    const ev = (id: number, day: number): GameEvent => ({ id, day, kind: 'rivalPassed', refId: 'r1', value: 1 })
+    const [first] = rivalPassedItems([ev(1, 100), { id: 2, day: 100, kind: 'rivalBorn', refId: 'r1' }], { rivals })
+    expect(first).toMatchObject({ kind: 'activity', rival: 'Nova', dedupeKey: 'rivalPassed:r1' })
+    expect(rivalPassedItems([{ id: 3, day: 1, kind: 'decisionShown', refId: 'mentor-coffee' }], { rivals })).toEqual([])
+    let b = dailyBudget(100)
+    let v: string
+    ;[v, b] = admit(b, first!, 100)
+    expect(v).toBe('show')
+    expect(admit(b, rivalPassedItems([ev(4, 110)], { rivals })[0]!, 110)[0]).toBe('skip')
+    expect(admit(b, rivalPassedItems([ev(5, 130)], { rivals })[0]!, 130)[0]).toBe('show')
+  })
+
+  it('no achievement, goal or thread step text reaches the strip (grep)', () => {
+    const files = import.meta.glob<string>(['../ui/layout/NotificationStrip.tsx', '../ui/Moments.tsx', '../ui/momentRules.ts'], { query: '?raw', import: 'default', eager: true })
+    expect(Object.keys(files)).toHaveLength(3)
+    for (const [f, src] of Object.entries(files)) expect(src, f).not.toMatch(/goalDone|threadStep|'achv\.|'codex\.|'goals?\.|conceptQueued/)
+  })
+})
+
+describe('cast and horizon (§9.1, §5.1)', () => {
+  it('bubble speakers use state.cast; the same seed gives the same names', () => {
+    const a = createGame({ seed: 11, founderXp: 0, runIndex: 0 })
+    const b = createGame({ seed: 11, founderXp: 0, runIndex: 0 })
+    expect(a.cast).toEqual(b.cast)
+    const cast = { ...a.cast!, mentor: 'Suna' }
+    const s: GameState = { ...a, cast, visitors: [{ id: 'v1', role: 'mentor', purpose: 'decision', arriveDay: 0, leaveDay: 9 }] }
+    expect(speakerName(s, 'v1')).toBe('Suna')
+    expect(speakerName(s, 'mentor')).toBe('Suna')
+    expect(castName(s, 'investor')).toBe(a.cast!.investor)
+    expect(npcLabel('mentor', cast)).toBe(`Suna · ${NPC_TEXT.mentor.title}`)
+    // An older save without a cast falls back to the role's default name.
+    expect(castName({}, 'mentor')).toBe(NPC_TEXT.mentor.name)
+  })
+
+  it('a crisis is "? · 58g" until the reveal, then its own icon and name (≤ 6 words)', () => {
+    const hidden: HorizonItem = { kind: 'crisis', day: 58, hidden: true }
+    expect(horizonItemText(hidden, 58, true)).toBe(`${t('horizon.crisisHidden')} · 58g`)
+    const shown: HorizonItem = { kind: 'crisis', day: 30, hidden: false, crisisId: 'cac-war' }
+    expect(horizonKindOf(shown).icon).toBe('megaphone')
+    const text = horizonItemText(shown, 30, true)
+    expect(text).toContain(t('crisis.cac-war'))
+    expect(text.split(/\s+/).length).toBeLessThanOrEqual(6)
+  })
+})
+
+describe('overlays and the Defter card (§10.6)', () => {
+  beforeEach(() => {
+    store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+  })
+
+  const report = (stage: StageIndex): StageReport => ({ stage, days: 60 + stage * 40, roundsClosed: stage, goalsDone: 1, threadSteps: 1, rivalRatio: 0, minRunway: 4.2 })
+
+  it('NotebookCard shows at most 20 words when it opens (every concept, numbers and unlock pill in)', () => {
+    const s = store().state
+    useGameStore.setState({ state: { ...s, concepts: { ...s.concepts, triggered: [...CONCEPT_IDS] } } })
+    for (const c of CONCEPTS) {
+      const html = ssr(createElement(NotebookCard, { conceptId: c.id, onClose: () => {} }))
+      expect(visibleWords(html), c.id).toBeLessThanOrEqual(20)
+      expect((html.match(/<p[\s>]/g) ?? []).length, c.id).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('MoveScene: no paragraph, the teaser ≤ 6 words, the report numbers of the stage just left', () => {
+    const s = store().state
+    useGameStore.setState({ state: { ...s, stage: 2, stageReports: [report(0), report(1)] } })
+    const html = ssr(createElement(MoveSceneOverlay, { onClose: () => {} }))
+    expect(html).not.toMatch(/<p[\s>]/)
+    expect(html).toContain(TEASERS[2])
+    expect(TEASERS[2].split(/\s+/).length).toBeLessThanOrEqual(6)
+    expect(html).toContain('100')
+  })
+
+  it('Victory: 7 karne rows (the engine\'s 6 reports + Unicorn), the archetype and the Keşif count', () => {
+    // The real path: a report per stage left (closeRound's pushStageReport), the Series C one written by winRun.
+    const s = structuredClone(store().state)
+    for (const stage of [0, 1, 2, 3, 4] as StageIndex[]) {
+      s.stage = stage
+      s.stageStart = { stage, day: s.time.day, users: 0, team: 1, releases: 0, mrr: 0, projects: 0 }
+      s.time.day += 60
+      pushStageReport(s, CONTENT)
+    }
+    s.stage = 5
+    s.stageStart = { stage: 5, day: s.time.day, users: 0, team: 1, releases: 0, mrr: 0, projects: 0 }
+    s.time.day += 90
+    winRun(s, CONTENT)
+    expect(s.stageReports?.map((r) => r.stage)).toEqual([0, 1, 2, 3, 4, 5])
+    useGameStore.setState({ state: { ...s, archetype: 'niche' } })
+    const html = ssr(createElement(VictoryOverlay))
+    expect(html).toContain('data-report-rows="7"')
+    expect((html.match(/<li[\s>]/g) ?? []).length).toBe(7)
+    expect(html).toContain(t('archetype.niche'))
+    expect(html).toContain(t('codex.count', codexCount(store().ui.codex)))
+    expect((html.match(/<p[\s>]/g) ?? []).length).toBeLessThanOrEqual(1)
   })
 })

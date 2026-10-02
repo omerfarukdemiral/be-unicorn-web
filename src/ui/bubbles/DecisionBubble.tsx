@@ -24,6 +24,8 @@ export function decisionById(id: DecisionCardId): DecisionCard | undefined {
 /** Shared card body (screen bubble + panel). Kind mark = orange tile (crisis = red tile + dot). */
 export function DecisionCardView({ card, onChoose, dense, stacked }: { card: DecisionCard; onChoose: (optionIndex: number) => void; dense?: boolean; /** One option per row (narrow panel). */ stacked?: boolean }) {
   const crisis = card.category === 'crisis'
+  // The run's cast speaks (GAMEPLAY V2 §9.1): a thread card's role becomes this run's name.
+  const cast = useGameStore((s) => s.state.cast)
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2.5">
@@ -32,7 +34,7 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
           {crisis && <Dot color="var(--color-negative)" size={7} className="absolute -right-0.5 -top-0.5 ring-2 ring-surface" />}
         </span>
         <div className="min-w-0">
-          <div className="ui-label">{npcLabel(card.speaker)}</div>
+          <div className="ui-label">{npcLabel(card.speaker, cast)}</div>
           <p className={cx('font-text mt-0.5 font-semibold leading-snug text-ink', dense ? 'text-sm' : 'text-base')}>{card.question}</p>
         </div>
       </div>

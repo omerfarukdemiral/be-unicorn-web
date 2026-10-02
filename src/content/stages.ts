@@ -26,15 +26,15 @@ export const STAGES: readonly StageDef[] = [
   {
     index: 3, key: 'seriesA', name: 'Series A', officeName: 'Açık plan kat', rings: 4, totalSlots: 30,
     targetValuation: 15_000_000, roundAmount: 4_000_000, roundEquity: 0.18,
-    unlockTools: ['adBudget', 'refactor'], unlockActions: ['refactorSprint'],
-    unlocksText: 'Reklam bütçesi, LTV:CAC paneli, refactor sprinti', paletteKey: 'openPlan',
+    unlockTools: ['adBudget', 'refactor', 'segments'], unlockActions: ['refactorSprint'],
+    unlocksText: 'Reklam bütçesi, refactor sprinti, yeni pazar', paletteKey: 'openPlan',
     tagline: 'Koca bir kat, büyümeyi ölçme zamanı.',
   },
   {
     index: 4, key: 'seriesB', name: 'Series B', officeName: 'İki katlı ofis', rings: 5, totalSlots: 44,
     targetValuation: 75_000_000, roundAmount: 20_000_000, roundEquity: 0.15,
-    unlockTools: ['enterpriseSales'],
-    unlocksText: 'Sunucu odası, kurumsal satış', paletteKey: 'twoFloor',
+    unlockTools: ['enterpriseSales', 'mna'],
+    unlocksText: 'Sunucu odası, kurumsal satış, rakip satın alma', paletteKey: 'twoFloor',
     tagline: 'İki kat, büyük müşteriler, büyük sorumluluk.',
   },
   {

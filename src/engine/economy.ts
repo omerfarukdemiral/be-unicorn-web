@@ -60,9 +60,14 @@ export function overload(users: number, cap: number): number {
   return Math.max(0, users / Math.max(1, cap) - 1)
 }
 
-/** Market size at a stage (GAMEPLAY V2 §4.3): MARKET_FALLBACK_TAM until the segments of §8 land. */
-export function marketTam(stage: number): number {
-  return B.MARKET_FALLBACK_TAM[Math.min(B.MARKET_FALLBACK_TAM.length - 1, Math.max(0, stage))]!
+/** Share of an opened segment counted on `day`: 0 → 1 over MARKET_RAMP_DAYS (GAMEPLAY V2 §8.1). */
+export function segmentRamp(openedDay: number, day: number): number {
+  return clamp(0, 1, (day - openedDay) / B.MARKET_RAMP_DAYS)
+}
+
+/** tam = Σ open segment size × its ramp (GAMEPLAY V2 §8.1). */
+export function marketTam(segments: readonly { size: number; openedDay: number }[], day: number): number {
+  return segments.reduce((a, m) => a + m.size * segmentRamp(m.openedDay, day), 0)
 }
 
 /** pen = users / tam, 0–1. */
@@ -148,14 +153,14 @@ export function infra(users: number, mrrValue: number, stage: number, infraMult 
   return Math.max((users / 1000) * B.INFRA_PER_1000_BY_STAGE[i]!, Math.max(0, mrrValue) * B.INFRA_MRR_SHARE[i]!) * infraMult
 }
 
-/** burn = maaşlar + kira + altyapı + reklamBütçesi (+ kurucu yaşam gideri, Faz 3). */
-export function burn(salaries: number, rentValue: number, infraValue: number, adBudget: number, founderLiving = 0): number {
-  return salaries + rentValue + infraValue + adBudget + founderLiving
+/** burn = maaşlar + kira + altyapı + reklamBütçesi (+ kurucu yaşam gideri, Faz 3; + segment bakımı, GAMEPLAY V2 §8.1). */
+export function burn(salaries: number, rentValue: number, infraValue: number, adBudget: number, founderLiving = 0, expansion = 0): number {
+  return salaries + rentValue + infraValue + adBudget + founderLiving + expansion
 }
 
-/** Costs in a payday ledger (salaries + rent + infra + ads + founder living). */
-export function ledgerCosts(l: { salaries: number; rent: number; infra: number; ads: number; founder?: number }): number {
-  return l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0)
+/** Costs in a payday ledger (salaries + rent + infra + ads + founder living + segment upkeep). */
+export function ledgerCosts(l: { salaries: number; rent: number; infra: number; ads: number; founder?: number; expansion?: number }): number {
+  return l.salaries + l.rent + l.infra + l.ads + (l.founder ?? 0) + (l.expansion ?? 0)
 }
 
 /** Founder living cost per month at a stage (CORE_LOOP §5 "Garaj burn'ü"). */

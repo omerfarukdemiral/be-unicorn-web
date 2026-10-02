@@ -1,4 +1,5 @@
-// Blocking overlay shell: dim backdrop + centered card (bottom sheet on phones; `sheet`: full-screen sheet on phones).
+// Blocking overlay shell (docs/GAMEPLAY_V2.md §10.6): bg-ink/45 backdrop, the card scales in from the centre in 180 ms
+// (bottom sheet on phones; `sheet`: full-screen sheet on phones). Opaque surface, no blur (§10.1 D4).
 import { useEffect, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { cx, IconButton } from '../primitives'
@@ -45,7 +46,7 @@ export function OverlayFrame({
           aria-modal="true"
           aria-labelledby={labelledBy}
           className={cx(
-            'flex h-full w-full flex-col overflow-hidden bg-surface pt-[env(safe-area-inset-top,0px)] animate-slide-up sm:h-auto sm:pt-0 sm:max-h-[92dvh] sm:animate-pop-in sm:rounded-card sm:border sm:border-border sm:shadow-pop',
+            'flex h-full w-full flex-col overflow-hidden bg-surface pt-[env(safe-area-inset-top,0px)] animate-slide-up sm:h-auto sm:pt-0 sm:max-h-[92dvh] sm:animate-rise sm:rounded-card sm:border sm:border-border sm:shadow-pop',
             wide ? 'sm:max-w-2xl' : 'sm:max-w-lg',
           )}
         >
@@ -56,14 +57,14 @@ export function OverlayFrame({
   }
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-ink/35 backdrop-blur-[2px] animate-fade-in sm:items-center sm:p-4" onClick={onClose}>
+    <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-ink/45 animate-fade-in sm:items-center sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
         onClick={(e) => e.stopPropagation()}
         className={cx(
-          'relative flex max-h-[92dvh] w-full animate-slide-up flex-col overflow-hidden sm:animate-pop-in',
+          'relative flex max-h-[92dvh] w-full animate-slide-up flex-col overflow-hidden sm:animate-rise',
           wide ? 'sm:max-w-2xl' : 'sm:max-w-md',
           bare ? 'rounded-t-card border border-border bg-surface shadow-pop sm:rounded-card' : 'ui-card rounded-b-none shadow-pop sm:rounded-card',
         )}

@@ -360,7 +360,7 @@ const uniCount = (runs: BotRun[]) => runs.filter((r) => r.stageDays[6] != null).
 crit('İyi bot iflas', band(goodRuns.filter(failedRun).length, goodRuns.length, 0, 0.05))
 crit('Careless iflas', band(careless.filter(failedRun).length, careless.length, 0.4, 0.6))
 crit('greedyGood iflas', band(v2('greedyGood').filter(failedRun).length, SEEDS, 0.15, 0.3))
-crit('coaster Unicorn', band(uniCount(v2('coaster')), SEEDS, 0, 0), ' (bilgi; B2 ara, nihai hedef E1)')
+crit('coaster Unicorn (E1 nihai)', band(uniCount(v2('coaster')), SEEDS, 0, 0))
 {
   // B1 (§4.1): the autopilot must not reach Unicorn AND its valuation must fall after the peak (growth stopped).
   const runs = v2('idleAfterProfit')
@@ -415,7 +415,13 @@ crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, car
   line(`- refactorSprint koşu başına (iyi botlar, medyan): ${refactors} (hedef 3–8): **${yes(refactors >= 3 && refactors <= 8)}**`)
   const penA = median(goodRuns.filter((r) => r.techDebtByStage[3] !== null).map((r) => r.penetrationByStage[3]!)) ?? 0
   const penB = median(goodRuns.filter((r) => r.techDebtByStage[4] !== null).map((r) => r.penetrationByStage[4]!)) ?? 0
-  line(`- Penetrasyon aşama sonu A / B (bilgi; MARKET_FALLBACK_TAM, hedef §8.1 ile 0.5–0.9): ${pct(penA, 1)} / ${pct(penB, 1)}`)
+  line(`- Penetrasyon aşama sonu A / B (iyi botlar, medyan; hedef 0.5–0.9): ${pct(penA, 1)} / ${pct(penB, 1)}: **${yes(penA >= 0.5 && penA <= 0.9 && penB >= 0.5 && penB <= 0.9)}**`)
+  // GAMEPLAY V2 §8.1–8.2 market verbs (good bots, per run).
+  const segs = median(goodRuns.map((r) => r.segmentsOpened)) ?? 0
+  const buys = median(goodRuns.map((r) => r.rivalsAcquired)) ?? 0
+  line(`- Unicorn öncesi segmentsOpened / rivalsAcquired (iyi botlar, medyan): ${segs} / ${buys} (hedef ≥ 2 / ≥ 1): **${yes(segs >= 2 && buys >= 1)}** · satın alan koşu ${goodRuns.filter((r) => r.rivalsAcquired > 0).length}/${goodRuns.length}`)
+  const sat = median(goodRuns.map((r) => r.saturationSeen)) ?? 0
+  line(`- Ufukta 'saturation' koşu başına (iyi botlar, medyan): ${sat} (hedef ≥ 1): **${yes(sat >= 1)}** · hiç görmeyen koşu ${goodRuns.filter((r) => r.saturationSeen === 0).length}/${goodRuns.length}`)
   if (unicornMedians.length) {
     const mins = unicornMedians.map(toMin)
     const spread = Math.max(...mins) / Math.min(...mins)

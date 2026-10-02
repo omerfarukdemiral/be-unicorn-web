@@ -1,45 +1,78 @@
-// Blocking overlay contents (the only centered modals): move scene, post-mortem, victory.
+// Blocking overlay contents (the only centered modals): move scene, post-mortem, victory. HUD grammar (docs/GAMEPLAY_V2.md
+// §10.6): numbers first, at most one sentence. The move scene and the victory draw the stage report cards (§9.3).
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { ConceptId, PostMortemCode, PostMortemReason } from '../../engine/types'
-import { POST_MORTEM_TEXT, STAGES } from '../../content'
-import { useGameStore } from '../../store/gameStore'
-import { Icon } from '../icons'
+import { ARCHETYPES, type Archetype, type ConceptId, type PostMortemCode, type StageReport } from '../../engine/types'
+import { STAGES, TEASERS } from '../../content'
+import { codexCount, useGameStore } from '../../store/gameStore'
+import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
-import { Button, Dot, IconBadge, Label, Stat } from '../primitives'
+import { Button, Dot, Label, Pill, Stat } from '../primitives'
 import { NotebookCard } from '../NotebookCard'
 import { conceptTitle } from '../panels/JournalPanel'
 import { useModalQueue } from '../modalQueue'
+import { stageVerb } from '../layout/RoadmapStepper'
 import { OverlayFrame } from './OverlayFrame'
+
+const STAGE_LAST = STAGES.length - 1
 
 // ---------------------------------------------------------------------------
 // Move scene (stage up)
 // ---------------------------------------------------------------------------
 
+/** "4.2 ay", "∞" (99 = profitable all stage, GAMEPLAY V2 §9.3). */
+function reportRunway(m: number): string {
+  return m >= 99 ? t('receipt.infinite') : t('unit.months', { v: fixed(m, 1) })
+}
+
+/** The report of the stage just left (null on an older save that has none). */
+function lastReport(reports: readonly StageReport[] | undefined, stage: number): StageReport | null {
+  return [...(reports ?? [])].reverse().find((r) => r.stage === stage - 1) ?? null
+}
+
 export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
-  const stage = useGameStore((s) => s.state.stage)
-  const def = STAGES[stage]
+  const s = useGameStore(useShallow((st) => ({ stage: st.state.stage, reports: st.state.stageReports })))
+  const def = STAGES[s.stage]
+  const next = STAGES[s.stage + 1]
+  const report = lastReport(s.reports, s.stage)
+  const verb = stageVerb(s.stage)
   return (
     <OverlayFrame onClose={onClose}>
-      <div className="flex flex-col items-center gap-4 p-6 text-center">
-        <div className="flex items-center gap-3 text-ink-3">
-          <OfficeGlyph size={48} muted />
-          <Icon name="chevronRight" size={22} />
-          <OfficeGlyph size={72} />
-        </div>
+      <div className="flex flex-col items-center gap-5 p-6 text-center">
         <div>
           <Label>{t('move.kicker', { stage: def?.name ?? '' })}</Label>
-          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t('round.moveTitle')}</h2>
-          <p className="mt-0.5 text-base font-semibold text-ink">{def?.officeName}</p>
+          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{def?.officeName}</h2>
         </div>
-        {def && (
-          <div className="w-full rounded-control border border-border px-4 py-3 text-left">
-            <Label>{t('move.unlocks')}</Label>
-            <p className="font-text mt-0.5 text-sm font-medium text-ink">{def.unlocksText}</p>
+        {/* The new verb, big: what this stage put in the player's hands. */}
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="grid size-16 place-items-center rounded-card bg-brand text-on-ink shadow-[0_10px_24px_-8px_var(--color-brand)]">
+            <Icon name={verb.icon} size={34} />
+          </span>
+          <span className="text-sm font-semibold text-ink">{verb.label}</span>
+        </div>
+        {report && (
+          <div className="grid w-full grid-cols-3 gap-3 text-left">
+            <Stat label={t('report.days')} value={num(report.days)} />
+            <Stat label={t('report.goals')} value={num(report.goalsDone)} icon="star" color="var(--color-g-equity)" />
+            <Stat label={t('report.minRunway')} value={reportRunway(report.minRunway)} />
           </div>
         )}
-        <Button tone="primary" className="w-full" onClick={onClose} autoFocus>
+        {next && (
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex items-center gap-3 text-ink-3">
+              <OfficeGlyph size={56} />
+              <Icon name="chevronRight" size={20} />
+              {/* The next office as a silhouette: its outline only, the teaser says what it opens. */}
+              <span className="relative opacity-40" title={t('move.nextOffice')}>
+                <OfficeGlyph size={56} muted />
+                <Icon name="lock" size={14} className="absolute -right-1 -top-1 text-ink-2" />
+              </span>
+            </div>
+            <span className="text-xs font-semibold text-ink-2">{TEASERS[s.stage as keyof typeof TEASERS]}</span>
+          </div>
+        )}
+        <Button tone="commit" className="w-full" onClick={onClose} autoFocus>
           {t('move.go')}
         </Button>
       </div>
@@ -82,8 +115,16 @@ function restart() {
   newGame({ seed: Math.floor(Math.random() * 2 ** 31), founderXp: xp, runIndex: state.meta.runIndex + 1, companyName: state.meta.companyName })
 }
 
+/** Highest month-end MRR of the run (the receipts' history plus today). */
+function peakMrr(history: readonly number[], mrr: number): number {
+  return history.reduce((m, v) => Math.max(m, v), mrr)
+}
+
+/** Post-mortem: day, peak MRR and the first blind spot as the one sentence (its Defter card one tap away), then "Yeniden". */
 export function PostMortemOverlay() {
-  const s = useGameStore(useShallow((st) => ({ go: st.state.gameOver, day: st.state.time.day, xp: st.state.meta.founderXp, stage: st.state.stage })))
+  const s = useGameStore(
+    useShallow((st) => ({ go: st.state.gameOver, day: st.state.time.day, stage: st.state.stage, peak: peakMrr(st.state.finance.mrrHistory, st.state.finance.mrr) })),
+  )
   const [open, setOpenRaw] = useState<ConceptId | null>(null)
   // Opening a card from the post-mortem also learns it (openConcept is allowed after game over).
   const setOpen = (c: ConceptId | null) => {
@@ -92,7 +133,8 @@ export function PostMortemOverlay() {
     if (c && state.concepts.triggered.includes(c) && !state.concepts.learned.includes(c)) dispatch({ type: 'openConcept', conceptId: c })
   }
   if (!s.go) return null
-  const reasons = s.go.reasons.slice(0, 3)
+  const cause = s.go.reasons[0]
+  const cid = cause?.conceptId
   return (
     <OverlayFrame wide>
       <div className="flex flex-col gap-5 p-5 sm:p-7">
@@ -102,38 +144,40 @@ export function PostMortemOverlay() {
             <Label>{t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}</Label>
           </div>
           <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}</h2>
-          <p className="font-text mt-1 text-sm text-ink-2">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostBody' : 'gameOver.bankruptBody')}</p>
         </header>
-        <h3 className="ui-label -mb-2">{t('gameOver.reasonsTitle')}</h3>
-        <ol className="flex flex-col gap-2">
-          {reasons.map((r, i) => (
-            <ReasonRow key={`${r.code}-${i}`} index={i} reason={r} open={open} setOpen={setOpen} />
-          ))}
-        </ol>
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label={t('pm.day')} value={num(Math.floor(s.day))} />
+          <Stat label={t('pm.peakMrr')} value={money(s.peak)} icon="trend" color="var(--color-g-cash)" />
+        </div>
+        {cause && (
+          <div className="border-t border-border pt-2">
+            <div className="flex items-start gap-2">
+              <p className="min-w-0 flex-1 text-lg font-semibold leading-snug text-ink">{t(`postMortem.${cause.code}`)}</p>
+              {cid && (
+                <button
+                  type="button"
+                  onClick={() => setOpen(open === cid ? null : cid)}
+                  title={t('decision.notebookLink', { v: conceptTitle(cid) })}
+                  aria-label={t('decision.notebookLink', { v: conceptTitle(cid) })}
+                  aria-expanded={open === cid}
+                  className="grid size-9 shrink-0 place-items-center rounded-control text-kind-concept transition-colors hover:bg-surface-2 max-md:size-11"
+                >
+                  <Icon name="book" size={18} />
+                </button>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <Label>{t('pm.cause')}</Label>
+              {cause.value !== undefined && <Pill className="tabular text-ink">{PM_FORMAT[cause.code](cause.value)}</Pill>}
+            </div>
+          </div>
+        )}
         {open && (
           <div className="overflow-hidden rounded-card border border-border animate-fade-in">
             <NotebookCard conceptId={open} />
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-3 rounded-control border border-border px-4 py-3">
-          <IconBadge icon="sparkle" size={32} color="var(--color-g-equity)" />
-          <div className="min-w-0 flex-1">
-            <div className="tabular text-sm font-semibold text-ink">{t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}</div>
-            <div className="tabular text-xs text-ink-2">{t('pm.xpHint', { total: fixed(s.xp + s.go.xpEarned, 1) })}</div>
-          </div>
-        </div>
-        <div className="flex flex-col items-center gap-0.5 text-center">
-          <p className="font-text text-xs font-medium text-ink-2">{t('pm.failureIsData')}</p>
-          <button
-            type="button"
-            onClick={() => setOpen(open === 'failure-is-data' ? null : 'failure-is-data')}
-            className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
-          >
-            <Icon name="book" size={13} className="text-kind-concept" />
-            {t('decision.notebookLink', { v: conceptTitle('failure-is-data') })}
-          </button>
-        </div>
-        <Button tone="primary" icon="refresh" onClick={restart} autoFocus>
+        <Button tone="commit" icon="refresh" onClick={restart} autoFocus cost={t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}>
           {t('gameOver.retry')}
         </Button>
       </div>
@@ -141,34 +185,32 @@ export function PostMortemOverlay() {
   )
 }
 
-function ReasonRow({ index, reason, open, setOpen }: { index: number; reason: PostMortemReason; open: ConceptId | null; setOpen: (c: ConceptId | null) => void }) {
-  const cid = reason.conceptId
-  return (
-    <li className="flex items-start gap-3 rounded-control border border-border p-3">
-      <span className="tabular w-6 shrink-0 pt-px text-sm font-semibold text-ink-2">{String(index + 1).padStart(2, '0')}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-snug text-ink">{t(`postMortem.${reason.code}`)}</p>
-        <p className="font-text mt-0.5 text-sm leading-snug text-ink-2">{POST_MORTEM_TEXT[reason.code]}</p>
-        {reason.value !== undefined && <p className="tabular mt-1 text-xs font-medium text-ink">{t('pm.yourNumber', { v: PM_FORMAT[reason.code](reason.value) })}</p>}
-        {cid && (
-          <button
-            type="button"
-            onClick={() => setOpen(open === cid ? null : cid)}
-            className="mt-1 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-ink underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-ink max-md:min-h-11"
-          >
-            <Icon name="book" size={13} className="text-kind-concept" />
-            {t('decision.notebookLink', { v: conceptTitle(cid) })}
-          </button>
-        )}
-      </div>
-    </li>
-  )
+const ARCHETYPE_ICON: Record<Archetype, IconName> = {
+  bootstrap: 'coin',
+  vcRocket: 'rocket',
+  niche: 'compass',
+  platform: 'network',
 }
 
+/** Victory: 4 numbers, the stage report cards as mini bars, the archetype walked + 3 untried silhouettes, the Keşif count. */
 export function VictoryOverlay() {
   const s = useGameStore(
-    useShallow((st) => ({ day: st.state.time.day, equity: st.state.stats.equity, valuation: st.state.finance.valuation, team: st.state.derived.teamSize, learned: st.state.concepts.learned.length, archetype: st.state.archetype })),
+    useShallow((st) => ({
+      day: st.state.time.day,
+      equity: st.state.stats.equity,
+      valuation: st.state.finance.valuation,
+      team: st.state.derived.teamSize,
+      learned: st.state.concepts.learned.length,
+      archetype: st.state.archetype,
+      reports: st.state.stageReports,
+      codex: st.ui.codex,
+    })),
   )
+  // The engine writes a report per stage left (Garaj … Series C, the last one by winRun); Unicorn closes the list as a
+  // row of its own, without a bar (no stage was lived there).
+  const reports = (s.reports ?? []).filter((r) => r.stage < STAGE_LAST).slice(-STAGE_LAST)
+  const longest = Math.max(1, ...reports.map((r) => r.days))
+  const found = codexCount(s.codex)
   return (
     <OverlayFrame wide>
       <div className="relative flex flex-col items-center gap-5 overflow-hidden p-6 text-center sm:p-8">
@@ -180,18 +222,62 @@ export function VictoryOverlay() {
           <h2 className="mt-1.5 text-3xl font-semibold tracking-tight text-ink">{t('victory.title')}</h2>
           <p className="font-text mt-1 text-sm text-ink-2">{t('victory.body', { days: Math.floor(s.day) })}</p>
         </div>
-        <div className="relative grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="relative grid w-full grid-cols-2 gap-3 text-left sm:grid-cols-4">
           <Stat label={t('victory.valuation')} value={money(s.valuation)} />
           <Stat label={t('hud.equity')} value={pct(s.equity, 1)} />
           <Stat label={t('victory.team')} value={num(s.team)} />
           <Stat label={t('victory.learned')} value={s.learned} />
         </div>
-        {s.archetype && <p className="relative text-sm font-semibold text-ink">{t('victory.archetype', { v: t(`archetype.${s.archetype}`) })}</p>}
-        <Button tone="primary" icon="refresh" className="relative w-full" onClick={restart}>
+        {reports.length > 0 && (
+          <div className="relative w-full text-left" data-report-rows={reports.length + 1}>
+            <Label>{t('report.title')}</Label>
+            <ol className="mt-1.5 flex flex-col gap-1">
+              {reports.map((r) => (
+                <li key={r.stage} className="flex h-6 items-center gap-2">
+                  <span className="w-20 shrink-0 truncate text-xs font-semibold text-ink">{STAGES[r.stage]?.name}</span>
+                  <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-brand/15">
+                    <span className="block h-full rounded-full bg-brand" style={{ width: `${(r.days / longest) * 100}%` }} />
+                  </span>
+                  <span className="tabular w-12 shrink-0 text-right text-xs font-semibold text-ink">{t('report.daysShort', { v: num(r.days) })}</span>
+                  <span className="tabular inline-flex w-8 shrink-0 items-center justify-end gap-0.5 text-xs font-semibold text-ink-2" title={t('report.goals')}>
+                    <Icon name="star" size={11} className="text-g-equity" />
+                    {r.goalsDone}
+                  </span>
+                </li>
+              ))}
+              <li className="flex h-6 items-center gap-2">
+                <span className="w-20 shrink-0 truncate text-xs font-semibold text-brand-ink">{STAGES[STAGE_LAST]?.name}</span>
+                <Icon name="unicorn" size={14} className="text-brand" />
+              </li>
+            </ol>
+          </div>
+        )}
+        <div className="relative flex w-full flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2" title={TEASERS[6]}>
+            {s.archetype && (
+              <Pill tint="var(--color-brand)" className="text-brand-ink">
+                <Icon name={ARCHETYPE_ICON[s.archetype]} size={13} />
+                {t(`archetype.${s.archetype}`)}
+              </Pill>
+            )}
+            {/* The roads not walked: grey silhouettes, unnamed. */}
+            {ARCHETYPES.filter((a) => a !== s.archetype)
+              .slice(0, 3)
+              .map((a) => (
+                <span key={a} aria-hidden="true" className="grid size-7 place-items-center rounded-[8px] border border-dashed border-border-strong text-ink-3 opacity-60">
+                  <Icon name={ARCHETYPE_ICON[a]} size={14} />
+                </span>
+              ))}
+          </div>
+          <Pill className="tabular text-ink">
+            <Icon name="sparkle" size={12} className="text-brand" />
+            {t('victory.codex')} {t('codex.count', found)}
+          </Pill>
+        </div>
+        <Button tone="commit" icon="refresh" className="relative w-full" onClick={restart}>
           {t('victory.again')}
         </Button>
       </div>
     </OverlayFrame>
   )
 }
-

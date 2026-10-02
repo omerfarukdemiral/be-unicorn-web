@@ -3,13 +3,15 @@
 // (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card,
 // round offer / pitch, the payday desk open on a waiting month; a center screen never holds it).
 // After each tick: a new concept goes straight to the Kazanımlar badge (no scene bubble), an interrupting event closes
-// the center screen, and at 4× an important moment slows the run to 1× (docs/GAMEPLAY_V2.md §3.6, §12).
+// the center screen, and at 4× an important moment slows the run to 1× (docs/GAMEPLAY_V2.md §3.6, §12). A card shown
+// lands in the Keşif record (localStorage 'be-unicorn:codex', outside the engine and the save, §9.2).
 import { create } from 'zustand'
+import { DECISIONS } from '../content'
 import { applyAction, createGame, step } from '../engine'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
-import { clearSave, readProfile, readSave, readUiSave, writeProfile, writeSave, writeUiSave } from './save'
+import { clearSave, readCodex, readProfile, readSave, readUiSave, writeCodex, writeProfile, writeSave, writeUiSave } from './save'
 import { addPin, autoPin, defaultPins, removePin } from './metricPins'
-import { CENTER_KINDS, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState } from './types'
+import { CENTER_KINDS, type Codex, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState } from './types'
 
 export { SAVE_KEY } from './save'
 
@@ -99,6 +101,38 @@ export function achievementsBadge(s: GameState, seenGoals: readonly string[]): n
   return waitingConcepts(s).length + done.filter((id) => !seenGoals.includes(id)).length
 }
 
+/** Last step of each card thread (rival's step 4 has two branches; the investor's step 5 is the exit offer). */
+const THREAD_LAST: Readonly<Record<string, number>> = DECISIONS.reduce<Record<string, number>>((acc, c) => {
+  if (c.thread) acc[c.thread.id] = Math.max(acc[c.thread.id] ?? 0, c.thread.step)
+  return acc
+}, {})
+
+/**
+ * The Keşif record after `next` (docs/GAMEPLAY_V2.md §9.2): every `decisionShown` card is seen, a thread's last step
+ * marks it done. Returns the same object when nothing new came (no write, no render).
+ */
+export function codexAfter(codex: Codex, prev: GameState, next: GameState): Codex {
+  const since = lastEventId(prev)
+  let out = codex
+  for (const e of next.events) {
+    if (e.id <= since || e.kind !== 'decisionShown' || !e.refId) continue
+    const card = DECISIONS.find((d) => d.id === e.refId)
+    if (!card) continue
+    if (!out.seenCards.includes(card.id)) out = { ...out, seenCards: [...out.seenCards, card.id] }
+    const th = card.thread
+    if (th && th.step >= (THREAD_LAST[th.id] ?? Infinity) && !out.threadsDone.includes(th.id)) out = { ...out, threadsDone: [...out.threadsDone, th.id] }
+  }
+  return out
+}
+
+/** The Keşif grid's own cells: every thread step and secret card (ordinary cards are not collected). */
+const CODEX_CARDS = DECISIONS.filter((d) => d.thread || d.secret)
+
+/** Keşif count: grid cells seen out of all of them ("23/64"), so the number matches the tiles. */
+export function codexCount(codex: Codex): { n: number; total: number } {
+  return { n: CODEX_CARDS.filter((d) => codex.seenCards.includes(d.id)).length, total: CODEX_CARDS.length }
+}
+
 const initialUi = (saved = readUiSave()): UiState => ({
   panel: null,
   panelBack: null,
@@ -118,6 +152,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
   pinTouched: saved.pinTouched ?? false,
   seenGoals: saved.seenGoals ?? [],
+  codex: readCodex(),
 })
 
 /** UI fields that survive newGame()/load() (player preferences of this session, top-bar pins included). */
@@ -509,11 +544,18 @@ export const useGameStore = create<GameStore>()((set, get) => ({
  * - a concept that arrived never shows as a scene bubble: it counts on the Kazanımlar badge at once, its visitor
  *   stands silently (tap → card) and, once the visitor's stay is over, it moves to the shelf (minimizeConcept);
  * - an interrupting event (a card, the round window, a missed payroll…) closes an open center screen;
- * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it).
+ * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it);
+ * - a card shown goes into the Keşif record (storage errors are swallowed by save.ts: play never breaks on them).
  * Engine changes go through dispatch, so the replay log reproduces them.
  */
 function afterStep(prev: GameState, next: GameState): void {
   const { dispatch, closeOverlay } = useGameStore.getState()
+  const codex = useGameStore.getState().ui.codex
+  const seen = codexAfter(codex, prev, next)
+  if (seen !== codex) {
+    useGameStore.setState((s) => ({ ui: { ...s.ui, codex: seen } }))
+    writeCodex(seen)
+  }
   const ac = next.concepts.active
   if (ac && !conceptVisitorStays(next, ac.id)) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
   if (centerOpen(useGameStore.getState().ui) && hasInterrupt(prev, next)) closeOverlay()

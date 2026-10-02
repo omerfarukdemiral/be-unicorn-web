@@ -1,7 +1,10 @@
 // Top bar, section A: stage name + date (neutral month ring) + stage progress (valuation / target) + the round.
 // The round clock lives ONLY here ("Tur 3/10 hf" chip, docs/LAYOUT.md §2.1); "Tur başlat" takes the same slot.
+// Curiosity (docs/GAMEPLAY_V2.md §9.4): the lead rival's notch rides the stage line, the next stage's ghost sits at its end.
+import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { STAGES } from '../../content'
+import { rivalNotch, type GameEvent, type StageIndex } from '../../engine'
+import { DECISIONS, STAGES, TEASERS } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
@@ -9,7 +12,7 @@ import { money } from '../format'
 import { cx } from '../primitives'
 import { DayClock } from '../time'
 import { valuationLine } from '../loopUi'
-import { openRoadmap, roadmapTitle, RoadmapStepper } from './RoadmapStepper'
+import { Ghost, openRoadmap, roadmapTitle, RoadmapStepper, type RivalNotch } from './RoadmapStepper'
 
 /** Round chip / button → Büyüme panel scrolled to the round block (again closes it, like the dock tabs). */
 export function openRound() {
@@ -37,6 +40,34 @@ function useStage() {
   )
 }
 
+/** Id of the newest rival card shown (category 'rival' or a rival thread step), 0 = none in the events buffer. */
+function lastRivalCard(events: readonly GameEvent[]): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e?.kind !== 'decisionShown') continue
+    const card = DECISIONS.find((d) => d.id === e.refId)
+    if (card && (card.category === 'rival' || card.thread?.id === 'rival')) return e.id
+  }
+  return 0
+}
+
+/**
+ * The lead rival's notch on the current link, on the scale of derived.stageProgress (valuation / B.STAGE_TARGET_VALUATION).
+ * Null before a rival is born, once the lead is bought (§8.2, the guard world.ts uses) and at the last stage.
+ * The engine runs the race on MRR (`ahead`), so the notch is kept on the side of the fill its colour says.
+ * `pulse` turns non-zero only for a rival card that came after this run was first seen (generation, like useFreshEvents).
+ */
+function useRivalNotch(): RivalNotch | null {
+  const card = useGameStore((st) => lastRivalCard(st.state.events))
+  const generation = useGameStore((st) => st.ui.generation)
+  const r = useGameStore(useShallow((st) => rivalNotch(st.state)))
+  // The card seen at the first sight of a run (mount, new game, loaded save) never nudges.
+  const base = useRef<{ generation: number; id: number } | null>(null)
+  if (!base.current || base.current.generation !== generation || card < base.current.id) base.current = { generation, id: card }
+  if (!r) return null
+  return { at: r.at, ahead: r.ahead, title: t('rival.notchTitle', { name: r.name, v: money(r.valuation) }), pulse: card > base.current.id ? card : 0 }
+}
+
 function progressTitle(s: ReturnType<typeof useStage>): string {
   const next = STAGES[s.stage + 1]
   if (!next) return t('top.lastStage')
@@ -44,10 +75,17 @@ function progressTitle(s: ReturnType<typeof useStage>): string {
   return s.parts ? `${head}\n${valuationLine(s.parts)}` : head
 }
 
-/** Segmented Unicorn-yolu line (phones: 4px under row 1, no figures; the "n/7" chip sits by the stage name): one segment per stage step. */
+/** Segmented Unicorn-yolu line (phones: 4px under row 1, no figures; the "n/7" chip sits by the stage name): one segment per stage step, the next stage's ghost at its right end (§9.4). */
 export function StageProgressLine({ className }: { className?: string }) {
   const s = useStage()
-  return <RoadmapStepper size="line" stage={s.stage} progress={STAGES[s.stage + 1] ? s.progress : 1} className={className} />
+  const notch = useRivalNotch()
+  const next = STAGES[s.stage + 1]
+  return (
+    <div className={cx('flex items-center gap-1', className)}>
+      <RoadmapStepper size="line" stage={s.stage} progress={next ? s.progress : 1} notch={notch} className="flex-1" />
+      {next && <Ghost size={10} ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
+    </div>
+  )
 }
 
 function RoundSlot({ variant }: { variant: StageVariant }) {
@@ -103,6 +141,7 @@ function RoundSlot({ variant }: { variant: StageVariant }) {
  */
 export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
   const s = useStage()
+  const notch = useRivalNotch()
   const name = STAGES[s.stage]?.name ?? '—'
   const next = STAGES[s.stage + 1]
 
@@ -149,7 +188,7 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
           <DayClock />
         </div>
         <div className="mt-1 flex items-center gap-2" title={progressTitle(s)}>
-          <RoadmapStepper stage={s.stage} progress={next ? s.progress : 1} />
+          <RoadmapStepper stage={s.stage} progress={next ? s.progress : 1} notch={notch} />
           {/* The next stop by name: "$12K → Pre-seed $500K" (narrow: just "→ Pre-seed"). */}
           <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
             {!next
@@ -158,6 +197,7 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
                 ? t('top.progressNext', { v: money(s.valuation), next: next.name, target: money(next.targetValuation ?? 0) })
                 : t('top.nextShort', { next: next.name })}
           </span>
+          {next && <Ghost ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
         </div>
       </div>
       <RoundSlot variant={variant} />

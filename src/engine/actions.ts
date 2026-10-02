@@ -24,6 +24,7 @@ import {
   type Slot,
 } from './types'
 import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, type EngineContent } from './util'
+import { acquireError, acquireRival, openSegment, segmentError } from './world'
 
 export type { Action, ActionType, ActionOf, TimedAction, ActionResult, ActionErrorCode } from './types'
 
@@ -425,6 +426,27 @@ const adoptPolicyH: Handler<'adoptPolicy'> = ({ s, content }, a) => {
   return null
 }
 
+// ---------------------------------------------------------------------------
+// Market (GAMEPLAY V2 §8.1–8.2)
+// ---------------------------------------------------------------------------
+
+/** Opens a segment: its cost now, one move, upkeep monthly; it ramps into the TAM over MARKET_RAMP_DAYS. */
+const openSegmentH: Handler<'openSegment'> = ({ s }, a) => {
+  const err = segmentError(s, a.id)
+  if (err) return err
+  openSegment(s, a.id)
+  return null
+}
+
+/** Buys a rival (Series B on): its price now, two moves; its users come over, the merger costs debt and morale. */
+const acquireRivalH: Handler<'acquireRival'> = ({ s }, a) => {
+  if (typeof a.id !== 'string') return 'invalid'
+  const err = acquireError(s, a.id)
+  if (err) return err
+  acquireRival(s, a.id)
+  return null
+}
+
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
   fire,
@@ -449,4 +471,6 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   roundPitch: roundPitchH,
   resolvePayday: resolvePaydayH,
   adoptPolicy: adoptPolicyH,
+  openSegment: openSegmentH,
+  acquireRival: acquireRivalH,
 }

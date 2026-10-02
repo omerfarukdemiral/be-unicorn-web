@@ -2,13 +2,14 @@
 // bottom bar. Sources: bankruptcy clock (P0), runway falling under 3 months (P0, 6 s), placing mode (P1), errors,
 // moments (receipt, release, outcome), activity (P2), and the next step (P3, resting). No achievements: a new gauge,
 // concept or goal only badges its home (docs/GAMEPLAY_V2.md §12 D9). At most 2 P2 items a game day; the rest fold
-// into a digest counted on the ⌃ button.
+// into a digest counted on the ⌃ button. The one rival item: the lead rival passing the player (`rivalPassed`, P2, once
+// per rival in DEDUPE_DAYS); a thread step, a goal or a discovery never reaches the strip (docs/GAMEPLAY_V2.md §9.4).
 // Right slot: the horizon as readable text ("Maaş günü 8 gün · Sürüm ~4 gün") + ⌃ popover (upcoming + recent events).
 // Rules (priority, queue, merge, 4× timing, de-duplication, daily budget) are pure in stripRules.ts.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { BANKRUPT_DAYS } from '../../engine/balance'
-import type { ActivityEntry, ActivityKind } from '../../engine/types'
+import type { ActivityEntry, ActivityKind, GameEvent, GameState } from '../../engine/types'
 import { blockingOverlay, useGameStore } from '../../store/gameStore'
 import type { Panel } from '../../store/types'
 import { Icon, type IconName } from '../icons'
@@ -19,7 +20,8 @@ import { soft } from '../theme'
 import { useExclusiveExpander } from '../hooks'
 import { activityText, ActivityHistory } from '../ActivityLine'
 import { errorText, usePlacing } from '../Feedback'
-import { HorizonDue, HorizonList, HorizonMini } from '../Horizon'
+import { HorizonDue, HorizonList, HorizonLoan, HorizonMini } from '../Horizon'
+import { useFreshEvents } from '../loopUi'
 import { momentLook, MomentLine, momentText, useMomentSource, type Moment } from '../Moments'
 import { NextStepChip, useNextStep } from '../NextStepChip'
 import {
@@ -44,6 +46,17 @@ type Item =
   | { key: number; kind: 'runwayLow'; runway: number }
   | { key: number; kind: 'error'; code: string }
   | { key: number; kind: 'activity'; entry: ActivityEntry }
+  | RivalItem
+
+/** The lead rival went past the player: a P2 line, de-duplicated per rival for DEDUPE_DAYS by the daily budget. */
+export type RivalItem = { key: number; kind: 'activity'; rival: string; dedupeKey: string }
+
+/** Strip items hidden in fresh engine events: only `rivalPassed` (rivalBorn, threads, goals stay off the strip). */
+export function rivalPassedItems(events: readonly GameEvent[], s: Pick<GameState, 'rivals'>): RivalItem[] {
+  return events
+    .filter((e) => e.kind === 'rivalPassed')
+    .map((e): RivalItem => ({ key: e.id, kind: 'activity', rival: s.rivals?.find((r) => r.id === e.refId)?.name ?? t('rival.unknown'), dedupeKey: `rivalPassed:${e.refId ?? ''}` }))
+}
 
 /** Keys for non-engine items (errors, runway, activity) never collide with engine event ids. */
 let localKey = -1
@@ -104,6 +117,10 @@ function lookOf(item: Item): Look {
       return { icon: 'warning', color: 'var(--color-energy)', title: text, panel: null, body: <span className="font-semibold text-ink">{text}</span> }
     }
     case 'activity': {
+      if ('rival' in item) {
+        const text = t('rival.passed', { name: item.rival })
+        return { icon: 'flag', color: 'var(--color-kind-decision)', title: text, panel: null, body: <span className="font-semibold text-ink">{text}</span> }
+      }
       const text = activityText(item.entry)
       return { icon: 'sparkle', color: 'var(--color-ink-2)', title: text, panel: activityPanel(item.entry.kind), body: <span className="font-text text-ink">{text}</span> }
     }
@@ -147,6 +164,12 @@ function useStripQueue(): [Item[], (key: number) => void, number, () => void] {
 
   // Moments (engine events).
   useMomentSource((ms) => push(ms.map((moment): Item => ({ key: moment.key, kind: moment.kind, moment }))))
+
+  // The lead rival passing the player (the one rival line; its dedupe key holds it to once a month per rival).
+  useFreshEvents((events, s) => {
+    const add = rivalPassedItems(events, s)
+    if (add.length) push(add)
+  })
 
   // Rejected action.
   const lastError = useGameStore((s) => s.ui.lastError)
@@ -341,6 +364,7 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
           <>
             <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
             <HorizonDue />
+            <HorizonLoan />
             <button type="button" onClick={() => setMore((o) => !o)} className="flex h-full min-w-0 max-w-[40%] shrink items-center rounded-md px-1 hover:bg-surface-2" aria-label={t('strip.more')}>
               {mobile ? (
                 <HorizonMini compact />

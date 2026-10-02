@@ -466,6 +466,7 @@ describe('fixed cast and named rivals (GAMEPLAY V2 §9.1, §8.2)', () => {
     delete old.cast
     delete old.director
     delete old.rivals
+    delete old.market
     old.stage = 3
     ;(old.finance as { valuation: number }).valuation = 20_000_000
     ;(old.meta as { saveVersion: number }).saveVersion = 3
@@ -480,5 +481,26 @@ describe('fixed cast and named rivals (GAMEPLAY V2 §9.1, §8.2)', () => {
     expect(migrate({ version: 3, state: garage })!.rivals).toEqual([])
     // The engine still steps it.
     expect(api.step(up, 2).rivals).toHaveLength(2)
+    // Market (§8.1): a Series A save sells to early adopters and smb; midmarket stays its verb.
+    expect(up.market!.segments.map((m) => m.id)).toEqual(['early', 'smb'])
+    expect(api.step(up, 0.25).derived.tam).toBe(16_000 * B.MARKET_SIZE_SCALE)
+  })
+
+  it('a bought lead rival leaves the race: no share back, no overtake, no pressure', () => {
+    let s = api.step(api.createGame({ seed: 9 }), 1)
+    for (let i = 1; i <= 4; i++) enterStage(s, i as GameState['stage'])
+    s = api.step({ ...s, stats: { ...s.stats, cash: 100_000_000 } }, 1)
+    const lead = s.rivals![0]!
+    lead.mrr = 50_000
+    s = api.applyAction(s, { type: 'acquireRival', id: lead.id }).state
+    expect(s.rivals![0]!.acquiredDay).toBeDefined()
+    // Its MRR keeps no tempo and the player at 0 MRR is never "passed" by it.
+    s = { ...s, finance: { ...s.finance, mrr: 0 } }
+    s = api.step(s, 40)
+    expect(s.rivals![0]!.share).toBe(0)
+    expect(s.rivals![0]!.mrr).toBe(50_000)
+    expect(s.events.some((e) => e.kind === 'rivalPassed' && e.refId === lead.id)).toBe(false)
+    const others = s.rivals!.slice(1).reduce((a, r) => a + r.strength * r.share, 0)
+    expect(Number(s.flags['rivalPressure'])).toBeCloseTo(Math.min(1, others), 1)
   })
 })

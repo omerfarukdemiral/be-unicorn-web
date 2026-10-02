@@ -257,14 +257,14 @@ Her turda bir yeni kısıt + bir yeni fiil + kasayı harcamaya değer bir yatır
 | Segment | Büyüklük (mutlak kullanıcı) | Açılış | Bedel (tek sefer) + aylık upkeep | Ek koşul |
 |---|---|---|---|---|
 | `early` | 2K | Garaj, açık | — | — |
-| `smb` | +10K | Seed'e girişte otomatik | — | — |
-| `midmarket` | +50K | Series A, **fiil** | $250K + $8K/ay | — |
-| `enterprise` | +200K | Series B, fiil | $1.5M + $40K/ay | `enterpriseSales` açık |
-| `global` | +450K | Series C, fiil | $8M + $150K/ay | `ops ≥ 3` (compliance kavramı) |
+| `smb` | +10K (uygulanan +14K) | Seed'e girişte otomatik | — | — |
+| `midmarket` | +50K (uygulanan +68K) | Series A, **fiil** | $250K + $8K/ay | — |
+| `enterprise` | +200K (uygulanan +250K) | Series B, fiil | $1.5M + $40K/ay | `enterpriseSales` açık |
+| `global` | +450K (uygulanan +700K) | Series C, fiil | $8M + $150K/ay | `ops ≥ 3` (compliance kavramı) |
 
-Büyüklükler eski taslağın (30K / 300K / 1.5M / ×2 / ×3) yerine **aşama çıkışında pen ≈ 0.7** verecek şekilde türetilir — mevcut sabitlerden aşama çıkış kullanıcıları Seed ≈ 7K, A ≈ 37K, B ≈ 143K, Unicorn ≈ 450K (MRR 16.2M / ARPU ≈ 36); eski TAM'la pen A'da 0.11, B'de 0.43 kalır, doygunluk ve `saturation` hiç çıkmazdı. `content/markets.ts` değerleri şu formülle testte doğrulanır: `Σsize(≤stage) ≈ STAGE_TARGET_VALUATION[stage+1] / (12 × MULTIPLE_MAX_BY_STAGE[stage] × ARPU[stage]) / 0.7 × 1.15` (satış sözleşmeleri kullanıcısız MRR getirir, ×1.15 pay); sabitler değişince `market.test` tabloyu yeniden ister. `MARKET_FALLBACK_TAM[stage]` (B2) aynı kümülatif değerlerdir.
+Büyüklükler eski taslağın (30K / 300K / 1.5M / ×2 / ×3) yerine **aşama çıkışında pen ≈ 0.7** verecek şekilde türetilir — mevcut sabitlerden aşama çıkış kullanıcıları Seed ≈ 7K, A ≈ 37K, B ≈ 143K, Unicorn ≈ 450K (MRR 16.2M / ARPU ≈ 36); eski TAM'la pen A'da 0.11, B'de 0.43 kalır, doygunluk ve `saturation` hiç çıkmazdı. `content/markets.ts` değerleri şu formülle testte doğrulanır: `Σsize(≤stage) ≈ STAGE_TARGET_VALUATION[stage+1] / (12 × MULTIPLE_MAX_BY_STAGE[stage] × ARPU[stage]) / 0.7 × 1.15` (satış sözleşmeleri kullanıcısız MRR getirir, ×1.15 pay); sabitler değişince `market.test` tabloyu yeniden ister. `MARKET_FALLBACK_TAM[stage]` (B2) aynı kümülatif değerlerdi; E1'de silindi (aşağıdaki sapma notu).
 
-> **B2 notu:** `MARKET_FALLBACK_TAM` şu an bu kümülatif değerlerin ×4'üdür (§4.3 sapma notu); E1 gerçek segmentleri getirince tablo ve ×4 yeniden ölçülür.
+> **E1 sapması (dalga 10, T17, kullanıcı onayı bekliyor):** `MARKET_FALLBACK_TAM` ve tek argümanlı `marketTam(stage)` silindi; `derived.tam = Σ açık segment × rampa(60g)`. Tablonun 2K/10K/50K/200K/450K segment büyüklükleri güncel sabitlerle kendi formül testini geçmedi; `content/markets.ts` segment başına **2K / 14K / 68K / 250K / 700K** kullanır (kümülatif 2K/16K/84K/334K/1.03M; aşama 1–5'te formülün ±%25'i). Ayrıca `balance.MARKET_SIZE_SCALE = 2`: engine her segmenti içerik büyüklüğünün iki katı sayar (B2'nin ×4'ünün yerine geçen ara düğme; ×1'de iyi botlar 1/48 Unicorn). Bunun bedeli: aşama çıkış pen'i A/B'de ≈ 0.15 (hedef 0.5–0.9) ve ufukta `saturation` koşu başına 0. **Açık karar (kullanıcı / T20):** §4.3 doygunluk eğrisini yumuşatmak (`CAC_SATURATION_K`, `CHURN_SATURATION` ya da (1 − pen) terimi) ya da çıkış-pen bandını düşürmek; platform arketipinin Unicorn düşüşü (12/12 → 2/12) ayrıca incelenir.
 
 Action `{type: 'openSegment', id}` (1 hamle, §7.1); 60 gün rampa (`RAMP_DAYS`, penetrasyona kademeli girer); geri kapatılamaz. `derived.tam`, `derived.penetration`; formüller §4.3. Ufuk `'saturation'` öğesi `pen ≥ 0.7`. **UI:** Pazar haritası `CenterFrame`'de (`Overlay {kind: 'market'}`, `h` kısayolu (harita; `m` Mağaza'nın), zaman akar; §14.3): segment karoları açık/siluet + kilit + aşama pill'i, `pen` halkası "68%", "Aç $250K" commit + `CostPreview`; rakip satırları ve `acquireRival` bedeli aynı ekranda (§8.2). Büyüme panelinde yalnız tek satır özet + "›".
 

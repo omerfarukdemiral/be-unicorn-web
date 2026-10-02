@@ -80,6 +80,15 @@ export interface SceneInset {
  */
 export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday'
 
+/**
+ * Keşif (docs/GAMEPLAY_V2.md §9.2, §12): decision cards ever shown and threads whose last step came, across runs.
+ * Outside the engine and outside keptUi: its own localStorage key 'be-unicorn:codex' (PLAN §1: no meta progress).
+ */
+export interface Codex {
+  seenCards: string[]
+  threadsDone: string[]
+}
+
 /** 0 = far (whole office), 1 = default, 2 = close. */
 export type ZoomLevel = 0 | 1 | 2
 
@@ -123,6 +132,8 @@ export interface UiState {
   pinTouched: boolean
   /** Stage goals (☆ ids) already seen in Kazanımlar; the other done ones count on the achievements badge. */
   seenGoals: string[]
+  /** Keşif grid (cards seen, threads done over every run); read from 'be-unicorn:codex', written by afterStep. */
+  codex: Codex
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */

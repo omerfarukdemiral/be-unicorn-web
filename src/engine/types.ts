@@ -84,7 +84,7 @@ export type HudWidget = (typeof HUD_WIDGETS)[number]
 export const INITIAL_WIDGETS: readonly HudWidget[] = ['cash', 'users', 'morale']
 
 /** Player tools unlocked by concepts or stages. */
-export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView', 'refactor'] as const
+export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView', 'refactor', 'segments', 'mna'] as const
 export type ToolId = (typeof TOOL_IDS)[number]
 
 /** Company policies, the Kanun Kitabı (GAMEPLAY V2 §7.2): signed once, never revoked. Effects live in content/policies.ts. */
@@ -95,6 +95,13 @@ export const POLICY_IDS = [
   'management',
 ] as const
 export type PolicyId = (typeof POLICY_IDS)[number]
+
+/**
+ * Market segments (GAMEPLAY V2 §8.1), smallest first. 'early' is open from the garage, 'smb' opens on arriving at Seed;
+ * the rest are opened by the player (openSegment). Sizes, costs and conditions live in content/markets.ts.
+ */
+export const MARKET_SEGMENT_IDS = ['early', 'smb', 'midmarket', 'enterprise', 'global'] as const
+export type MarketSegmentId = (typeof MARKET_SEGMENT_IDS)[number]
 
 // ---------------------------------------------------------------------------
 // Ids (plain strings, documented for readability)
@@ -570,6 +577,8 @@ export interface BurnBreakdown {
   ads: number
   /** Founder living cost (FOUNDER_LIVING_COST[stage]); optional for older saves and mocks. */
   founder?: number
+  /** Monthly upkeep of the opened market segments (GAMEPLAY V2 §8.1); missing = none. */
+  expansion?: number
 }
 
 /** Costs accrued since the last payday (+ revenue, which already flowed into cash day by day). */
@@ -581,6 +590,8 @@ export interface MonthLedger {
   ads: number
   /** Founder living cost accrued (optional: older saves). */
   founder?: number
+  /** Segment upkeep accrued (GAMEPLAY V2 §8.1; optional: older saves). Paid like ads: it cannot be deferred. */
+  expansion?: number
 }
 
 /** GAMEPLAY V2 §6.1: what the payday desk does with each line of a month it cannot pay. Ads cannot be deferred. */
@@ -622,12 +633,14 @@ export interface MonthReceipt {
   ads: number
   /** Founder living cost ("Kurucu"). */
   founder?: number
+  /** Segment upkeep ("Pazar", GAMEPLAY V2 §8.1); missing = no segment bought. */
+  expansion?: number
   /** Loan interest and principal repaid on this payday (GAMEPLAY V2 §6.2); missing = no loan. */
   interest?: number
   loanRepay?: number
   /** Owed after this payday (GAMEPLAY V2 §6.1, deferred costs + their interest); missing = nothing owed. */
   deferred?: number
-  /** Costs paid on payday (salaries + rent + infra + ads + founder + loan service). */
+  /** Costs paid on payday (salaries + rent + infra + ads + founder + expansion + loan service). */
   paid: number
   /** revenue − paid. */
   net: number
@@ -800,7 +813,7 @@ export interface DerivedMetrics {
   valuationParts?: ValuationBreakdown
   /** "Satış görüşmesi" return preview (monthly saturation). */
   salesCall?: SalesCallPreview
-  /** Market size the users are measured against (GAMEPLAY V2 §4.3; MARKET_FALLBACK_TAM until markets land). */
+  /** Market size the users are measured against: Σ of the open segments, each ramping in (GAMEPLAY V2 §8.1). */
   tam?: number
   /** users / tam, 0–1: saturates paid and organic reach and lifts churn and CAC. */
   penetration?: number
@@ -810,6 +823,57 @@ export interface DerivedMetrics {
   moves?: MovesView
   /** The Kanun Kitabı (GAMEPLAY V2 §7.2). */
   policies?: PoliciesView
+  /** The market map (GAMEPLAY V2 §8.1–8.2): segments and the rivals that can be bought, as the engine prices them. */
+  market?: MarketView
+}
+
+/**
+ * An opened market segment (GAMEPLAY V2 §8.1). `size` users join the TAM over MARKET_RAMP_DAYS from `openedDay`;
+ * `upkeep` is its monthly cost (0 for the free ones). Never closed again.
+ */
+export interface MarketSegment {
+  id: MarketSegmentId
+  size: number
+  openedDay: number
+  upkeep: number
+}
+
+/** The market (GAMEPLAY V2 §8.1): the opened segments, oldest first. Older saves default by stage (market.marketOf). */
+export interface MarketState {
+  segments: MarketSegment[]
+}
+
+/** One segment as the market map shows it: open (and how far ramped) or a silhouette with its price and lock. */
+export interface SegmentView {
+  id: MarketSegmentId
+  /** Stage it opens at. */
+  stage: StageIndex
+  size: number
+  /** One-off cost and monthly upkeep (0 = free / automatic). */
+  cost: number
+  upkeep: number
+  open: boolean
+  /** 0–1 of its size counted in the TAM (1 once MARKET_RAMP_DAYS passed; 0 while closed). */
+  ramp: number
+  /** Opens by itself on arriving at its stage (no verb). */
+  auto: boolean
+  /** Why openSegment would fail right now (null = it can be opened; closed auto ones are 'notUnlocked'). */
+  error: ActionErrorCode | null
+}
+
+/** A rival as the M&A row prices it (GAMEPLAY V2 §8.2): what it costs and the users it brings. */
+export interface AcquisitionView {
+  id: string
+  price: number
+  users: number
+  /** Why acquireRival would fail right now (null = it can be bought). */
+  error: ActionErrorCode | null
+}
+
+export interface MarketView {
+  segments: SegmentView[]
+  /** Rivals still in the market (bought ones left out). */
+  rivals: AcquisitionView[]
 }
 
 /** Next crisis on the calendar: the date is known, the id only from CRISIS_TELEGRAPH_DAYS before. */
@@ -856,6 +920,10 @@ export interface Rival {
   mrr: number
   valuation: number
   momentum: -1 | 0 | 1
+  /** Bought by the player (acquireRival, GAMEPLAY V2 §8.2): out of the market, its share 0 for good. */
+  acquiredDay?: number
+  /** Closed down (the rival thread's rival-dies, flags.rivalGone): out of the market like a bought one. */
+  goneDay?: number
   /** Strength × RIVAL_ADAPT_STRENGTH until this day (a missed payroll gives the player room to breathe). */
   adaptUntilDay?: number
   ahead?: boolean
@@ -931,7 +999,8 @@ export interface NextStep {
   value?: number
 }
 
-export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady' | 'crisis'
+/** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */
+export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady' | 'crisis' | 'saturation'
 
 export interface HorizonItem {
   kind: HorizonKind
@@ -1135,6 +1204,10 @@ export type GameEventKind =
   | 'eviction'
   /** A policy was signed (GAMEPLAY V2 §7.2; refId = PolicyId). */
   | 'policyAdopted'
+  /** A market segment was opened (GAMEPLAY V2 §8.1; refId = MarketSegmentId, value = its size). */
+  | 'segmentOpened'
+  /** A rival was bought (GAMEPLAY V2 §8.2; refId = rival id, value = the price). */
+  | 'rivalAcquired'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1251,6 +1324,8 @@ export interface GameState {
   stageReports?: StageReport[]
   /** Company policies (GAMEPLAY V2 §7.2); older saves default lazily (util.policiesOf). */
   policies?: PolicyState
+  /** The market's opened segments (GAMEPLAY V2 §8.1); older saves default lazily by stage (market.marketOf). */
+  market?: MarketState
 }
 
 // ---------------------------------------------------------------------------
@@ -1294,6 +1369,11 @@ export type Action =
   // Company
   /** Signs a policy of the Kanun Kitabı (GAMEPLAY V2 §7.2): one move, irreversible. */
   | { type: 'adoptPolicy'; policyId: PolicyId }
+  // Market (GAMEPLAY V2 §8)
+  /** Opens a market segment: one move, its cost now and its upkeep monthly; never closed again. */
+  | { type: 'openSegment'; id: MarketSegmentId }
+  /** Buys a rival (from Series B): two moves, its price now; its share of the market comes with it. */
+  | { type: 'acquireRival'; id: string }
 
 export type ActionType = Action['type']
 export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>

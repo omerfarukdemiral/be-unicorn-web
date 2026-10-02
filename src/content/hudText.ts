@@ -6,7 +6,6 @@ export const HUD_TEXT: Record<string, string> = {
   'achv.title': 'Kazanımlar',
   'achv.open': 'Kazanımlar (K)',
   'achv.discovery': 'Keşif',
-  'achv.discoveryEmpty': 'Yakında açılır',
 
   // Guidance (§11): the step chip's count, the paused start's goal label (the number is the value)
   'step.count': '{i}/{n}',
@@ -151,4 +150,23 @@ export const HUD_TEXT: Record<string, string> = {
   'loan.warn': 'İhlal {n} · {d}g',
   'loan.risk': 'Risk · {d}g',
   'metrics.holdTitle': 'Uzun bas: üst bara sabitle',
+
+  // Overlays (§10.6): stage report numbers (move scene, victory), post-mortem numbers, the notebook card's fold
+  'report.days': 'Gün',
+  'report.goals': 'Hedef',
+  'report.minRunway': 'En dar runway',
+  'report.title': 'Karne',
+  'report.daysShort': '{v}g',
+  'move.nextOffice': 'Sonraki ofis',
+  'pm.day': 'Gün',
+  'pm.peakMrr': 'Zirve MRR',
+  'pm.cause': 'Neden',
+  'victory.codex': 'Keşif',
+  'notebook.more': 'daha',
+  'notebook.less': 'az',
+
+  // Curiosity surfaces (§9.4, §5.1): the next stage's ghost, the receipt's teaser line, the covenant countdown
+  'ghost.title': 'Sıradaki: {v}',
+  'receipt.next': '→ {d} · {v}',
+  'loan.dueTitle': 'Kovenant kontrolü {d}g',
 }

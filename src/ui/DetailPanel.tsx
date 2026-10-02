@@ -7,6 +7,7 @@ import { DEPT_TEXT, FURNITURE, NPC_TEXT, PROJECT_CATEGORY_TEXT } from '../conten
 import { useGameStore } from '../store/gameStore'
 import type { Selection } from '../store/types'
 import { Icon, type IconName } from './icons'
+import { castName } from './bubbles/speaker'
 import { t } from './i18n'
 import { fixed, money, pct } from './format'
 import { Bar, Button, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './primitives'
@@ -69,7 +70,7 @@ export function DetailHeader({ selection }: { selection: Selection }) {
         }
         case 'visitor': {
           const v = st.visitors.find((x) => x.id === selection.id)
-          return { title: v ? NPC_TEXT[v.role].name : '—', sub: v ? NPC_TEXT[v.role].title : '' }
+          return { title: v ? castName(st, v.role) : '—', sub: v ? NPC_TEXT[v.role].title : '' }
         }
         case 'founder':
           return { title: t('founder.you'), sub: t('detail.founderSub') }

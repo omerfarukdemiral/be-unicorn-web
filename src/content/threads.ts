@@ -11,9 +11,10 @@ import type { DecisionCard } from './types'
 const mod = (kind: ModifierKind, value: number, days: number) => ({ kind, value, days })
 /** The Pre-seed round is open or done: the five-step threads (investor, rival) may start in its Garaj weeks. */
 const roundHeard = (s: GameState): boolean => s.stage >= 1 || s.round?.active === true
-/** Set by rival-dies. T17: the engine removes that rival; until then the thread's later steps stay shut. */
+/** Set by rival-dies: the engine takes that rival out of the market (world.leadGone). Mirrors balance RIVAL_GONE_FLAG. */
 const RIVAL_GONE_FLAG = 'rivalGone'
-const rivalStands = (s: GameState): boolean => s.flags[RIVAL_GONE_FLAG] === undefined
+/** The thread's rival is still in the market: not closed down (rival-dies) and not bought (acquireRival). */
+const rivalStands = (s: GameState): boolean => s.flags[RIVAL_GONE_FLAG] === undefined && s.rivals?.[0]?.acquiredDay === undefined
 
 // =========================================================== Threads (22)
 export const THREAD_CARDS: readonly DecisionCard[] = [
@@ -444,7 +445,7 @@ export const THREAD_CARDS: readonly DecisionCard[] = [
       {
         label: 'Teklif hazırla',
         tradeoff: { gain: 'Rakip masaya gelir', cost: 'Kasadan pay' },
-        // T17: acquireRival reads flags.rivalBuyIntent (the offer opens on the market screen).
+        // The prepared offer: the next acquireRival is priced × ACQUIRE_INTENT_DISCOUNT (balance.ts), then the flag goes.
         effects: { cashPercent: -0.05, reputation: 4, setFlag: 'rivalBuyIntent' },
         reflection: 'Rakibi almak, pazarı tek hamlede büyütür.',
         conceptId: 'concentration',

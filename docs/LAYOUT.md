@@ -262,12 +262,15 @@ Tek kanal, tek stil, tek satır. Aynı anda **bir** ana mesaj + sağda ufuk yuva
 | P2 | Ay fişi (payday) | "Ay 1 fişi · ödenen −$1.5K · net −$2.5K · runway 4.8 → 4.6 ay" | 4 sn | Metrikler › Yakıt |
 | P2 | Sürüm anı | "web-1 v1 yayında · +9 kullanıcı · +$27/ay" | 4 sn | Projeler |
 | P2 | Karar → sonucu | "Yan iş seçiminden: +$1.5K" | 4 sn | Büyüme |
-| P2 | Hedef tamam | "☆ Hedef tamam: İlk sürümü çıkar" | 3.5 sn | Büyüme |
 | P2 | Tur penceresi / tur haftası | "Tur penceresi açıldı" / "Tur 3/10 · teklif $1.2M → $1.3M" | 4 / 3.5 sn | Büyüme › Tur |
-| P2 | Yeni metrik | "Yeni gösterge: Yakıt · üst bara sabitlendi" / "… · Metrikler'de" | 5 sn | Metrikler (odak) |
+| P1 | Kasa gerilimi alarmı (`AlarmKind`: `paydayShort`, `crisis`, `loanCalled`, `roundFailed`, `boardMissed`) | — (kural `stripRules.ts`'te; maaş masası kendi overlay'inde açılır) | 6 sn | ilgili yüzey |
 | P2-düşük | Aktivite (§3.3) | "Ayşe işe başladı" | 3 sn | ilgili panel |
 | **P3** | Sıradaki adım (dinlenme) | "6/8 · 12 kullanıcıya ulaş · 50 hedef [Yap ›]" | kalıcı | `followStep` |
 | P4 | Boş durum | (şerit gizlenir; inset değişmez, bkz. §6) | — | — |
+
+**Kazanımlar şeritte değil** (GAMEPLAY V2 §12, DECISIONS #28): `goal` (hedef tamam), `milestone` ve `newMetric` şeride
+düşmez; sağ üstte tek kazanım ikonu (`AchievementsButton`, K) rozetle sayar, Defter'de okunur. Günlük P2 kotası 2
+(fiş ve hata kotaya girmez); ofis lafı günde 1.
 
 Kuyruk kuralları (`src/ui/layout/stripRules.ts`, React'siz, test edilir; `momentRules.ts`'teki `mergeMoments`, `MOMENT_LIFE_MS`,
 `MOMENT_QUEUE_MAX` yeniden kullanılır):
@@ -347,7 +350,10 @@ segmenti ve ince ekran kenarı (`ScreenFrame`). Ay halkası, aşama bölümü, t
 Duraklı kırmızısı tehlike kırmızısı değildir: ayrı, daha az doygun token (`--color-negative` değil), yalnız **kesik**
 çizgi ve ⏸ segmentinde görünür, hiçbir sayıyı boyamaz (tek kırmızı kuralının istisnası, `docs/DESIGN.md` › One red
 rule). Renk tek sinyal değildir: düz/kesik, ⏸/▶ ve etiket aynı durumu taşır. Ortadaki `CenterFrame` ekranları
-(istatistik vb.) zamanı durdurmaz; çerçeve onların üstünde kalır, açıkken `PauseVeil` çizilmez.
+(İstatistik, Kanun Kitabı, Pazar haritası) zamanı durdurmaz; çerçeve onların üstünde kalır, açıkken `PauseVeil` çizilmez.
+Önemli olay (`decisionShown`, `paydayShort`, `crisis`, `roundWindow`, `payrollMissed`, `roundFailed`, `loanCalled`) açık
+`CenterFrame`'i kapatır ve 4×'i 1×'e indirir. Yeni pause sebebi yalnız `payday`: maaş masası açıkken kesik kırmızı;
+"Sonra" ile kapanınca zaman akar ve ufukta 3 günlük sayaç işler.
 `docs/DESIGN.md` › Time state bölümü buna göre güncellendi.
 
 ---
@@ -558,8 +564,11 @@ export function cashFlow(s: Pick<GameState, 'stats' | 'finance'>): CashFlow {
 
 ### 7.6 Bozulmayacak davranışlar (kabul listesi)
 
-- `pauseReasons` (modal/decision/concept/offer) aynen; Metrikler duraklatmaz.
-- Kısayollar: Space, 1/2/3, M/E/P/B/K (+ G), Esc, +/−; `isTypingTarget` kuralı.
+- `pauseReasons` (modal/decision/concept/offer/**payday**) aynen; Metrikler ve `CenterFrame` ekranları duraklatmaz. `concept` yalnız kavram kartı ikondan açıkken.
+- **Dock 5 sekme** (GAMEPLAY V2 §12): Mağaza M · Ekip E · Projeler P · Büyüme B · Metrikler G. Defter/Kazanımlar Dock'tan çıktı.
+- **Sağ üst ikonlar** (`ViewControls`): yakınlaştırma −/+, dil, Kazanımlar (kitap, K, rozet), İstatistik (trend, I), Liderlik (kupa, L), Ayarlar.
+- **Overlay listesi** (`store/types.ts Overlay`): engelleyen `moveScene` / `postMortem` / `victory`; ortada durdurmayan `stats` / `lawbook` / `market` (`CENTER_KINDS`, aynı anda biri, açılınca sağ paneli kapatır); `payday` ortada, yalnız açıkken durdurur.
+- Kısayollar: Space, 1/2/3, M/E/P/B/G, K, L, I, Esc, +/−; `isTypingTarget` kuralı.
 - Tek panel: sekme aynı sekmeyle kapanır, `openPanel({root})`, geri düğmesi; mobilde şerit popover'ı ve sheet `useExclusiveExpander` ile birbirini kapatır.
 - Balon yerleşimi `sceneInset` + `[data-scene-top]` ile çalışır; world bubbles modu etkilenmez.
 - `ScreenFrame` `data-testid="screen-frame"` ve `data-state` değerleri (`1x/2x/4x/focus/paused`) korunur (testler okuyor olabilir).

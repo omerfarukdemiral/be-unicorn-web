@@ -881,6 +881,15 @@ describe('center screens (docs/GAMEPLAY_V2.md §14.3)', () => {
     expect(store().ui.overlay).toEqual({ kind: 'postMortem' })
   })
 
+  it('toggleCenter lawbook / market (Y / H): opens, switches, again closes', () => {
+    store().toggleCenter('lawbook')
+    expect(store().ui.overlay).toEqual({ kind: 'lawbook' })
+    store().toggleCenter('market')
+    expect(store().ui.overlay).toEqual({ kind: 'market' })
+    store().toggleCenter('market')
+    expect(store().ui.overlay).toBeNull()
+  })
+
   it('stats open + decisionShown: the screen closes, 4× drops to 1×, the tick goes on', () => {
     store().dispatch({ type: 'setSpeed', speed: 4 })
     store().openOverlay({ kind: 'stats' })

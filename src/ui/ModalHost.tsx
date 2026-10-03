@@ -15,7 +15,7 @@ import { PaydayOverlay } from './overlays/PaydayOverlay'
 import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
 import { CenterFrame } from './stats/CenterFrame'
 
-/** 'acquired' (the sale, GAMEPLAY V2 §8.2) shows the post-mortem frame until it has its own screen. */
+/** 'acquired' (the sale, GAMEPLAY V2 §8.2) routes to the post-mortem frame, which draws its own AcquiredOverlay screen. */
 function gameOverOverlay(kind: GameOverState['kind']): Overlay {
   return kind === 'unicorn' ? { kind: 'victory' } : { kind: 'postMortem' }
 }

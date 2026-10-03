@@ -1,7 +1,8 @@
 // Statistics screen (docs/GAMEPLAY_V2.md §14.5), inside the CenterFrame: four tabs (Para, Büyüme, Ekip, Profil) of
 // hand-drawn charts. Time flows while it is open, so the lines grow under the player's eyes. Numbers over labels:
 // every tile's header is its value (22px tabular), the name is one word; the one sentence is "Kasa biter · Gün 412".
-// Tap a line to select a month: every tile header then prints that month.
+// Tap a line to select a month: every tile header then prints that month. Para marks the crisis calendar and the board's
+// quarter ends on the cash line; Büyüme draws the lead rival's valuation as a thin grey line.
 //
 // Performance (§14.5): the month series are rebuilt only when a payday adds a receipt (statsMemo keyed on count +
 // last payday); the live end (cash, MRR, users, day) comes from a separate small selector, the projection and the
@@ -19,13 +20,24 @@ import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
 import { Chip, cx, Segmented } from '../primitives'
 import { Legend, ramp, WIDGET_COLOR } from '../theme'
-import { costSplit, COST_KEYS, deptBars, growthView, moneyView, profileView, projectionMonths, runwayAt, statsKey, statsLocks, statsMemo, teamView, type CostKey, type LiveTip, type StatsSeries } from './statsData'
+import { calendarMarks, costSplit, COST_KEYS, deptBars, growthView, leadRival, moneyView, profileView, projectionMonths, runwayAt, statsKey, statsLocks, statsMemo, teamView, type CostKey, type LiveTip, type StatsSeries } from './statsData'
 
 export const STATS_TABS: readonly StatsTab[] = ['money', 'growth', 'team', 'profile']
 
 const TAB_ICON: Record<StatsTab, IconName> = { money: 'cash', growth: 'trend', team: 'users', profile: 'compass' }
 
-const COST_TEXT: Record<CostKey, string> = { salaries: 'burn.salaries', rent: 'burn.rent', founder: 'burn.founder', infra: 'burn.infra', ads: 'burn.ads' }
+const COST_TEXT: Record<CostKey, string> = {
+  salaries: 'burn.salaries',
+  rent: 'burn.rent',
+  founder: 'burn.founder',
+  infra: 'burn.infra',
+  ads: 'burn.ads',
+  expansion: 'burn.expansion',
+  interest: 'burn.interest',
+}
+
+/** Vertical marks on the cash line: paydays plain, the crisis calendar in the energy hue, the board in brand ink. */
+const MARK_COLOR = { payday: undefined, crisis: 'var(--color-energy)', board: 'var(--color-brand-ink)' } as const
 
 /** Chart height: every tile ≥ 200px, phones too (§14.5). */
 const LINE_H = 200
@@ -145,7 +157,9 @@ function MoneyTab({ series, live, sel, onSelect, animate }: TabProps) {
     const months = projectionMonths(p)
     return months > p.points.length ? cashProjection(st, months) : p
   }, [live.day, series])
-  const v = useMemo(() => moneyView(series, live, proj), [series, live, proj])
+  // Calendar marks: a string key (the views are new every step), the dates only move when a crisis or a quarter does.
+  const marksKey = useGameStore((s) => JSON.stringify(calendarMarks(s.state.calendar, s.state.derived.board, (s.state.board?.hits ?? 0) + (s.state.board?.misses ?? 0), s.state.time.day)))
+  const v = useMemo(() => moneyView(series, live, proj, JSON.parse(marksKey)), [series, live, proj, marksKey])
   const burn = useGameStore(useShallow((s) => ({ ...s.state.finance.burnBreakdown })))
   const locked = useGameStore(useShallow((s) => statsLocks(s.state.unlockedWidgets, s.state.unlockedTools, null)))
   const cash = valueAt(v.cash, sel)
@@ -173,7 +187,7 @@ function MoneyTab({ series, live, sel, onSelect, animate }: TabProps) {
           series={[{ id: 'cash', color: WIDGET_COLOR.cash, points: v.cash }]}
           projection={v.projection}
           danger={v.death}
-          marks={v.marks.map((m) => ({ x: m.x, color: m.kind === 'payday' ? undefined : 'var(--color-ink-3)' }))}
+          marks={v.marks.map((m) => ({ x: m.x, color: MARK_COLOR[m.kind] }))}
           height={LINE_H}
           formatY={money}
           formatX={dayText}
@@ -226,7 +240,8 @@ function MoneyTab({ series, live, sel, onSelect, animate }: TabProps) {
 
 function GrowthTab({ series, live, sel, onSelect, animate }: TabProps) {
   const round = useGameStore(useShallow((s) => (s.state.derived.round ? { target: s.state.derived.round.target, windowAt: s.state.derived.round.windowAt } : null)))
-  const v = useMemo(() => growthView(series, live, round), [series, live, round])
+  const rival = useGameStore(useShallow((s) => leadRival(s.state.rivals)))
+  const v = useMemo(() => growthView(series, live, round, rival), [series, live, round, rival])
   const ch = useGameStore(useShallow((s) => ({ ...s.state.derived.channels })))
   const locked = useGameStore(useShallow((s) => statsLocks(s.state.unlockedWidgets, s.state.unlockedTools, v.penetration)))
   const mrr = valueAt(v.mrr, sel)
@@ -241,11 +256,31 @@ function GrowthTab({ series, live, sel, onSelect, animate }: TabProps) {
       <Tile label={t('stats.users')} icon="users" color={WIDGET_COLOR.users} value={users.y === null ? '—' : num(users.y)} sub={<SelDay x={users.x} />}>
         <LineChart label={t('stats.users')} series={[{ id: 'users', color: WIDGET_COLOR.users, points: v.users }]} height={LINE_H} formatY={num} formatX={dayText} selectedX={sel} onSelect={onSelect} animate={animate} />
       </Tile>
-      <Tile wide label={t('stats.valuation')} icon="rocket" color="var(--color-brand)" value={val.y === null ? '—' : money(val.y)} sub={<SelDay x={val.x} />}>
+      <Tile
+        wide
+        label={t('stats.valuation')}
+        icon="rocket"
+        color="var(--color-brand)"
+        value={val.y === null ? '—' : money(val.y)}
+        sub={
+          <>
+            <SelDay x={val.x} />
+            {v.rival && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-2" data-rival-line>
+                <span aria-hidden="true" className="h-px w-3 bg-ink-4" />
+                {t('stats.rivalToday', { name: v.rival.name })}
+              </span>
+            )}
+          </>
+        }
+      >
         <LineChart
           label={t('stats.valuation')}
-          series={[{ id: 'valuation', color: 'var(--color-brand)', points: v.valuation }, ...(v.rival.length ? [{ id: 'rival', color: 'var(--color-ink-4)', points: v.rival, thin: true }] : [])]}
-          targets={v.target ? [{ y: v.target.value, label: t('stats.target') }, { y: v.target.window, label: t('stats.window'), color: 'var(--color-border-strong)' }] : []}
+          series={[{ id: 'valuation', color: 'var(--color-brand)', points: v.valuation }]}
+          targets={[
+            ...(v.target ? [{ y: v.target.value, label: t('stats.target') }, { y: v.target.window, label: t('stats.window'), color: 'var(--color-border-strong)' }] : []),
+            ...(v.rival ? [{ y: v.rival.valuation, label: t('stats.rival'), color: 'var(--color-ink-4)' }] : []),
+          ]}
           height={LINE_H}
           formatY={money}
           formatX={dayText}

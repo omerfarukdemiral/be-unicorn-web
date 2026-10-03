@@ -1,5 +1,6 @@
-// Blocking overlay contents (the only centered modals): move scene, post-mortem, victory. HUD grammar (docs/GAMEPLAY_V2.md
-// §10.6): numbers first, at most one sentence. The move scene and the victory draw the stage report cards (§9.3).
+// Blocking overlay contents (the only centered modals): move scene, post-mortem, the sale (acquired), victory. HUD
+// grammar (docs/GAMEPLAY_V2.md §10.6): numbers first, at most one sentence. The move scene and the victory draw the
+// stage report cards (§9.3).
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ARCHETYPES, type Archetype, type ConceptId, type PostMortemCode, type StageReport } from '../../engine/types'
@@ -133,6 +134,8 @@ export function PostMortemOverlay() {
     if (c && state.concepts.triggered.includes(c) && !state.concepts.learned.includes(c)) dispatch({ type: 'openConcept', conceptId: c })
   }
   if (!s.go) return null
+  // The sale (§8.2) is a sub-ending of its own, not a death: three numbers, the XP, "Yeniden".
+  if (s.go.kind === 'acquired') return <AcquiredOverlay day={s.day} xp={s.go.xpEarned} />
   const cause = s.go.reasons[0]
   const cid = cause?.conceptId
   return (
@@ -140,10 +143,10 @@ export function PostMortemOverlay() {
       <div className="flex flex-col gap-5 p-5 sm:p-7">
         <header>
           <div className="flex items-center gap-1.5">
-            <Dot color={s.go.kind === 'acquired' ? 'var(--color-g-equity)' : 'var(--color-negative)'} size={7} />
+            <Dot color="var(--color-negative)" size={7} />
             <Label>{t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}</Label>
           </div>
-          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : s.go.kind === 'acquired' ? 'gameOver.acquiredTitle' : 'gameOver.bankruptTitle')}</h2>
+          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}</h2>
         </header>
         <div className="grid grid-cols-2 gap-3">
           <Stat label={t('pm.day')} value={num(Math.floor(s.day))} />
@@ -178,6 +181,35 @@ export function PostMortemOverlay() {
           </div>
         )}
         <Button tone="commit" icon="refresh" onClick={restart} autoFocus cost={t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}>
+          {t('gameOver.retry')}
+        </Button>
+      </div>
+    </OverlayFrame>
+  )
+}
+
+/**
+ * The sale (acquired, §8.2): the price the company went for, the founder's share of it and the day, then the XP on
+ * the "Yeniden" commit. No sentence; nothing goes to the leaderboard (cloud.ts sends no 'acquired' run).
+ */
+export function AcquiredOverlay({ day, xp }: { day: number; xp: number }) {
+  const s = useGameStore(useShallow((st) => ({ valuation: st.state.finance.valuation, equity: st.state.stats.equity, stage: st.state.stage })))
+  return (
+    <OverlayFrame>
+      <div className="flex flex-col items-center gap-5 p-6 text-center" data-acquired>
+        <span className="grid size-16 place-items-center rounded-card bg-g-equity/15 text-g-equity">
+          <Icon name="handshake" size={34} />
+        </span>
+        <div>
+          <Label>{STAGES[s.stage]?.name}</Label>
+          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t('gameOver.acquiredTitle')}</h2>
+        </div>
+        <div className="grid w-full grid-cols-3 gap-3 text-left">
+          <Stat label={t('acq.valuation')} value={money(s.valuation)} icon="coin" color="var(--color-g-cash)" />
+          <Stat label={t('acq.equity')} value={pct(s.equity, 1)} icon="pie" color="var(--color-g-equity)" />
+          <Stat label={t('acq.day')} value={num(Math.floor(day))} />
+        </div>
+        <Button tone="commit" icon="refresh" className="w-full" onClick={restart} autoFocus cost={t('gameOver.xp', { v: fixed(xp, 1) })}>
           {t('gameOver.retry')}
         </Button>
       </div>

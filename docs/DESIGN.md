@@ -138,6 +138,15 @@ payday lump, receipt net, the stage section). Counter badges on the tabs are `br
 `negative`) and only ever appears as the **dashed** viewport frame + the ⏸ segment: the dashed line and the ⏸ icon
 tell "waiting" apart from "this can end the run". It never colours a number.
 
+### Data viz (`src/ui/charts/`, GAMEPLAY V2 §14.4)
+
+Hand-drawn SVG, no chart dependency; data and colours come in as props. A series takes its **gauge hue**
+(`WIDGET_COLOR`), at most 4 hues per chart; stacked parts are `ramp()` strengths of one hue. The lead rival is a
+thin grey reference line with no value. Red only where the run can end (`negative`: the death point, the runway < 3
+band) — the one red rule holds inside charts too. Numbers Oxanium tabular, ≤ 4 ticks (`niceTicks`); no hover
+tooltip (touch): tap selects a month and the tile header prints it. A series not learned yet is a `LockedTile`
+(icon + name, dashed, no sentence). Charts live in the center `StatsScreen`, which never pauses time.
+
 ### Status, kinds, departments
 
 | Token | Value | Use |
@@ -215,7 +224,15 @@ card. No 800+.
    `shelfColor` values are one pastel-saturated family: no greys, no near-black, no neon, and every one
    takes ink text at >= 4.5:1 (guarded by `src/content/__tests__/concepts.test.ts`).
 8. **Locked / disabled stays neutral** (dashed `border-strong`, `ink-3`), so colour always means "live".
-9. Light shadows, hairline borders, generous whitespace; one surface level per stack (don't nest cards).
+9. **HUD grammar, not calm web UI** (docs/GAMEPLAY_V2.md §10.1 D1–D9, DECISIONS #30; replaces "generous whitespace,
+   hairline, light shadows"). The number is the biggest thing on every surface (Oxanium `tabular-nums`, primary
+   22–28px); one readable sentence at a time (≤ 12 words, Inter only there, no paragraphs); buttons come in tiers —
+   *commit* (spends cash/equity: fill + cost chip `−$4.2K/ay` / `runway 9→7`, 120 ms press + `confirm` cue),
+   *routine* (hairline, small), *danger* (negative hairline); the panel frame has a 3px state stripe, radius 10,
+   fully opaque; rows 36px, 4px gaps instead of `divide-y`; numbers tween 300–600 ms (`useTween`), ≤ 3 flashes a
+   second, `prefers-reduced-motion` stops the keyframes; guidance is object emphasis (a breathing Dock icon, ghost
+   slot, target notch; ≤ 2 at once), never "click here" text; the strip shows 1 item, ≤ 2 P2 a game day.
+   **Still banned:** a card inside a card, solid gauge discs, `<input type="range">`.
 10. **A metric keeps its hue everywhere.** Panels showing a HUD metric use the same `WIDGET_COLOR` tile
     (`<Stat icon color>`) and the same warning rule (e.g. LTV:CAC < 3 amber in Metrikler and Büyüme). Project
     maturity bars use the category hue (`CATEGORY_COLOR`).

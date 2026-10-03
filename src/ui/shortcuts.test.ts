@@ -22,6 +22,14 @@ describe('shortcuts', () => {
     const all = [...DOCK_TABS.map((d) => d.key), LEADERBOARD_KEY, ACHIEVEMENTS_KEY, ...Object.keys(CENTER_KEYS), ...FIXED]
     expect(new Set(all).size).toBe(all.length)
     expect(CENTER_KEYS.i).toBe('stats')
-    for (const k of ['i', 'l', 'm', 'k']) expect(all.filter((x) => x === k)).toHaveLength(1)
+    for (const k of ['i', 'l', 'm', 'k', 'y', 'h']) expect(all.filter((x) => x === k)).toHaveLength(1)
+  })
+
+  it('y / h open Kanun Kitabı and Pazar haritası, clear of the dock, Liderlik and Kazanımlar', () => {
+    expect(CENTER_KEYS.y).toBe('lawbook')
+    expect(CENTER_KEYS.h).toBe('market')
+    const others = [...DOCK_TABS.map((d) => d.key), LEADERBOARD_KEY, ACHIEVEMENTS_KEY]
+    for (const k of ['y', 'h']) expect(others).not.toContain(k)
+    expect(new Set(Object.values(CENTER_KEYS))).toEqual(new Set(['stats', 'lawbook', 'market']))
   })
 })

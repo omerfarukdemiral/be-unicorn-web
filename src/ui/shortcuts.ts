@@ -1,5 +1,5 @@
 // Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/G panel tabs (G = Metrikler, 'gösterge') (again = close),
-// K Kazanımlar, L Liderlik, I İstatistik (again = close), Esc closes, +/- zoom. A center screen (statistics…) does not
+// K Kazanımlar, L Liderlik, I İstatistik / Y Kanun Kitabı / H Pazar haritası (again = close), Esc closes, +/- zoom. A center screen (statistics…) does not
 // block the keys: time and the other shortcuts keep working under it (docs/GAMEPLAY_V2.md §14.3).
 import { useEffect, useRef } from 'react'
 import type { GameSpeed } from '../engine/types'
@@ -14,10 +14,10 @@ export const LEADERBOARD_KEY = 'l'
 export const ACHIEVEMENTS_KEY = 'k'
 
 /**
- * Center screens by key. Kanun Kitabı and Pazar haritası get theirs with their screens (H5b): the planned L / M are
- * Liderlik and Mağaza today, so the plan now names Y (Kanun) and H (Pazar haritası) (shortcuts.test.ts keeps every key unique).
+ * Center screens by key: I İstatistik, Y Kanun Kitabı ('yasa'), H Pazar haritası. The plan's L / M are Liderlik and
+ * Mağaza, so the plan names Y and H instead (GAMEPLAY_V2 §14.3; shortcuts.test.ts keeps every key unique).
  */
-export const CENTER_KEYS: Readonly<Record<string, CenterKind>> = { i: 'stats' }
+export const CENTER_KEYS: Readonly<Record<string, CenterKind>> = { i: 'stats', y: 'lawbook', h: 'market' }
 
 /** Book icon / K: opens Kazanımlar, again closes it. */
 export function toggleAchievements(): void {

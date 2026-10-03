@@ -1,6 +1,6 @@
 # Be Unicorn — Core Loop Tasarımı: "Nabız Döngüsü + Sürüm Anı"
 
-> Durum: öneri (henüz uygulanmadı, DECISIONS'a girmedi). Tarih: 2026-09-23.
+> Durum: **uygulandı.** Faz 0–3 DECISIONS #13–#18'de; Faz 4 `docs/GAMEPLAY_V2.md`'de yeniden tanımlandı ve uygulandı (DECISIONS #21–#30). Tarih: 2026-09-23 (öneri), 2026-10-03 (Faz 4 kapanışı).
 > Temel: jürinin kazananı **feedback-juice** (toplam 119/150). Aşılananlar: **tycoon**'dan sürüm anı ve maaş günü, **decision-driven**'dan ufuk şeridi, tur büyüklüğü seçimi ve telegraflanan kriz, **teaching-first**'ten due-diligence listesi ve "Kararın → sonucu" satırı.
 > İlgili: PLAN.md §1–§10, DECISIONS.md #12–#13, DESIGN.md `--color-speed-*`, CONTRACTS.md.
 
@@ -234,7 +234,7 @@ Her kavram döngünün bir vuruşuna bağlanır, böylece kavramı döngünün k
 - Sürüm anı: masa üstünde pankart, kapıdan içeri yürüyen figürler (sayaçla senkron), "+N kullanıcı · MRR +$X". Düşük sürümde konfeti yok, sakin bir "öğrendik" balonu.
 - Kilometre taşları (ilk kullanıcı, 100/1000 kullanıcı, ilk $, ilk kârlı ay, tur kapanışı): tek konfeti, ekip alkışı, Defter'e bir satır. Blocking modal açmaz.
 
-**Popup bütçesi.** Engelleyen tek şey panelde açılan kartlar (karar, Defter, teklif) ve taşınma/term sheet modalıdır. Fiş, çip, ufuk, pankart ve rozetler engellemez, ≤ 4 sn görünür. Mobilde çip ve ufuk tek satıra birleşir, fiş ince bir toast olur.
+**Popup bütçesi** (GAMEPLAY V2 §3 md.11, §12; DECISIONS #28). Engelleyen tek şey panelde açılan kartlar (karar, Defter, teklif), taşınma/term sheet modalı ve **maaş masası** (`payday`, yalnız açıkken durdurur). Ortadaki `CenterFrame` ekranları (İstatistik, Kanun Kitabı, Pazar haritası) durdurmaz; önemli olay gelince kendiliğinden kapanır. Kart bütçesi sabittir: `CARD_DAILY_CHANCE 0.08`, `CARD_COOLDOWN_DAYS 25` kriz/kurul/iplik kartlarıyla paylaşılır, aynı gün ikinci kart yok, koşu başına ≤ 45 kart, `CONTENT.decisions` ≤ 65. Kazanımlar (`goal`, `milestone`, `newMetric`) şeride düşmez: sağ üstte tek ikon + rozet; günlük P2 kotası 2. Fiş, çip, ufuk, pankart ve rozetler engellemez, ≤ 4 sn görünür. Mobilde çip ve ufuk tek satıra birleşir, fiş ince bir toast olur.
 
 **Ses** (src/audio başka oturumda, yalnızca öneri): maaş günü için yazar kasa, sürüm için yükselen arpej, duraklatmada düşük geçiren filtre.
 
@@ -344,12 +344,13 @@ Sıra kuralı: her faz tek başına oynanabilir bir iyileşme verir. Yasak dosya
 
 **Bitti kriteri:** Sim: dikkatsiz bot iflas %10–25, iyi bot ≤ %3; garajda < 4 dk'da iflas yok; Unicorn medyanı 45–90 dk; ölü süre medyanı ≤ 8 sn; karar politikaları arasında Unicorn süresi ya da iflas oranı anlamlı fark gösterir (en iyi ile en kötü arasında ≥ %15). Eski kayıtlar migrasyonla açılır.
 
-### Faz 4 — Derinlik (oyun testine göre seçilir)
-- Seçenek A: Sprint odağı (Özellik / Kalite / Büyüme) ve 1–5★ sürüm puanı, "aynı odakla devam" varsayılanı, aynı odakta azalan getiri.
-- Seçenek B: Kalıcı politika çipleri.
-- Seçenek C: Haftalık kurucu odağı.
+### Faz 4 — Derinlik (uygulandı: `docs/GAMEPLAY_V2.md`, DECISIONS #21–#30)
+- Seçenek A (sprint odağı, sürüm puanı): **seçilmedi**; sürüm dalgaları otomatik kalır.
+- Seçenek B (kalıcı politika çipleri): **uygulandı** → Kanun Kitabı, 12 geri alınamaz politika (GAMEPLAY V2 §7.2, #24).
+- Seçenek C (haftalık kurucu odağı): **uygulandı** → Pre-seed'den haftalık hamle bütçesi tek kurucu kısıtı (§7.1, #24).
+- Ek olarak: kış takvimi + yönetmen (§5, #22), maaş masası + kredi + düşebilen tur (§6, #23), pazar/rakip/kurul/yenileme (§8, #25), iplikler + keşif (§9, #26).
 
-**Bitti kriteri:** Oyun testinde kullanıcı "core loop" için olumlu geri bildirim verir. Sim'de tek bir odak ya da politika tüm arketiplerde baskın değildir. Seçilmeyen seçenekler PLAN'a "v2" olarak yazılır.
+**Bitti kriteri:** Sim'de tek bir politika tüm iyi koşularda zorunlu değil (`sim/run.ts` "Zorunlu politika yok" satırı), §15 hedef tablosu `sim/REPORT.md`'de; oyun testi kullanıcıda.
 
 ---
 

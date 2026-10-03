@@ -1,4 +1,5 @@
 // PLAN §3.1. Slot counts / round sizes are starting values [DENGE]; tune together with engine/balance.ts.
+// unlocksText and tagline ≤ 6 words (docs/VOICE.md §3.1); unlockTools is the full GAMEPLAY V2 §8.5 list.
 import type { StageDef } from './types'
 
 export const STAGES: readonly StageDef[] = [
@@ -14,27 +15,27 @@ export const STAGES: readonly StageDef[] = [
     targetValuation: 500_000, roundAmount: 150_000, roundEquity: 0.1, newSlotType: 'common',
     unlockTools: ['capTableView'], unlockActions: ['motivateTeam', 'investorCoffee'],
     unlocksText: 'Ortak alan slotu, cap table', paletteKey: 'cowork',
-    tagline: 'İlk yatırım geldi, artık bir masadan fazlası var.',
+    tagline: 'İlk yatırım geldi, masalar çoğaldı.',
   },
   {
     index: 2, key: 'seed', name: 'Seed', officeName: 'Küçük ofis', rings: 3, totalSlots: 18,
     targetValuation: 3_000_000, roundAmount: 800_000, roundEquity: 0.15, newSlotType: 'room',
     unlockActions: ['salesCall'],
-    unlocksText: 'Oda slotu (toplantı), fiyatlama dersiyle fiyat ayarı', paletteKey: 'smallOffice',
+    unlocksText: 'Toplantı odası, fiyat ayarı, satış', paletteKey: 'smallOffice',
     tagline: 'Kapısında adımız yazan ilk ofis.',
   },
   {
     index: 3, key: 'seriesA', name: 'Series A', officeName: 'Açık plan kat', rings: 4, totalSlots: 30,
     targetValuation: 15_000_000, roundAmount: 4_000_000, roundEquity: 0.18,
     unlockTools: ['adBudget', 'refactor', 'segments', 'renewal'], unlockActions: ['refactorSprint'],
-    unlocksText: 'Reklam bütçesi, refactor sprinti, yeni pazar, yenileme', paletteKey: 'openPlan',
+    unlocksText: 'Reklam, refactor, yeni pazar, yenileme', paletteKey: 'openPlan',
     tagline: 'Koca bir kat, büyümeyi ölçme zamanı.',
   },
   {
     index: 4, key: 'seriesB', name: 'Series B', officeName: 'İki katlı ofis', rings: 5, totalSlots: 44,
     targetValuation: 75_000_000, roundAmount: 20_000_000, roundEquity: 0.15,
     unlockTools: ['enterpriseSales', 'mna'],
-    unlocksText: 'Sunucu odası, kurumsal satış, rakip satın alma', paletteKey: 'twoFloor',
+    unlocksText: 'Sunucu odası, kurumsal satış, satın alma', paletteKey: 'twoFloor',
     tagline: 'İki kat, büyük müşteriler, büyük sorumluluk.',
   },
   {

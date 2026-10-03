@@ -19,7 +19,6 @@ export const HUD_TEXT: Record<string, string> = {
   'center.stats': 'İstatistik',
   'center.lawbook': 'Kanun Kitabı',
   'center.market': 'Pazar haritası',
-  'center.soon': 'Yakında',
   'stats.open': 'İstatistik (I)',
   'stats.tabs': 'Sekmeler',
 
@@ -39,6 +38,8 @@ export const HUD_TEXT: Record<string, string> = {
   'stats.valuation': 'Değerleme',
   'stats.target': 'Hedef',
   'stats.window': 'Pencere',
+  'stats.rival': 'Rakip',
+  'stats.rivalToday': '{name} · bugün',
   'stats.newUsers': 'Yeni',
   'stats.channels': 'Kanallar',
   'stats.market': 'Pazar',
@@ -121,8 +122,9 @@ export const HUD_TEXT: Record<string, string> = {
   'growth.row.market': 'Pazar',
   'growth.row.policies': 'Politikalar',
   'growth.row.board': 'Kurul',
-  'growth.row.marketValue': '{p} dolu',
+  'growth.row.marketValue': '{p} · {n} segment',
   'growth.row.policiesValue': '{n} politika',
+  'growth.row.policiesWait': '{n} politika · {d}g',
   'growth.row.boardValue': '{v} · {d}g',
   'shop.buyGo': 'Satın al',
   'round.mult': 'Çarpan',
@@ -169,4 +171,76 @@ export const HUD_TEXT: Record<string, string> = {
   'ghost.title': 'Sıradaki: {v}',
   'receipt.next': '→ {d} · {v}',
   'loan.dueTitle': 'Kovenant kontrolü {d}g',
+
+  // Center screens' tab strip (CenterFrame): İstatistik | Kanun Kitabı | Pazar haritası
+  'center.tabs': 'Ekranlar',
+
+  // Kanun Kitabı (§7.2): tree names, lock as a number, the signing ring, the one commit, the irreversible pill
+  'law.tree.survival': 'Hayatta kalma',
+  'law.tree.growth': 'Büyüme',
+  'law.tree.craft': 'Zanaat',
+  'law.tree.org': 'Yönetim',
+  'law.lock.runway': 'runway < {v}',
+  'law.lock.stage': '{v}+',
+  'law.lock.team': 'ekip ≥ {v}',
+  'law.lock.profitMonths': 'kâr ≥ {v} ay',
+  'law.lock.crisis': 'kira krizi',
+  'law.signed': 'İmzalı',
+  'law.closed': 'Kapalı',
+  'law.count': '{n}/{total}',
+  'law.wait': '{d}g',
+  'law.waitTitle': 'Sıradaki imza için kalan gün',
+  'law.equity': '+{v} hisse/tur',
+  'law.equityTitle': 'Her turda bu kadar fazla hisse',
+  'law.sign': 'İmzala',
+  'law.final': 'Geri alınamaz',
+  'law.pick': 'Yasa seç',
+
+  // Pazar haritası (§8.1–8.2): segment names, fill ring, open commit, rival rows, buy commit
+  'mkt.segment.early': 'Erken',
+  'mkt.segment.smb': 'KOBİ',
+  'mkt.segment.midmarket': 'Orta pazar',
+  'mkt.segment.enterprise': 'Kurumsal',
+  'mkt.segment.global': 'Küresel',
+  'mkt.fill': 'Doluluk',
+  'mkt.size': '{v} kişi',
+  'mkt.upkeep': '{v}/ay',
+  'mkt.open': 'Aç',
+  'mkt.auto': 'Otomatik',
+  'mkt.rivals': 'Rakipler',
+  'mkt.you': 'Sen',
+  'mkt.brings': '+{v} kullanıcı',
+  'mkt.buy': 'Satın al',
+  'mkt.lead': 'Baş rakip',
+  'mkt.rivalsEmpty': 'Rakip yok',
+  'mkt.full': 'Pazar doluyor; büyümek için yeni segment aç.',
+
+  // Kurul (§8.3) and renewals (§8.4) in Büyüme
+  'board.title': 'Kurul',
+  'board.missed': 'Kaçan {n}',
+  'board.streak': 'Seri {n}',
+  'board.penalty': 'Çarpan ×{v}',
+  'board.progressTitle': 'MRR, kurul hedefine göre',
+  'renew.title': 'Yenileme',
+  'renew.hold': 'Zam iste',
+  'renew.discount': 'İndirim ver',
+  'renew.chance': 'Şans {p}',
+  'renew.fail': 'Kayıp {p}',
+  'renew.days': '{d}g',
+
+  // Loan offer on a decision card (§6.2): amount, rate, term, covenant as numbers
+  'loan.amount': 'Tutar',
+  'loan.term': 'Vade',
+
+  // Dock: a late tool not open yet (grey silhouette + its stage)
+  'dock.lockedTitle': '{tool} · {stage}',
+
+  // Stats (§14.5): the two late cost slices, the lead rival's line
+  'burn.expansion': 'Pazar',
+  'burn.interest': 'Faiz',
+
+  // The sale (acquired, §8.2): three numbers + XP + "Yeniden"
+  'acq.valuation': 'Satış değeri',
+  'acq.equity': 'Payın',
+  'acq.day': 'Gün',
 }

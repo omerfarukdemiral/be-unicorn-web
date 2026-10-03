@@ -11,9 +11,14 @@ export const STAGE_SLOTS: readonly number[] = [4, 10, 18, 30, 44, 60, 60]
 /** engine SECONDS_PER_DAY and the fastest GameSpeed. */
 export const SECONDS_PER_DAY = 2
 export const MAX_SPEED = 4
+/** Share of the fastest measured day a submission may reach a stage at (DECISIONS #20). */
+export const MIN_STAGE_SHARE = 0.65
 /**
- * Earliest believable game day for each stage (cumulative from day 0). About 65% of the fastest bot run over
- * 160 simulated runs (sim/: 4 archetypes × 2 decision policies × 20 seeds; fastest days were
- * 104 / 184 / 318 / 583 / 866 / 1529). Rebalancing the game ⇒ re-measure these.
+ * Fastest day each stage was reached over 160 real-engine bot runs (`npx tsx sim/minStageDays.ts`: 4 archetypes ×
+ * 2 decision policies × 20 seeds × 3000 days), measured after the GAMEPLAY V2 balance (T20). Rebalancing ⇒ re-measure.
  */
-export const MIN_DAY_FOR_STAGE: readonly number[] = [0, 65, 120, 210, 380, 560, 1000]
+export const MEASURED_FASTEST_DAYS: readonly number[] = [0, 109, 155, 381, 695, 1033, 1855]
+/** MIN_STAGE_SHARE of the fastest day, floored to 5 days (never above the measured share). */
+export const minDayTable = (fastest: readonly number[]): number[] => fastest.map((d) => Math.floor((d * MIN_STAGE_SHARE) / 5) * 5)
+/** Earliest believable game day for each stage (cumulative from day 0) = minDayTable(MEASURED_FASTEST_DAYS). */
+export const MIN_DAY_FOR_STAGE: readonly number[] = [0, 70, 100, 245, 450, 670, 1205]

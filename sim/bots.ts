@@ -18,6 +18,7 @@ import {
   type Dept,
   type EngineContent,
   type FounderActionKind,
+  type GameEvent,
   type GameEventKind,
   type GameState,
   type NextCrisis,
@@ -225,7 +226,7 @@ export interface BotRun {
   downRounds: number
   crisesFired: number
   crisisNearDeath: number
-  /** Alive ≥ 180 days after the first near-death payday (null = never near death). */
+  /** Alive ≥ 180 days after the first near-death payday in NEAR_DEATH_STAGES (null = never near death there). */
   survivedNearDeath: boolean | null
   /** The same from the first payday with runway < 3 months. */
   survivedNearDeath3: boolean | null
@@ -264,7 +265,13 @@ export interface BotRun {
   /** Σ rival share on the last payday of each stage (index = stage; 0 = no payday there). */
   rivalShareByStage: number[]
   threadSteps: number
+  /** Threads whose last step was answered (GAMEPLAY V2 §9.2 threadsDone; the store's codex reads the same last step). */
+  threadsDone: number
   secretsSeen: number
+  /** Secret cards answered over the run (ids; §15 "her gizli kart 2–12 koşu"). */
+  secretIds: string[]
+  /** Defined bad decisions (badDecision): day + what, for the §15 trace criterion on deaths. */
+  badDecisions: { day: number; what: string }[]
   /** Serialized save at the end of the run (UTF-8 bytes). */
   saveBytes: number
   /** Crises that hit (§5.1): day, stage, whether the bot was preparing, and the lowest payday runway in the window after. */
@@ -634,6 +641,12 @@ function signPolicies(c: Ctx, cfg: BotConfig): void {
   if (pick) c.act({ type: 'adoptPolicy', policyId: pick })
 }
 
+/** Rest before burnout: energy below REST_AT_ENERGY and no rest for REST_EVERY_DAYS (founder-burnout waits 180). */
+const REST_AT_ENERGY = 40
+const REST_EVERY_DAYS = 150
+/** Days between a good bot's sales calls. */
+const SALES_EVERY_DAYS = 30
+
 /**
  * Founder moves in priority order. GAMEPLAY V2 §7.1: from Pre-seed on the week's move budget is the constraint, so the
  * order is what gets the moves; a round keeps one move back for the week's pitch. `careless`: spends the budget on the
@@ -643,6 +656,12 @@ function founder(c: Ctx, cfg: BotConfig, careless = false): void {
   const { act } = c
   if (c.s.founder.currentAction) return
   if (c.s.founder.energy < 25) { act({ type: 'founderAction', kind: 'rest' }); return }
+  // A sensible founder takes the week off before months of low energy turn into burnout (the secret founder-burnout
+  // card is meant to be rare: GAMEPLAY V2 §9.2, 2–12 runs in 24 seeds). Rest costs no move.
+  if (!careless && c.s.founder.energy < REST_AT_ENERGY && c.s.time.day - (c.s.founder.cooldowns.rest ?? 0) >= REST_EVERY_DAYS) {
+    act({ type: 'founderAction', kind: 'rest' })
+    return
+  }
   const reserve = !careless && c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
   const go = (kind: FounderActionKind): boolean => {
     const m = c.s.derived.moves
@@ -654,7 +673,11 @@ function founder(c: Ctx, cfg: BotConfig, careless = false): void {
   if (c.s.round?.active && go('investorCoffee')) return
   if (c.s.stats.morale < 50 && go('motivateTeam')) return
   // Deals saturate within a month (half, then a quarter): a sensible player stops at half.
-  if (cfg.useSalesCalls && (c.s.derived.salesCall?.factor ?? 1) >= 0.5 && go('salesCall')) return
+  // One big deal a month (GAMEPLAY V2 §15 salesCall ≤ 80 a run): the move budget goes to the late verbs too.
+  if (cfg.useSalesCalls && (c.s.derived.salesCall?.factor ?? 1) >= 0.5 && (careless || c.s.time.day - (c.mem.salesDay ?? -99) >= SALES_EVERY_DAYS) && go('salesCall')) {
+    c.mem.salesDay = c.s.time.day
+    return
+  }
   if (c.s.projects.some((p) => p.maturity < 1) && go('talkToUsers')) return
   // A sensible player stops once the circle is used up ("tanıdık çevren tükeniyor").
   if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5 && go('findUsers')) return
@@ -911,12 +934,42 @@ function randomTurn(c: Ctx, rng: Rng): void {
 /** Careless player: bootstrap's plan without the care (see BotKind). */
 const CARELESS: BotConfig = { ...BOTS.bootstrap, kind: 'careless', minRunwayToHire: 0, teamCap: ALL_CAP, furnishReserveMonths: 0, impulseBuy: 0.15, prepareCrisis: false }
 
+/**
+ * Round started this late (runway in months) counts as a bad decision (GAMEPLAY V2 §15 "geç tur"), from Pre-seed on:
+ * the Garaj → Pre-seed round always starts on a thin runway, so it says nothing about the player.
+ */
+export const LATE_ROUND_RUNWAY = 4
+/** Stages whose paydays count as near death (§15 "Seed/A/B"; the Garaj and Pre-seed paydays are thin by design). */
+export const NEAR_DEATH_STAGES: readonly number[] = [2, 3, 4]
+/** Days before a death searched for a bad decision (§15: son 180 gün). */
+export const DEATH_TRACE_DAYS = 180
+
+/**
+ * GAMEPLAY V2 §15 defined bad DECISION, read from one event with the state before its step (runway, stage): a loan,
+ * a round started from Pre-seed on at runway < LATE_ROUND_RUNWAY, or a crisis card answered (or left to default) with an option that spends more cash than its cheapest one.
+ * playBot books them in BotRun.badDecisions, which sim/trace.ts and the run report both read: every good-bot death must
+ * show one in its last DEATH_TRACE_DAYS.
+ */
+export function badDecision(e: GameEvent, runway: number, stage: number, content: EngineContent): string | null {
+  if (e.kind === 'loanTaken') return 'kredi'
+  if (e.kind === 'roundStarted' && stage >= 1 && runway < LATE_ROUND_RUNWAY) return `geç tur (runway ${runway.toFixed(1)})`
+  if ((e.kind === 'decisionAnswered' || e.kind === 'decisionDefaulted') && e.refId) {
+    const card = content.decisions.find((d) => d.id === e.refId)
+    if (card?.category !== 'crisis') return null
+    const cost = (i: number) => -(card.options[i]?.effects.cash ?? 0)
+    const i = e.value ?? 0
+    if (cost(i) > Math.min(...card.options.map((_, k) => cost(k)))) return `kriz kartında pahalı seçenek (${card.id} #${i})`
+  }
+  return null
+}
+
 export function playBot(
   kind: BotKind,
   seed: number,
   content: EngineContent,
   maxDays = 2700,
-  onDay?: (s: GameState) => void,
+  /** Called after every step with the state and the bad decisions booked so far (sim/trace.ts). */
+  onDay?: (s: GameState, badDecisions: readonly { day: number; what: string }[]) => void,
   policy: DecisionPolicy = 'best',
   overrides: Partial<BotConfig> = {},
 ): BotRun {
@@ -998,6 +1051,7 @@ export function playBot(
   let loanCalled = 0
   let firstLoanDay: number | null = null
   let roundsFailed = 0
+  const badDecisions: BotRun['badDecisions'] = []
   let roundsClosed = 0
   const movesUsed = [0, 0, 0, 0, 0, 0, 0]
   const movesGiven = [0, 0, 0, 0, 0, 0, 0]
@@ -1097,6 +1151,8 @@ export function playBot(
         firstLoanDay ??= e.day
       }
       if (e.kind === 'loanCalled') loanCalled++
+      const bad = badDecision(e, before.finance.runway ?? 99, before.stage, content)
+      if (bad) badDecisions.push({ day: e.day, what: bad })
       if (e.kind === 'roundFailed') roundsFailed++
       if (e.kind === 'paydayShort') paydaysShort++
       if (e.kind === 'boardHit') boardQuartersAll.hit++
@@ -1118,13 +1174,14 @@ export function playBot(
         techDebtByStage[s.stage] = s.techDebt
         penetrationByStage[s.stage] = s.derived.penetration ?? 0
         rivalShareByStage[s.stage] = (s.rivals ?? []).reduce((a, r) => a + r.share, 0)
+        const nearStage = NEAR_DEATH_STAGES.includes(s.stage)
         if (rw < 2) {
           nearDeathPaydays[s.stage] = (nearDeathPaydays[s.stage] ?? 0) + 1
-          firstNearDeath ??= s.time.day
+          if (nearStage) firstNearDeath ??= s.time.day
         }
         if (rw < 3) {
           nearDeathPaydays3[s.stage] = (nearDeathPaydays3[s.stage] ?? 0) + 1
-          firstNearDeath3 ??= s.time.day
+          if (nearStage) firstNearDeath3 ??= s.time.day
         }
         if ((s.finance.lastReceipt?.net ?? -1) >= 0) {
           profitPaydays++
@@ -1154,10 +1211,15 @@ export function playBot(
     seenId = s.events[s.events.length - 1]?.id ?? seenId
     if (s.time.day <= DAYS_5_MIN) c5 = s.concepts.learned.length
     if (s.time.day <= DAYS_10_MIN) c10 = s.concepts.learned.length
-    onDay?.(s)
+    onDay?.(s, badDecisions)
   }
   const failed = s.gameOver?.kind === 'bankrupt' || s.gameOver?.kind === 'teamLost'
   const threadCards = new Set(content.decisions.filter((d) => d.thread).map((d) => d.id))
+  const threadLast = new Map<string, number>()
+  for (const d of content.decisions) if (d.thread) threadLast.set(d.thread.id, Math.max(threadLast.get(d.thread.id) ?? 0, d.thread.step))
+  const answeredIds = new Set(s.decisions.history.map((h) => h.cardId))
+  const threadsDone = new Set(content.decisions.filter((d) => d.thread && answeredIds.has(d.id) && d.thread.step >= threadLast.get(d.thread.id)!).map((d) => d.thread!.id))
+  const secretIds = content.decisions.filter((d) => d.secret && answeredIds.has(d.id)).map((d) => d.id)
   return {
     kind,
     seed,
@@ -1219,7 +1281,10 @@ export function playBot(
     rivalPassedSeedEarly,
     rivalShareByStage,
     threadSteps: s.decisions.history.filter((h) => threadCards.has(h.cardId)).length,
-    secretsSeen: 0,
+    threadsDone: threadsDone.size,
+    secretsSeen: secretIds.length,
+    secretIds,
+    badDecisions,
     saveBytes: new TextEncoder().encode(serialize(s)).length,
     crises: crises.map(({ eventId: _id, ...k }) => k),
     preparedForCrisis: crises.filter((k) => k.prepared).length,

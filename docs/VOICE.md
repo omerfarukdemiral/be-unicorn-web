@@ -63,6 +63,9 @@ Ekranda aynı anda tek okunacak cümle. Açıklama paragrafı yazılmaz; sayı `
 | Tooltip / ipucu | `*Title`, `*Hint`, `*note` | ≤ 8 |
 | Ufuk öğesi | `horizon.*` | ≤ 6 |
 | Teaser | `TEASERS` | ≤ 6 |
+| Aşama / yol haritası satırı | `stages.ts` (`unlocksText`, `tagline`), `roadmap.ts` | ≤ 6 |
+| Kavram kartı (NotebookCard) | görünen metnin tamamı | ≤ 20 |
+| Karne / taşınma sahnesi | `MoveScene`, `Victory` | paragraf yok, sayı + ikon |
 | Aşama hedefi ipucu (render edilmez) | `StageGoal.hint` | ≤ 8 |
 | Buton | `common.*`, `step.go.*`, fiil butonları | ≤ 2 |
 | Boş durum | `*.empty`, `*Empty` | ≤ 4 |

@@ -141,10 +141,11 @@ export const MARKET_RAMP_DAYS = 60
 /**
  * [DENGE ≠ GAMEPLAY V2 §8.1 × 1] Users a segment really adds = its content size × this. At × 1 (exit pen ≈ 0.3, the §4.3
  * channel terms (1 − pen) / (1 + 3 pen²) and churn × (1 + 0.5 pen) hold users where inflow = churn) 1/48 good bots
- * reached Unicorn in 100 min (sim T17); × 2 brings them back to ~84 min at exit pen ≈ 0.15. Interim like B2's × 4: the
- * open decision is §4.3's saturation curve vs §8.1's exit pen 0.5–0.9 (T20).
+ * reached Unicorn in 100 min (sim T17); × 2 brings them back to ~84 min at exit pen ≈ 0.15. [T20 duration knob 2 → 2.5]
+ * At × 2 platform stalled under $1B in Series C (15/24 Unicorn, 104 min); × 2.5 gives 24/24 at ~92 min and the archetype
+ * spread 1.18× (24 seeds). Still open: §4.3's saturation curve vs §8.1's exit pen 0.5–0.9 (pen stays ≈ 0.15).
  */
-export const MARKET_SIZE_SCALE = 2
+export const MARKET_SIZE_SCALE = 2.5
 /** Penetration at which the horizon shows 'saturation' (ads go to waste; time for the next segment). */
 export const MARKET_SATURATION_PEN = 0.7
 
@@ -196,8 +197,12 @@ export const RAISE_EVERY_DAYS = 360
  * the bill grows with the business, not only with the head count of the servers.
  */
 export const INFRA_PER_1000_BY_STAGE: readonly number[] = [10, 10, 15, 25, 40, 60, 60]
-/** [B2 difficulty knob 0.05/0.08/0.12/0.15/0.18 → 0.06/0.10/0.16/0.20/0.24] Profitable runs banked too much cash (sim). */
-export const INFRA_MRR_SHARE: readonly number[] = [0, 0.06, 0.1, 0.16, 0.2, 0.24, 0.24]
+/**
+ * [B2 difficulty knob 0.05/0.08/0.12/0.15/0.18 → 0.06/0.10/0.16/0.20/0.24] Profitable runs banked too much cash (sim).
+ * [T20 Seed 0.10 → 0.18, B 0.20 → 0.16, C 0.24 → 0.22] toward the §15 min-runway bands (Seed 9.8 → 7.3, B 4.1 → 3.9,
+ * C 6.0 months); the bands and the profit-month share stay out of reach of this knob (DECISIONS #21).
+ */
+export const INFRA_MRR_SHARE: readonly number[] = [0, 0.06, 0.18, 0.16, 0.16, 0.22, 0.22]
 export const SERVER_ROOM_INFRA_MULT = 0.8
 export const SEVERANCE_MONTHS = 0.5
 /**
@@ -315,8 +320,11 @@ export const ROUND_SIZE_EQUITY: Readonly<Record<RoundSize, number>> = { small: 0
  */
 /** [B2 difficulty knob 1.25 → 1] With 1.25 the stage min-runway medians sat at Seed 20 / C 24 months (sim). */
 export const ROUND_NEW_BURN_MULT = 1
-/** [GAMEPLAY V2 §4.2 0.5 → 0.3] 76% of rounds closed on the table floor: the amount now really follows burn × months. */
-export const ROUND_AMOUNT_TABLE_MIN = 0.3
+/**
+ * [GAMEPLAY V2 §4.2 0.5 → 0.3] 76% of rounds closed on the table floor: the amount now really follows burn × months.
+ * [T20 0.3 → 0.25] the floor still carried the Seed runway (min-runway median 9.8 → 7.3 months with INFRA_MRR_SHARE).
+ */
+export const ROUND_AMOUNT_TABLE_MIN = 0.25
 export const ROUND_AMOUNT_TABLE_MAX = 0.7
 /** Price part of the offer: valuation / target, clamped to this range. */
 export const ROUND_OFFER_CLAMP: readonly [number, number] = [0.6, 1.2]

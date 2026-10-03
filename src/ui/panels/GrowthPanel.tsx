@@ -1,11 +1,11 @@
-// Büyüme: funding round, product health, channels (ad budget steps), price steps, enterprise, and one-line rows to the
-// center screens (Pazar haritası, Kanun Kitabı, Kurul). HUD grammar (GAMEPLAY V2 §10.5): no sliders, every step is a
+// Büyüme: funding round, product health, channels (ad budget steps), price steps, enterprise + renewals, and one-line
+// rows to the center screens (Pazar haritası, Kanun Kitabı) with the Kurul row under them. HUD grammar (GAMEPLAY V2 §10.5): no sliders, every step is a
 // button with its CostPreview; the big surfaces open in the middle (CenterFrame), not stacked in this drawer.
 // Stage goals (☆) live in Kazanımlar (JournalPanel).
 import { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { adBudgetSteps, nearestPriceStep, PRICE_STEPS } from '../../engine'
-import type { GameState, ToolId } from '../../engine/types'
+import type { ToolId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
@@ -13,14 +13,11 @@ import { Bar, Chip, CostPreview, cx, Dot, Empty, LockedHint, SectionTitle, Segme
 import { iconTone, WIDGET_COLOR } from '../theme'
 import { Icon, type IconName } from '../icons'
 import { useSpendPreview } from '../widgets'
+import { centerSummary } from '../center/centerData'
 import { RoundSection } from './RoundSection'
 import { DecisionOutcomes } from './GoalsCard'
-
-/**
- * Kanun Kitabı state (§3.1 `policies: {adopted, lastSignedDay}`) lands with its own wave (F2); read as optional here so
- * the row works before and after. The Kurul row (§8.3) comes with E3 and reads the engine's own board view then.
- */
-type LateGame = { policies?: { adopted: readonly string[] } }
+import { BoardRow } from './BoardRow'
+import { RenewalSection } from './RenewalSection'
 
 function useTool(id: ToolId): boolean {
   return useGameStore((s) => s.state.unlockedTools.includes(id))
@@ -41,6 +38,7 @@ export function GrowthPanel({ section }: { section?: 'round' }) {
       <ChannelSection />
       <PriceSection />
       <EnterpriseSection />
+      <RenewalSection />
     </div>
   )
 }
@@ -77,22 +75,23 @@ function ProductSection() {
   )
 }
 
-/** One line per center screen: icon, name, its number, "›" (opens the CenterFrame; time keeps flowing there). */
+/**
+ * One line per center screen: icon, name, its numbers ("68% · 2 segment", "3 politika · 12g"), "›" (opens the
+ * CenterFrame; time keeps flowing there). The Kurul row follows from Series A.
+ */
 function CenterRows() {
-  const d = useGameStore(
-    useShallow((s) => {
-      const late = s.state as GameState & LateGame
-      return {
-        penetration: s.state.derived.penetration ?? 0,
-        policies: late.policies?.adopted.length ?? 0,
-      }
-    }),
-  )
+  const d = useGameStore(useShallow((s) => centerSummary(s.state.derived.policies, s.state.derived.market, s.state.derived.penetration, s.state.time.day)))
   const toggleCenter = useGameStore((s) => s.toggleCenter)
   return (
     <ul className="flex flex-col gap-1">
-      <CenterRow icon="pie" label={t('growth.row.market')} value={t('growth.row.marketValue', { p: pct(d.penetration) })} onOpen={() => toggleCenter('market')} />
-      <CenterRow icon="book" label={t('growth.row.policies')} value={t('growth.row.policiesValue', { n: d.policies })} onOpen={() => toggleCenter('lawbook')} />
+      <CenterRow icon="pie" label={t('growth.row.market')} value={t('growth.row.marketValue', { p: pct(d.pen), n: d.segments })} onOpen={() => toggleCenter('market')} />
+      <CenterRow
+        icon="book"
+        label={t('growth.row.policies')}
+        value={d.waitDays > 0 ? t('growth.row.policiesWait', { n: d.policies, d: d.waitDays }) : t('growth.row.policiesValue', { n: d.policies })}
+        onOpen={() => toggleCenter('lawbook')}
+      />
+      <BoardRow />
     </ul>
   )
 }

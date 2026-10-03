@@ -10,9 +10,11 @@ import { CenterFrame } from './CenterFrame'
 import { STATS_TABS, StatsScreen } from './StatsScreen'
 import {
   BAR_MONTHS,
+  calendarMarks,
   costSplit,
   deptBars,
   growthView,
+  leadRival,
   moneyView,
   profileView,
   projectionMonths,
@@ -69,7 +71,10 @@ describe('statsData: receipts → series', () => {
     expect(s.lastDay).toBe(90)
     expect(s.rows.map((r) => r.x)).toEqual([30, 60, 90])
     expect(s.rows[0]).toMatchObject({ cash: null, revenue: null, costs: null, mrr: 0, newUsers: 5 })
-    expect(s.rows[1]).toMatchObject({ cash: 45_000, revenue: 1_000, costs: [4_000, 500, 1_500, 100, 0], team: 3 })
+    expect(s.rows[1]).toMatchObject({ cash: 45_000, revenue: 1_000, costs: [4_000, 500, 1_500, 100, 0, 0, 0], team: 3 })
+    // Late cost slices: segment upkeep and loan interest; the principal repaid is not a cost.
+    const late = statsData([receipt(1, { expansion: 8_000, interest: 600, loanRepay: 1_400 })])
+    expect(late.rows[0]!.costs).toEqual([4_000, 500, 1_500, 100, 0, 8_000, 600])
   })
 
   it('Para: cash line + live end, dashed projection, death point, paydays as marks, 12-month flow', () => {
@@ -87,7 +92,7 @@ describe('statsData: receipts → series', () => {
     ])
     // The rebuilt month has no revenue / cost split: no bar for it.
     expect(v.flow.map((g) => g.x)).toEqual([60, 90])
-    expect(v.flow[0]!.values).toEqual([[1_000], [4_000, 500, 1_500, 100, 0]])
+    expect(v.flow[0]!.values).toEqual([[1_000], [4_000, 500, 1_500, 100, 0, 0, 0]])
     // Profitable: no death, no red point.
     expect(moneyView(s, live, { points: [], deathDay: null }).death).toBeNull()
   })
@@ -130,14 +135,48 @@ describe('statsData: receipts → series', () => {
     expect(v.target).toEqual({ value: 500_000, window: 300_000 })
     expect(v.mrr.at(-1)).toEqual({ x: 100, y: 3_200 })
     expect(v.penetration).toBe(0.12)
-    expect(v.rival).toEqual([])
+    expect(v.rival).toBeNull()
     expect(growthView(statsData([receipt(1)]), live, undefined).penetration).toBeNull()
+  })
+
+  it('Para marks: fired crises and a scheduled one inside the horizon; board quarter ends (judged + running)', () => {
+    const calendar = [
+      { id: 'lease-hike', day: 140, revealDay: 110, fired: true as const },
+      { id: null, day: 320, revealDay: 290 },
+    ]
+    const board = { targetMrr: 50_000, endDay: 450, mrr: 30_000, missed: 0, streak: 1, penalty: false }
+    // Day 270: the day-320 crisis is inside CRISIS_HORIZON_DAYS; one quarter judged before the running one.
+    const m = calendarMarks(calendar, board, 1, 270)
+    expect(m).toEqual({ crisis: [140, 320], board: [360, 450] })
+    expect(calendarMarks(undefined, undefined, 0, 0)).toEqual({ crisis: [], board: [] })
+    // A crisis scheduled past the horizon is not on the line (§5.1); judged quarters come from the board, not the event ring.
+    expect(calendarMarks(calendar, board, 3, 200).crisis).toEqual([140])
+    expect(calendarMarks(calendar, board, 3, 200).board).toEqual([180, 270, 360, 450])
+    const v = moneyView(statsData([receipt(1)]), live, { points: [{ day: 120, cash: 1 }], deathDay: null }, m)
+    expect(v.marks.filter((k) => k.kind !== 'payday')).toEqual([
+      { x: 140, kind: 'crisis' },
+      { x: 320, kind: 'crisis' },
+      { x: 360, kind: 'board' },
+      { x: 450, kind: 'board' },
+    ])
+  })
+
+  it('Büyüme: the lead rival as today’s value only (no made-up history); gone once bought', () => {
+    const rival = { id: 'r1', name: 'Kova', bornDay: 45, strength: 0.4, share: 0.1, mrr: 2_000, valuation: 380_000, momentum: 0 as const }
+    const lead = leadRival([rival])
+    expect(lead).toEqual({ name: 'Kova', valuation: 380_000 })
+    const s = statsData([receipt(1), receipt(2)])
+    expect(growthView(s, live, null, lead).rival).toEqual({ name: 'Kova', valuation: 380_000 })
+    expect(growthView(s, live, null).rival).toBeNull()
+    expect(leadRival([{ ...rival, acquiredDay: 90 }])).toBeNull()
+    expect(leadRival(undefined)).toBeNull()
   })
 
   it('Ekip / Profil / split: engine numbers in chart order', () => {
     const s = statsData([receipt(1)])
     expect(teamView(s, live).team).toEqual([{ x: 60, y: 3 }, { x: 100, y: 5 }])
-    expect(costSplit({ salaries: 9, rent: 2, infra: 1, ads: 0 })).toEqual([9, 2, 0, 1, 0])
+    expect(costSplit({ salaries: 9, rent: 2, infra: 1, ads: 0 })).toEqual([9, 2, 0, 1, 0, 0, 0])
+    expect(costSplit({ salaries: 9, rent: 2, infra: 1, ads: 0, expansion: 8 })).toEqual([9, 2, 0, 1, 0, 8, 0])
     const counts = { eng: 2, product: 1, marketing: 0, sales: 0, ops: 1 }
     const out = { eng: 1.8, product: 0.9, marketing: 0, sales: 0, ops: 1 }
     expect(deptBars(['eng', 'ops'], counts, out)).toEqual([
@@ -243,11 +282,13 @@ describe('StatsScreen render', () => {
     if (rw !== null) expect(html).not.toContain('∞')
   })
 
-  it('Kanun Kitabı / Pazar haritası: empty placeholders, no sentence', () => {
+  it('Kanun Kitabı / Pazar haritası: their screens in the frame, the tab strip, at most one sentence', () => {
     for (const kind of ['lawbook', 'market'] as const) {
       const html = renderToStaticMarkup(createElement(CenterFrame, { kind, onClose: () => {} }))
       expect(html).toContain(`data-center-frame="${kind}"`)
-      expect(html.match(/<p[\s>]/g)?.length ?? 0).toBe(0)
+      expect(html).toContain(kind === 'lawbook' ? 'data-lawbook' : 'data-market')
+      expect(html.match(/aria-pressed="true"/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
+      expect(html.match(/<p[\s>]/g)?.length ?? 0).toBeLessThanOrEqual(1)
     }
   })
 })

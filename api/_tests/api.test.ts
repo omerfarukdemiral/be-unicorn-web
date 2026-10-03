@@ -13,6 +13,7 @@ import { MemoryKv } from '../_lib/memoryKv.js'
 import { lbScore } from '../_lib/leaderboard.js'
 import { acceptCompanyName, maskEmail, normalizeEmail, resetLimitsForTests, sanitizeCompanyName } from '../_lib/auth.js'
 import { pepperMissing } from '../_lib/kv.js'
+import { MIN_DAY_FOR_STAGE as MIN_DAY } from '../../src/net/stageRules.js'
 
 let t = 1_800_000_000_000
 let kv: MemoryKv
@@ -75,11 +76,13 @@ async function climb(token: string, steps: Step[]): Promise<LeaderboardSubmitOk>
   return last!.body
 }
 /** A believable path to a stage (one submission per stage, at its earliest day + `extra`). */
+/** Fixture days follow the measured stage table: S1 is the earliest Pre-seed day, U the earliest Unicorn day. */
+const S1 = MIN_DAY[1]!
+const U = MIN_DAY[6]!
 function pathTo(stage: number, last: Step, extra = 20): Step[] {
-  const MIN = [0, 65, 120, 210, 380, 560, 1000]
   const VAL = [50_000, 600_000, 3_500_000, 16_000_000, 80_000_000, 320_000_000]
   const out: Step[] = []
-  for (let s = 0; s < stage; s++) out.push({ stage: s, valuation: VAL[s], day: MIN[s]! + extra, team: 2 + s * 4 })
+  for (let s = 0; s < stage; s++) out.push({ stage: s, valuation: VAL[s], day: MIN_DAY[s]! + extra, team: 2 + s * 4 })
   out.push(last)
   return out
 }
@@ -308,12 +311,12 @@ describe('leaderboard', () => {
     const b = await signUp('zeynep@kod.io', 'Kod Atölyesi')
     const c = await signUp('can@x.co', 'Can Co')
     playDays(400)
-    await climb(a, [{ stage: 1, valuation: 400_000, day: 70, team: 3 }])
+    await climb(a, [{ stage: 1, valuation: 400_000, day: S1 + 4, team: 3 }])
     await climb(b, [
-      { stage: 1, valuation: 600_000, day: 70, team: 5, companyName: 'Kod Atölyesi' },
-      { stage: 2, valuation: 1_000_000, day: 130, team: 7, companyName: 'Kod Atölyesi' },
+      { stage: 1, valuation: 600_000, day: S1 + 4, team: 5, companyName: 'Kod Atölyesi' },
+      { stage: 2, valuation: 1_000_000, day: MIN_DAY[2]! + 30, team: 7, companyName: 'Kod Atölyesi' },
     ])
-    const r = await climb(c, [{ stage: 1, valuation: 300_000, day: 66, team: 2, companyName: 'Can Co' }])
+    const r = await climb(c, [{ stage: 1, valuation: 300_000, day: S1, team: 2, companyName: 'Can Co' }])
     expect(r).toMatchObject({ rank: 3, total: 3 })
 
     const anon = await call<LeaderboardOk>(board, 'GET')
@@ -325,7 +328,7 @@ describe('leaderboard', () => {
     const own = mine.body.rows.find((x) => x.me)!
     expect(own.email).toBe('omer@helio.studio')
     expect(mine.body.rows.filter((x) => x.email.includes('***'))).toHaveLength(2)
-    expect(mine.body.me).toMatchObject({ rank: 2, companyName: 'Helio Studio', day: 70, team: 3 })
+    expect(mine.body.me).toMatchObject({ rank: 2, companyName: 'Helio Studio', day: S1 + 4, team: 3 })
     expect(mine.body.above?.companyName).toBe('Kod Atölyesi')
     expect(mine.body.above?.email).toBe('ze***@kod.io')
     expect(mine.body.gap).toEqual({ stages: 1, valuation: 0, days: 0 })
@@ -354,8 +357,8 @@ describe('leaderboard', () => {
   it('Unicorns: fewer days ranks higher', async () => {
     const a = await signUp('fast@x.co', 'Fast')
     const b = await signUp('slow@x.co', 'Slow')
-    await climb(b, pathTo(6, { stage: 6, valuation: 3e9, cash: 1e8, day: 1300, team: 60, companyName: 'Slow' }).map((x) => ({ companyName: 'Slow', ...x })))
-    await climb(a, pathTo(6, { stage: 6, valuation: 1.1e9, cash: 1e8, day: 1100, team: 50, companyName: 'Fast' }).map((x) => ({ companyName: 'Fast', ...x })))
+    await climb(b, pathTo(6, { stage: 6, valuation: 3e9, cash: 1e8, day: U + 220, team: 60, companyName: 'Slow' }).map((x) => ({ companyName: 'Slow', ...x })))
+    await climb(a, pathTo(6, { stage: 6, valuation: 1.1e9, cash: 1e8, day: U + 20, team: 50, companyName: 'Fast' }).map((x) => ({ companyName: 'Fast', ...x })))
     const r = await call<LeaderboardOk>(board, 'GET', { token: b })
     expect(r.body.rows[0]!.companyName).toBe('Fast')
     expect(r.body.rows[0]!.status).toBe('unicorn')
@@ -364,9 +367,9 @@ describe('leaderboard', () => {
 
   it('a Unicorn right after a payday submission is accepted (5 → 6 has no round)', async () => {
     const a = await signUp()
-    await climb(a, pathTo(5, { stage: 5, valuation: 9e8, cash: 5e7, day: 1200, team: 50 }))
+    await climb(a, pathTo(5, { stage: 5, valuation: 9e8, cash: 5e7, day: U, team: 50 }))
     playDays(2)
-    const win = await call<LeaderboardSubmitOk>(submitLb, 'POST', { token: a, body: metrics({ stage: 6, valuation: 1.05e9, cash: 5e7, day: 1201, team: 50, status: 'unicorn' }) })
+    const win = await call<LeaderboardSubmitOk>(submitLb, 'POST', { token: a, body: metrics({ stage: 6, valuation: 1.05e9, cash: 5e7, day: U + 1, team: 50, status: 'unicorn' }) })
     expect(win.status).toBe(200)
     expect(win.body.row.status).toBe('unicorn')
   })
@@ -376,7 +379,7 @@ describe('leaderboard', () => {
     const cheat = { stage: 6, valuation: 1e11, cash: 2e11, day: 29, team: 125, runIndex: 1, status: 'unicorn' }
     expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics(cheat) })).body.detail).toBe('stageTooFast')
     playDays(5000)
-    const late = { stage: 6, valuation: 1.5e9, cash: 1e8, day: 1100, team: 60, runIndex: 2, status: 'unicorn' }
+    const late = { stage: 6, valuation: 1.5e9, cash: 1e8, day: U + 100, team: 60, runIndex: 2, status: 'unicorn' }
     expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics(late) })).body.detail).toBe('newRunStage')
     // Seen from Garaj, the run still has to take its time in wall-clock terms.
     expect((await call(submitLb, 'POST', { token: a, body: metrics({ runIndex: 3, day: 10 }) })).status).toBe(200)
@@ -396,9 +399,9 @@ describe('leaderboard', () => {
     expect((await bad({ stage: 1.5 })).detail).toBe('stage')
     expect((await bad({ valuation: -1 })).detail).toBe('valuation')
     expect((await bad({ stage: 0, valuation: 5e9 })).detail).toBe('valuation')
-    expect((await bad({ stage: 6, valuation: 1e6, day: 1200 })).detail).toBe('unicornValuation')
-    expect((await bad({ stage: 3, valuation: 5e6, day: 150 })).detail).toBe('stageTooFast')
-    expect((await bad({ stage: 6, valuation: 1.2e9, day: 900 })).detail).toBe('stageTooFast')
+    expect((await bad({ stage: 6, valuation: 1e6, day: U })).detail).toBe('unicornValuation')
+    expect((await bad({ stage: 3, valuation: 5e6, day: MIN_DAY[3]! - 2 })).detail).toBe('stageTooFast')
+    expect((await bad({ stage: 6, valuation: 1.2e9, day: U - 2 })).detail).toBe('stageTooFast')
     expect((await bad({ team: 500 })).detail).toBe('team')
     expect((await bad({ cash: 9e9 })).detail).toBe('cash')
     expect((await bad({ status: 'unicorn' })).detail).toBe('status')
@@ -410,33 +413,33 @@ describe('leaderboard', () => {
     const a = await signUp()
     // A brand-new account cannot already be on day 900.
     expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ day: 900 }) })).body.detail).toBe('dayVsClock')
-    playDays(70)
-    expect((await call(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 400_000, day: 70 }) })).status).toBe(200)
+    playDays(S1)
+    expect((await call(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 400_000, day: S1 }) })).status).toBe(200)
     // No time passed: the game cannot be 100 days further.
-    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 400_000, day: 170 }) })).body.detail).toBe('dayVsClock')
+    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 400_000, day: S1 + 100 }) })).body.detail).toBe('dayVsClock')
     playDays(100)
-    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 400_000, day: 66 }) })).body.detail).toBe('dayBackwards')
-    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 0, valuation: 400_000, day: 80 }) })).body.detail).toBe('stageBackwards')
-    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 5, valuation: 2e8, day: 80 }) })).body.detail).toBe('stageTooFast')
-    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 5e7, day: 71 }) })).body.detail).toBe('valuationJump')
-    expect((await call(submitLb, 'POST', { token: a, body: metrics({ stage: 2, valuation: 2_000_000, day: 150 }) })).status).toBe(200)
+    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 400_000, day: S1 - 1 }) })).body.detail).toBe('dayBackwards')
+    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 0, valuation: 400_000, day: S1 + 10 }) })).body.detail).toBe('stageBackwards')
+    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 5, valuation: 2e8, day: S1 + 10 }) })).body.detail).toBe('stageTooFast')
+    expect((await call<{ detail: string }>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 5e7, day: S1 + 1 }) })).body.detail).toBe('valuationJump')
+    expect((await call(submitLb, 'POST', { token: a, body: metrics({ stage: 2, valuation: 2_000_000, day: Math.max(S1 + 80, MIN_DAY[2]!) }) })).status).toBe(200)
   })
 
   it('a new run replaces the row; an older run is refused; a Unicorn finish is kept until beaten', async () => {
     const a = await signUp()
-    await climb(a, [{ stage: 1, valuation: 7e5, day: 80, runIndex: 0 }, { stage: 2, valuation: 2e6, day: 200, runIndex: 0, status: 'bankrupt' }])
+    await climb(a, [{ stage: 1, valuation: 7e5, day: S1 + 10, runIndex: 0 }, { stage: 2, valuation: 2e6, day: MIN_DAY[2]! + 100, runIndex: 0, status: 'bankrupt' }])
     const next = await call<LeaderboardSubmitOk>(submitLb, 'POST', { token: a, body: metrics({ stage: 0, valuation: 20_000, day: 3, runIndex: 1 }) })
     expect(next.body.row).toMatchObject({ stage: 0, day: 3, status: 'playing' })
     expect((await call<{ error: string }>(submitLb, 'POST', { token: a, body: metrics({ runIndex: 0, day: 300 }) })).body.error).toBe('staleRun')
 
-    await climb(a, pathTo(6, { stage: 6, valuation: 1.2e9, cash: 5e7, day: 1100, team: 55, runIndex: 1, companyName: 'Helio Studio' }).map((x) => ({ runIndex: 1, ...x })))
-    const third = await call<LeaderboardSubmitOk>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 600_000, day: 70, runIndex: 2, companyName: 'Finly' }) })
+    await climb(a, pathTo(6, { stage: 6, valuation: 1.2e9, cash: 5e7, day: U + 20, team: 55, runIndex: 1, companyName: 'Helio Studio' }).map((x) => ({ runIndex: 1, ...x })))
+    const third = await call<LeaderboardSubmitOk>(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 600_000, day: S1, runIndex: 2, companyName: 'Finly' }) })
     expect(third.status).toBe(200)
     // The kept Unicorn keeps the name it won with, even though the new run is called Finly.
-    expect(third.body.row).toMatchObject({ stage: 6, status: 'unicorn', day: 1100, companyName: 'Helio Studio' })
+    expect(third.body.row).toMatchObject({ stage: 6, status: 'unicorn', day: U + 20, companyName: 'Helio Studio' })
     // The new run keeps being tracked: its next step is judged against run 2, not the kept Unicorn.
     playDays(40)
-    expect((await call(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 700_000, day: 100, runIndex: 2, companyName: 'Finly' }) })).status).toBe(200)
+    expect((await call(submitLb, 'POST', { token: a, body: metrics({ stage: 1, valuation: 700_000, day: S1 + 30, runIndex: 2, companyName: 'Finly' }) })).status).toBe(200)
   })
 
   it('keeps the company name sanitized and in sync; refuses links and swear words; one rename a day', async () => {

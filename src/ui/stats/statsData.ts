@@ -4,11 +4,16 @@
 //
 // Performance: time flows under the screen and step() clones the state, so `receipts` is a new array ~8 times a
 // second at 4×. The series are rebuilt only when the key (receipt count, last payday) changes: statsMemo().
-import { PROFILE_AXES, type BurnBreakdown, type CashProjection, type CompanyProfile, type Dept, type ReceiptEntry } from '../../engine/types'
+import { BOARD_QUARTER_DAYS, CRISIS_HORIZON_DAYS } from '../../engine/balance'
+import { PROFILE_AXES, type BoardView, type BurnBreakdown, type CalendarEntry, type CashProjection, type CompanyProfile, type Dept, type ReceiptEntry, type Rival } from '../../engine/types'
 import type { BarGroup, LinePoint } from '../charts'
 
-/** Cost parts of a month, bottom of the stack first (same order as the Yakıt card). */
-export const COST_KEYS = ['salaries', 'rent', 'founder', 'infra', 'ads'] as const
+/**
+ * Cost parts of a month, bottom of the stack first (same order as the Yakıt card), then the late ones: segment upkeep
+ * (§8.1) and loan interest (§6.2; on the receipt only: the live burn has no such line). The principal repaid is a cash
+ * flow, not a cost: it stays out of the stack.
+ */
+export const COST_KEYS = ['salaries', 'rent', 'founder', 'infra', 'ads', 'expansion', 'interest'] as const
 export type CostKey = (typeof COST_KEYS)[number]
 
 /** Months shown in the bar charts ("son 12 ay"). */
@@ -63,7 +68,7 @@ export function statsData(receipts: readonly ReceiptEntry[] | undefined): StatsS
       cash: r.cashAfter,
       runway: r.runwayAfter,
       revenue: r.revenue,
-      costs: COST_KEYS.map((k) => r[k] ?? 0),
+      costs: COST_KEYS.map((k) => (r[k] ?? 0)),
       mrr: r.mrr,
       users: r.users,
       newUsers: r.usersDelta ?? null,
@@ -129,10 +134,24 @@ export interface MoneyView {
 
 export type MarkKind = 'payday' | 'crisis' | 'board'
 
-/** Days of the calendar to mark on the cash line (crisis calendar, board quarter ends); wired by the later waves. */
+/** Days of the calendar to mark on the cash line (crisis calendar, board quarter ends). */
 export interface CalendarMarks {
   crisis?: readonly number[]
   board?: readonly number[]
+}
+
+/**
+ * The crisis calendar's dates: those that fired, and a scheduled one only inside the horizon (§5.1: the date shows
+ * CRISIS_HORIZON_DAYS ahead, never earlier). The board's quarter ends: the running one (derived.board) and the
+ * `judged` ones before it, BOARD_QUARTER_DAYS apart back from its start (board.hits + misses; the event ring is capped).
+ */
+export function calendarMarks(calendar: readonly CalendarEntry[] | undefined, board: BoardView | undefined, judged: number, day: number): CalendarMarks {
+  const crisis = (calendar ?? []).filter((c) => c.fired || c.day - day <= CRISIS_HORIZON_DAYS).map((c) => c.day)
+  const boardDays = board ? [board.endDay, ...Array.from({ length: Math.max(0, judged) }, (_, k) => board.endDay - (k + 1) * BOARD_QUARTER_DAYS)].filter((x) => x > 0).sort((a, b) => a - b) : []
+  return {
+    crisis: [...new Set(crisis)],
+    board: [...new Set(boardDays)],
+  }
 }
 
 /** Paydays the cash projection must span to reach its death day (the engine's default 12 can stop short of it). */
@@ -179,14 +198,24 @@ export function runwayAt(s: StatsSeries, live: LiveTip, sel: number | null): { y
   return { y: live.runway, x: null }
 }
 
-/** This month's cost split for the pie (the live burn breakdown, COST_KEYS order). */
+/** This month's cost split for the pie (the live burn breakdown, COST_KEYS order; no live loan line). */
 export function costSplit(b: BurnBreakdown): number[] {
-  return COST_KEYS.map((k) => b[k] ?? 0)
+  return COST_KEYS.map((k) => (k === 'interest' ? 0 : (b[k] ?? 0)))
+}
+
+/** The lead rival (rivals[0], §8.2) while it is in the market: today's valuation as the grey reference on Değerleme. */
+export function leadRival(rivals: readonly Rival[] | undefined): { name: string; valuation: number } | null {
+  const r = rivals?.[0]
+  if (!r || r.acquiredDay !== undefined || r.goneDay !== undefined) return null
+  return { name: r.name, valuation: Math.round(r.valuation) }
 }
 
 export interface GrowthView {
-  /** Lead rival's valuation (thin grey line); empty until the rivals wave writes it. */
-  rival: LinePoint[]
+  /**
+   * Lead rival's valuation today: a grey reference line, not a series. The receipts keep no rival history, so no past
+   * is drawn; the line moves as the rival does (it is the bar to beat now).
+   */
+  rival: { name: string; valuation: number } | null
   mrr: LinePoint[]
   users: LinePoint[]
   valuation: LinePoint[]
@@ -198,10 +227,15 @@ export interface GrowthView {
   penetration: number | null
 }
 
-export function growthView(s: StatsSeries, live: LiveTip, round: { target: number; windowAt: number } | null | undefined, rival: readonly LinePoint[] = []): GrowthView {
+export function growthView(
+  s: StatsSeries,
+  live: LiveTip,
+  round: { target: number; windowAt: number } | null | undefined,
+  rival: { name: string; valuation: number } | null = null,
+): GrowthView {
   const lastPen = [...s.rows].reverse().find((r) => r.penetration !== null)?.penetration ?? null
   return {
-    rival: [...rival],
+    rival: rival ? { name: rival.name, valuation: rival.valuation } : null,
     mrr: withTip(pts(s.rows, (r) => r.mrr), live.day, live.mrr),
     users: withTip(pts(s.rows, (r) => r.users), live.day, live.users),
     valuation: withTip(pts(s.rows, (r) => r.valuation), live.day, live.valuation),

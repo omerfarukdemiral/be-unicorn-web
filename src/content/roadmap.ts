@@ -10,10 +10,10 @@ export interface RoadmapStep {
 
 export const ROADMAP_STEPS: readonly RoadmapStep[] = [
   { stage: 0, unlock: 'Bir masa, elle kullanıcı avı' },
-  { stage: 1, unlock: 'Ortak alan, cap table' },
-  { stage: 2, unlock: 'Toplantı odası, satış görüşmesi' },
-  { stage: 3, unlock: 'Reklam bütçesi, LTV:CAC paneli' },
-  { stage: 4, unlock: 'Sunucu odası, kurumsal satış' },
-  { stage: 5, unlock: 'Sahne ve lab slotları' },
+  { stage: 1, unlock: 'Ortak alan, cap table, politikalar' },
+  { stage: 2, unlock: 'Toplantı odası, satış, baş rakip' },
+  { stage: 3, unlock: 'Reklam, yeni pazar, kurul' },
+  { stage: 4, unlock: 'Kurumsal satış, rakip satın alma' },
+  { stage: 5, unlock: 'Sahne, lab, küresel pazar' },
   { stage: 6, unlock: 'Kampüs. Oyun biter, efsane başlar.' },
 ]

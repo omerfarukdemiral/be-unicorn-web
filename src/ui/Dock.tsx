@@ -5,6 +5,11 @@
 // Guidance (§11, D8): the tab the next step needs breathes; a hire that bounced off a missing desk badges Mağaza,
 // which then opens on the empty desk slot (the scene's ghost slot).
 // Badges (§4.1): counters in brand, a leaving employee in warning.
+// Locked late tools (§8.5, §9.4: Pazar, Refactor, Yenileme, Satın alma): the next stage's ones sit after the tabs as
+// grey silhouettes with a lock and that stage's pill; they leave the row once the stage opens them.
+import { useShallow } from 'zustand/react/shallow'
+import { STAGES } from '../content'
+import type { ToolId } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import type { DockTab } from '../store/types'
 import { unseenMetrics } from '../store/metricPins'
@@ -12,6 +17,7 @@ import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
 import { deskNeeded, dropDeskError, guidedTab, shopSlotTarget } from './guidance'
+import { lockedTools } from './center/centerData'
 
 /** The noDesk error a free desk has already answered (guidance.ts dropDeskError), folded on every store change. */
 let deskErrorDropped = 0
@@ -35,6 +41,8 @@ export const DOCK_TABS: DockTabDef[] = [
 ]
 
 type BadgeTone = 'brand' | 'warn'
+
+const TOOL_ICON: Partial<Record<ToolId, IconName>> = { segments: 'pie', refactor: 'refresh', renewal: 'handshake', mna: 'flag' }
 
 function useBadges(): Partial<Record<DockTab, { n: number; tone: BadgeTone }>> {
   const leaving = useGameStore((s) => s.state.employees.filter((e) => e.status === 'leaving').length)
@@ -95,6 +103,7 @@ export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'
             </button>
           )
         })}
+        <LockedTools size={48} />
       </div>
     )
   }
@@ -126,8 +135,38 @@ export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'
           </button>
         )
       })}
+      <LockedTools size={touch ? 44 : 40} />
     </div>
   )
+}
+
+/** The next stage's late tools as grey silhouettes: icon, lock, the stage pill along the bottom edge (no action). */
+function LockedTools({ size }: { size: number }) {
+  const tools = useGameStore(useShallow((s) => lockedTools(STAGES, s.state.unlockedTools, s.state.stage).map((x) => `${x.id}:${x.stage}`)))
+  return tools.map((key) => {
+    const [id, at] = key.split(':') as [ToolId, string]
+    const stage = STAGES[Number(at)]?.name ?? ''
+    const title = t('dock.lockedTitle', { tool: t(`tool.${id}`), stage })
+    return (
+      <span
+        key={id}
+        role="img"
+        aria-label={title}
+        title={title}
+        data-locked-tool={id}
+        className="relative grid shrink-0 place-items-center rounded-control border border-dashed border-border-strong text-ink-3"
+        style={{ width: size, height: size }}
+      >
+        <Icon name={TOOL_ICON[id] ?? 'lock'} size={18} className="-mt-2.5 opacity-40" />
+        <span aria-hidden="true" className="absolute right-0.5 top-0.5 text-ink-2">
+          <Icon name="lock" size={10} />
+        </span>
+        <span aria-hidden="true" className="tabular absolute bottom-[3px] left-1/2 max-w-[40px] -translate-x-1/2 truncate whitespace-nowrap rounded-full bg-surface-2 px-1 text-[8px] font-bold uppercase leading-3 text-ink-2">
+          {stage}
+        </span>
+      </span>
+    )
+  })
 }
 
 /** `inset`: inside the button (phone row scrolls sideways, which would clip a badge that sticks out). */

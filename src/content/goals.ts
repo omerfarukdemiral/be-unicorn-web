@@ -3,10 +3,14 @@
 // `hint` is ≤ 8 words and not rendered (GAMEPLAY V2 §10.5); the field stays for the type.
 // Each reached ☆ takes 1 point off the equity sold in the next round (engine balance GOAL_STAR_EQUITY_DISCOUNT).
 import type { GameState, StageBaseline } from '../engine/types'
+import { MARKET_SEGMENTS } from './markets'
 import type { StageGoal } from './types'
 
 const releasesSince = (s: GameState, b: StageBaseline): number => (s.releaseCount ?? 0) - b.releases
 const newProjectAt = (s: GameState, b: StageBaseline, m: number): boolean => s.projects.some((p) => p.createdDay >= b.day && p.maturity >= m)
+/** Segments the player opened since `day` (GAMEPLAY V2 §8.1 verb; the automatic ones do not count). */
+const segmentsOpened = (s: GameState, day = -Infinity): number =>
+  (s.market?.segments ?? []).filter((m) => m.openedDay >= day && !MARKET_SEGMENTS.find((d) => d.id === m.id)?.auto).length
 
 // Goals measure what is done INSIDE the stage (`b` = where it started): nothing carried in completes one on arrival.
 export const GOALS: readonly StageGoal[] = [
@@ -84,11 +88,14 @@ export const GOALS: readonly StageGoal[] = [
     },
   },
   {
-    id: 'c-profit',
+    // GAMEPLAY V2 §8.4: Series C's market verbs (the profit goal rewarded the autopilot Rule of 40 punishes). Two markets
+    // opened in all, at least one of them inside C (global only opens here), so the two carried in from A/B do not
+    // complete it on arrival; the renewal is inside C too.
+    id: 'c-reach',
     stage: 5,
-    text: 'MRR’ı %50 büyüt ve kâra geç',
-    hint: 'Gelir gideri geçince kasa erimez.',
-    check: (s, b) => s.finance.mrr >= Math.max(1, b.mrr * 1.5) && s.finance.net > 0,
+    text: '2 pazar aç, 1 sözleşme yenile',
+    hint: 'Yeni pazar ve yenileme geliri büyütür.',
+    check: (s, b) => segmentsOpened(s) >= 2 && segmentsOpened(s, b.day) >= 1 && s.finance.enterpriseCustomers.some((c) => (c.renewedDay ?? -1) >= b.day),
   },
   {
     id: 'c-full',

@@ -84,7 +84,7 @@ export type HudWidget = (typeof HUD_WIDGETS)[number]
 export const INITIAL_WIDGETS: readonly HudWidget[] = ['cash', 'users', 'morale']
 
 /** Player tools unlocked by concepts or stages. */
-export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView', 'refactor', 'segments', 'mna'] as const
+export const TOOL_IDS = ['priceControl', 'adBudget', 'enterpriseSales', 'capTableView', 'refactor', 'segments', 'mna', 'renewal'] as const
 export type ToolId = (typeof TOOL_IDS)[number]
 
 /** Company policies, the Kanun Kitabı (GAMEPLAY V2 §7.2): signed once, never revoked. Effects live in content/policies.ts. */
@@ -332,6 +332,15 @@ export interface EnterpriseCustomer {
   sinceDay: number
   /** Contract end (balance SALES_CONTRACT_DAYS): the customer leaves unless renewed. Missing = old save, open-ended. */
   untilDay?: number
+  /**
+   * GAMEPLAY V2 §8.4, settled once on its notice day (RENEWAL_NOTICE_DAYS before untilDay): true = a key account then, up
+   * for renewal (renewalDue fired); false = a smaller deal, it ends on its day. Missing = the notice day is still ahead.
+   */
+  renewalDue?: boolean
+  /** Renewed at a discount once: the next 'hold' is RENEW_DISCOUNTED_HOLD less likely (the discount leaves a trace). */
+  discounted?: true
+  /** Day of the last renewal (stage goals count renewals inside the stage). */
+  renewedDay?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +433,8 @@ export interface RoundState {
   offer: RoundOffer
   /** Valuation when the round started; offer shrinks if metrics fall below. */
   baseValuation: number
+  /** Board quarters hit priced into this round's equity (GAMEPLAY V2 §8.3); spent from board.credit only at the close. */
+  boardCredit?: number
   // --- Live round (docs/CORE_LOOP.md §4.3, phase 2). Optional: rounds from older saves lack them. ---
   /** Size picked at start: runway months ↔ equity. */
   size?: RoundSize
@@ -825,6 +836,51 @@ export interface DerivedMetrics {
   policies?: PoliciesView
   /** The market map (GAMEPLAY V2 §8.1–8.2): segments and the rivals that can be bought, as the engine prices them. */
   market?: MarketView
+  /** The board's quarter (GAMEPLAY V2 §8.3); absent before Series A. */
+  board?: BoardView
+  /** Contracts up for renewal (GAMEPLAY V2 §8.4), the soonest first, with both offers priced. */
+  renewals?: RenewalView[]
+}
+
+/**
+ * The board (GAMEPLAY V2 §8.3), from Series A: every BOARD_QUARTER_DAYS the MRR is checked against `targetMrr`.
+ * `missed` / `streak`: quarters missed / hit in a row (each resets the other). `hits` / `misses`: over the run.
+ * `credit`: hit quarters not yet priced into a round (each takes BOARD_HIT_EQUITY off the next one's equity).
+ */
+export interface BoardState {
+  quarterStart: number
+  targetMrr: number
+  missed: number
+  streak: number
+  hits?: number
+  misses?: number
+  credit?: number
+}
+
+/** The running quarter as the UI shows it: "Kurul $X · 23g". */
+export interface BoardView {
+  targetMrr: number
+  endDay: number
+  mrr: number
+  missed: number
+  streak: number
+  /** flags.boardCapPenalty: the multiple is × BOARD_CAP_PENALTY until a quarter is hit. */
+  penalty: boolean
+}
+
+/** A contract up for renewal (GAMEPLAY V2 §8.4) and what each offer would do. */
+export interface RenewalView {
+  id: string
+  name: string
+  mrr: number
+  untilDay: number
+  /** 'hold': the chance it stays at MRR × RENEW_HOLD_MRR (else it leaves now). */
+  holdChance: number
+  holdMrr: number
+  /** 'discount': it stays for sure at MRR × RENEW_DISCOUNT_MRR. */
+  discountMrr: number
+  /** Why renewContract would fail right now (null = it can be offered). */
+  error: ActionErrorCode | null
 }
 
 /**
@@ -1000,7 +1056,8 @@ export interface NextStep {
 }
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */
-export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady' | 'crisis' | 'saturation'
+/** 'board': the board's quarter end (amount = target MRR, §8.3); 'renewal': a contract's last day (amount = its MRR, §8.4). */
+export type HorizonKind = 'payday' | 'delayed' | 'release' | 'roundClose' | 'roundReady' | 'crisis' | 'saturation' | 'board' | 'renewal'
 
 export interface HorizonItem {
   kind: HorizonKind
@@ -1025,6 +1082,9 @@ export interface HorizonItem {
   crisisId?: CrisisId
   /** Crisis: the date is known but not what it is yet ("?"). */
   hidden?: boolean
+  /** Renewal: the contract (EnterpriseCustomer.id) and its name. */
+  contractId?: string
+  contractName?: string
 }
 
 /** A release moment (maturity threshold passed): the user wave and the MRR jump it brought. */
@@ -1208,6 +1268,16 @@ export type GameEventKind =
   | 'segmentOpened'
   /** A rival was bought (GAMEPLAY V2 §8.2; refId = rival id, value = the price). */
   | 'rivalAcquired'
+  /** The board's quarter was hit (GAMEPLAY V2 §8.3; value = MRR). */
+  | 'boardHit'
+  /** The board's quarter was missed (value = quarters missed in a row). */
+  | 'boardMissed'
+  /** A contract comes up for renewal (GAMEPLAY V2 §8.4; refId = contract id, value = its day of leaving). */
+  | 'renewalDue'
+  /** A contract was renewed (refId = contract id, value = its new MRR). */
+  | 'contractRenewed'
+  /** A contract left: not renewed in time, or 'hold' refused (refId = contract id, value = the MRR lost). */
+  | 'contractLost'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1234,7 +1304,8 @@ export interface PostMortemReason {
 }
 
 export interface GameOverState {
-  kind: 'bankrupt' | 'teamLost' | 'unicorn'
+  /** 'acquired': the company was sold (acquisition-offer, GAMEPLAY V2 §8.2), a sub-ending; never on the leaderboard. */
+  kind: 'bankrupt' | 'teamLost' | 'unicorn' | 'acquired'
   day: number
   /** Exactly 3 for bankruptcies (PLAN §5.10). */
   reasons: PostMortemReason[]
@@ -1244,7 +1315,7 @@ export interface GameOverState {
 export type CounterKey =
   | 'hires' | 'fires' | 'resignations' | 'manualFinds' | 'userTalks' | 'motivates'
   | 'investorCoffees' | 'salesCalls' | 'crunches' | 'projectsStarted' | 'roundsClosed'
-  | 'peakTeam' | 'lowGrowthMonths' | 'profitMonths' | 'refactors'
+  | 'peakTeam' | 'lowGrowthMonths' | 'profitMonths' | 'refactors' | 'renewals'
 
 // ---------------------------------------------------------------------------
 // GameState
@@ -1326,6 +1397,8 @@ export interface GameState {
   policies?: PolicyState
   /** The market's opened segments (GAMEPLAY V2 §8.1); older saves default lazily by stage (market.marketOf). */
   market?: MarketState
+  /** The board's quarter (GAMEPLAY V2 §8.3) from Series A; older saves from A on get theirs lazily (world.boardOf). */
+  board?: BoardState
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,6 +1447,14 @@ export type Action =
   | { type: 'openSegment'; id: MarketSegmentId }
   /** Buys a rival (from Series B): two moves, its price now; its share of the market comes with it. */
   | { type: 'acquireRival'; id: string }
+  /**
+   * Answers a contract's renewal (GAMEPLAY V2 §8.4), from RENEWAL_NOTICE_DAYS before its end: one move. 'hold' asks
+   * for more (a chance), 'discount' keeps it for less (for sure, and it leaves a trace).
+   */
+  | { type: 'renewContract'; id: string; offer: RenewOffer }
+
+export const RENEW_OFFERS = ['hold', 'discount'] as const
+export type RenewOffer = (typeof RENEW_OFFERS)[number]
 
 export type ActionType = Action['type']
 export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>

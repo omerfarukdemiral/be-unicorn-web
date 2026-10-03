@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CONCEPT_IDS, type EffectBundle } from '../../engine/types'
-import { DECISIONS as CARD_DECISIONS } from '../decisions'
+import { BOARD_CARDS, DECISIONS as CARD_DECISIONS } from '../decisions'
 import { CONTENT, SECRET_CARDS, THREAD_CARDS } from '../index'
 import { makeBusyState, makeState, sentenceCount, wordCount } from './fixture'
 
@@ -31,8 +31,11 @@ const RETIRED = [
 const SCOLDING = /\b(hata yaptın|yanlış seçim|aptal|kötü karar|bunu yapmamalıydın|suçlu sensin)\b/i
 
 const allEffects = (fx: EffectBundle[]): EffectBundle[] => fx
-/** The cards this lane writes: the rolled deck, the thread steps and the secret cards (crisis cards live in crises.ts). */
-const DECISIONS = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS]
+/**
+ * The cards this lane writes: the rolled deck, the thread steps, the secret cards and the board's review card (crisis
+ * cards live in crises.ts).
+ */
+const DECISIONS = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...BOARD_CARDS]
 const conceptSet = new Set<string>(CONCEPT_IDS)
 const cardIds = new Set(CONTENT.decisions.map((d) => d.id))
 

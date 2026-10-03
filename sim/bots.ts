@@ -167,7 +167,8 @@ export interface BotRun {
   seed: number
   /** Day each stage was reached (index = stage). */
   stageDays: (number | null)[]
-  end: 'bankrupt' | 'teamLost' | 'unicorn' | 'timeout'
+  /** 'acquired': the company was sold (acquisition-offer, GAMEPLAY V2 §8.2). */
+  end: 'bankrupt' | 'teamLost' | 'unicorn' | 'acquired' | 'timeout'
   endDay: number
   conceptsBy5Min: number
   conceptsBy10Min: number
@@ -241,7 +242,11 @@ export interface BotRun {
   rivalsAcquired: number
   /** Times the horizon started showing 'saturation' (market ≥ 70% full, GAMEPLAY V2 §8.1). */
   saturationSeen: number
+  /** Board quarters closed in Series B / C (GAMEPLAY V2 §8.3). */
   boardQuarters: { hit: number; missed: number }
+  /** The same over every stage with a board (Series A on: the coaster stalls before B). */
+  boardQuartersAll: { hit: number; missed: number }
+  /** Renewals that came up in Series B / C, and those kept (GAMEPLAY V2 §8.4). */
   renewals: { offered: number; kept: number }
   refactors: number
   /** Tech debt on the last payday of each stage (index = stage; null = stage never paid a payday). */
@@ -298,7 +303,7 @@ const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
 /** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
 const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT_KINDS, 'founderActionDone', 'hired', 'visitorArrived', 'stageUp'])
 /** Bot actions that count as a meaningful player move (not background knob-twiddling like ad/price/assign). */
-const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival'])
+const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival', 'renewContract'])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -329,9 +334,15 @@ function otherWayOut(s: GameState, card: DecisionCard, loanIndex: number): boole
   })
 }
 
+/** The acquisition-offer's sale (GAMEPLAY V2 §8.2): a bot plays for Unicorn and never takes it. */
+function sellsCompany(flag: string | readonly string[] | undefined): boolean {
+  return flag !== undefined && (typeof flag === 'string' ? [flag] : flag).includes(balance.ACQUIRED_FLAG)
+}
+
 function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig): number {
   const fx = card.options[i]!.effects
   const w = cfg.weights
+  if (sellsCompany(fx.setFlag)) return -Infinity
   // The devil's deal: the loan's cash counts half (interest, covenant), and only when there is no other way.
   // A legacy loan flag (a crisis card still on the old bridge: its cash becomes the loan) is weighed the same way.
   let loan = 0
@@ -778,12 +789,31 @@ function expand(c: Ctx, cfg: BotConfig): void {
 }
 
 /**
- * GAMEPLAY V2 §8.2 boardroom (Series B on): a rival is bought when ACQUIRE_RUNWAY months of runway stay after its price;
- * the one bringing the most users per dollar first. The autopilots never buy.
+ * GAMEPLAY V2 §8.4 renewals (Series A on): every contract up for renewal is answered — 'hold' when its expected MRR is
+ * worth at least the discount's (holdChance × RENEW_HOLD_MRR ≥ RENEW_DISCOUNT_MRR: the engine prices the chance with
+ * maturity, rival share and the storm), else 'discount'. `rng`: a careless player picks the offer at random and keeps no
+ * move back for the pitch.
+ */
+function renewals(c: Ctx, rng?: Rng): void {
+  const reserve = !rng && c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
+  for (const r of c.s.derived.renewals ?? []) {
+    const m = c.s.derived.moves
+    if (m && m.left - balance.MOVE_COST.renewContract < reserve) return
+    if (r.error !== null) continue
+    const offer = rng ? rng.pick(['hold', 'discount'] as const) : r.holdChance * balance.RENEW_HOLD_MRR >= balance.RENEW_DISCOUNT_MRR ? 'hold' : 'discount'
+    c.act({ type: 'renewContract', id: r.id, offer })
+  }
+}
+
+/**
+ * GAMEPLAY V2 §8.2 boardroom: the renewals first (Series A on), then (Series B on) a rival is bought when ACQUIRE_RUNWAY
+ * months of runway stay after its price, the one bringing the most users per dollar first. The autopilots do neither.
  */
 const ACQUIRE_RUNWAY = 9
 function boardroom(c: Ctx, cfg: BotConfig): void {
-  if (cfg.afterProfit || c.s.stage < balance.ACQUIRE_MIN_STAGE) return
+  if (cfg.afterProfit) return
+  renewals(c)
+  if (c.s.stage < balance.ACQUIRE_MIN_STAGE) return
   const m = c.s.derived.moves
   const reserve = c.s.round?.active ? balance.MOVE_COST.roundPitch : 0
   if (m && m.left - balance.MOVE_COST.acquireRival < reserve) return
@@ -975,6 +1005,11 @@ export function playBot(
   let week = null as { start: number; total: number; stage: number } | null
   let saturationSeen = 0
   let saturated = false
+  const boardQuarters = { hit: 0, missed: 0 }
+  const boardQuartersAll = { hit: 0, missed: 0 }
+  const renewalsBC = { offered: 0, kept: 0 }
+  /** Series B / C, where §15 reads the board and the renewals. */
+  const lateStage = () => s.stage === 4 || s.stage === 5
 
   while (!s.gameOver && s.time.day < maxDays) {
     if (cfg && careless) {
@@ -993,6 +1028,7 @@ export function playBot(
         furnish(ctx, cfg)
         hiring(ctx, cfg)
         growth(ctx, cfg)
+        renewals(ctx, botRng)
         founder(ctx, cfg, true)
         fundraise(ctx, { ...cfg, roundSize: botRng.pick(['small', 'target', 'large'] as const) }, true)
       }
@@ -1063,6 +1099,13 @@ export function playBot(
       if (e.kind === 'loanCalled') loanCalled++
       if (e.kind === 'roundFailed') roundsFailed++
       if (e.kind === 'paydayShort') paydaysShort++
+      if (e.kind === 'boardHit') boardQuartersAll.hit++
+      if (e.kind === 'boardMissed') boardQuartersAll.missed++
+      if (lateStage() && e.kind === 'boardHit') boardQuarters.hit++
+      if (lateStage() && e.kind === 'boardMissed') boardQuarters.missed++
+      if (lateStage() && e.kind === 'renewalDue') renewalsBC.offered++
+      // The action's own events land before the step: the scan after it sees them too.
+      if (lateStage() && e.kind === 'contractRenewed') renewalsBC.kept++
       if ((e.kind === 'paydayResolved' || e.kind === 'paydayAutoResolved') && (e.value ?? 0) > 0.5) paydayDeferrals++
       if (e.kind === 'roundClosed') roundsClosed++
       if (e.kind === 'crisis') crises.push({ day: e.day, stage: s.stage, prepared: prepOn, minRunway: 99, eventId: e.id })
@@ -1163,8 +1206,9 @@ export function playBot(
     segmentsOpened: actionCounts['openSegment'] ?? 0,
     rivalsAcquired: actionCounts['acquireRival'] ?? 0,
     saturationSeen,
-    boardQuarters: { hit: 0, missed: 0 },
-    renewals: { offered: 0, kept: 0 },
+    boardQuarters,
+    boardQuartersAll,
+    renewals: renewalsBC,
     refactors: s.counters.refactors ?? 0,
     techDebtByStage,
     peakValuation,

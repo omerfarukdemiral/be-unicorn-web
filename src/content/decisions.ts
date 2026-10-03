@@ -8,6 +8,8 @@
 //   - Loans (GAMEPLAY V2 §6.2) are `effects.loan` terms; the engine sizes them on the burn and closes every loan offer
 //     while one runs (one loan only).
 //   - Rival cards read flags.rivalPressure (0–1), maintained by the engine.
+//   - acquisition-offer's sale sets SOLD_FLAG (engine balance ACQUIRED_FLAG): the run ends as 'acquired' (GAMEPLAY V2 §8.2).
+//   - BOARD_CARDS: the board-review card the engine brings on the second missed quarter in a row (§8.3), never rolled.
 import type { GameState, ModifierKind } from '../engine/types'
 import type { DecisionCard } from './types'
 
@@ -26,6 +28,10 @@ const rivalPressure = (s: GameState): number => {
  * (the lead's pressure fades once the player outgrows its anchor).
  */
 const rivalNear = (s: GameState): boolean => rivalPressure(s) >= 0.35 || (s.rivals?.length ?? 0) > 0
+/** Mirrors engine balance ACQUIRED_FLAG: the sale ends the run. */
+const SOLD_FLAG = 'companySold'
+/** GAMEPLAY V2 §8.2: a buyer only knocks while a rival in the market is strong (strength > 0.7). */
+const strongRival = (s: GameState): boolean => (s.rivals ?? []).some((r) => r.acquiredDay === undefined && r.goneDay === undefined && r.strength > 0.7)
 
 export const DECISIONS: readonly DecisionCard[] = [
   // =========================================================== Garaj (3)
@@ -485,6 +491,10 @@ export const DECISIONS: readonly DecisionCard[] = [
     speaker: 'investor',
     thread: { id: 'investor', step: 5 },
     question: 'Büyük bir şirket bizi satın almak istiyor. Rakam cazip.',
+    condition: strongRival,
+    // The sale comes last (old saves' option indexes keep their meaning) and is never the default: an unanswered card
+    // closes the door and does not end the run.
+    defaultOption: 1,
     options: [
       {
         label: 'Masaya otur, satma',
@@ -498,6 +508,13 @@ export const DECISIONS: readonly DecisionCard[] = [
         tradeoff: { gain: 'Odak ve moral', cost: 'Güvenli çıkış kaçar' },
         effects: { morale: 5 },
         reflection: 'Hedefi bilen, cazip teklife de hayır diyebilir.',
+        conceptId: 'no-single-path',
+      },
+      {
+        label: 'Sat, oyunu bitir',
+        tradeoff: { gain: 'Güvenli çıkış, hisse paraya döner', cost: 'Unicorn yolu burada biter' },
+        effects: { setFlag: SOLD_FLAG },
+        reflection: 'Satmak da bir varış; yalnız başka bir yere.',
         conceptId: 'no-single-path',
       },
     ],
@@ -737,6 +754,39 @@ export const DECISIONS: readonly DecisionCard[] = [
         effects: { reputation: 3, modifiers: [mod('organic', 0.9, 30)] },
         reflection: 'Kopyalanan özellik, kopyalanamayan vizyonu gösterir.',
         conceptId: 'feature-vs-product',
+      },
+    ],
+  },
+]
+
+/**
+ * GAMEPLAY V2 §8.3: brought by the engine when the board's quarter is missed twice in a row (never rolled). It takes
+ * the next card slot like a crisis card; the multiple stays capped until a quarter is hit, whatever is picked.
+ */
+export const BOARD_CARDS: readonly DecisionCard[] = [
+  {
+    id: 'board-review',
+    stage: 3,
+    category: 'crisis',
+    speaker: 'investor',
+    question: 'Kurul iki çeyrektir hedefi kaçırdı. CEO değişimi mi, plan revizyonu mu?',
+    condition: () => false,
+    once: false,
+    defaultAfterDays: 30,
+    options: [
+      {
+        label: 'Deneyimli CEO getir',
+        tradeoff: { gain: 'Kurul sakinleşir, ekip hızlı kalır', cost: '%2 hisse yeni CEO’ya' },
+        effects: { equity: -0.02 },
+        reflection: 'Kontrolü paylaşmak, bazen şirketi korumanın bedelidir.',
+        conceptId: 'cap-table-health',
+      },
+      {
+        label: 'Planı revize et',
+        tradeoff: { gain: 'Hisse sende kalır', cost: 'İki ay üretim yavaşlar' },
+        effects: { modifiers: [mod('production', 0.9, 60)] },
+        reflection: 'Gerçekçi plan, tekrar kaçırılan hedeften iyidir.',
+        conceptId: 'no-single-path',
       },
     ],
   },

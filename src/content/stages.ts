@@ -26,8 +26,8 @@ export const STAGES: readonly StageDef[] = [
   {
     index: 3, key: 'seriesA', name: 'Series A', officeName: 'Açık plan kat', rings: 4, totalSlots: 30,
     targetValuation: 15_000_000, roundAmount: 4_000_000, roundEquity: 0.18,
-    unlockTools: ['adBudget', 'refactor', 'segments'], unlockActions: ['refactorSprint'],
-    unlocksText: 'Reklam bütçesi, refactor sprinti, yeni pazar', paletteKey: 'openPlan',
+    unlockTools: ['adBudget', 'refactor', 'segments', 'renewal'], unlockActions: ['refactorSprint'],
+    unlocksText: 'Reklam bütçesi, refactor sprinti, yeni pazar, yenileme', paletteKey: 'openPlan',
     tagline: 'Koca bir kat, büyümeyi ölçme zamanı.',
   },
   {

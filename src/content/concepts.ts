@@ -589,6 +589,7 @@ export const CONCEPTS: readonly Concept[] = [
             : 'Defterin boş. İlk sayfayı bu şirket yazacak.'
         const day = Math.floor(go.day)
         if (go.kind === 'unicorn') return `${day} günde unicorn oldun. Bu sefer neyi doğru yaptın?`
+        if (go.kind === 'acquired') return `${day}. günde şirketi sattın. Unicorn için neyi farklı yapardın?`
         const how = go.kind === 'teamLost' ? 'ekip dağıldı' : 'kasa bitti'
         const k = go.reasons.length
         return `${day} gün dayandın, sonra ${how}.` + (k > 0 ? ` ${k} kör nokta bulduk.` : '')

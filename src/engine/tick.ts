@@ -8,13 +8,13 @@ import { applyDefaultDecision, applyDueEffects, fireCalendar, maybeShowDecision 
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
 import { accrueMonth, amortizeTechDebt, checkGoals, checkPaydayDesk, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
-import { completeFounderAction, dailyFounder, expireContracts, regenEnergy } from './founder'
+import { completeFounderAction, dailyContracts, dailyFounder, regenEnergy } from './founder'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
 import { checkRoundWindow, progressRound } from './round'
 import { DAYS_PER_MONTH, DAYS_PER_WEEK, FIXED_STEP_DAYS, type GameEventKind, type GameState } from './types'
 import { clone, modifierMult, pushActivity, pushEvent, type EngineContent } from './util'
-import { checkMilestones, dailyVisitors, detectArchetype, expireBubbles, idleLine, monthEnd, sayLine, updateRivalPressure } from './world'
+import { checkMilestones, dailyBoard, dailyVisitors, detectArchetype, expireBubbles, idleLine, monthEnd, sayLine, updateRivalPressure } from './world'
 
 const EVENT_LINE: Partial<Record<GameEventKind, OfficeLineTrigger>> = {
   hired: 'hire',
@@ -99,7 +99,8 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   if (s.gameOver) return
   dailyPeople(s, content)
   dailyFounder(s, day)
-  expireContracts(s)
+  // GAMEPLAY V2 §8.4: renewals come up RENEWAL_NOTICE_DAYS ahead; a contract past its day leaves.
+  dailyContracts(s)
   s.modifiers = s.modifiers.filter((m) => m.untilDay > s.time.day)
   s.candidates = s.candidates.filter((c) => c.expiresDay > s.time.day)
   if (day % DAYS_PER_WEEK === 0) fillCandidates(s, content, rng)
@@ -113,6 +114,8 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
     amortizeTechDebt(s)
   }
   checkGoals(s, content)
+  // GAMEPLAY V2 §8.3: the board's quarter closes on today's MRR (its card, if any, joins the queue before the roll).
+  dailyBoard(s, content)
   updateRivalPressure(s)
   detectArchetype(s)
   recomputeDerived(s, content)

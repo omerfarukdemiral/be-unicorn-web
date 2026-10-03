@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { findUsersPreview } from '../founder'
 import { createEngine } from '../index'
-import { diligenceFactor, diligenceNow, lockedPrice, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { closeRound, diligenceFactor, diligenceNow, lockedPrice, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { Rng, createRngState } from '../rng'
 import type { DiligenceItem, GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
 
@@ -121,6 +122,20 @@ describe('round size (8 / 12 / 16 months ↔ equity)', () => {
     expect(r.state.round!.months).toBe(B.ROUND_RUNWAY_MONTHS.large)
     expect(r.state.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'large', 0), 6)
     expect(api.applyAction(s, { type: 'startRound', size: 'huge' as never }).error).toBe('invalid')
+  })
+
+  it('GAMEPLAY V2 §8.3: each board quarter hit takes BOARD_HIT_EQUITY off the next round, priced once', () => {
+    expect(roundEquityFor(4, 'target', 0, 0, 2 * B.BOARD_HIT_EQUITY)).toBeCloseTo(roundEquityFor(4, 'target', 0) - 2 * B.BOARD_HIT_EQUITY, 9)
+    const base = launched(usersFor(450_000))
+    const s = refresh({ ...base, board: { quarterStart: 0, targetMrr: 0, missed: 0, streak: 2, credit: 2 } })
+    expect(s.derived.round!.sizes!.find((x) => x.size === 'large')!.equity).toBeCloseTo(roundEquityFor(1, 'large', 0, 0, 2 * B.BOARD_HIT_EQUITY), 9)
+    const r = api.applyAction(s, { type: 'startRound', size: 'large' })
+    expect(r.state.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'large', 0) - 2 * B.BOARD_HIT_EQUITY, 6)
+    // Spent only at the close (a failed round keeps it); a quarter hit while the round runs stays for the next one.
+    expect(r.state.board!.credit).toBe(2)
+    const closing = structuredClone({ ...r.state, board: { ...r.state.board!, credit: 3 } })
+    closeRound(closing, fakeContent(), new Rng(createRngState(1)))
+    expect(closing.board!.credit).toBe(1)
   })
 })
 

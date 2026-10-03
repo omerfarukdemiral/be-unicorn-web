@@ -1,4 +1,4 @@
-// Bankruptcy, team loss and victory (PLAN §5.10). Post-mortem reasons come from the player's own data.
+// Bankruptcy, team loss, victory (PLAN §5.10) and the sale (GAMEPLAY V2 §8.2). Post-mortem reasons come from the player's own data.
 import * as B from './balance'
 import { promoteConcept } from './concepts'
 import { queueConcept } from './effects'
@@ -66,10 +66,30 @@ export function winRun(s: GameState, content?: EngineContent): void {
 }
 
 /**
- * Daily: bankruptcy clock + warnings, team-zero grace, unicorn check. The clock runs only after a missed payday
+ * GAMEPLAY V2 §8.2 sub-ending: the acquisition-offer was taken ("Sat, oyunu bitir"). The run ends as 'acquired' with the
+ * XP of the stage it was sold in (as a run ending there would earn); it never goes to the leaderboard (net/cloud.ts).
+ */
+export function sellCompany(s: GameState): void {
+  if (s.gameOver) return
+  delete s.flags[B.ACQUIRED_FLAG]
+  const xp = B.XP_PER_STAGE * (1 + s.stage)
+  s.gameOver = { kind: 'acquired', day: s.time.day, reasons: [], xpEarned: xp }
+  s.time.speed = 0
+  pushEvent(s, { kind: 'gameOver', value: xp })
+}
+
+/** The sale was signed (the card's flag): it ends the run at once, wherever the answer came from (click or default). */
+export function checkSale(s: GameState): void {
+  if (s.flags[B.ACQUIRED_FLAG]) sellCompany(s)
+}
+
+/**
+ * Daily: the sale, bankruptcy clock + warnings, team-zero grace, unicorn check. The clock runs only after a missed payday
  * (loop.ts `missedPayroll`) and stops once cash covers what is owed again (docs/CORE_LOOP.md §5 "Maaş günü").
  */
 export function dailyEndgame(s: GameState, content: EngineContent): void {
+  checkSale(s)
+  if (s.gameOver) return
   if (s.finance.payrollMissed && s.stats.cash - owedCosts(s) >= 0) s.finance.payrollMissed = false
   if (s.finance.payrollMissed) {
     s.finance.negativeCashDays += 1

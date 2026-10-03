@@ -29,6 +29,9 @@ export const HORIZON_KIND: Record<HorizonItem['kind'], { icon: IconName; color: 
   crisis: { icon: 'warning', color: 'var(--color-g-burn)' },
   // The market is saturated (§8.1): users hue, not a warning.
   saturation: { icon: 'pie', color: 'var(--color-g-users)' },
+  // Known exams (§8.3–8.4): the board in the equity hue, a renewal in the cash hue; neither is danger.
+  board: { icon: 'bars', color: 'var(--color-g-equity)' },
+  renewal: { icon: 'handshake', color: 'var(--color-g-cash)' },
 }
 
 /** A month waiting on the payday desk (§6.1) is the one payday that is danger: red, with its countdown. */
@@ -81,6 +84,10 @@ export function horizonLabel(h: HorizonItem, projectName: (id: string | undefine
       return crisisName(h)
     case 'saturation':
       return t('horizon.saturation')
+    case 'board':
+      return t('horizon.board', { v: money(h.amount ?? 0) })
+    case 'renewal':
+      return t('horizon.renewal', { v: h.contractName ?? '' })
   }
 }
 
@@ -97,7 +104,8 @@ function crisisName(h: HorizonItem): string {
 
 export function horizonItemText(h: HorizonItem, days: number, short = false): string {
   if (h.kind === 'payday' && h.due) return t('horizon.item.paydayDue', { d: whenLabel(days, short) })
-  return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short), ...(h.kind === 'crisis' ? { v: crisisName(h) } : {}) })
+  const v = h.kind === 'crisis' ? crisisName(h) : h.kind === 'board' ? money(h.amount ?? 0) : undefined
+  return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short), ...(v !== undefined ? { v } : {}) })
 }
 
 function useHorizon() {

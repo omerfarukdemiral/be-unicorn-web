@@ -140,10 +140,10 @@ export function PostMortemOverlay() {
       <div className="flex flex-col gap-5 p-5 sm:p-7">
         <header>
           <div className="flex items-center gap-1.5">
-            <Dot color="var(--color-negative)" size={7} />
+            <Dot color={s.go.kind === 'acquired' ? 'var(--color-g-equity)' : 'var(--color-negative)'} size={7} />
             <Label>{t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}</Label>
           </div>
-          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}</h2>
+          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : s.go.kind === 'acquired' ? 'gameOver.acquiredTitle' : 'gameOver.bankruptTitle')}</h2>
         </header>
         <div className="grid grid-cols-2 gap-3">
           <Stat label={t('pm.day')} value={num(Math.floor(s.day))} />

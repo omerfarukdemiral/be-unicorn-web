@@ -2,13 +2,13 @@
 import * as B from './balance'
 import * as E from './economy'
 import { loanMonthlyService } from './effects'
-import { findUsersPreview, movesView, salesCallPreview } from './founder'
+import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './founder'
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
-import { marketOf, marketUpkeep, marketView } from './world'
+import { boardView, marketOf, marketUpkeep, marketView } from './world'
 
 export interface Outputs {
   perEmployee: Record<string, number>
@@ -214,7 +214,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const penalty =
     E.bmPenalty(bm, s.stage) *
     E.idlePenalty(s.stage, s.stats.cash, burn, s.time.day, s.finance.lastRoundCloseDay ?? s.time.day) *
-    (s.flags['boardCapPenalty'] ? B.BOARD_CAP_PENALTY : 1)
+    (s.flags[B.BOARD_PENALTY_FLAG] ? B.BOARD_CAP_PENALTY : 1)
   // Investor winter (GAMEPLAY V2 §5.1): a lower ceiling and a higher growth ask while its modifiers last.
   const capMult = modifierMult(s, 'multipleCap')
   const multCap = E.multipleCap(s.stage, capMult)
@@ -303,6 +303,11 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)
+  // GAMEPLAY V2 §8.3–8.4: the board's quarter and the contracts up for renewal (the horizon lists both).
+  const board = boardView(s)
+  if (board) s.derived.board = board
+  const renewals = renewalViews(s)
+  if (renewals.length) s.derived.renewals = renewals
   s.derived.horizon = horizon(s)
   const crisis = nextCrisis(s)
   if (crisis) s.derived.nextCrisis = crisis

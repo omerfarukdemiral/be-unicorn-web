@@ -18,7 +18,7 @@ import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
 import { ROUND_PITCHES, ROUND_SIZES } from './types'
 import { incCounter, modifierMult, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
-import { ensureRivals, markRivalAnchor, openAutoSegments, rivalOut } from './world'
+import { boardOf, ensureRivals, markRivalAnchor, openAutoSegments, rivalOut } from './world'
 
 const WEEK_ACC = 'roundWeekAcc'
 /** Flag: the stage whose round window already announced itself (one roundWindow event per stage). */
@@ -70,12 +70,18 @@ export function roundAmountFor(s: GameState, target: StageIndex, months: number)
 
 /**
  * Equity sold for a size; each ☆ stage goal takes GOAL_STAR_EQUITY_DISCOUNT off. `extra`: what the survival policies
- * signed so far add for good (policyEquity, GAMEPLAY V2 §7.2).
+ * signed so far add for good (policyEquity, GAMEPLAY V2 §7.2). `board`: what the board's hit quarters take off
+ * (boardEquity, §8.3).
  */
-export function roundEquityFor(target: StageIndex, size: RoundSize, stars: number, extra = 0): number {
+export function roundEquityFor(target: StageIndex, size: RoundSize, stars: number, extra = 0, board = 0): number {
   const base = B.ROUND_EQUITY[target]
   if (base == null) return 0
-  return Math.max(0.02, base * B.ROUND_SIZE_EQUITY[size] - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT) + Math.max(0, extra)
+  return Math.max(0.02, base * B.ROUND_SIZE_EQUITY[size] - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT - Math.max(0, board)) + Math.max(0, extra)
+}
+
+/** GAMEPLAY V2 §8.3: BOARD_HIT_EQUITY less equity in the next round per board quarter hit since the last one. */
+export function boardEquity(s: GameState): number {
+  return (s.board?.credit ?? 0) * B.BOARD_HIT_EQUITY
 }
 
 /** Creeping normality (§7.2): POLICY_SURVIVAL_EQUITY more equity in every round per survival policy ever signed. */
@@ -271,7 +277,7 @@ export function roundView(s: GameState, stars: number): RoundView | undefined {
     const downFactor = offerFactor(price, diligence, 0, 0)
     view.sizes = ROUND_SIZES.map((size): RoundSizeOption => {
       const amount = roundAmountFor(s, targetStage, B.ROUND_RUNWAY_MONTHS[size])
-      const equity = roundEquityFor(targetStage, size, stars, policyEquity(s))
+      const equity = roundEquityFor(targetStage, size, stars, policyEquity(s), boardEquity(s))
       const o: RoundSizeOption = { size, months: B.ROUND_RUNWAY_MONTHS[size], amount, offer: Math.round(amount * view.factor), equity }
       if (down) {
         const downAmount = amount * B.DOWN_ROUND_AMOUNT
@@ -312,7 +318,8 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
   if (B.ROUND_AMOUNT[target] == null || B.ROUND_EQUITY[target] == null || targetValuation == null) return 'roundNotReady'
   const months = B.ROUND_RUNWAY_MONTHS[size]
   const baseAmount = roundAmountFor(s, target, months) * (down ? B.DOWN_ROUND_AMOUNT : 1)
-  const equity = down ? downEquity(roundEquityFor(target, size, stars, policyEquity(s))) : roundEquityFor(target, size, stars, policyEquity(s))
+  const normal = roundEquityFor(target, size, stars, policyEquity(s), boardEquity(s))
+  const equity = down ? downEquity(normal) : normal
   const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
   const diligence = diligenceNow(s)
   const r: RoundState = {
@@ -338,6 +345,8 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
     r.down = true
     s.flags[DOWN_STAGE] = s.stage
   }
+  // The board's credit is priced into this round's equity; it is spent at the close (a failed round keeps it).
+  if (s.board?.credit) r.boardCredit = s.board.credit
   setOfferAmount(r, liveOffer(s, r, diligence))
   s.round = r
   s.flags[WEEK_ACC] = 0
@@ -478,6 +487,8 @@ export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   markRivalAnchor(s)
   // GAMEPLAY V2 §8.1: the stage's automatic segment (smb at Seed) opens and ramps in.
   openAutoSegments(s)
+  // GAMEPLAY V2 §8.3: arriving at Series A the board sets its first quarter (later stages keep the running one).
+  boardOf(s)
 }
 
 /**
@@ -534,6 +545,8 @@ export function closeRound(s: GameState, content: EngineContent, rng: Rng): void
   s.stats.reputation = clamp(0, 100, s.stats.reputation + B.ROUND_CLOSE_REPUTATION)
   unlockWidget(s, 'reputation')
   incCounter(s, 'roundsClosed')
+  // GAMEPLAY V2 §8.3: the quarters this round priced are spent; those hit while it ran stay for the next one.
+  if (s.board && r.boardCredit) s.board.credit = Math.max(0, (s.board.credit ?? 0) - r.boardCredit)
   s.finance.lastRoundCloseDay = s.time.day
   for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay = Math.min(v.leaveDay, s.time.day)
   pushActivity(s, 'roundClosed', { amount: Math.round(r.offer.amount), equity: r.offer.equity })

@@ -36,8 +36,8 @@ export const CRISES: readonly CrisisDef[] = [
     stage: 3,
     name: 'Büyük müşteri yenilemesi',
     cardId: 'crisis-key-account',
-    // T19: the two biggest enterprise contracts fall to renewal (§8.4). Until renewals exist: a milder stand-in on the
-    // whole revenue (the real crisis puts two contracts at risk, not every seat).
+    // §8.4: the biggest contracts fall to renewal. The engine also cuts the 'hold' chance by 0.2 while these modifiers
+    // last (founder.ts holdChance); the mild revenue hit below stays as the crisis's felt cost.
     effects: (_s, sev) => ({ modifiers: [hit('arpu', 0.9, 120, sev), hit('churn', 1.2, 120, sev)] }),
   },
   {

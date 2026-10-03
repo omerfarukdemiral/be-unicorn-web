@@ -67,6 +67,7 @@ export const TOOL_TEXT: Record<ToolId, { name: string; description: string }> = 
   refactor: { name: 'Refactor', description: 'Teknik borcu bir sprintte erit.' },
   segments: { name: 'Pazar haritası', description: 'Yeni pazar aç, büyüme alanı kazan.' },
   mna: { name: 'Satın alma', description: 'Rakibi al, kullanıcıları seninle gelsin.' },
+  renewal: { name: 'Yenileme', description: 'Biten sözleşmeyi zamla ya da indirimle tut.' },
 }
 
 export const SLOT_TYPE_TEXT: Record<SlotType, { name: string; description: string }> = {
@@ -415,6 +416,8 @@ const BASE_TEXT: Record<string, string> = {
   // Game over
   'gameOver.bankruptTitle': 'Şirket kapandı',
   'gameOver.teamLostTitle': 'Ekip dağıldı',
+  // GAMEPLAY V2 §8.2 sub-ending: the company was sold (the post-mortem frame shows it until 'acquired' has its own screen).
+  'gameOver.acquiredTitle': 'Şirket satıldı',
   'gameOver.xp': '+{v} Kurucu XP',
   'gameOver.xpHint': 'Sonraki oyunda başlangıç kasan %{v} daha fazla.',
   'gameOver.retry': 'Yeniden kur',

@@ -1,9 +1,9 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
+import { BOARD_FROM_STAGE, DILIGENCE_MOM, DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
 import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt, type ToolId } from './types'
-import { castOf, defaultMarket, ensureRivals, marketTools } from './world'
+import { castOf, defaultMarket, ensureRivals, marketTools, newBoard } from './world'
 import { uniquePush } from './util'
 
 export interface SaveFile {
@@ -76,6 +76,14 @@ const MIGRATIONS: Record<number, Migration> = {
       st.market = defaultMarket(st.stage, Math.floor(time.day))
       if (Array.isArray(st.unlockedTools)) for (const tool of marketTools(st.stage)) uniquePush(st.unlockedTools as ToolId[], tool)
     }
+    // Board (§8.3): a save from Series A on starts its first quarter at load, on its saved MRR at the stage's plain ask
+    // (no modifiers read here); the stage's 'renewal' tool (§8.4) comes with it.
+    const mrrFin = finance as { mrr?: unknown } | undefined
+    if (!st.board && typeof st.stage === 'number' && st.stage >= BOARD_FROM_STAGE && typeof time?.day === 'number') {
+      const ask = DILIGENCE_MOM[Math.min(DILIGENCE_MOM.length - 1, st.stage)]!
+      st.board = newBoard(time.day, typeof mrrFin?.mrr === 'number' ? mrrFin.mrr : 0, ask)
+      if (Array.isArray(st.unlockedTools)) uniquePush(st.unlockedTools as ToolId[], 'renewal')
+    }
     const game = st as unknown as GameState
     if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st
@@ -101,6 +109,9 @@ export function serialize(state: GameState): string {
   return JSON.stringify(file)
 }
 
+/** Stage goals renamed after saves had them (GAMEPLAY V2 §8.4: Series C's 'c-profit' became 'c-reach'). */
+const RENAMED_GOALS: Readonly<Record<string, string>> = { 'c-profit': 'c-reach' }
+
 /** Upgrades an older save; null if it is from the future or cannot be migrated. */
 export function migrate(file: { version: number; state: unknown }): GameState | null {
   let v = file.version
@@ -114,6 +125,8 @@ export function migrate(file: { version: number; state: unknown }): GameState | 
   }
   const out = st as unknown as GameState
   if (!out.meta || !out.time || !out.stats) return null
+  // Renamed stage goals keep the ☆ already earned (any version: the rename landed inside v4).
+  if (Array.isArray(out.goalsDone)) out.goalsDone = [...new Set(out.goalsDone.map((id) => RENAMED_GOALS[id] ?? id))]
   out.meta.saveVersion = SAVE_VERSION
   return out
 }

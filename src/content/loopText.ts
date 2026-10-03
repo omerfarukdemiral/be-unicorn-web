@@ -50,6 +50,11 @@ export const LOOP_TEXT: Record<string, string> = {
   'horizon.inDaysShort': '{v}g',
   'horizon.today': 'bugün',
   'horizon.empty': 'Önümüzdeki haftalar sakin',
+  // GAMEPLAY V2 §8.3–8.4: known exams ("Kurul $X · 23g"; a contract's last day).
+  'horizon.item.board': 'Kurul {v} · {d}',
+  'horizon.board': 'Kurul hedefi {v} MRR',
+  'horizon.item.renewal': 'Yenileme · {d}',
+  'horizon.renewal': '{v} yenilemesi',
 
   // Month receipt (ay fişi)
   'receipt.title': '{m}. ay fişi',

@@ -4,7 +4,8 @@ import { learnConcept, minimizeConcept } from './concepts'
 import { answerDecision } from './decisions'
 import { recomputeDerived } from './derive'
 import { applyEffects, applyMorale, unlockTool } from './effects'
-import { actionEnergy, movesError, spendMoves, startFounderAction } from './founder'
+import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
+import { checkSale } from './endgame'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
@@ -15,6 +16,7 @@ import {
   FOUNDER_SLOT_ID,
   POLICY_IDS,
   PROJECT_CATEGORIES,
+  RENEW_OFFERS,
   type Action,
   type ActionErrorCode,
   type ActionOf,
@@ -363,7 +365,13 @@ const openConcept: Handler<'openConcept'> = ({ s, content }, a) => (learnConcept
 
 const minimizeConceptH: Handler<'minimizeConcept'> = ({ s, content }, a) => (minimizeConcept(s, content.concepts, a.conceptId) ? null : 'notFound')
 
-const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => answerDecision(s, content, a.cardId, a.optionIndex)
+/** An answer can sell the company (acquisition-offer, GAMEPLAY V2 §8.2): the run ends with the click. */
+const answerDecisionH: Handler<'answerDecision'> = ({ s, content }, a) => {
+  const err = answerDecision(s, content, a.cardId, a.optionIndex)
+  if (err) return err
+  checkSale(s)
+  return null
+}
 
 const startRoundH: Handler<'startRound'> = ({ s, rng, content }, a) => startRound(s, rng, starsOfStage(s, content, s.stage), a.size ?? 'target', a.down === true)
 
@@ -447,6 +455,19 @@ const acquireRivalH: Handler<'acquireRival'> = ({ s }, a) => {
   return null
 }
 
+// ---------------------------------------------------------------------------
+// Contract renewal (GAMEPLAY V2 §8.4)
+// ---------------------------------------------------------------------------
+
+/** Answers a contract's renewal: one move; 'hold' is a chance at more, 'discount' a sure thing for less. */
+const renewContractH: Handler<'renewContract'> = ({ s, rng }, a) => {
+  if (typeof a.id !== 'string' || !(RENEW_OFFERS as readonly string[]).includes(a.offer)) return 'invalid'
+  const err = renewError(s, a.id)
+  if (err) return err
+  renewContract(s, a.id, a.offer, rng)
+  return null
+}
+
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
   fire,
@@ -473,4 +494,5 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   adoptPolicy: adoptPolicyH,
   openSegment: openSegmentH,
   acquireRival: acquireRivalH,
+  renewContract: renewContractH,
 }

@@ -3,7 +3,7 @@ import { ENTERPRISE_NAMES } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
 import type { Rng } from './rng'
-import { DAYS_PER_WEEK, type ActionErrorCode, type FindUsersPreview, type FounderActionKind, type FounderMoves, type GameState, type MovesView, type SalesCallPreview } from './types'
+import { DAYS_PER_WEEK, type ActionErrorCode, type EnterpriseCustomer, type FindUsersPreview, type FounderActionKind, type FounderMoves, type GameState, type MovesView, type RenewalView, type RenewOffer, type SalesCallPreview } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
 
 /** Flag: "Elle kullanıcı bul" uses this month (reset on month end). */
@@ -55,15 +55,123 @@ export function salesCallPreview(s: GameState): SalesCallPreview {
   }
 }
 
-/** Daily: contracts past their end leave (their MRR goes with them). */
-export function expireContracts(s: GameState): void {
+// ---------------------------------------------------------------------------
+// Contract renewal (GAMEPLAY V2 §8.4)
+// ---------------------------------------------------------------------------
+
+/** Renewals are the founder's verb from Series A; before it a contract simply ends on its day. */
+export function renewalsOpen(s: GameState): boolean {
+  return s.stage >= B.RENEWAL_FROM_STAGE
+}
+
+const ended = (s: GameState, c: EnterpriseCustomer): boolean => c.untilDay !== undefined && c.untilDay <= s.time.day
+
+/** A contract leaves with its MRR (not renewed in time, or 'hold' refused). */
+function loseContract(s: GameState, c: EnterpriseCustomer): void {
+  pushActivity(s, 'enterpriseLost', { customer: c.name })
+  pushEvent(s, { kind: 'contractLost', refId: c.id, value: c.mrr })
+}
+
+/** One of the RENEWAL_KEY_ACCOUNTS biggest contracts right now (ties count for both). */
+function keyAccount(list: readonly EnterpriseCustomer[], c: EnterpriseCustomer): boolean {
+  return list.filter((x) => x.mrr > c.mrr).length < B.RENEWAL_KEY_ACCOUNTS
+}
+
+/**
+ * Daily: RENEWAL_NOTICE_DAYS before its end a contract is settled once: a key account then comes up for renewal
+ * (renewalDue, with the whole notice window), a smaller deal never does, even if the bigger ones leave later. A contract
+ * past its end leaves and its MRR goes with it (unanswered = gone, as before renewals).
+ */
+export function dailyContracts(s: GameState): void {
   const list = s.finance.enterpriseCustomers
-  if (!list.some((c) => c.untilDay !== undefined && c.untilDay <= s.time.day)) return
+  if (renewalsOpen(s)) {
+    for (const c of list) {
+      if (c.untilDay === undefined || c.renewalDue !== undefined || ended(s, c) || s.time.day < c.untilDay - B.RENEWAL_NOTICE_DAYS) continue
+      c.renewalDue = keyAccount(list, c)
+      if (!c.renewalDue) continue
+      pushEvent(s, { kind: 'renewalDue', refId: c.id, value: c.untilDay })
+    }
+  }
+  if (!list.some((c) => ended(s, c))) return
   s.finance.enterpriseCustomers = list.filter((c) => {
-    if (c.untilDay === undefined || c.untilDay > s.time.day) return true
-    pushActivity(s, 'enterpriseLost', { customer: c.name })
+    if (!ended(s, c)) return true
+    loseContract(s, c)
     return false
   })
+}
+
+/**
+ * Chance a 'hold' keeps the contract: RENEW_HOLD_BASE + RENEW_HOLD_MAT × maturity − RENEW_HOLD_SHARE × Σ rival share,
+ * less while the key-account storm is on and less again after a discount, in [0, 1].
+ */
+export function renewHoldChance(s: GameState, c: EnterpriseCustomer): number {
+  const share = (s.rivals ?? []).reduce((a, r) => a + r.share, 0)
+  const storm = s.modifiers.some((m) => m.source === `crisis:${B.RENEW_CRISIS_ID}` && m.untilDay > s.time.day)
+  return clamp(
+    0,
+    1,
+    B.RENEW_HOLD_BASE +
+      B.RENEW_HOLD_MAT * s.derived.avgMaturity -
+      B.RENEW_HOLD_SHARE * share -
+      (storm ? B.RENEW_HOLD_CRISIS : 0) -
+      (c.discounted ? B.RENEW_DISCOUNTED_HOLD : 0),
+  )
+}
+
+/**
+ * Why renewContract would fail, or null: no such contract → notFound; before A → notUnlocked; not up for renewal
+ * (before its notice: cooldown; a smaller deal that never comes up: notFound); one move.
+ */
+export function renewError(s: GameState, id: string): ActionErrorCode | null {
+  const c = s.finance.enterpriseCustomers.find((x) => x.id === id)
+  if (!c || c.untilDay === undefined) return 'notFound'
+  if (!renewalsOpen(s)) return 'notUnlocked'
+  if (!c.renewalDue) return s.time.day < c.untilDay - B.RENEWAL_NOTICE_DAYS ? 'cooldown' : 'notFound'
+  return movesError(s, B.MOVE_COST.renewContract)
+}
+
+/**
+ * The renewal answer (call after renewError passed): 'hold' keeps it at MRR × RENEW_HOLD_MRR with renewHoldChance
+ * (else it leaves now), 'discount' keeps it for sure at MRR × RENEW_DISCOUNT_MRR and marks it. Renewed: another
+ * SALES_CONTRACT_DAYS from today.
+ */
+export function renewContract(s: GameState, id: string, offer: RenewOffer, rng: Rng): void {
+  const c = s.finance.enterpriseCustomers.find((x) => x.id === id)!
+  spendMoves(s, B.MOVE_COST.renewContract)
+  if (offer === 'hold') {
+    if (!rng.chance(renewHoldChance(s, c))) {
+      s.finance.enterpriseCustomers = s.finance.enterpriseCustomers.filter((x) => x !== c)
+      loseContract(s, c)
+      return
+    }
+    c.mrr = Math.round(c.mrr * B.RENEW_HOLD_MRR)
+    delete c.discounted
+  } else {
+    c.mrr = Math.max(1, Math.round(c.mrr * B.RENEW_DISCOUNT_MRR))
+    c.discounted = true
+  }
+  c.untilDay = s.time.day + B.SALES_CONTRACT_DAYS
+  c.renewedDay = Math.floor(s.time.day)
+  delete c.renewalDue
+  incCounter(s, 'renewals')
+  pushEvent(s, { kind: 'contractRenewed', refId: c.id, value: c.mrr })
+}
+
+/** derived.renewals: the contracts up for renewal, the soonest first, with both offers priced (the UI only draws them). */
+export function renewalViews(s: GameState): RenewalView[] {
+  return s.finance.enterpriseCustomers
+    .filter((c) => c.renewalDue && c.untilDay !== undefined)
+    .sort((a, b) => a.untilDay! - b.untilDay!)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      mrr: c.mrr,
+      untilDay: c.untilDay!,
+      holdChance: renewHoldChance(s, c),
+      holdMrr: Math.round(c.mrr * B.RENEW_HOLD_MRR),
+      discountMrr: Math.max(1, Math.round(c.mrr * B.RENEW_DISCOUNT_MRR)),
+      error: renewError(s, c.id),
+    }))
 }
 
 /** Tech debt one "Refactor sprinti" pays back: REFACTOR_DEBT_BASE + one point per engineer, at most the debt there is. */

@@ -290,9 +290,13 @@ Pay: doğuşta `share = RIVAL_BORN_SHARE(0.10)`; haftalık `share += 0.03 × (st
 
 `GameState.board: {quarterStart, targetMrr, missed, streak}`. A'ya girişte ve her 90 günde `targetMrr = mrr × (1 + growthAsk(s))^3` (`round.ts:69`). Çeyrek sonu: tuttu → `streak++`, `reputation +3`, sonraki turda `roundEquity −0.005`; kaçırdı → `missed++`, event `boardMissed`; 2 ardışık → `flags.boardCapPenalty` (çarpan ×0.8, §4.1; hedef tutunca kalkar) + kriz kartı `board-review` ("CEO değişimi mi, plan revizyonu mu?": `equity −0.02` ya da `production 0.9 / 60g`). Ufuk `'board'`: "Kurul $X · 23g" — önceden bilinen sınav. Kaçırma öldürmez, toparlanma kapısı bırakır.
 
+**Uygulama (dalga 11, DECISIONS #26):** hedef formülü aynen; bir çeyrek kaçınca sonraki hedef `growthAsk × BOARD_REVISED_ASK (0.5)` ister [DENGE] (tam ask'ta iyi botlar çeyreklerin %47'sini kaçırıyor, ×0.8 tavanı Unicorn'u 35/48 → 23/48'e düşürüyordu). Kurul kredisi (en çok 4 × 0.005) tur **kapanınca** harcanır; başarısız tur krediyi korur.
+
 ### 8.4 Kurumsal sözleşme yenileme (A'dan; B'de balina)
 
 `expireContracts` (`founder.ts:59`) yerine: `untilDay − 30`'da `HorizonItem 'renewal'` + event `renewalDue`; Action `{type: 'renewContract', id, offer: 'hold'|'discount'}` (1 hamle): `hold` → başarı `0.5 + 0.5×avgMaturity − 0.3×Σshare` (rng; `key-account-renewal` krizi −0.2), başarıda **mrr ×1.1** (fiyat artışı); `discount` → mrr ×0.85 kesin **ve `contract.discounted = true`: sonraki yenilemede taban zaten ×0.85, `hold` şansı −0.1** (indirim iz bırakır; eski EV'de `hold` 0.77 < `discount` 0.85 hep indirim baskındı). Cevapsız → düşer (mevcut davranış). Yenilenen sözleşme 360 gün. `refactorSprint` B2'de tanımlandı (§4.2); burada yalnız `ToolId 'refactor'` açılışı A'dadır.
+
+**Uygulama (dalga 11, DECISIONS #26):** her sözleşme değil, bildirim gününde en büyük `RENEWAL_KEY_ACCOUNTS = 4` sözleşme yenilemeye düşer (karar bildirim gününde bir kez verilir); küçükler eskisi gibi süresi dolunca düşer [DENGE] (her sözleşme yenilenince koşu başına ~320 yenileme, `renewContract` en sık fiil oluyordu). Series C hedefi `c-profit` yerine `c-reach`: toplam 2 pazar (en az 1'i C'de açılmış) + C'de 1 yenileme; eski kayıtta kazanılmış `c-profit` → `c-reach`. `acquired` XP'si `XP_PER_STAGE × (1 + stage)` (aynı aşamadaki iflasla eşit); bulut skoru `acquired` koşusunu göndermez.
 
 ### 8.5 Aşama fiil tablosu
 

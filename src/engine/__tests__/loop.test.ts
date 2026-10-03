@@ -6,7 +6,9 @@ import * as B from '../balance'
 import { createEngine } from '../index'
 import { crisisSeverity, isCardEligible } from '../decisions'
 import { winRun } from '../endgame'
+import { renewHoldChance } from '../founder'
 import { releaseLevel } from '../loop'
+import { enterStage } from '../round'
 import { daysToPayday, horizon, nextCrisis, nextStep } from '../loopSelectors'
 import { migrate } from '../save'
 import type { EngineApi, GameState, RoundState, StageIndex } from '../types'
@@ -679,5 +681,117 @@ describe('payday desk on the loop (GAMEPLAY V2 §6.1)', () => {
     expect(words(card.question)).toBeLessThanOrEqual(12)
     for (const o of card.options) expect(words(o.label)).toBeLessThanOrEqual(5)
     expect(card.options[0]!.effects.modifiers).toEqual([{ kind: 'rent', value: 1.5, days: 180 }])
+  })
+})
+
+describe('contract renewal (GAMEPLAY V2 §8.4)', () => {
+  /** A Series A company (plenty of cash, a full move week) with one contract that ends in `days` (+ smaller deals), a day on. */
+  function withContract(days = B.SALES_CONTRACT_DAYS, stage: StageIndex = 3, small: number[] = []): GameState {
+    let s = api.createGame({ seed: 1 })
+    for (let i = 1; i <= stage; i++) enterStage(s, i as StageIndex)
+    const day = s.time.day
+    const deals = small.map((mrr, i) => ({ id: `small-${i}`, name: `S${i}`, mrr, sinceDay: day, untilDay: day + days }))
+    s = { ...s, stats: { ...s.stats, cash: 50_000_000 }, finance: { ...s.finance, enterpriseCustomers: [{ id: 'ent-1', name: 'Acme', mrr: 10_000, sinceDay: day, untilDay: day + days }, ...deals] } }
+    return api.step(s, 1)
+  }
+  const fresh = (s: GameState): GameState => ({ ...s, founder: { ...s.founder, moves: { left: 5, weekStart: Math.floor(s.time.day) } } })
+  const renew = (s: GameState, offer: 'hold' | 'discount') => api.applyAction(fresh(s), { type: 'renewContract', id: 'ent-1', offer })
+
+  it('without the verb a contract leaves after 360 days; renewalDue comes 30 days before', () => {
+    const s0 = withContract()
+    const until = s0.finance.enterpriseCustomers[0]!.untilDay!
+    const before = api.step(s0, until - B.RENEWAL_NOTICE_DAYS - s0.time.day - 1)
+    expect(before.events.some((e) => e.kind === 'renewalDue')).toBe(false)
+    expect(before.derived.renewals).toBeUndefined()
+    const due = api.step(before, 1.5)
+    expect(due.events.filter((e) => e.kind === 'renewalDue' && e.refId === 'ent-1')).toHaveLength(1)
+    expect(due.derived.renewals!.map((r) => r.id)).toEqual(['ent-1'])
+    expect(due.derived.horizon!.find((h) => h.kind === 'renewal')).toMatchObject({ day: until, contractId: 'ent-1', amount: 10_000 })
+    // Unanswered: gone on its day, with its MRR, and the notice never repeats.
+    const gone = api.step(due, until - due.time.day + 0.5)
+    expect(gone.finance.enterpriseCustomers).toHaveLength(0)
+    expect(gone.events.filter((e) => e.kind === 'renewalDue')).toHaveLength(1)
+    expect(gone.events.some((e) => e.kind === 'contractLost' && e.refId === 'ent-1')).toBe(true)
+    // Before Series A a contract simply ends: no notice, no verb.
+    const seed = withContract(10, 2)
+    expect(api.step(seed, 5).events.some((e) => e.kind === 'renewalDue')).toBe(false)
+    expect(renew(seed, 'discount').error).toBe('notUnlocked')
+  })
+
+  it('only the key accounts (the RENEWAL_KEY_ACCOUNTS biggest) come up; a smaller deal ends on its day', () => {
+    // ent-1 + (RENEWAL_KEY_ACCOUNTS − 1) whales are the key accounts; the last, small deal is not.
+    const whales = Array.from({ length: B.RENEWAL_KEY_ACCOUNTS - 1 }, () => 9_000)
+    const smallId = `small-${whales.length}`
+    const keys = ['ent-1', ...whales.map((_, i) => `small-${i}`)]
+    const s = withContract(B.RENEWAL_NOTICE_DAYS - 2, 3, [...whales, 2_000])
+    const due = s.events.filter((e) => e.kind === 'renewalDue').map((e) => e.refId)
+    expect(due.sort()).toEqual([...keys].sort())
+    expect(s.derived.renewals!.map((r) => r.id).sort()).toEqual([...keys].sort())
+    expect(api.applyAction(s, { type: 'renewContract', id: smallId, offer: 'discount' }).error).toBe('notFound')
+    // Settled on its notice day: the whales leaving later never turn the small deal into a last-minute renewal.
+    const alone = api.step({ ...s, finance: { ...s.finance, enterpriseCustomers: s.finance.enterpriseCustomers.filter((c) => c.id === smallId) } }, 1)
+    expect(alone.events.some((e) => e.kind === 'renewalDue' && e.refId === smallId)).toBe(false)
+    expect(alone.derived.renewals ?? []).toEqual([])
+    const end = api.step(s, B.RENEWAL_NOTICE_DAYS)
+    expect(end.finance.enterpriseCustomers).toHaveLength(0)
+  })
+
+  it("the verb: not before the notice, one move; 'discount' keeps it at × 0.85 for 360 days and leaves a trace", () => {
+    expect(renew(withContract(), 'discount').error).toBe('cooldown')
+    const s = withContract(B.RENEWAL_NOTICE_DAYS - 1)
+    expect(api.applyAction(s, { type: 'renewContract', id: 'nope', offer: 'hold' }).error).toBe('notFound')
+    expect(api.applyAction(s, { type: 'renewContract', id: 'ent-1', offer: 'maybe' as never }).error).toBe('invalid')
+    expect(api.applyAction({ ...s, founder: { ...s.founder, moves: { left: 0, weekStart: 0 } } }, { type: 'renewContract', id: 'ent-1', offer: 'discount' }).error).toBe('noMoves')
+    const r = renew(s, 'discount')
+    expect(r.ok).toBe(true)
+    const c = r.state.finance.enterpriseCustomers[0]!
+    expect(c.mrr).toBe(Math.round(10_000 * B.RENEW_DISCOUNT_MRR))
+    expect(c.discounted).toBe(true)
+    expect(c.renewalDue).toBeUndefined()
+    expect(c.untilDay).toBeCloseTo(r.state.time.day + B.SALES_CONTRACT_DAYS, 6)
+    expect(r.state.founder.moves!.left).toBe(5 - B.MOVE_COST.renewContract)
+    expect(r.state.counters.renewals).toBe(1)
+    expect(r.state.events.some((e) => e.kind === 'contractRenewed' && e.value === c.mrr)).toBe(true)
+    // The trace: the next 'hold' is RENEW_DISCOUNTED_HOLD less likely.
+    expect(renewHoldChance(s, s.finance.enterpriseCustomers[0]!) - renewHoldChance(r.state, c)).toBeCloseTo(B.RENEW_DISCOUNTED_HOLD, 6)
+  })
+
+  it("'hold': at chance 1 it stays at × 1.1, at chance 0 it leaves now", () => {
+    const s = withContract(B.RENEWAL_NOTICE_DAYS - 1)
+    const sure = { ...s, rivals: [], derived: { ...s.derived, avgMaturity: 1 } }
+    expect(renewHoldChance(sure, sure.finance.enterpriseCustomers[0]!)).toBe(1)
+    const kept = renew(sure, 'hold').state
+    expect(kept.finance.enterpriseCustomers[0]!.mrr).toBe(Math.round(10_000 * B.RENEW_HOLD_MRR))
+    const lost = { ...s, derived: { ...s.derived, avgMaturity: 0 }, rivals: [{ id: 'r', name: 'R', bornDay: 0, strength: 0.9, share: 2, mrr: 1, valuation: 1, momentum: 0 as const }] }
+    expect(renewHoldChance(lost, lost.finance.enterpriseCustomers[0]!)).toBe(0)
+    const r = renew(lost, 'hold')
+    expect(r.ok).toBe(true)
+    expect(r.state.finance.enterpriseCustomers).toHaveLength(0)
+    expect(r.state.events.some((e) => e.kind === 'contractLost')).toBe(true)
+  })
+
+  it("'hold' EV ≥ 'discount' EV from maturity 0.7 with no rival share, higher with it; the key-account storm takes 0.2 off", () => {
+    const s = withContract(B.RENEWAL_NOTICE_DAYS - 1)
+    const c = s.finance.enterpriseCustomers[0]!
+    for (const m of [0.7, 0.85, 1]) {
+      const at = { ...s, rivals: [], derived: { ...s.derived, avgMaturity: m } }
+      expect(renewHoldChance(at, c) * B.RENEW_HOLD_MRR).toBeGreaterThanOrEqual(B.RENEW_DISCOUNT_MRR)
+    }
+    const low = { ...s, rivals: [], derived: { ...s.derived, avgMaturity: 0.4 } }
+    expect(renewHoldChance(low, c) * B.RENEW_HOLD_MRR).toBeLessThan(B.RENEW_DISCOUNT_MRR)
+    // With the B/C rival share (Σ 0.15–0.35) maturity 0.7 is no longer enough: each 0.1 share takes 0.03 off the chance,
+    // so the threshold moves up (the bots compare the view's holdChance, not the maturity).
+    const rival = { id: 'r', name: 'R', bornDay: 0, strength: 0.6, share: 0.35, mrr: 1, valuation: 1, momentum: 0 as const }
+    const shared = { ...s, rivals: [rival], derived: { ...s.derived, avgMaturity: 0.7 } }
+    expect(renewHoldChance(shared, c)).toBeCloseTo(0.5 + 0.5 * 0.7 - B.RENEW_HOLD_SHARE * 0.35, 6)
+    expect(renewHoldChance(shared, c) * B.RENEW_HOLD_MRR).toBeLessThan(B.RENEW_DISCOUNT_MRR)
+    const mature = { ...shared, derived: { ...shared.derived, avgMaturity: 1 } }
+    expect(renewHoldChance(mature, c) * B.RENEW_HOLD_MRR).toBeGreaterThanOrEqual(B.RENEW_DISCOUNT_MRR)
+    const calm = { ...s, rivals: [], derived: { ...s.derived, avgMaturity: 0.8 } }
+    const storm = { ...calm, modifiers: [{ id: 'm', kind: 'churn' as const, value: 1.2, untilDay: s.time.day + 60, source: `crisis:${B.RENEW_CRISIS_ID}` }] }
+    expect(renewHoldChance(calm, c) - renewHoldChance(storm, c)).toBeCloseTo(B.RENEW_HOLD_CRISIS, 6)
+    // The view prices both offers for the UI.
+    const due = api.step(s, 1)
+    expect(due.derived.renewals![0]).toMatchObject({ id: 'ent-1', holdMrr: 11_000, discountMrr: 8_500, error: null })
   })
 })

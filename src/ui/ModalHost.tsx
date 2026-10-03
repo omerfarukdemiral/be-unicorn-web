@@ -8,13 +8,15 @@
 // Everything else (Defter cards, decisions, round, settings) opens in the single right panel.
 import { useCallback, useEffect, useRef } from 'react'
 import { useGameStore } from '../store/gameStore'
+import type { GameOverState } from '../engine/types'
 import type { Overlay } from '../store/types'
 import { requestOverlay, useModalQueue } from './modalQueue'
 import { PaydayOverlay } from './overlays/PaydayOverlay'
 import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
 import { CenterFrame } from './stats/CenterFrame'
 
-function gameOverOverlay(kind: 'bankrupt' | 'teamLost' | 'unicorn'): Overlay {
+/** 'acquired' (the sale, GAMEPLAY V2 §8.2) shows the post-mortem frame until it has its own screen. */
+function gameOverOverlay(kind: GameOverState['kind']): Overlay {
   return kind === 'unicorn' ? { kind: 'victory' } : { kind: 'postMortem' }
 }
 

@@ -104,7 +104,8 @@ export function nextCrisis(s: GameState): NextCrisis | undefined {
 /**
  * The next HORIZON_DAYS: paydays with their projected lump, delayed decision effects (with the source card),
  * release ETAs at today's build speed, the round close and a ready round, the payday desk's last day, a saturated market. Sorted by day. The next crisis looks
- * further (CRISIS_HORIZON_DAYS): "?" until its reveal, then its id.
+ * further (CRISIS_HORIZON_DAYS): "?" until its reveal, then its id. Known exams (GAMEPLAY V2 §8.3–8.4) show however far:
+ * the board's quarter end with its target MRR, and every contract up for renewal on its last day.
  */
 export function horizon(s: GameState): HorizonItem[] {
   const now = s.time.day
@@ -156,6 +157,9 @@ export function horizon(s: GameState): HorizonItem[] {
   if (desk) out.push({ kind: 'payday', due: true, day: desk.day + B.PAYDAY_DECIDE_DAYS, amount: Math.max(0, owedTotal(s) - s.stats.cash) })
   // GAMEPLAY V2 §8.1: a market ≥ 70% full is a storm already here (ads go to waste): today, until a segment opens.
   if ((s.derived.penetration ?? 0) >= B.MARKET_SATURATION_PEN) out.push({ kind: 'saturation', day: now })
+  const board = s.derived.board
+  if (board) out.push({ kind: 'board', day: board.endDay, amount: board.targetMrr })
+  for (const r of s.derived.renewals ?? []) out.push({ kind: 'renewal', day: r.untilDay, amount: r.mrr, contractId: r.id, contractName: r.name })
   const crisis = nextCrisis(s)
   if (crisis && crisis.day <= now + B.CRISIS_HORIZON_DAYS) {
     out.push({ kind: 'crisis', day: crisis.day, hidden: crisis.hidden, ...(crisis.id !== undefined ? { crisisId: crisis.id } : {}) })

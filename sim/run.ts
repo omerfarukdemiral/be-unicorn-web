@@ -473,6 +473,35 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   line(`- Rakip Σpay Series B sonu medyanı (iyi botlar, ${inB.length} koşu): ${shareB === null ? '—' : shareB.toFixed(2)} (hedef 0.15–0.35): **${yes(shareB !== null && shareB >= 0.15 && shareB <= 0.35)}** · Seed / A / C ${[2, 3, 5].map((st) => (median(goodRuns.filter((r) => r.techDebtByStage[st] !== null).map((r) => r.rivalShareByStage[st]!)) ?? 0).toFixed(2)).join(' / ')}`)
 }
 {
+  // GAMEPLAY V2 §8.3 board, §8.4 renewals, §8.2 the sale (Series B / C).
+  const quarters = (runs: BotRun[]) => runs.reduce((a, r) => a + r.boardQuarters.hit + r.boardQuarters.missed, 0)
+  const missed = (runs: BotRun[]) => runs.reduce((a, r) => a + r.boardQuarters.missed, 0)
+  crit('Kurul çeyrek kaçırma B/C, iyi botlar (çeyrek)', band(missed(goodRuns), quarters(goodRuns), 0.3, 0.5))
+  // The coaster stalls before Series B: its quarters are read from A on (all its board quarters).
+  const all = v2('coaster').map((r) => r.boardQuartersAll)
+  const coasterQ = all.reduce((a, q) => a + q.hit + q.missed, 0)
+  const coasterReachedA = v2('coaster').filter((r) => r.stageDays[3] != null).length
+  // No quarter closed (the coaster never reached Series A): the line measures nothing, so it is not a pass.
+  if (coasterQ === 0) line(`- Kurul çeyrek kaçırma, coaster (A–C): n = 0, ölçülmedi (A'ya ulaşan coaster ${coasterReachedA}/${SEEDS}): **HAYIR**`)
+  else crit('Kurul çeyrek kaçırma, coaster (A–C, çeyrek)', band(all.reduce((a, q) => a + q.missed, 0), coasterQ, 0.8, 1), ` · A'ya ulaşan ${coasterReachedA}/${SEEDS}`)
+  // Per run over §15's population: every good bot that reached Series B. Only bootstrap / niche call on enterprises
+  // (useSalesCalls), so the sellers' own rate is shown beside it, never in its place.
+  const inBC = goodRuns.filter((r) => r.stageDays[4] != null)
+  const offered = inBC.map((r) => r.renewals.offered)
+  const total = offered.reduce((a, n) => a + n, 0)
+  const perRun = total / Math.max(1, offered.length)
+  const kept = inBC.reduce((a, r) => a + r.renewals.kept, 0)
+  const sellers = inBC.filter((r) => r.kind === 'bootstrap' || r.kind === 'niche')
+  const sellerRate = sellers.reduce((a, r) => a + r.renewals.offered, 0) / Math.max(1, sellers.length)
+  line(`- Yenileme kararı B/C koşu başına (iyi botlar, B'ye ulaşan ${inBC.length} koşu, ortalama): ${perRun.toFixed(1)} (hedef 4–10) · yenilenen ${pct(kept, total)} (hedef ≥ %60): **${yes(inBC.length > 0 && perRun >= 4 && perRun <= 10 && total > 0 && kept / total >= 0.6)}** · koşu başına ${offered.length ? `${Math.min(...offered)}–${Math.max(...offered)}` : '—'} · satıcılar (bootstrap + niche, ${sellers.length} koşu) ${sellerRate.toFixed(1)}`)
+  const acquired = (runs: BotRun[]) => runs.filter((r) => r.end === 'acquired').length
+  crit("'acquired' bitişi, iyi botlar", band(acquired(goodRuns), goodRuns.length, 0, 0))
+  // The offer only comes in Series C: with no careless run there the line measures nothing, so it is not a pass.
+  const carelessC = careless.filter((r) => r.stageDays[5] != null).length
+  if (carelessC === 0) line(`- 'acquired' bitişi, careless: C'ye ulaşan careless 0/${careless.length}, ölçülmedi: **HAYIR**`)
+  else crit("'acquired' bitişi, careless", band(acquired(careless), careless.length, 0.1, 0.3), ` · C'ye ulaşan careless ${carelessC}/${careless.length}`)
+}
+{
   // GAMEPLAY V2 §6.2 loan and §6.3 failed rounds (good bots = the 4 archetypes).
   const took = goodRuns.filter((r) => r.loansTaken > 0)
   crit('İyi botlarda kredi alan koşu', band(took.length, goodRuns.length, 0, 0.3))

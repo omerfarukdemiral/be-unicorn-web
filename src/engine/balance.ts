@@ -28,7 +28,7 @@ export const ROUND_AMOUNT: readonly (number | null)[] = [null, 150_000, 800_000,
 export const STAGE_UNLOCK_TOOLS: Readonly<Partial<Record<number, readonly ToolId[]>>> = {
   1: ['capTableView'],
   // Seed's price control is unlocked by the `pricing` concept (Hisset → Adlandır → Kullan).
-  3: ['adBudget', 'refactor', 'segments'],
+  3: ['adBudget', 'refactor', 'segments', 'renewal'],
   4: ['enterpriseSales', 'mna'],
 }
 export const ROUND_EQUITY: readonly (number | null)[] = [null, 0.1, 0.15, 0.18, 0.15, 0.12, null]
@@ -460,6 +460,59 @@ export const SALES_CALL_FULL_PER_MONTH = 2
 export const SALES_CALL_SATURATION = 0.5
 /** Enterprise contracts run this long, then the customer leaves (contract length, no churn in between). */
 export const SALES_CONTRACT_DAYS = 360
+
+/**
+ * GAMEPLAY V2 §8.4 renewal (from Series A): RENEWAL_NOTICE_DAYS before its end a key account (one of the
+ * RENEWAL_KEY_ACCOUNTS biggest contracts on that day: the whales the key-account storm names) comes up for renewal;
+ * left unanswered it leaves on its day. The smaller deals end on their day as before.
+ * [DENGE, T19 sim] Key accounts only, not every contract (§8.4 says all): the sellers make up to ~280 sales calls a run
+ * and each would come back once a year for good, burying the week under paperwork. At 4 the good bots meet ~4.7
+ * renewals per B/C run (band 4–10; the sellers ~9, the others none), at 2 only ~2.9. 'hold' asks for more: it stays at MRR × RENEW_HOLD_MRR with chance
+ * RENEW_HOLD_BASE + RENEW_HOLD_MAT × avgMaturity − RENEW_HOLD_SHARE × Σ rival share (− RENEW_HOLD_CRISIS while the
+ * key-account-renewal storm is on, − RENEW_DISCOUNTED_HOLD if it was bought with a discount before), else it leaves
+ * now. 'discount' keeps it for sure at MRR × RENEW_DISCOUNT_MRR and marks it. A renewed contract runs
+ * SALES_CONTRACT_DAYS again. With no rival share, at maturity ≥ 0.7 'hold' is worth at least 'discount'
+ * (0.85 × 1.1 ≥ 0.85); each 0.1 of rival share takes 0.03 off the chance, so in B/C (Σshare 0.15–0.35) it needs more
+ * maturity: derived.renewals carries the chance, the comparison is holdChance × RENEW_HOLD_MRR vs RENEW_DISCOUNT_MRR.
+ */
+export const RENEWAL_FROM_STAGE: StageIndex = 3
+export const RENEWAL_NOTICE_DAYS = 30
+export const RENEWAL_KEY_ACCOUNTS = 4
+export const RENEW_HOLD_BASE = 0.5
+export const RENEW_HOLD_MAT = 0.5
+export const RENEW_HOLD_SHARE = 0.3
+export const RENEW_HOLD_CRISIS = 0.2
+export const RENEW_DISCOUNTED_HOLD = 0.1
+export const RENEW_HOLD_MRR = 1.1
+export const RENEW_DISCOUNT_MRR = 0.85
+/** The calendar crisis that makes 'hold' harder while its modifiers last (content/crises.ts). */
+export const RENEW_CRISIS_ID = 'key-account-renewal'
+
+/**
+ * GAMEPLAY V2 §8.3 board (from Series A): on arriving at A and every BOARD_QUARTER_DAYS the board sets
+ * targetMrr = MRR × (1 + growthAsk)^3 (three months at the investor's ask). Hit → reputation +BOARD_HIT_REPUTATION and
+ * BOARD_HIT_EQUITY less equity in the next round (at most BOARD_CREDIT_MAX quarters stack); missed
+ * BOARD_PENALTY_MISSES in a row → flags.boardCapPenalty (multiple × BOARD_CAP_PENALTY until a hit) and the
+ * board-review card (it takes the card budget like a crisis card).
+ * [DENGE, T19 sim] After a miss the board revises its plan: the next quarter asks growthAsk × BOARD_REVISED_ASK. At the
+ * full ask every quarter the ×0.8 cap held so often that only 24/48 good bots reached Unicorn in 3000 days (99 min
+ * censored median); revised at 0.5 they miss ~32% of B/C quarters (band 30–50%) and 33/48 arrive (88 min).
+ */
+export const BOARD_FROM_STAGE: StageIndex = 3
+export const BOARD_QUARTER_DAYS = 90
+export const BOARD_REVISED_ASK = 0.5
+export const BOARD_HIT_REPUTATION = 3
+export const BOARD_HIT_EQUITY = 0.005
+export const BOARD_CREDIT_MAX = 4
+export const BOARD_PENALTY_MISSES = 2
+export const BOARD_PENALTY_FLAG = 'boardCapPenalty'
+export const BOARD_REVIEW_CARD_ID = 'board-review'
+
+/**
+ * GAMEPLAY V2 §8.2 sub-ending: the acquisition-offer's "sell" option sets this flag (content/decisions.ts mirrors the
+ * name) and the run ends as 'acquired'.
+ */
+export const ACQUIRED_FLAG = 'companySold'
 
 // ---------------------------------------------------------------------------
 // Hiring

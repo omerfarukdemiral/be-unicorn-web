@@ -15,6 +15,8 @@ import {
   type ActionErrorCode,
   type AcquisitionView,
   type Archetype,
+  type BoardState,
+  type BoardView,
   type DirectorState,
   type GameState,
   type MarketSegmentId,
@@ -241,7 +243,7 @@ export function ensureRivals(s: GameState, rng?: Rng): void {
   while (rivals.length < want) spawnRival(s, rng)
 }
 
-/** The investor's ask at this stage (the same pace DD measures, with its modifiers). */
+/** The investor's ask at this stage (the same pace DD measures, with its modifiers; the board asks it too). */
 function rivalAsk(s: GameState): number {
   return B.DILIGENCE_MOM[Math.min(B.DILIGENCE_MOM.length - 1, s.stage)]! * modifierMult(s, 'diligenceMom')
 }
@@ -289,6 +291,81 @@ function checkLeadPassed(s: GameState): void {
     lead.ahead = true
     pushEvent(s, { kind: 'rivalPassed', refId: lead.id, value: lead.valuation })
   } else if (lead.ahead && own > lead.mrr * B.RIVAL_PASS_RESET) lead.ahead = false
+}
+
+// ---------------------------------------------------------------------------
+// Board (GAMEPLAY V2 §8.3): a known exam every quarter from Series A. A miss does not kill: two in a row cap the
+// multiple until the next hit (a door back stays open).
+// ---------------------------------------------------------------------------
+
+/** The quarter's target: MRR × (1 + ask)^3, three months at the investor's pace (whole dollars). */
+export function boardTarget(mrr: number, ask: number): number {
+  return Math.round(Math.max(0, mrr) * (1 + ask) ** 3)
+}
+
+/** A board whose first quarter starts on `day`: arriving at Series A, or an older save from A on (save.ts, no state read). */
+export function newBoard(day: number, mrr: number, ask: number): BoardState {
+  return { quarterStart: Math.floor(day), targetMrr: boardTarget(mrr, ask), missed: 0, streak: 0 }
+}
+
+/**
+ * The board from Series A (undefined before). A save from A on that has none gets its first quarter from today, and
+ * with it the stage's 'renewal' tool (both came with this wave). Mutates: engine paths only.
+ */
+export function boardOf(s: GameState): BoardState | undefined {
+  if (s.stage < B.BOARD_FROM_STAGE) return undefined
+  if (!s.board) {
+    s.board = newBoard(s.time.day, s.finance.mrr, rivalAsk(s))
+    uniquePush(s.unlockedTools, 'renewal')
+  }
+  return s.board
+}
+
+/**
+ * Daily: the quarter ends BOARD_QUARTER_DAYS after it began. Hit (MRR ≥ target): reputation, a round-equity credit, the
+ * cap penalty lifted. Missed: BOARD_PENALTY_MISSES in a row raise flags.boardCapPenalty and bring the board-review card
+ * (queued: it takes the next card slot, like a crisis card). Either way the next quarter starts at today's MRR (after a
+ * miss at the revised ask).
+ */
+export function dailyBoard(s: GameState, content: EngineContent): void {
+  const b = boardOf(s)
+  if (!b || s.gameOver || s.time.day < b.quarterStart + B.BOARD_QUARTER_DAYS) return
+  if (s.finance.mrr >= b.targetMrr) {
+    b.streak += 1
+    b.missed = 0
+    b.hits = (b.hits ?? 0) + 1
+    b.credit = Math.min(B.BOARD_CREDIT_MAX, (b.credit ?? 0) + 1)
+    s.stats.reputation = clamp(0, 100, s.stats.reputation + B.BOARD_HIT_REPUTATION)
+    delete s.flags[B.BOARD_PENALTY_FLAG]
+    pushEvent(s, { kind: 'boardHit', value: Math.round(s.finance.mrr) })
+  } else {
+    b.missed += 1
+    b.streak = 0
+    b.misses = (b.misses ?? 0) + 1
+    pushEvent(s, { kind: 'boardMissed', value: b.missed })
+    if (b.missed >= B.BOARD_PENALTY_MISSES && !s.flags[B.BOARD_PENALTY_FLAG]) {
+      s.flags[B.BOARD_PENALTY_FLAG] = true
+      const id = B.BOARD_REVIEW_CARD_ID
+      if (content.decisions.some((c) => c.id === id) && !s.decisions.queue.includes(id) && s.decisions.active?.cardId !== id) s.decisions.queue.push(id)
+    }
+  }
+  b.quarterStart = Math.floor(s.time.day)
+  // After a miss the board revises its plan (BOARD_REVISED_ASK): a door back to a hit, and the cap lifts with it.
+  b.targetMrr = boardTarget(s.finance.mrr, rivalAsk(s) * (b.missed > 0 ? B.BOARD_REVISED_ASK : 1))
+}
+
+/** derived.board: the running quarter (the horizon's "Kurul $X · 23g"). */
+export function boardView(s: GameState): BoardView | undefined {
+  const b = s.stage >= B.BOARD_FROM_STAGE ? s.board : undefined
+  if (!b) return undefined
+  return {
+    targetMrr: b.targetMrr,
+    endDay: b.quarterStart + B.BOARD_QUARTER_DAYS,
+    mrr: s.finance.mrr,
+    missed: b.missed,
+    streak: b.streak,
+    penalty: !!s.flags[B.BOARD_PENALTY_FLAG],
+  }
 }
 
 // ---------------------------------------------------------------------------

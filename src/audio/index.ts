@@ -106,7 +106,8 @@ function onStore(next: GameStore, prev: GameStore): void {
   // Game over replaces everything else in the same update.
   if (s.gameOver && !p.gameOver) {
     cursor = maxEventId(s)
-    cue(s.gameOver.kind === 'unicorn' ? 'victory' : 'gameOver')
+    // A sale (§8.2) is an exit, not a loss: it gets the round-close cue, not the game-over one.
+    cue(s.gameOver.kind === 'unicorn' ? 'victory' : s.gameOver.kind === 'acquired' ? 'roundClosed' : 'gameOver')
     return
   }
 

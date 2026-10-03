@@ -359,12 +359,17 @@ const TERMINAL_RETRIES = 3
 /** A run the board will not take (it first showed up already past Pre-seed, e.g. played offline before sign-in). */
 let refusedRun = -1
 
-function runStatus(s: GameState): RunStatus {
+/**
+ * The run's status on the board; null = not sent. A sold company ('acquired', GAMEPLAY V2 §8.2) is neither a Unicorn
+ * nor a bankruptcy: nothing goes up and its last 'playing' row stays (contract.ts RunStatus and the API are unchanged).
+ */
+export function runStatus(s: GameState): RunStatus | null {
   if (!s.gameOver) return 'playing'
+  if (s.gameOver.kind === 'acquired') return null
   return s.gameOver.kind === 'unicorn' && s.stage === 6 ? 'unicorn' : 'bankrupt'
 }
 
-/** Leaderboard body for a state (team counts the founder). */
+/** Leaderboard body for a state (team counts the founder). A run runStatus keeps off the board is never sent (submitNow). */
 export function submissionOf(s: GameState): LeaderboardSubmitBody {
   return {
     stage: s.stage,
@@ -374,7 +379,7 @@ export function submissionOf(s: GameState): LeaderboardSubmitBody {
     team: s.employees.length + 1,
     companyName: s.meta.companyName,
     runIndex: s.meta.runIndex,
-    status: runStatus(s),
+    status: runStatus(s) ?? 'playing',
   }
 }
 
@@ -384,7 +389,7 @@ export async function submitNow(opts: { withReplay?: boolean } = {}): Promise<vo
   if (!cs.account || cs.backend !== 'online') return
   const store = useGameStore.getState()
   const s = store.state
-  if (s.time.day < 1) return
+  if (s.time.day < 1 || runStatus(s) === null) return
   const body = submissionOf(s)
   if (body.runIndex === refusedRun) return
   const key = `${body.runIndex}:${body.stage}:${Math.floor(body.day)}:${body.status}:${Math.round(body.valuation)}:${Math.round(body.cash)}:${body.team}`

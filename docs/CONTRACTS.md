@@ -144,7 +144,7 @@ interface GameStore {
 }
 // effectiveSpeed({state, ui}) = 0 if gameOver or ui.pauseReasons non-empty, else state.time.speed.
 // ui.pauseReasons ('modal' | 'decision' | 'concept' | 'offer' | 'payday') is derived from overlay/panel (+ state for 'offer':
-// Büyüme › Tur open while the size choice or a weekly pitch waits); never dispatched as setSpeed.
+// Büyüme › Tur open — the only view with the size picker — while the size choice or a weekly pitch waits); never dispatched as setSpeed.
 // newGame()/load() start paused (time.speed 0, ui.runStarted false) until the player's first setSpeed > 0.
 ```
 

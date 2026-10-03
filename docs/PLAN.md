@@ -71,7 +71,7 @@ Her yatırım turunda oyuncu yeni ve daha büyük bir ofise taşınır. Mobilyal
 |---|---|---|---|---|---|---|---|
 | 0 Garaj | Garaj | 1 | 4 | — | — | — | Masa slotu, elle kullanıcı bulma |
 | 1 Pre-seed | Coworking köşesi | 2 | 10 | $500K | $150K | %10 | Ortak alan slotu, cap table |
-| 2 Seed | Küçük ofis | 3 | 18 | $3M | $800K | %15 | Oda slotu (toplantı), fiyat ayarı |
+| 2 Seed | Küçük ofis | 3 | 18 | $3M | $800K | %15 | Oda slotu (toplantı); fiyat ayarı `pricing` kartıyla (DECISIONS #9) |
 | 3 Series A | Açık plan kat | 4 | 30 | $15M | $4M | %18 | Reklam bütçesi, LTV:CAC paneli |
 | 4 Series B | İki katlı ofis | 5 | 44 | $75M | $20M | %15 | Sunucu odası, kurumsal satış |
 | 5 Series C | Bina | 6 | 60 | $300M | $150M | %12 | Özel slotlar (sahne, lab) |
@@ -191,7 +191,7 @@ Olgunluk düşükken reklamla gelen kullanıcı hızla gider. Bu, "ürün-pazar 
 ```
 arpu       = 4 × 1.15^aşama × fiyatÇarpanı × (1 + min(0.8, satış × 0.04)) × (0.3 + 0.7 × ortOlgunluk)
 MRR        = users × arpu
-fiyatÇarpanı: oyuncunun ayarı (0.7 – 1.6), Seed'de açılır
+fiyatÇarpanı: oyuncunun ayarı (0.7 – 1.6), Seed'de `pricing` kartı açılınca (DECISIONS #9)
 fiyat artışı → 1 ay boyunca churn × (1 + (fiyatÇarpanı − 1) × 0.8)
 ```
 

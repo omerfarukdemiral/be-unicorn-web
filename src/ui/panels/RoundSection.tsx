@@ -4,12 +4,14 @@
 // week's pitch. HUD grammar: the offer factor and the round-end runway are Stats (the runway red in the danger band),
 // each diligence row carries its +5% / −10% pill, the pitches are icon + number buttons. One sentence (the header).
 // Every number comes from state.derived.round / state.round / the engine selectors (the panel only shows them).
-// Open as {kind:'growth', section:'round'} while a choice waits, it is the `offer` focus pause.
+// The plain Büyüme hub shows the window as one row (Stats + a "Tur büyüklüğü" button); the size picker, diligence and
+// start live in Büyüme › Tur ({kind:'growth', section:'round'}), where a waiting size choice or weekly pitch is the
+// `offer` focus pause. The hub never pauses (§14.1).
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ROUND_SIZES, type DiligenceItem, type PitchOption, type RoundPitch, type RoundSize, type RoundSizeOption } from '../../engine/types'
 import { BURN_MULTIPLE_MAX, DILIGENCE_MET, DILIGENCE_UNMET, ROUND_FAIL_STRIKES } from '../../engine/balance'
-import { roundEndRunway } from '../../engine/loopSelectors'
+import { roundEndRunway, roundOutlook, type RoundOutlook } from '../../engine/loopSelectors'
 import { STAGES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
@@ -76,6 +78,28 @@ function RoundEndRunway() {
   )
 }
 
+const TREND_ARROW: Record<RoundOutlook['trend'], string> = { up: '↑', flat: '→', down: '↓' }
+
+/**
+ * The valuation multiple against the stage's ceiling (playtest LD4): amber + "Tavan" once more growth no longer lifts
+ * it, so waiting only grows the price through MRR.
+ */
+export function MultipleCap({ outlook: o }: { outlook: RoundOutlook }) {
+  return (
+    <Stat
+      label={t('round.multCap')}
+      icon="trend"
+      color="var(--color-brand)"
+      value={
+        <span data-mult-cap={o.atCap ? 'cap' : 'below'} className={o.atCap ? 'text-energy-ink' : undefined}>
+          {fixed(o.multiple, 1)}× <span className="text-[12px] text-ink-2">/ {fixed(o.cap, 0)}</span>
+        </span>
+      }
+      sub={o.atCap ? <Pill tint="var(--color-energy)" className="text-energy-ink">{t('round.capPill')}</Pill> : undefined}
+    />
+  )
+}
+
 /** Strikes (GAMEPLAY V2 §6.3): one pip per ROUND_FAIL_STRIKES, filled ones amber (a warning, not the red danger). */
 function Strikes({ strikes, risk }: { strikes: number; risk: number }) {
   return (
@@ -88,7 +112,7 @@ function Strikes({ strikes, risk }: { strikes: number; risk: number }) {
   )
 }
 
-export function RoundSection() {
+export function RoundSection({ setup = false }: { setup?: boolean }) {
   const s = useGameStore(
     useShallow((st) => ({
       stage: st.state.stage,
@@ -99,13 +123,17 @@ export function RoundSection() {
       equity: st.state.stats.equity,
     })),
   )
+  const outlook = useGameStore(useShallow((st) => (st.state.round?.active ? null : roundOutlook(st.state))))
   const dispatch = useGameStore((st) => st.dispatch)
+  const openPanel = useGameStore((st) => st.openPanel)
   const [size, setSize] = useState<RoundSize>('target')
   const active = s.round?.active ? s.round : undefined
   const view = s.view
   const next = STAGES[(active?.targetStage ?? s.stage + 1) as number]
   if (!view && !active) return null
   const chosen = view?.sizes?.find((x) => x.size === size)
+  // The hub's summary row: the picker opens in Büyüme › Tur (which holds time while the choice waits).
+  const summary = !active && s.canStart && !setup
 
   return (
     <section id="round-section" className="flex scroll-mt-2 flex-col gap-3 border-t border-border-strong pt-3">
@@ -113,7 +141,7 @@ export function RoundSection() {
         <IconBadge icon={active ? 'timer' : 'rocket'} size={36} color="var(--color-brand)" />
         <div className="min-w-0">
           <h2 className="text-base font-semibold leading-tight tracking-wide">{active ? t('round.activeTitle') : t('round.windowTitle', { stage: next?.name ?? '' })}</h2>
-          <p className="font-text text-xs text-ink-2">{active ? t('round.activeSub') : s.canStart ? t('round.windowOpen') : t('round.windowClosed', { v: money(view?.windowAt ?? 0) })}</p>
+          <p className="font-text text-xs text-ink-2">{active ? t('round.activeSub') : s.canStart ? t(outlook?.atCap && outlook.trend !== 'up' ? 'round.windowCapped' : 'round.windowOpen') : t('round.windowClosed', { v: money(view?.windowAt ?? 0) })}</p>
         </div>
       </header>
 
@@ -149,12 +177,26 @@ export function RoundSection() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <Stat label={t('round.mult')} icon="scale" color="var(--color-brand)" value={`${fixed(view.factor, 2)}×`} />
+          <div className="grid grid-cols-3 gap-2">
+            <Stat
+              label={t('round.mult')}
+              icon="scale"
+              color="var(--color-brand)"
+              value={`${fixed(view.factor, 2)}×`}
+              // Where the offer goes in ~30 days if the player waits (arrow = the valuation's direction).
+              sub={outlook ? <span data-outlook={outlook.trend} className="tabular">{TREND_ARROW[outlook.trend]} {fixed(outlook.factorIn30, 2)}×</span> : undefined}
+            />
+            {outlook && <MultipleCap outlook={outlook} />}
             <RoundEndRunway />
           </div>
 
-          {view.sizes && (
+          {summary && (
+            <Button tone="commit" icon="rocket" onClick={() => openPanel({ kind: 'growth', section: 'round' }, { replace: true })}>
+              {t('round.sizeTitle')}
+            </Button>
+          )}
+
+          {!summary && view.sizes && (
             <div className="flex flex-col gap-1">
               <div className="ui-label">{t('round.sizeTitle')}</div>
               <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('round.sizeTitle')}>
@@ -186,12 +228,16 @@ export function RoundSection() {
             </div>
           )}
 
-          <Diligence items={view.diligence} />
+          {!summary && (
+            <>
+              <Diligence items={view.diligence} />
 
-          <Button tone="commit" icon="rocket" disabled={!s.canStart} onClick={() => dispatch({ type: 'startRound', size })}>
-            {s.canStart ? t('round.startSize', { v: t(`round.size.${size}`) }) : t('round.notReady')}
-          </Button>
-          {view.downRound && chosen?.down && <DownRound option={chosen} retryIn={view.retryIn ?? 0} onStart={() => dispatch({ type: 'startRound', size, down: true })} />}
+              <Button tone="commit" icon="rocket" disabled={!s.canStart} onClick={() => dispatch({ type: 'startRound', size })}>
+                {s.canStart ? t('round.startSize', { v: t(`round.size.${size}`) }) : t('round.notReady')}
+              </Button>
+              {view.downRound && chosen?.down && <DownRound option={chosen} retryIn={view.retryIn ?? 0} onStart={() => dispatch({ type: 'startRound', size, down: true })} />}
+            </>
+          )}
         </>
       ) : null}
     </section>

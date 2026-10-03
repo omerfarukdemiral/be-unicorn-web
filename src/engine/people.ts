@@ -174,9 +174,10 @@ export function hireCandidate(s: GameState, c: Candidate, deskSlotId: string | u
     const slot = s.office.slots.find((x) => x.id === deskSlotId)
     if (slot) slot.occupantId = e.id
   }
-  // Builders join the oldest unfinished project.
+  // Builders join the least mature unfinished project; with none left they wait for the next one (idleBuilders).
   if (e.dept === 'eng' || e.dept === 'product') {
-    const p = s.projects.find((x) => x.maturity < 1)
+    let p: (typeof s.projects)[number] | undefined
+    for (const x of s.projects) if (x.maturity < 1 && (!p || x.maturity < p.maturity)) p = x
     if (p) {
       p.assignedIds.push(e.id)
       e.projectId = p.id

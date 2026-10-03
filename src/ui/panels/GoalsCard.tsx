@@ -3,12 +3,12 @@
 // HUD grammar (GAMEPLAY V2 §10.5): the valuation formula is a stacked bar of its parts, a ☆ shows its prize as a pill
 // (−1% hisse on the next round), the goal's hint is never rendered.
 import { useShallow } from 'zustand/react/shallow'
-import { GOAL_STAR_EQUITY_DISCOUNT } from '../../engine/balance'
+import { GOAL_STAR_EQUITY_DISCOUNT, VAL_PER_LAUNCHED, VAL_PER_RELEASE, VAL_PER_USER, VAL_RELEASE_MAX } from '../../engine/balance'
 import type { ValuationBreakdown } from '../../engine/types'
 import { goalsOfStage, STAGES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
-import { fixed, money, pct } from '../format'
+import { fixed, money, num, pct } from '../format'
 import { Bar, cx, Pill, SectionTitle } from '../primitives'
 import { Icon } from '../icons'
 import { effectSummary, optionLabel } from '../loopUi'
@@ -74,15 +74,18 @@ export function GoalsCard() {
   )
 }
 
-/** The valuation as a stacked bar of what builds it (engine valuationParts); the amounts in the legend. */
-function ValuationParts({ parts: v }: { parts: ValuationBreakdown }) {
+/**
+ * The valuation as a stacked bar of what builds it (engine valuationParts); the legend shows count × rate before
+ * revenue (playtest LD2: one more launch is a visible +$150K). Also drawn under Büyüme's product block.
+ */
+export function ValuationParts({ parts: v }: { parts: ValuationBreakdown }) {
   const R = ramp(WIDGET_COLOR.cash)
   const list: LegendPart[] =
     v.mode === 'pre'
       ? [
-          { value: v.launchedValue, color: R[0], label: t('goals.part.launched') },
-          { value: v.usersValue, color: R[1], label: t('goals.part.users') },
-          { value: v.releasesValue, color: R[2], label: t('goals.part.releases') },
+          { value: v.launchedValue, color: R[0], label: t('goals.part.launchedN', { n: v.launched, r: money(VAL_PER_LAUNCHED) }) },
+          { value: v.usersValue, color: R[1], label: t('goals.part.usersN', { n: num(v.users), r: money(VAL_PER_USER) }) },
+          { value: v.releasesValue, color: R[2], label: t('goals.part.releasesN', { n: v.releases, m: VAL_RELEASE_MAX, r: money(VAL_PER_RELEASE) }) },
         ]
       : [
           { value: v.total - v.preFade, color: R[0], label: t('goals.part.mrr', { x: fixed(v.multiple, 1) }) },

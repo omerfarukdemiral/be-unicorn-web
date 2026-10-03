@@ -10,6 +10,7 @@ import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFre
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
+import { idleBuilders } from './loopSelectors'
 import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
@@ -297,12 +298,11 @@ const startProject: Handler<'startProject'> = ({ s }, a) => {
     createdDay: s.time.day,
     assignedIds: [] as string[],
   }
-  // Idle builders join the new project.
-  for (const e of s.employees) {
-    if ((e.dept === 'eng' || e.dept === 'product') && e.projectId === undefined) {
-      e.projectId = p.id
-      p.assignedIds.push(e.id)
-    }
+  // Builders on no project (onboarding hires too) join the new one; finished projects keep theirs for updates.
+  for (const id of idleBuilders(s, true)) {
+    const e = s.employees.find((x) => x.id === id)!
+    e.projectId = p.id
+    p.assignedIds.push(e.id)
   }
   s.projects.push(p)
   incCounter(s, 'projectsStarted')

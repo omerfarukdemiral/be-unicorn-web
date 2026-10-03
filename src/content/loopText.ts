@@ -126,6 +126,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'round.windowTitle': '{stage} turu',
   'round.windowClosed': 'Pencere {v} değerlemede açılır',
   'round.windowOpen': 'Pencere açık: şimdi mi, biraz daha mı?',
+  'round.windowCapped': 'Çarpan tavanda; beklemek az kazandırır.',
   'round.windowProgress': 'Değerleme {v} / pencere {w}',
   'round.priceNow': 'Değerleme hedefin {p} kadarı → teklif çarpanı ×{f}',
   'round.priceHint': 'Erken başlarsan fiyat kilitlenir, beklersen teklif büyür.',

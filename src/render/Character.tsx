@@ -101,6 +101,8 @@ export interface EmployeeCharacterProps {
   speed: number
   /** Derived overload > 0: engineers rush. */
   overload: boolean
+  /** A builder with nothing to build (idleBuilders): the "…" marker while otherwise working. */
+  idle: boolean
   selected: boolean
   onSelect: (id: string) => void
 }
@@ -115,6 +117,7 @@ function sameEmployeeProps(a: EmployeeCharacterProps, b: EmployeeCharacterProps)
     a.layout === b.layout &&
     a.speed === b.speed &&
     a.overload === b.overload &&
+    a.idle === b.idle &&
     a.selected === b.selected &&
     a.onSelect === b.onSelect
   )
@@ -224,7 +227,8 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
     setSpeakerPos(e.id, mover.x, HEAD_Y + lift, mover.z, !mover.outside)
   })
 
-  const showIcon = employee.status !== 'working'
+  const iconKind = employee.status === 'working' && props.idle ? 'idle' : employee.status
+  const showIcon = iconKind !== 'working'
   return (
     <>
       <group ref={root}>
@@ -233,7 +237,7 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
       </group>
       {showIcon && (
         <group ref={icon}>
-          <StatusIcon status={employee.status} />
+          <StatusIcon status={iconKind} />
         </group>
       )}
     </>

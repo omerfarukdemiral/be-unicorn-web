@@ -43,9 +43,14 @@ export function LawbookScreen() {
     const st = useGameStore.getState().state
     return lawbookView(POLICIES, st.derived.policies, (id) => policyError(st, CONTENT, id), st)
   }, [gate])
-  const firstOpen = book.trees.flatMap((g) => g.cards).find((c) => c.status === 'open')?.id ?? null
+  const cards = book.trees.flatMap((g) => g.cards)
+  // Unpicked, the bar shows the first open law; right after a signature none is open, so it keeps the countdown
+  // (first waiting law) or the law just signed instead of falling back to "Yasa seç".
+  const firstOpen = cards.find((c) => c.status === 'open')?.id ?? null
+  const firstWait = cards.find((c) => c.status === 'wait')?.id ?? null
+  const lastSigned = useGameStore((s) => s.state.policies?.adopted.at(-1) ?? null)
   const [picked, setPicked] = useState<PolicyId | null>(null)
-  const sel = book.trees.flatMap((g) => g.cards).find((c) => c.id === (picked ?? firstOpen)) ?? null
+  const sel = cards.find((c) => c.id === (picked ?? firstOpen ?? firstWait ?? lastSigned)) ?? null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-lawbook>
@@ -71,7 +76,7 @@ export function LawbookScreen() {
               <ul className="flex flex-col gap-1">
                 {g.cards.map((c) => (
                   <li key={c.id}>
-                    <LawCardButton card={c} on={sel?.id === c.id} onPick={() => setPicked(c.id)} />
+                    <LawCardButton card={c} on={sel?.id === c.id} waitLeft={book.wait.left} onPick={() => setPicked(c.id)} />
                   </li>
                 ))}
               </ul>
@@ -79,12 +84,12 @@ export function LawbookScreen() {
           ))}
         </div>
       </div>
-      <SignBar card={sel} day={day} />
+      <SignBar card={sel} day={day} waitLeft={book.wait.left} waitTotal={book.wait.total} />
     </div>
   )
 }
 
-function LawCardButton({ card, on, onPick }: { card: LawCard; on: boolean; onPick: () => void }) {
+function LawCardButton({ card, on, waitLeft, onPick }: { card: LawCard; on: boolean; waitLeft: number; onPick: () => void }) {
   const silhouette = card.status === 'locked' || card.status === 'closed'
   return (
     <button
@@ -104,6 +109,7 @@ function LawCardButton({ card, on, onPick }: { card: LawCard; on: boolean; onPic
         <span className="block truncate text-[13px] font-semibold text-ink">{card.name}</span>
         {card.status === 'locked' && <span className="tabular block text-[11px] font-semibold text-ink-2">{lockText(card.lock)}</span>}
         {card.status === 'closed' && <span className="block text-[11px] font-semibold text-ink-3">{t('law.closed')}</span>}
+        {card.status === 'wait' && <span className="tabular block text-[11px] font-semibold text-ink-2">{t('law.wait', { d: waitLeft })}</span>}
       </span>
       {card.status === 'signed' && <Icon name="check" size={16} className="shrink-0 text-positive-ink" />}
       {(card.status === 'signed' || silhouette) && <Icon name="lock" size={14} className="shrink-0 text-ink-3" />}
@@ -112,8 +118,11 @@ function LawCardButton({ card, on, onPick }: { card: LawCard; on: boolean; onPic
   )
 }
 
-/** The picked law: its sentence, the survival price, the money preview, the commit (or the reason it cannot be signed). */
-function SignBar({ card, day }: { card: LawCard | null; day: number }) {
+/**
+ * The picked law: its sentence, the survival price, the money preview, the commit (or the reason it cannot be signed).
+ * A blocked commit says why as a number: the cooldown's days left (with the header's ring beside it), or the moves.
+ */
+function SignBar({ card, day, waitLeft, waitTotal }: { card: LawCard | null; day: number; waitLeft: number; waitTotal: number }) {
   const dispatch = useGameStore((s) => s.dispatch)
   const id = card?.id ?? null
   const status = card?.status
@@ -128,6 +137,16 @@ function SignBar({ card, day }: { card: LawCard | null; day: number }) {
     )
   }
   const canSign = card.status === 'open' && card.error === null
+  const cooling = card.error === 'cooldown'
+  const cost = cooling
+    ? t('law.wait', { d: waitLeft })
+    : card.error === 'noMoves'
+      ? `${moves?.left ?? 0}/${moves?.total ?? 0} · ${t('error.noMoves')}`
+      : card.error
+        ? t(`error.${card.error}`)
+        : moves
+          ? `${moves.left}/${moves.total}`
+          : undefined
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t border-border px-3 py-2.5 safe-bottom min-[640px]:flex-row min-[640px]:items-center" data-sign-bar={card.id}>
       <div className="min-w-0 flex-1">
@@ -154,11 +173,19 @@ function SignBar({ card, day }: { card: LawCard | null; day: number }) {
             {t('law.final')}
           </Pill>
           <CostPreview preview={preview} />
+          {card.status === 'wait' && (
+            <span className="relative grid size-9 shrink-0 place-items-center" title={t('law.waitTitle')} data-sign-wait>
+              <Ring value={1 - waitLeft / waitTotal} size={36} stroke={3} />
+              <Icon name="timer" size={14} className="text-ink-2" />
+            </span>
+          )}
           <Button
             tone="commit"
+            icon={cooling ? 'timer' : undefined}
             disabled={!canSign}
+            title={cooling ? t('law.waitTitle') : undefined}
             onClick={() => dispatch({ type: 'adoptPolicy', policyId: card.id })}
-            cost={card.error ? t(`error.${card.error}`) : moves ? `${moves.left}/${moves.total}` : undefined}
+            cost={cost}
           >
             {t('law.sign')}
           </Button>

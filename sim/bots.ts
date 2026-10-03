@@ -225,6 +225,9 @@ export interface BotRun {
   roundsClosed: number
   downRounds: number
   crisesFired: number
+  /** Crisis calendar dates that passed, skipped ones included (a settled storm: fired, no id); the spacing check reads these. */
+  crisisDates: number[]
+  crisesSkipped: number
   crisisNearDeath: number
   /** Alive ≥ 180 days after the first near-death payday in NEAR_DEATH_STAGES (null = never near death there). */
   survivedNearDeath: boolean | null
@@ -1257,6 +1260,8 @@ export function playBot(
     roundsClosed,
     downRounds,
     crisesFired: crises.length,
+    crisisDates: (s.calendar ?? []).filter((c) => c.fired).map((c) => c.day),
+    crisesSkipped: (s.calendar ?? []).filter((c) => c.fired && c.id === null).length,
     crisisNearDeath: crises.filter((k) => k.minRunway < 2).length,
     survivedNearDeath: firstNearDeath === null ? null : !(failed && s.time.day - firstNearDeath < 180),
     survivedNearDeath3: firstNearDeath3 === null ? null : !(failed && s.time.day - firstNearDeath3 < 180),

@@ -1,7 +1,7 @@
 // Content barrel. Engine, render and UI import content ONLY from here.
 import type { ContentBundle, DecisionCard } from './types'
 import { STAGES } from './stages'
-import { CONCEPTS } from './concepts'
+import { CONCEPTS, PRICING_GATE } from './concepts'
 import { BOARD_CARDS, DECISIONS as CARD_DECISIONS } from './decisions'
 import { CRISES, CRISIS_CARDS } from './crises'
 import { SECRET_CARDS, THREAD_CARDS } from './threads'
@@ -32,7 +32,7 @@ const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...THREAD_CARDS, 
 const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT, ...HUD_TEXT }
 
 export * from './types'
-export { STAGES, CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }
+export { STAGES, CONCEPTS, PRICING_GATE, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }
 export { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT, UI_TEXT }
 // Additions (content lane): extra name pools, typed text tables, formatting helpers.
 export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }

@@ -10,6 +10,12 @@ import { TECH_DEBT_MIN_SPEED, TECH_DEBT_PER_POINT } from '../engine/balance'
 import { formatMoney, formatMonths, formatNumber, formatPercent, formatRatio } from './format'
 import { ARCHETYPE_TEXT } from './strings'
 
+/**
+ * The `pricing` concept's bar (DECISIONS #9): price control opens from this card, not from reaching Seed. Shared with
+ * the Büyüme lock (priceGate) so the conditions shown there are the ones the trigger checks.
+ */
+export const PRICING_GATE = { users: 500, maturity: 0.5, churn: 0.08 } as const
+
 const count = (s: GameState, k: keyof GameState['counters']): number => s.counters[k] ?? 0
 
 function firstHireDay(s: GameState): number | null {
@@ -286,7 +292,11 @@ export const CONCEPTS: readonly Concept[] = [
     id: 'pricing',
     stage: 2,
     // Valuable product (mature, users stay) still sold at the default price.
-    trigger: (s) => s.stats.users > 500 && s.finance.priceMultiplier <= 1 && s.derived.avgMaturity >= 0.5 && s.stats.churn < 0.08,
+    trigger: (s) =>
+      s.stats.users > PRICING_GATE.users &&
+      s.finance.priceMultiplier <= 1 &&
+      s.derived.avgMaturity >= PRICING_GATE.maturity &&
+      s.stats.churn < PRICING_GATE.churn,
     speaker: 'customer',
     bubble: 'Bu fiyata mı? Açıkçası iki katını da verirdim.',
     card: {

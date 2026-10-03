@@ -1,5 +1,6 @@
 // All characters in the scene: employees, the founder and visiting NPCs.
 import { useCallback, useMemo } from 'react'
+import { idleBuilders } from '../engine/loopSelectors'
 import { FOUNDER_SLOT_ID, type GameState } from '../engine/types'
 import { EmployeeCharacter, FounderCharacter } from './Character'
 import { Npc } from './Npc'
@@ -12,6 +13,8 @@ const selectPeople = (s: GameState) => [s.employees, s.visitors, s.founder.curre
 // Characters are memoised on the fields they draw, so this list re-rendering per tick stays cheap.
 export function People() {
   const [employees, visitors, action, chosenSpeed, overload] = useGS(selectPeople)
+  // Builders with nothing to build carry a "…" over the head (playtest LD1).
+  const idle = useGS(idleBuilders)
   // A focus pause (decision / Defter card / modal) holds the world still without touching time.speed.
   const held = useUi((u) => u.pauseReasons.length > 0)
   const slots = useOffice().slots
@@ -47,6 +50,7 @@ export function People() {
           layout={layout}
           speed={speed}
           overload={overload}
+          idle={idle.includes(e.id)}
           selected={selection?.kind === 'employee' && selection.id === e.id}
           onSelect={selectEmployee}
         />

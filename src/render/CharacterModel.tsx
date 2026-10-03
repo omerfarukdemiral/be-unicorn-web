@@ -105,8 +105,11 @@ export const CharacterModel = memo(function CharacterModel({ look, rig }: { look
   )
 })
 
+/** Amber "…" over a builder with nothing to build (playtest LD1). */
+const IDLE_COLOR = '#f2b544'
+
 /** Floating status icon above the head (PLAN §7.2). */
-export function StatusIcon({ status, y = 1.2 }: { status: EmployeeStatus | 'rest' | 'busy' | 'none'; y?: number }) {
+export function StatusIcon({ status, y = 1.2 }: { status: EmployeeStatus | 'rest' | 'busy' | 'idle' | 'none'; y?: number }) {
   const g = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
     if (!g.current) return
@@ -115,7 +118,7 @@ export function StatusIcon({ status, y = 1.2 }: { status: EmployeeStatus | 'rest
     g.current.rotation.y = t * 0.8
   })
   if (status === 'working' || status === 'none') return null
-  const color = status === 'rest' ? '#9cc9f5' : status === 'busy' ? '#c9a7f5' : STATUS_COLORS[status]
+  const color = status === 'rest' ? '#9cc9f5' : status === 'busy' ? '#c9a7f5' : status === 'idle' ? IDLE_COLOR : STATUS_COLORS[status]
   return (
     <group ref={g} position={[0, y, 0]}>
       {status === 'burnout' && (
@@ -146,6 +149,8 @@ export function StatusIcon({ status, y = 1.2 }: { status: EmployeeStatus | 'rest
           <mesh geometry={torusGeo(0.03, 0.01)} material={mat('#fbf8f2')} position={[0.06, 0, 0]} />
         </>
       )}
+      {status === 'idle' &&
+        [-0.08, 0, 0.08].map((x) => <mesh key={x} geometry={GEO.sphere} material={glowMat(color, 0.4)} scale={[0.045, 0.045, 0.045]} position={[x, 0, 0]} />)}
       {(status === 'rest' || status === 'busy') && (
         <>
           <mesh geometry={GEO.box} material={glowMat(color, 0.4)} scale={[0.12, 0.025, 0.025]} position={[0, 0.05, 0]} />

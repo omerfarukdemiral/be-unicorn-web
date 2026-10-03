@@ -4,7 +4,8 @@
 // the h52 bars (min(360, 46vw) wide, so the sheet never covers the top bar or pushes the strip off-screen); portrait
 // = one bottom sheet 8px above the bottom bar's tab row. The element carries data-scene-right / data-scene-sheet:
 // layout/useSceneInset measures it.
-// Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 13px uppercase title + the panel's primary number.
+// Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 13px uppercase title + the panel's labelled primary
+// number (KASA $15.1K: the label says which figure, since each panel shows a different one).
 import { type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useGameStore } from '../store/gameStore'
@@ -14,8 +15,9 @@ import { t } from './i18n'
 import { money, num, pct } from './format'
 import { cx, IconButton } from './primitives'
 import { iconTone, PANEL_COLOR } from './theme'
-import { panelHeadline, type HeadlineValue } from './panelHeadline'
-import { useIsMobile, useLayoutMode } from './hooks'
+import { ledgerMoney } from './widgets'
+import { panelHeadline, type HeadlineUnit, type HeadlineValue } from './panelHeadline'
+import { useIsMobile, useLayoutMode, useTween } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
 import { usePanelWidth } from './layout/useSceneInset'
@@ -56,6 +58,9 @@ function headlineText(h: HeadlineValue): string {
   switch (h.unit) {
     case 'money':
       return money(h.value)
+    // Same digits as the HUD Kasa chip, so the two never read differently.
+    case 'cash':
+      return ledgerMoney(h.value)
     case 'perMonth':
       return t('hud.netPerMonth', { v: money(h.value) })
     case 'pct':
@@ -66,23 +71,41 @@ function headlineText(h: HeadlineValue): string {
       return h.of === undefined ? num(h.value) : t('journal.count', { n: num(h.value), total: h.of })
     case 'energy':
       return t('founder.energyValue', { v: Math.round(h.value) })
+    // The label already says Gün, so the day prints bare.
     case 'day':
-      return t('outcome.day', { d: h.value })
+      return num(h.value)
   }
 }
 
-/** The panel's primary number (right of the title). Own subscription: only this ticks with the engine, not the panel. */
+/** Units counted in whole steps: the tween's in-between values are rounded so "3 kişi" never reads "2.6 kişi". */
+const WHOLE: readonly HeadlineUnit[] = ['people', 'count', 'energy', 'day']
+
+/**
+ * The panel's primary number (right of the title), behind its one-word label. Own subscription: only this ticks with
+ * the engine, not the panel. Tweened like the HUD chips, so it eases to (and lands on) the same figure; keyed by panel,
+ * so a panel switch shows the new figure at once instead of easing from the previous panel's number.
+ */
 function HeadlineNumber({ panel }: { panel: Panel }) {
   const h = useGameStore(
     useShallow((s) => {
       const x = panelHeadline(s.state, panel)
-      return { main: x ? headlineText(x) : null, sub: x?.sub ? headlineText(x.sub) : null, danger: !!x?.danger }
+      return {
+        label: x ? t(x.label) : null,
+        value: x?.value ?? 0,
+        unit: x?.unit ?? 'money',
+        of: x?.of,
+        sub: x?.sub ? headlineText(x.sub) : null,
+        danger: !!x?.danger,
+      }
     }),
   )
-  if (!h.main) return null
+  const shown = useTween(h.value)
+  if (!h.label) return null
+  const main = headlineText({ value: WHOLE.includes(h.unit) ? Math.round(shown) : shown, unit: h.unit, of: h.of })
   return (
-    <span className="tabular flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
-      <span className={cx('text-[17px] font-bold leading-none', h.danger ? 'text-negative-ink' : 'text-ink')}>{h.main}</span>
+    <span className="tabular flex shrink-0 items-baseline gap-1.5 whitespace-nowrap" title={h.label}>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-2">{h.label}</span>
+      <span className={cx('text-[17px] font-bold leading-none', h.danger ? 'text-negative-ink' : 'text-ink')}>{main}</span>
       {h.sub && <span className="text-[12px] font-semibold text-ink-2">· {h.sub}</span>}
     </span>
   )
@@ -161,7 +184,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
           <Icon name={meta.icon} size={20} className="shrink-0" style={{ color: iconTone(hue) }} />
           <span className="truncate">{meta.title}</span>
         </h2>
-        <HeadlineNumber panel={panel} />
+        <HeadlineNumber key={panelKey(panel)} panel={panel} />
         {close}
       </div>
     )

@@ -1,14 +1,17 @@
 // Pure core-loop selectors (docs/CORE_LOOP.md §5): the next link of the main chain and the horizon ahead.
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
-import { ledgerCosts, runway } from './economy'
+import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
 import { firstFreeDesk, isFreeDesk } from './office'
+import { diligenceNow, offerFactor, priceRatio } from './round'
+import { modifierMult } from './util'
 import { rivalOut } from './world'
 import {
   DAYS_PER_MONTH,
   DAYS_PER_WEEK,
   type CashProjection,
   type CompanyProfile,
+  type EmployeeId,
   type GameState,
   type HorizonItem,
   type NextCrisis,
@@ -68,6 +71,62 @@ export function nextStep(s: GameState): NextStep {
   }
   if (s.derived.canStartRound) return step('round')
   return step('grow', { progress: clamp01(s.derived.stageProgress), ...(target !== null ? { target } : {}) })
+}
+
+/**
+ * Builders with nothing to build (playtest LD1): eng/product people on no project. Extra builders on a finished
+ * project are not idle: their output still fills its updates. `withOnboarding` also returns fresh hires still
+ * onboarding (startProject takes them; the scene marker and Team pill wait until they are in).
+ * Read by startProject (who moves), the scene's idle marker, the Team row and the Projects tab.
+ */
+export function idleBuilders(s: Pick<GameState, 'employees'>, withOnboarding = false): EmployeeId[] {
+  const out: EmployeeId[] = []
+  for (const e of s.employees) {
+    if (e.dept !== 'eng' && e.dept !== 'product') continue
+    if (e.status === 'leaving' || (e.status === 'onboarding' && !withOnboarding)) continue
+    if (e.projectId === undefined) out.push(e.id)
+  }
+  return out
+}
+
+/** Where the round's numbers are heading if the player waits (playtest LD4): read-only, nothing stored. */
+export interface RoundOutlook {
+  /** Growth has earned the stage's whole multiple ceiling (penalties aside): more growth no longer lifts it. */
+  atCap: boolean
+  multiple: number
+  cap: number
+  /** Valuation in ~30 days at today's multiple, MRR grown by the 3-month average MoM. */
+  in30: number
+  trend: 'up' | 'flat' | 'down'
+  /** The pre-round offer factor at `in30` with today's due diligence. */
+  factorIn30: number
+}
+
+/** Below this 30-day valuation gain the wait reads as flat (UI telegraph only, not a balance number). */
+const OUTLOOK_FLAT = 0.05
+
+export function roundOutlook(s: GameState): RoundOutlook | null {
+  const target = B.STAGE_TARGET_VALUATION[s.stage + 1]
+  if (!target) return null
+  const d = s.derived
+  const multiple = d.valuationMultiple
+  const cap = d.multipleCap ?? multiple
+  const momAvg = d.momAvg ?? d.momGrowth
+  // Pre-revenue (users × rate drives the price) the MRR outlook and the multiple say nothing: no outlook.
+  if (d.valuationParts?.mode === 'pre') return null
+  const pre = valuationPreRevenue(s.stats.users, s.projects.filter((p) => p.launched).length, Math.min(B.VAL_RELEASE_MAX, s.releaseCount ?? 0))
+  const now = s.finance.valuation
+  const in30 = s.finance.mrr > 0 ? valuation(s.finance.mrr * (1 + momAvg), multiple, pre, s.stage) : now
+  const gain = now > 0 ? in30 / now - 1 : 0
+  return {
+    // Growth has earned the whole ceiling (burn / idle-cash / board penalties do not hide it: more growth adds nothing).
+    atCap: growthScore(momAvg, s.stage, modifierMult(s, 'diligenceMom')) >= 0.99,
+    multiple,
+    cap,
+    in30,
+    trend: gain >= OUTLOOK_FLAT ? 'up' : gain <= -OUTLOOK_FLAT ? 'down' : 'flat',
+    factorIn30: offerFactor(priceRatio(in30, target), diligenceNow(s), 0),
+  }
 }
 
 /**

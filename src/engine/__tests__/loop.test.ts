@@ -403,6 +403,34 @@ describe('crisis calendar (GAMEPLAY V2 §5.1)', () => {
     expect(storm).toBe(fired.length)
   })
 
+  it('a settled crisis never repeats: the landlord card answered with "go remote" leaves a quiet date', () => {
+    const lease = CRISES.find((c) => c.id === 'lease-hike')!
+    const e = createEngine(fakeContent({ decisions: [...CRISIS_CARDS], crises: [lease] }))
+    const run = (option: number): GameState => {
+      let s = closeInto(e, rich(e, 4), 1)
+      s = stepTo(e, s, s.calendar![0]!.day)
+      expect(s.decisions.active?.cardId).toBe('crisis-lease-hike')
+      s = e.applyAction(s, { type: 'answerDecision', cardId: 'crisis-lease-hike', optionIndex: option }).state
+      const next = pending(s)[0]!
+      return stepTo(e, s, next.day + 5)
+    }
+    const remote = run(1)
+    const second = remote.calendar![1]!
+    expect(second).toMatchObject({ id: null, fired: true })
+    expect(remote.events.filter((ev) => ev.kind === 'crisis')).toHaveLength(1)
+    expect(remote.events.some((ev) => ev.kind === 'crisisRevealed' && ev.value === second.day)).toBe(false)
+    expect(remote.decisions.active?.cardId).not.toBe('crisis-lease-hike')
+    expect(remote.decisions.history.filter((h) => h.cardId === 'crisis-lease-hike')).toHaveLength(1)
+    // The next date is spaced from the skipped one, not rescheduled in a loop.
+    expect(pending(remote)).toHaveLength(1)
+    expect(pending(remote)[0]!.day - second.day).toBeGreaterThanOrEqual(B.CRISIS_GAP_MIN)
+    // Control: staying put keeps the lighter repeat and its card.
+    const stay = run(0)
+    expect(stay.calendar![1]).toMatchObject({ id: 'lease-hike', fired: true, light: true })
+    expect(stay.events.filter((ev) => ev.kind === 'crisis')).toHaveLength(2)
+    expect(stay.decisions.active?.cardId).toBe('crisis-lease-hike')
+  })
+
   it('the crisis card takes the slot of a rolled card: no roll in the reserve window before a crisis day', () => {
     const roll = fakeCard('c-roll', { once: false })
     const e = createEngine(fakeContent({ decisions: [CARD, roll], crises: [fakeCrisis('storm', 1)] }))

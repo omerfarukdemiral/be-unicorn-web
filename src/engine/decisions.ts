@@ -254,22 +254,31 @@ export function scheduleCrisis(s: GameState, rng: Rng): void {
 
 /**
  * Reveal day: a crisis of the current stage that has not come yet; the pool used up → the previous crisis again,
- * lighter (severity × CRISIS_LIGHT_SEVERITY); no previous one → an unused crisis of an earlier stage.
+ * lighter (severity × CRISIS_LIGHT_SEVERITY); no previous one → an unused crisis of an earlier stage. A settled crisis
+ * (its remedy in place) is never drawn; nothing left → the date passes quietly (fired, no id, no event).
  */
 function revealCrisis(s: GameState, content: EngineContent, rng: Rng, e: CalendarEntry): void {
   const pool = content.crises ?? []
   if (!pool.length) return
   const cal = calendarOf(s)
   const used = new Set(cal.map((c) => c.id).filter((id): id is string => id !== null))
-  const fresh = pool.filter((c) => c.stage === s.stage && !used.has(c.id))
+  const open = (c: CrisisDef): boolean => !c.settled?.(s)
+  const fresh = pool.filter((c) => c.stage === s.stage && !used.has(c.id) && open(c))
   let pick: CrisisDef | undefined = fresh.length > 1 ? rng.pick(fresh) : fresh[0]
   if (!pick) {
-    const prev = [...cal].reverse().find((c) => c !== e && c.id !== null)
-    pick = prev ? pool.find((c) => c.id === prev.id) : undefined
+    for (let i = cal.length - 1; i >= 0 && !pick; i--) {
+      const prev = cal[i]!
+      if (prev === e || prev.id === null) continue
+      const def = pool.find((c) => c.id === prev.id)
+      if (def && open(def)) pick = def
+    }
     if (pick) e.light = true
   }
-  pick ??= pool.filter((c) => c.stage <= s.stage && !used.has(c.id)).sort((a, b) => b.stage - a.stage)[0]
-  if (!pick) return
+  pick ??= pool.filter((c) => c.stage <= s.stage && !used.has(c.id) && open(c)).sort((a, b) => b.stage - a.stage)[0]
+  if (!pick) {
+    e.fired = true
+    return
+  }
   e.id = pick.id
   pushEvent(s, { kind: 'crisisRevealed', refId: pick.id, value: e.day })
 }
@@ -318,6 +327,8 @@ export function fireCalendar(s: GameState, content: EngineContent, rng: Rng): vo
   const e = pendingCrisis(s)
   if (!e || s.gameOver) return
   if (e.id === null && s.time.day >= e.revealDay) revealCrisis(s, content, rng, e)
+  // Skipped on the reveal (every storm settled): the next date is spaced from this one.
+  if (e.fired) return scheduleCrisis(s, rng)
   if (s.time.day < e.day) return
   e.fired = true
   const def = e.id === null ? undefined : content.crises?.find((c) => c.id === e.id)

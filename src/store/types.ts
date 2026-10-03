@@ -73,10 +73,10 @@ export interface SceneInset {
 
 /**
  * Automatic focus pauses: a blocking modal (never a center screen), an unanswered decision card open in the panel or
- * expanded in the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, or the round offer /
- * weekly pitch open in Büyüme > Tur (`offer`: panel `{kind:'growth', section:'round'}` while a size choice or pitch
- * waits), or the payday desk open while finance.pendingPayday waits (`payday`, GAMEPLAY V2 §3 md.6).
- * Shop / team / projects / growth panels never pause; a concept arriving (badge only) never pauses.
+ * expanded in the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, the round offer
+ * (`offer`: Büyüme › Tur `{kind:'growth', section:'round'}`, the only view that draws the size picker, while a size
+ * choice or a weekly pitch waits), or the payday desk open while finance.pendingPayday waits (`payday`, GAMEPLAY V2
+ * §3 md.6). Shop / team / projects panels and the plain Büyüme hub never pause; a concept arriving never pauses.
  */
 export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday'
 
@@ -117,10 +117,12 @@ export interface UiState {
   sceneInset: SceneInset
   /** The scene decision bubble is expanded (the player is reading the card there): a `decision` focus pause. */
   decisionExpanded: boolean
-  /** "Önemli anda yavaşla": at 4× an important moment drops the speed to 1× (never pauses). Default on. */
+  /** "Önemli anda yavaşla": at 4× an important moment drops the speed to 1× (never pauses), and returns to 4× after the moment. Default on. */
   slowOnMoments: boolean
   /** performance.now() of the last automatic 4× → 1× slowdown (UI shows a short note), null = none yet. */
   slowdownAt: number | null
+  /** Game day the automatic slowdown hands 4× back (null = no restore pending; the player's own setSpeed clears it). */
+  slowdownResumeDay: number | null
   /**
    * Gauges pinned to the top bar (docs/LAYOUT.md §5.2): at most PIN_MAX, oldest first. A pin whose gauge is locked
    * (e.g. a new run) is not shown but keeps its place. Persisted in localStorage 'be-unicorn:ui'.

@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { createGame, type GameState } from '../engine'
 import { CONCEPT_IDS } from '../engine/types'
 import type { Panel, PanelKind } from '../store/types'
+import { UI_TEXT } from '../content'
+import { cashFlow } from './cashflow'
 import { panelHeadline } from './panelHeadline'
 import { CostPreview } from './primitives'
 
@@ -39,13 +41,37 @@ describe('panelHeadline', () => {
     }
   })
 
+  it('every panel kind labels its number with a short existing text key', () => {
+    const s = game()
+    for (const p of Object.values(PANELS)) {
+      const label = panelHeadline(s, p)!.label
+      expect(label, p.kind).toBeTruthy()
+      expect(UI_TEXT[label], `${p.kind}: ${label}`).toBeTruthy()
+      expect(UI_TEXT[label]!.split(/\s+/).length, label).toBeLessThanOrEqual(2)
+    }
+    // The Ekip head already titles the row "Ekip": its label must say something else.
+    expect(UI_TEXT[panelHeadline(s, PANELS.team)!.label]).not.toBe(UI_TEXT['dock.team'])
+  })
+
+  it('shop and decision show the HUD Kasa figure (usable, payday owed taken out), not the bank balance', () => {
+    const s = game()
+    s.stats.cash = 16_200
+    s.finance.ledger = { ...s.finance.ledger!, salaries: 900, rent: 100, infra: 52, ads: 50, founder: 0 }
+    const usable = cashFlow(s).usable
+    expect(usable).toBe(15_098)
+    expect(panelHeadline(s, PANELS.shop)).toMatchObject({ label: 'hud.cash', value: usable, unit: 'cash', danger: false })
+    expect(panelHeadline(s, PANELS.decision)).toMatchObject({ label: 'hud.cash', value: usable })
+    s.stats.cash = 1000
+    expect(panelHeadline(s, PANELS.shop)?.danger).toBe(true)
+  })
+
   it('only picks engine numbers', () => {
     const s = game()
     s.stats.cash = 12_345
     s.finance.mrr = 900
     s.finance.valuation = 2_000_000
     s.finance.burnBreakdown.salaries = 4200
-    expect(panelHeadline(s, PANELS.shop)).toMatchObject({ value: 12_345, unit: 'money', danger: false })
+    expect(panelHeadline(s, PANELS.shop)).toMatchObject({ value: cashFlow(s).usable, unit: 'cash', danger: false })
     expect(panelHeadline(s, PANELS.growth)).toMatchObject({ value: 900, unit: 'money' })
     expect(panelHeadline(s, PANELS.leaderboard)).toMatchObject({ value: 2_000_000 })
     expect(panelHeadline(s, PANELS.team)).toMatchObject({ value: s.employees.length, unit: 'people', sub: { value: -4200, unit: 'perMonth' } })

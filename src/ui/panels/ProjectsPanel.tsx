@@ -7,7 +7,8 @@ import { PROJECT_CATEGORY_TEXT, PROJECT_NAMES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
-import { pct } from '../format'
+import { money, pct } from '../format'
+import { launchGain } from '../loopUi'
 import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
 
@@ -24,6 +25,9 @@ function nextProjectName(): string {
 }
 
 export const MVP_MATURITY = 0.2
+
+/** A launch tag under this ($) is noise next to a revenue valuation: the card shows none. */
+const LAUNCH_GAIN_MIN = 1000
 
 export const CATEGORY_ICON: Record<ProjectCategory, IconName> = {
   mobile: 'phone',
@@ -47,6 +51,9 @@ export const CATEGORY_COLOR: Record<ProjectCategory, string> = {
 export function ProjectsPanel() {
   const projects = useGameStore(useShallow((s) => s.state.projects))
   const dispatch = useGameStore((s) => s.dispatch)
+  // What one more launch adds to the valuation today (playtest LD2); hidden once revenue has replaced the floor.
+  const gain = useGameStore((s) => launchGain(s.state.derived.valuationParts, s.state.stage))
+  const gainTag = gain >= LAUNCH_GAIN_MIN ? t('projects.launchGain', { v: money(gain) }) : null
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -76,9 +83,17 @@ export function ProjectsPanel() {
                 {PROJECT_CATEGORY_TEXT[c].name}
               </span>
               <span className="font-text text-[11px] leading-snug text-ink-2">{PROJECT_CATEGORY_TEXT[c].description}</span>
-              <span className="mt-auto inline-flex items-center gap-1 pt-1 text-[11px] font-semibold text-brand-ink">
-                <Icon name="plus" size={12} />
-                {t('projects.start')}
+              <span className="mt-auto flex w-full items-center justify-between gap-1 pt-1">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-ink">
+                  <Icon name="plus" size={12} />
+                  {t('projects.start')}
+                </span>
+                {gainTag && (
+                  <Pill tint="var(--color-brand)" className="tabular text-brand-ink">
+                    <Icon name="rocket" size={11} />
+                    {gainTag}
+                  </Pill>
+                )}
               </span>
             </button>
           ))}

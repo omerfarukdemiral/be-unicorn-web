@@ -152,6 +152,8 @@ describe('statsData: receipts → series', () => {
     // A crisis scheduled past the horizon is not on the line (§5.1); judged quarters come from the board, not the event ring.
     expect(calendarMarks(calendar, board, 3, 200).crisis).toEqual([140])
     expect(calendarMarks(calendar, board, 3, 200).board).toEqual([180, 270, 360, 450])
+    // A date skipped on the reveal (fired, no id: the storm was settled) passed quietly: no mark.
+    expect(calendarMarks([...calendar, { id: null, day: 180, revealDay: 150, fired: true as const }], board, 3, 200).crisis).toEqual([140])
     const v = moneyView(statsData([receipt(1)]), live, { points: [{ day: 120, cash: 1 }], deathDay: null }, m)
     expect(v.marks.filter((k) => k.kind !== 'payday')).toEqual([
       { x: 140, kind: 'crisis' },

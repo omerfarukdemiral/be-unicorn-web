@@ -2,6 +2,7 @@
 // §10.5): 36px person cards with a 4px gap (no hairline list), salary as the number, every hire carries its CostPreview.
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { idleBuilders } from '../../engine/loopSelectors'
 import { DEPTS, type Candidate, type Dept, type Employee } from '../../engine/types'
 import { DEPT_TEXT } from '../../content'
 import { useGameStore } from '../../store/gameStore'
@@ -142,8 +143,12 @@ function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: 
 
 function TeamList() {
   const employees = useGameStore(useShallow((s) => s.state.employees))
+  const idle = useGameStore(useShallow((s) => idleBuilders(s.state)))
   const select = useGameStore((s) => s.select)
-  const sorted = employees.slice().sort((a, b) => Number(b.status === 'leaving') - Number(a.status === 'leaving') || a.dept.localeCompare(b.dept))
+  // Leaving first (they need an answer), then builders with nothing to build, then by department.
+  const sorted = employees
+    .slice()
+    .sort((a, b) => Number(b.status === 'leaving') - Number(a.status === 'leaving') || Number(idle.includes(b.id)) - Number(idle.includes(a.id)) || a.dept.localeCompare(b.dept))
   if (sorted.length === 0) return <Empty text={t('team.empty')} icon="users" />
   return (
     <ul className="flex flex-col gap-1">
@@ -157,7 +162,7 @@ function TeamList() {
               onClick={() => select({ kind: 'employee', id: e.id })}
               className="flex min-h-9 w-full items-center gap-2 rounded-control bg-surface-2/60 px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
             >
-              <EmployeeRow employee={e} />
+              <EmployeeRow employee={e} idle={idle.includes(e.id)} />
             </button>
           )}
         </li>
@@ -166,7 +171,7 @@ function TeamList() {
   )
 }
 
-export function EmployeeRow({ employee: e }: { employee: Employee }) {
+export function EmployeeRow({ employee: e, idle = false }: { employee: Employee; idle?: boolean }) {
   return (
     <>
       <Avatar name={e.name} dept={e.dept} size={28} />
@@ -176,6 +181,7 @@ export function EmployeeRow({ employee: e }: { employee: Employee }) {
           <span className="truncate text-[13px] font-semibold">{e.name}</span>
           {e.star && <Icon name="star" size={12} fill="currentColor" className="shrink-0 text-g-equity" />}
           {e.status !== 'working' && <Pill className={STATUS_TONE[e.status]} dot={STATUS_DOT[e.status]}>{t(`status.${e.status}`)}</Pill>}
+          {idle && e.status === 'working' && <Pill tint="var(--color-energy)" dot="var(--color-energy)">{t('team.idle')}</Pill>}
           {!e.deskSlotId && <Icon name="desk" size={12} className="shrink-0 text-negative" aria-label={t('team.noSeat')} />}
         </div>
         <Bar value={e.morale / 100} tone={moraleTone(e.morale)} height={4} className="mt-1 max-w-28" />

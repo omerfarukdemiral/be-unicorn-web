@@ -32,6 +32,7 @@ import {
   panelSelection,
   pauseReasonsOf,
   PAYDAY_SLOW_RUNWAY_MONTHS,
+  SLOWDOWN_WINDOW_DAYS,
   useGameStore,
   waitingConcepts,
 } from './gameStore'
@@ -477,12 +478,36 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().ui.slowdownAt).not.toBeNull()
     const sets = store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed')
     expect(sets.at(-1)?.action).toEqual({ type: 'setSpeed', speed: 1 })
+    expect(store().ui.slowdownResumeDay).not.toBeNull()
+
+    // The moment dealt with (card answered), SLOWDOWN_WINDOW_DAYS later 4× is back, through the replay too.
+    const card = store().state.decisions.active!
+    expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
+    const answeredDay = store().state.time.day
+    for (let i = 0; i < 200 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(4)
+    expect(store().state.time.day).toBeGreaterThanOrEqual(answeredDay + SLOWDOWN_WINDOW_DAYS - 1e-9)
+    expect(store().ui.slowdownResumeDay).toBeNull()
+    expect(store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed').at(-1)?.action).toEqual({ type: 'setSpeed', speed: 4 })
 
     // Same moment at 2×: no change.
     store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
     store().dispatch({ type: 'setSpeed', speed: 2 })
     for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.decisions.active).toBeDefined()
+    expect(store().state.time.speed).toBe(2)
+  })
+
+  it('a speed the player picks during the slowdown window wins: no 4× restore', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(1)
+    const card = store().state.decisions.active!
+    store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 })
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    expect(store().ui.slowdownResumeDay).toBeNull()
+    const day = store().state.time.day
+    for (let i = 0; i < 400 && store().state.time.day < day + SLOWDOWN_WINDOW_DAYS * 3; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.speed).toBe(2)
   })
 
@@ -596,6 +621,33 @@ describe('core loop phase 2: round offer / weekly pitch (store side)', () => {
     expect(pauseReasonsOf(ui, open)).toEqual(['offer'])
     expect(pauseReasonsOf(ui, s)).toEqual([])
     expect(pauseReasonsOf(ui)).toEqual([])
+    // The size picker lives in Büyüme › Tur only: the plain hub (one summary row) never holds time (playtest UI2, §14.1).
+    const plain = { overlay: null, panel: { kind: 'growth' as const } }
+    expect(pauseReasonsOf(plain, open)).toEqual([])
+    expect(pauseReasonsOf(plain, s)).toEqual([])
+    expect(pauseReasonsOf({ overlay: null, panel: { kind: 'team' as const } }, open)).toEqual([])
+  })
+
+  it('the Büyüme hub lets time run while the window is open; opening the size picker holds it until the round starts', () => {
+    const s = store().state
+    useGameStore.setState({ state: { ...s, derived: { ...s.derived, canStartRound: true } } })
+    store().openPanel({ kind: 'growth' }, { root: true })
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(2)
+    // The hub's "Tur büyüklüğü" row opens Büyüme › Tur: the size choice now holds time.
+    store().openPanel({ kind: 'growth', section: 'round' }, { replace: true })
+    expect(store().ui.pauseReasons).toEqual(['offer'])
+    expect(effectiveSpeed(store())).toBe(0)
+    const day = store().state.time.day
+    store().tick(1)
+    expect(store().state.time.day).toBe(day)
+    // Starting the round (or closing the panel) ends the hold: back to the player's 2×.
+    const r = store().dispatch({ type: 'startRound', size: 'target' })
+    expect(r.ok, r.error).toBe(true)
+    expect(store().state.round?.active).toBe(true)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(2)
+    expect(store().exportReplay().actions.some((a) => a.action.type === 'setSpeed' && a.action.speed === 0)).toBe(false)
   })
 
   it('the round window opening is an important moment (4× → 1×); weekly beats are not', () => {

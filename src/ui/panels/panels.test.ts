@@ -6,7 +6,8 @@
 import React, { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createGame, step, type GameState, type StageIndex } from '../../engine'
+import { applyAction, createGame, step, type GameState, type StageIndex } from '../../engine'
+import { daysLeft } from '../center/centerData'
 import { horizon } from '../../engine/loopSelectors'
 import { enterStage } from '../../engine/round'
 import { SECONDS_PER_DAY } from '../../engine/types'
@@ -17,6 +18,12 @@ import { PostMortemOverlay } from '../overlays/Overlays'
 import { CenterFrame } from '../stats/CenterFrame'
 import { WIDGETS } from '../widgets'
 import { GrowthPanel } from './GrowthPanel'
+import { MultipleCap } from './RoundSection'
+import { launchGain, priceGate, releaseGain } from '../loopUi'
+import { openConceptCard } from '../uiActions'
+import { t } from '../i18n'
+import { CONCEPTS } from '../../content'
+import type { ValuationBreakdown } from '../../engine/types'
 
 const SOURCES = import.meta.glob<string>('./*.tsx', { query: '?raw', import: 'default', eager: true })
 const UI_SOURCES = import.meta.glob<string>('../**/*.tsx', { query: '?raw', import: 'default', eager: true })
@@ -103,12 +110,63 @@ describe('panel sources', () => {
     expect(src('GrowthPanel')).not.toMatch(/board\?\./)
   })
 
+  it('the size picker lives in Büyüme › Tur only: the hub shows a summary row that opens it (UI2, the offer pause)', () => {
+    expect(src('GrowthPanel')).toMatch(/<RoundSection setup=\{section === 'round'\} \/>/)
+    expect(src('RoundSection')).toMatch(/!summary && view\.sizes/)
+    expect(src('RoundSection')).toMatch(/openPanel\(\{ kind: 'growth', section: 'round' \}/)
+  })
+
   it('no hairline lists in the rebuilt panels (4px gaps instead of divide-y)', () => {
     for (const name of REBUILT) expect(src(name), name).not.toMatch(/divide-y/)
   })
 
   it('the widget registry still covers its cards', () => {
     expect(Object.keys(WIDGETS).length).toBeGreaterThan(10)
+  })
+})
+
+describe('price lock (playtest LD5)', () => {
+  it('priceGate mirrors the pricing trigger: the same bars, met = the trigger would fire (price still at 1×)', () => {
+    const s = createGame({ seed: 3 })
+    enterStage(s, 1)
+    enterStage(s, 2)
+    const pricing = CONCEPTS.find((c) => c.id === 'pricing')!
+    const set = (users: number, maturity: number, churn: number) => {
+      s.stats.users = users
+      s.derived.avgMaturity = maturity
+      s.stats.churn = churn
+      const g = priceGate(s)
+      return [g.stage && g.users.ok && g.maturity.ok && g.churn.ok, pricing.trigger(s)]
+    }
+    expect(set(501, 0.5, 0.079)).toEqual([true, true])
+    expect(set(500, 0.9, 0.02)).toEqual([false, false])
+    expect(set(900, 0.49, 0.02)).toEqual([false, false])
+    expect(set(900, 0.9, 0.08)).toEqual([false, false])
+    expect(priceGate(s).waiting).toBe(false)
+  })
+})
+
+describe('valuation levers (playtest LD2, LD4)', () => {
+  const parts = (over: Partial<ValuationBreakdown>): ValuationBreakdown => ({
+    mode: 'pre', users: 300, launched: 1, releases: 2, usersValue: 120_000, launchedValue: 150_000, releasesValue: 30_000,
+    mrr: 0, multiple: 15, momAvg: 0, min: 3, cap: 15, penalty: 1, blend: 0, preFade: 0, total: 300_000, ...over,
+  })
+
+  it('a launch is worth $150K before revenue and ~0 once revenue has replaced the floor (Seed, blend 1)', () => {
+    expect(launchGain(parts({}), 1)).toBeCloseTo(150_000, 6)
+    expect(releaseGain(parts({}), 1)).toBeCloseTo(15_000, 6)
+    expect(releaseGain(parts({ releases: 5 }), 1)).toBe(0)
+    expect(launchGain(parts({ mode: 'post', mrr: 50_000, blend: 1, total: 9_000_000 }), 2)).toBeLessThan(1)
+    expect(launchGain(undefined, 0)).toBe(0)
+  })
+
+  it('the multiple at its ceiling carries the Tavan pill', () => {
+    const o = { multiple: 15, cap: 15, in30: 1, trend: 'flat' as const, factorIn30: 1 }
+    const at = renderToStaticMarkup(createElement(MultipleCap, { outlook: { ...o, atCap: true } }))
+    expect(at).toContain('data-mult-cap="cap"')
+    expect(at).toContain('Tavan')
+    const below = renderToStaticMarkup(createElement(MultipleCap, { outlook: { ...o, multiple: 9, atCap: false } }))
+    expect(below).not.toContain('Tavan')
   })
 })
 
@@ -198,6 +256,23 @@ describe('center screens (H5b)', () => {
     expect(html).not.toMatch(/type="range"/)
   })
 
+  it('Kanun Kitabı after a signature: the bar keeps the countdown (days on the cards, the commit and a ring), never "Yasa seç"', () => {
+    const r = applyAction(lateState(2), { type: 'adoptPolicy', policyId: 'crunch-culture' })
+    expect(r.ok).toBe(true)
+    const left = daysLeft(r.state.derived.policies!.nextSignDay, r.state.time.day)
+    expect(left).toBeGreaterThan(0)
+    useGameStore.setState({ state: r.state, ui: { ...initial.ui, overlay: { kind: 'lawbook' } } })
+    const html = renderToStaticMarkup(createElement(CenterFrame, { kind: 'lawbook', onClose: () => {} }))
+    expect(html).not.toContain('Yasa seç')
+    expect(html).toContain('data-law="hire-fast" data-status="wait"')
+    expect(html).toContain('data-sign-wait')
+    // Header ring, each waiting card and the commit chip all carry the same day count.
+    const waiting = (html.match(/data-status="wait"/g) ?? []).length
+    expect((html.match(new RegExp(`>${left}g<`, 'g')) ?? []).length).toBe(waiting + 2)
+    expect(html).not.toContain('Bekle.')
+    expect(sentences(html)).toBe(1)
+  })
+
   it('Pazar haritası: fill ring, segment tiles, "Aç" with its price, rival rows; at most one sentence', () => {
     useGameStore.setState({ state: lateState(4), ui: { ...initial.ui, overlay: { kind: 'market' } } })
     const html = renderToStaticMarkup(createElement(CenterFrame, { kind: 'market', onClose: () => {} }))
@@ -223,6 +298,27 @@ describe('center screens (H5b)', () => {
     expect(html).toContain('data-board-row')
     useGameStore.setState({ state: lateState(2) })
     expect(renderToStaticMarkup(createElement(GrowthPanel, {}))).not.toContain('data-board-row')
+  })
+
+  it('Büyüme price lock (LD5): the trigger checks with live numbers; a shelved pricing card becomes the way in', () => {
+    const s = lateState(2)
+    s.unlockedTools = s.unlockedTools.filter((x) => x !== 'priceControl')
+    s.concepts.triggered = s.concepts.triggered.filter((x) => x !== 'pricing')
+    s.concepts.learned = s.concepts.learned.filter((x) => x !== 'pricing')
+    useGameStore.setState({ state: s, ui: { ...initial.ui } })
+    let html = renderToStaticMarkup(createElement(GrowthPanel, {}))
+    expect(html).toContain('/500 kullanıcı')
+    expect(html).toContain('Olgunluk ')
+    expect(html).toContain('Churn ')
+    expect(html).not.toContain(t('growth.priceWaiting'))
+    // The customer came and the bubble went to the shelf unopened: the lock points at the card.
+    useGameStore.setState({ state: { ...s, concepts: { ...s.concepts, triggered: [...s.concepts.triggered, 'pricing'], minimized: [...s.concepts.minimized, 'pricing'] } } })
+    html = renderToStaticMarkup(createElement(GrowthPanel, {}))
+    expect(html).toContain(t('growth.priceWaiting'))
+    expect(html).not.toContain('/500 kullanıcı')
+    openConceptCard('pricing')
+    expect(useGameStore.getState().state.unlockedTools).toContain('priceControl')
+    expect(renderToStaticMarkup(createElement(GrowthPanel, {}))).not.toContain(t('growth.priceWaiting'))
   })
 
   it('lawbook / market open: the tick moves on; a decision card closes them', () => {

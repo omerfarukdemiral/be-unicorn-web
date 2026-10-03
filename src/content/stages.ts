@@ -21,7 +21,7 @@ export const STAGES: readonly StageDef[] = [
     index: 2, key: 'seed', name: 'Seed', officeName: 'Küçük ofis', rings: 3, totalSlots: 18,
     targetValuation: 3_000_000, roundAmount: 800_000, roundEquity: 0.15, newSlotType: 'room',
     unlockActions: ['salesCall'],
-    unlocksText: 'Toplantı odası, fiyat ayarı, satış', paletteKey: 'smallOffice',
+    unlocksText: 'Toplantı odası, satış', paletteKey: 'smallOffice',
     tagline: 'Kapısında adımız yazan ilk ofis.',
   },
   {

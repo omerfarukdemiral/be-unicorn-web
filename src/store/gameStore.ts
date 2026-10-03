@@ -1,9 +1,11 @@
 // zustand store: the only bridge between the pure engine and render/ui.
 // dispatch → engine.applyAction; tick → fixed engine steps (FIXED_STEP_DAYS) scaled by the effective speed
 // (time.speed = the player's choice, held at 0 while any ui.pauseReasons is active: modal, decision, concept card,
-// round offer / pitch, the payday desk open on a waiting month; a center screen never holds it).
+// round size choice / weekly pitch in Büyüme › Tur, the payday desk open on a waiting month; a center screen never
+// holds it).
 // After each tick: a new concept goes straight to the Kazanımlar badge (no scene bubble), an interrupting event closes
-// the center screen, and at 4× an important moment slows the run to 1× (docs/GAMEPLAY_V2.md §3.6, §12). A card shown
+// the center screen, and at 4× an important moment slows the run to 1× for a few game days, then back to 4×
+// (docs/GAMEPLAY_V2.md §3.6, §12). A card shown
 // lands in the Keşif record (localStorage 'be-unicorn:codex', outside the engine and the save, §9.2).
 import { create } from 'zustand'
 import { DECISIONS } from '../content'
@@ -48,6 +50,21 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
   'roundClosed',
   'release',
 ])
+
+/** Game days at 1× after an important moment before 4× comes back (~6 s at 1×, SECONDS_PER_DAY = 2). */
+export const SLOWDOWN_WINDOW_DAYS = 3
+
+/** True while the store itself sends setSpeed (the slowdown and its restore): such a call keeps the pending restore. */
+let autoSpeed = false
+
+function autoSetSpeed(speed: GameSpeed): void {
+  autoSpeed = true
+  try {
+    useGameStore.getState().dispatch({ type: 'setSpeed', speed })
+  } finally {
+    autoSpeed = false
+  }
+}
 
 /** A payday that leaves less than this many months of runway is an important moment too (docs/CORE_LOOP.md §3.2). */
 export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
@@ -148,6 +165,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   decisionExpanded: false,
   slowOnMoments: true,
   slowdownAt: null,
+  slowdownResumeDay: null,
   pinnedMetrics: saved.pinnedMetrics ?? [],
   seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
   pinTouched: saved.pinTouched ?? false,
@@ -222,6 +240,8 @@ export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisi
   const p = ui.panel
   if ((p?.kind === 'decision' && p.answered === undefined) || ui.decisionExpanded) r.push('decision')
   if (p?.kind === 'journal' && p.conceptId) r.push('concept')
+  // Only Büyüme › Tur draws the size picker (the plain hub shows a one-row summary that opens it), so only it holds the
+  // size choice or a weekly pitch; the hub, and the running round itself, never pause (§14.1: showing is not deciding).
   if (p?.kind === 'growth' && p.section === 'round' && state && offerWaiting(state)) r.push('offer')
   if (paydayDeskOpen(ui, state)) r.push('payday')
   return r
@@ -359,6 +379,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // The payday desk closes once its month is answered (`payday` pause ends with it).
     set((s) => ({ state: res.state, ui: withAutoPins(withPause(withDesk(starts ? { ...s.ui, runStarted: true } : s.ui, res.state), res.state), state, res.state) }))
     retargetEmptiedDetail(action, res.state)
+    // The player's own speed choice always wins over a pending 4× restore.
+    if (action.type === 'setSpeed' && !autoSpeed && get().ui.slowdownResumeDay !== null) set((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
     if (!res.state.decisions.active && get().ui.decisionExpanded) get().setDecisionExpanded(false)
@@ -544,7 +566,9 @@ export const useGameStore = create<GameStore>()((set, get) => ({
  * - a concept that arrived never shows as a scene bubble: it counts on the Kazanımlar badge at once, its visitor
  *   stands silently (tap → card) and, once the visitor's stay is over, it moves to the shelf (minimizeConcept);
  * - an interrupting event (a card, the round window, a missed payroll…) closes an open center screen;
- * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it);
+ * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it) for
+ *   SLOWDOWN_WINDOW_DAYS game days once the moment is dealt with (no card or payday waiting, no focus pause), then 4×
+ *   comes back the same way; a new moment in the window pushes the restore later, a player setSpeed cancels it;
  * - a card shown goes into the Keşif record (storage errors are swallowed by save.ts: play never breaks on them).
  * Engine changes go through dispatch, so the replay log reproduces them.
  */
@@ -560,10 +584,20 @@ function afterStep(prev: GameState, next: GameState): void {
   if (ac && !conceptVisitorStays(next, ac.id)) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
   if (centerOpen(useGameStore.getState().ui) && hasInterrupt(prev, next)) closeOverlay()
   const ui = useGameStore.getState().ui
-  if (ui.slowOnMoments && next.time.speed === 4) {
-    if (hasImportantMoment(prev, next)) {
-      dispatch({ type: 'setSpeed', speed: 1 })
-      useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownAt: performance.now() } }))
-    }
+  const resumeDay = next.time.day + SLOWDOWN_WINDOW_DAYS
+  if (ui.slowOnMoments && next.time.speed === 4 && hasImportantMoment(prev, next)) {
+    autoSetSpeed(1)
+    useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownAt: performance.now(), slowdownResumeDay: resumeDay } }))
+    return
   }
+  if (ui.slowdownResumeDay === null) return
+  // The window counts from when the moment is dealt with: a card or a payday still waiting (or a new moment) moves it on.
+  const waiting = !!next.decisions.active || !!next.finance.pendingPayday || hasImportantMoment(prev, next)
+  if (waiting) {
+    if (resumeDay > ui.slowdownResumeDay) useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: resumeDay } }))
+    return
+  }
+  if (ui.pauseReasons.length > 0 || next.time.day < ui.slowdownResumeDay) return
+  useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
+  if (useGameStore.getState().state.time.speed === 1) autoSetSpeed(4)
 }

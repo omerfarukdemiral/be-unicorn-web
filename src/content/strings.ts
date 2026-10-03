@@ -240,6 +240,14 @@ const BASE_TEXT: Record<string, string> = {
   'hud.archetype': 'Yolun',
   'hud.overload': 'Aşırı yük',
 
+  // RightPanel head number labels (one word before the figure)
+  'head.roster': 'Kadro',
+  'head.mrr': 'MRR',
+  'head.mom': 'Büyüme',
+  'head.stage': 'Aşama',
+  'head.valuation': 'Değerleme',
+  'head.day': 'Gün',
+
   // Speed & view
   'speed.label': 'Hız',
   'speed.hint': '{v}× hız',
@@ -308,6 +316,7 @@ const BASE_TEXT: Record<string, string> = {
   'team.noCandidates': 'Aday yok',
   'team.refresh': 'Yeni adaylar',
   'team.hire': 'İşe al',
+  'team.idle': 'Boşta',
   'team.fire': 'Yollarınızı ayır',
   'team.expires': '{n} gün içinde gider',
   'team.freeDesks': '{n} boş masa',
@@ -349,7 +358,12 @@ const BASE_TEXT: Record<string, string> = {
   'growth.paidUsers': 'Reklamdan gelen',
   'growth.price': 'Fiyat',
   'growth.priceMultiplier': 'Fiyat çarpanı',
-  'growth.priceLocked': 'Fiyat ayarı Seed’de açılır.',
+  'growth.priceLocked': 'Dördü aynı gün tutunca bir müşteri fiyatı sorar.',
+  'growth.priceWaiting': 'Müşteri fiyatı sordu: kartı aç, fiyat ayarı açılsın.',
+  'growth.gate.stage': 'Seed',
+  'growth.gate.users': '{v}/{t} kullanıcı',
+  'growth.gate.maturity': 'Olgunluk {v}/{t}',
+  'growth.gate.churn': 'Churn {v} < {t}',
   'growth.priceWarning': 'Zam, bir ay boyunca churn’ü artırır.',
   'growth.arpuNow': 'Kullanıcı başı {v}/ay',
   'growth.enterprise': 'Kurumsal müşteriler',

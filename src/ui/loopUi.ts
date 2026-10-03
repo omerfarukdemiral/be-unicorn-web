@@ -2,7 +2,9 @@
 // Presentation only: every number comes from the engine (state.derived / finance / releases / outcomes).
 import { useEffect, useRef } from 'react'
 import type { EffectBundle, GameEvent, GameState, NextStep, ValuationBreakdown } from '../engine/types'
-import { DECISIONS } from '../content'
+import * as B from '../engine/balance'
+import { valuation } from '../engine/economy'
+import { DECISIONS, PRICING_GATE } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { t } from './i18n'
 import { fixed, money, num, pct, signedMoney } from './format'
@@ -75,6 +77,26 @@ export function valuationLine(v: ValuationBreakdown | undefined): string {
   return t(key, { m: money(v.mrr), x: fixed(v.multiple, 1), g: pct(v.momAvg, 1), n: fixed(v.min, 1), c: fixed(v.cap, 0), b: pct(v.blend, 0), p: money(v.preFade) })
 }
 
+/**
+ * What `extra` pre-revenue value (a launch, a release) adds to the valuation today, through the engine's own formula:
+ * the full amount before revenue, × (1 − blend) once the floor fades from Seed, ~0 when revenue already outweighs it.
+ */
+function preGain(v: ValuationBreakdown | undefined, stage: number, extra: number): number {
+  if (!v) return 0
+  const pre = v.usersValue + v.launchedValue + v.releasesValue
+  return Math.max(0, valuation(v.mrr, v.multiple, pre + extra, stage) - valuation(v.mrr, v.multiple, pre, stage))
+}
+
+/** Valuation one more launched product adds now (playtest LD2: the tag on a new project). */
+export function launchGain(v: ValuationBreakdown | undefined, stage: number): number {
+  return preGain(v, stage, B.VAL_PER_LAUNCHED)
+}
+
+/** Valuation one more release adds now; 0 once VAL_RELEASE_MAX releases count. */
+export function releaseGain(v: ValuationBreakdown | undefined, stage: number): number {
+  return v && v.releases < B.VAL_RELEASE_MAX ? preGain(v, stage, B.VAL_PER_RELEASE) : 0
+}
+
 /** Version name, or "güncelleme N" for an update after 1.0. */
 export function releaseName(level: number, update?: number): string {
   return update !== undefined && update > 0 ? t('release.update', { n: update }) : releaseLevelName(level)
@@ -96,6 +118,34 @@ export function stepText(step: NextStep, s: Pick<GameState, 'stats' | 'finance'>
       return t('step.traction', { v: money(s.finance.valuation), t: money(step.target ?? 0) })
     default:
       return t(`step.${step.id}`)
+  }
+}
+
+/** One condition of the price lock: the live figure, the bar, met or not. */
+export interface GateCheck {
+  value: number
+  bar: number
+  ok: boolean
+}
+
+/**
+ * Büyüme price lock (DECISIONS #9): price control opens only when the player opens the `pricing` card. The trigger
+ * needs Seed + the three checks on the same day (priceMultiplier ≤ 1 holds while the tool is locked); `waiting` =
+ * the card already came (bubble on screen or shelved) but was never opened, so the lock points at it.
+ */
+export function priceGate(s: Pick<GameState, 'stage' | 'stats' | 'derived' | 'concepts'>): {
+  stage: boolean
+  users: GateCheck
+  maturity: GateCheck
+  churn: GateCheck
+  waiting: boolean
+} {
+  return {
+    stage: s.stage >= 2,
+    users: { value: s.stats.users, bar: PRICING_GATE.users, ok: s.stats.users > PRICING_GATE.users },
+    maturity: { value: s.derived.avgMaturity, bar: PRICING_GATE.maturity, ok: s.derived.avgMaturity >= PRICING_GATE.maturity },
+    churn: { value: s.stats.churn, bar: PRICING_GATE.churn, ok: s.stats.churn < PRICING_GATE.churn },
+    waiting: s.concepts.triggered.includes('pricing') && !s.concepts.learned.includes('pricing'),
   }
 }
 

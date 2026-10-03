@@ -22,6 +22,8 @@ export const CRISES: readonly CrisisDef[] = [
     // Rent × 1.8 for 90 days + a deposit of 3 months' rent. There is no rent modifier yet (rent is priced in derive):
     // the 90-day difference is paid up front with the deposit.
     effects: (s, sev) => ({ cash: -Math.round(rentOf(s) * (3 + 0.8 * 3 * sev)) }),
+    // A remote team has no landlord: the card's 'go remote' option or the signed policy settles it for good.
+    settled: (s) => s.flags[REMOTE_FIRST_FLAG] === true || (s.policies?.adopted ?? []).includes('remote-first'),
   },
   {
     id: 'cac-war',

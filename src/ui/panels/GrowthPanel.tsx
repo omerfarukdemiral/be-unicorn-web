@@ -15,9 +15,11 @@ import { Icon, type IconName } from '../icons'
 import { useSpendPreview } from '../widgets'
 import { centerSummary } from '../center/centerData'
 import { RoundSection } from './RoundSection'
-import { DecisionOutcomes } from './GoalsCard'
+import { DecisionOutcomes, ValuationParts } from './GoalsCard'
 import { BoardRow } from './BoardRow'
 import { RenewalSection } from './RenewalSection'
+import { priceGate } from '../loopUi'
+import { openConceptCard } from '../uiActions'
 
 function useTool(id: ToolId): boolean {
   return useGameStore((s) => s.state.unlockedTools.includes(id))
@@ -31,7 +33,7 @@ export function GrowthPanel({ section }: { section?: 'round' }) {
   }, [section])
   return (
     <div className="flex flex-col gap-5">
-      {(showRound || section === 'round') && <RoundSection />}
+      {(showRound || section === 'round') && <RoundSection setup={section === 'round'} />}
       <ProductSection />
       <CenterRows />
       <DecisionOutcomes />
@@ -54,6 +56,7 @@ function ProductSection() {
       total: s.state.projects.length,
       growth: s.state.derived.momGrowth,
       mrr: s.state.finance.mrr,
+      parts: s.state.derived.valuationParts,
     })),
   )
   return (
@@ -71,6 +74,8 @@ function ProductSection() {
         />
         <Stat label={t('growth.mrr')} icon="cash" color={WIDGET_COLOR.cash} value={money(d.mrr)} sub={t('growth.mom', { v: pct(d.growth, 1) })} />
       </div>
+      {/* What builds the valuation (playtest LD2): the same stacked bar as the goals card, count × rate in the legend. */}
+      {d.parts && <ValuationParts parts={d.parts} />}
     </section>
   )
 }
@@ -193,7 +198,7 @@ function PriceSection() {
     <section>
       <SectionTitle right={<span className="tabular text-[15px] font-semibold text-ink">{`${fixed(d.mult, 2)}×`}</span>}>{t('growth.price')}</SectionTitle>
       {!unlocked ? (
-        <LockedHint text={t('growth.priceLocked')} />
+        <PriceLock />
       ) : (
         <>
           <Segmented label={t('growth.priceMultiplier')} className="w-full justify-between">
@@ -212,6 +217,48 @@ function PriceSection() {
         </>
       )}
     </section>
+  )
+}
+
+/**
+ * Price lock as the trigger's own checks (playtest LD5): stage + users / maturity / churn with live numbers, each
+ * green once met. Once the `pricing` customer has come and gone unopened (bubble shelved), the lock becomes a
+ * brand button (breathing coin) to that card: opening it is what unlocks the tool (learnConcept).
+ */
+function PriceLock() {
+  const g = useGameStore(useShallow((s) => priceGate(s.state)))
+  if (g.waiting) {
+    return (
+      <button
+        type="button"
+        onClick={() => openConceptCard('pricing')}
+        className="flex min-h-9 w-full items-center gap-2 rounded-control border border-brand bg-brand-soft px-3 py-2 text-left text-brand-ink"
+      >
+        <Icon name="coin" size={16} className="shrink-0 animate-breathe" />
+        <span className="min-w-0 flex-1 text-xs font-semibold">{t('growth.priceWaiting')}</span>
+        <Icon name="chevronRight" size={16} className="shrink-0" />
+      </button>
+    )
+  }
+  return (
+    <>
+      <LockedHint text={t('growth.priceLocked')} />
+      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+        <GateItem ok={g.stage} text={t('growth.gate.stage')} />
+        <GateItem ok={g.users.ok} text={t('growth.gate.users', { v: num(g.users.value), t: num(g.users.bar) })} />
+        <GateItem ok={g.maturity.ok} text={t('growth.gate.maturity', { v: pct(g.maturity.value), t: pct(g.maturity.bar) })} />
+        <GateItem ok={g.churn.ok} text={t('growth.gate.churn', { v: pct(g.churn.value, 1), t: pct(g.churn.bar) })} />
+      </ul>
+    </>
+  )
+}
+
+function GateItem({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <li className="tabular inline-flex items-center gap-1 rounded-control bg-surface-2/60 px-2 py-1 text-[11px] text-ink-2">
+      <Dot color={ok ? 'var(--color-positive)' : 'var(--color-border-strong)'} size={6} />
+      {text}
+    </li>
   )
 }
 

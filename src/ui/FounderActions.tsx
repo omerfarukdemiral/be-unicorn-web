@@ -36,6 +36,10 @@ export interface FounderActionView {
   /** 0–1 of the cooldown left. */
   cdFrac: number
   saturated: boolean
+  /** The return the saturation badge shows: "½", "¼" or a percent below that ("6%"). */
+  satLabel?: string
+  /** Return below a quarter: the icon goes ink-3 so the dead lever reads dead (still tappable). */
+  dead?: boolean
   /** Moves it takes this week (0 in the garage or for a free action). */
   moves: number
   /** The week's moves do not cover it: still tappable, the engine answers "Haftaya". */
@@ -87,6 +91,7 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
       : t('founder.salesCall.preview', { r: range(sales.min, sales.max, money), d: sales.contractDays, n: sales.fullLeft })
     : ''
   const salesSaturated = !!sales && sales.factor < 1
+  const factorOf = (kind: FounderActionKind): number | undefined => (kind === 'findUsers' ? find?.factor : kind === 'salesCall' ? sales?.factor : undefined)
   // "Refactor sprinti" (GAMEPLAY V2 §4.2): the debt it pays back, from the engine (8 + one per engineer).
   const refactorCut = useGameStore((s) => Math.round(refactorDebtCut(s.state)))
   const refactorText = t('founder.refactorSprint.preview', { n: refactorCut })
@@ -164,6 +169,7 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
       runFrac,
       cdFrac,
       saturated,
+      ...(saturated ? { satLabel: satLabel(factorOf(kind) ?? 1), dead: (factorOf(kind) ?? 1) < SAT_DEAD && !running } : {}),
       moves: moves ? FOUNDER_ACTION_DEFS[kind].moves : 0,
       outOfMoves,
       guided: guided === kind && !locked,
@@ -177,12 +183,20 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
   return { energy: f.energy, low: f.energy < LOW_ENERGY, moves, day: f.day, actions }
 }
 
+/** Below this return the slot's icon greys out (playtest LD3: a 6% find looked as live as a 50% one). */
+const SAT_DEAD = 0.25
+
+/** Saturation badge text: the return as "½" / "¼", or a whole percent below a quarter. */
+export function satLabel(factor: number): string {
+  return factor >= 0.5 ? '½' : factor >= SAT_DEAD ? '¼' : `${Math.round(factor * 100)}%`
+}
+
 /** Slot size (px): 44 everywhere (the phone row is 44 tall; touch targets stay ≥ 44, docs/GAMEPLAY_V2.md §10.4). */
 export const SLOT = 44
 
 /**
  * One ability slot (docs/GAMEPLAY_V2.md §10.4): a 44px square, icon 22 in the action's hue, the move cost top right
- * (on the budget), saturation "½" top left, running / cooldown as a 2px line along the bottom edge. No visible label:
+ * (on the budget), saturation "½" / "¼" / "6%" top left (a dead lever greys its icon), running / cooldown as a 2px line along the bottom edge. No visible label:
  * the name (≤ 2 words) lives in the tooltip. Locked = grey silhouette + lock + the unlocking stage's pill; a tap shows
  * the teaser and opens nothing. `tipAlign` keeps tips on screen. `floats`: numbers rising above the slot.
  * Exported pieces are pure props (no store): FloatingNumber.test.tsx renders a slot to a string.
@@ -236,8 +250,8 @@ export function FounderSlot({
         <Icon
           name={FOUNDER_ICON[a.kind]}
           size={a.locked ? 18 : 22}
-          className={cx('shrink-0', a.locked ? '-mt-2.5 text-ink-3 opacity-40' : idle && 'text-ink-3')}
-          style={idle ? undefined : { color: iconTone(hue) }}
+          className={cx('shrink-0', a.locked ? '-mt-2.5 text-ink-3 opacity-40' : (idle || a.dead) && 'text-ink-3')}
+          style={idle || a.dead ? undefined : { color: iconTone(hue) }}
         />
         {a.locked && (
           <>
@@ -263,9 +277,9 @@ export function FounderSlot({
           </span>
         )}
         {a.saturated && (
-          // Saturated: a small amber "½" so the diminishing return is visible before the click.
+          // Saturated: a small amber "½" / "¼" / "6%" so the diminishing return is visible before the click.
           <span aria-hidden="true" className="tabular absolute -left-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-energy-ink px-0.5 text-[9px] font-bold leading-none text-on-ink">
-            ½
+            {a.satLabel ?? '½'}
           </span>
         )}
         <span

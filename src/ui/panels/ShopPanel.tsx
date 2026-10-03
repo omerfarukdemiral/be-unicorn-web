@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 // Pure placement rules shared with the engine (same precedent as FounderActions → founderActionError).
 import { canPlaceAt } from '../../engine/office'
 import { shopPlacement, type ShopPlacement } from './shopPlacement'
-import { SLOT_TYPES, type OfficeState, type Slot, type SlotId, type SlotType } from '../../engine/types'
+import { SLOT_TYPES, type OfficeState, type RingState, type Slot, type SlotId, type SlotType } from '../../engine/types'
 import { DEPT_TEXT, FURNITURE, type FurnitureEffects, type FurnitureItem } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
@@ -41,6 +41,11 @@ function placementFor(office: OfficeState, item: FurnitureItem, target: Slot | u
 }
 
 const BOUGHT_MS = 2400
+/** "Bought" toast pinned on the bought row: an overlay, so the list never shifts under the cursor. */
+type Bought = { itemId: string; text: string; key: number }
+/** What sits above the catalog: the "for slot" strip and the ring CTA. Either one appearing or leaving moves every row. */
+type AboveList = { strip?: { ring: number; type: SlotType }; ring?: RingState }
+const aboveKey = (a: AboveList) => `${a.strip ? `${a.strip.ring}:${a.strip.type}` : '-'}|${a.ring ? `${a.ring.index}:${a.ring.openCost}` : '-'}`
 
 export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
   const { stage, cash, office } = useGameStore(useShallow((s) => ({ stage: s.state.stage, cash: s.state.stats.cash, office: s.state.office })))
@@ -48,7 +53,7 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
   const openPanel = useGameStore((s) => s.openPanel)
   const target = slotTarget ? office.slots.find((x) => x.id === slotTarget) : undefined
   const [filter, setFilter] = useState<SlotType | 'all'>(target?.type ?? 'all')
-  const [bought, setBought] = useState<{ text: string; key: number } | null>(null)
+  const [bought, setBought] = useState<Bought | null>(null)
 
   // A new target (another empty slot tapped) filters to its type.
   const targetType = target?.type
@@ -78,21 +83,36 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
     ({ item, place }) => !place.slot && place.roomRing !== null && place.nextRing && item.stageUnlock <= stage && slotTypeStage(item.slotType) <= stage,
   )?.place.nextRing
 
+  // Layout hold: while the pointer is on the catalog or the bought toast shows, the strip/CTA boxes keep their last
+  // layout (a gone one turns invisible, a new one waits), so the next "Satın al" stays under the cursor.
+  const [hovering, setHovering] = useState(false)
+  const live: AboveList = { strip: target && !targetGone ? { ring: target.ring, type: target.type } : undefined, ring: ringOffer }
+  const liveKey = aboveKey(live)
+  const [shown, setShown] = useState({ key: liveKey, v: live })
+  const held = hovering || bought !== null
+  if (!held && shown.key !== liveKey) setShown({ key: liveKey, v: live })
+  const above = held ? shown.v : live
+  const strip = above.strip && (live.strip ?? above.strip)
+  const ringCta = above.ring && (live.ring ?? above.ring)
+
   const buy = (item: FurnitureItem, place: ShopPlacement) => {
     // Untargeted buys use the engine's own auto placement (placeItem without slotId).
     const r = dispatch(place.targeted && place.slot ? { type: 'placeItem', itemId: item.id, slotId: place.slot.id } : { type: 'placeItem', itemId: item.id })
     if (!r.ok) return
     const ev = [...r.state.events].reverse().find((e) => e.kind === 'itemPlaced')
     const ring = r.state.office.slots.find((x) => x.id === ev?.refId)?.ring ?? place.slot?.ring ?? 1
-    setBought({ text: t('shop.bought', { item: item.name, ring }), key: performance.now() })
+    setBought({ itemId: item.id, text: t('shop.bought', { item: item.name, ring }), key: performance.now() })
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {target && !targetGone && (
-        <div className="flex items-center gap-2 rounded-control border border-border bg-surface-2 py-1.5 pl-3 pr-1.5 text-xs font-semibold text-ink">
-          <Icon name={SLOT_ICON[target.type]} size={15} className="shrink-0 text-ink-2" />
-          <span className="min-w-0 flex-1 truncate">{t('shop.forSlot', { ring: target.ring, type: t(`slot.${target.type}`) })}</span>
+      {strip && (
+        <div
+          aria-hidden={!live.strip || undefined}
+          className={cx('flex items-center gap-2 rounded-control border border-border bg-surface-2 py-1.5 pl-3 pr-1.5 text-xs font-semibold text-ink', !live.strip && 'invisible')}
+        >
+          <Icon name={SLOT_ICON[strip.type]} size={15} className="shrink-0 text-ink-2" />
+          <span className="min-w-0 flex-1 truncate">{t('shop.forSlot', { ring: strip.ring, type: t(`slot.${strip.type}`) })}</span>
           <Button
             size="sm"
             tone="ghost"
@@ -106,7 +126,7 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
           </Button>
         </div>
       )}
-      <div>
+      <div onPointerEnter={() => setHovering(true)} onPointerLeave={() => setHovering(false)}>
         <SectionTitle>{t('shop.catalog')}</SectionTitle>
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2">
           <Chip active={filter === 'all'} onClick={() => setFilter('all')}>
@@ -129,22 +149,23 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
             {t('shop.slotLocked', { stage: stageName(slotTypeStage(filter)) })}
           </p>
         )}
-        {bought && (
-          <div role="status" key={bought.key} className="mb-2 flex animate-pop-in items-center gap-1.5 rounded-control border border-border px-3 py-2 text-xs font-semibold text-ink">
-            <Icon name="check" size={14} className="shrink-0 text-positive-ink" />
-            {bought.text}
-          </div>
-        )}
         {items.length === 0 ? (
           <Empty text={t('shop.empty')} icon="bag" />
         ) : (
           <>
-            {ringOffer && (
-              <RingCta index={ringOffer.index} openCost={ringOffer.openCost} rent={ringOffer.rentPerMonth} cash={cash} onOpen={() => dispatch({ type: 'openRing', ring: ringOffer.index })} />
+            {ringCta && (
+              <RingCta
+                index={ringCta.index}
+                openCost={ringCta.openCost}
+                rent={ringCta.rentPerMonth}
+                cash={cash}
+                hidden={!live.ring}
+                onOpen={() => dispatch({ type: 'openRing', ring: ringCta.index })}
+              />
             )}
             <ul className="flex flex-col gap-1">
               {items.map(({ item, place }) => (
-                <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={place} onBuy={buy} />
+                <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={place} bought={bought?.itemId === item.id ? bought : undefined} onBuy={buy} />
               ))}
             </ul>
           </>
@@ -160,12 +181,14 @@ function ShopItem({
   stage,
   cash,
   place,
+  bought,
   onBuy,
 }: {
   item: FurnitureItem
   stage: number
   cash: number
   place: ShopPlacement
+  bought?: Bought
   onBuy: (item: FurnitureItem, place: ShopPlacement) => void
 }) {
   const locked = item.stageUnlock > stage || slotTypeStage(item.slotType) > stage
@@ -175,7 +198,18 @@ function ShopItem({
   const next = noRoom && place.roomRing !== null ? place.nextRing : undefined
   const preview = useSpendPreview(-item.price, item.upkeep ?? 0)
   return (
-    <li title={item.description} className={cx('flex flex-col gap-1.5 rounded-control bg-surface-2/60 px-2 py-2', locked && 'opacity-55')}>
+    <li title={item.description} className={cx('relative flex flex-col gap-1.5 rounded-control bg-surface-2/60 px-2 py-2', locked && 'opacity-55')}>
+      {bought && (
+        // Top-right, clear of the bottom-right Buy button; click-through so a repeat buy still lands.
+        <div
+          role="status"
+          key={bought.key}
+          className="pointer-events-none absolute right-1.5 top-1.5 z-10 flex max-w-[75%] animate-pop-in items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-ink shadow-sm"
+        >
+          <Icon name="check" size={12} className="shrink-0 text-positive-ink" />
+          <span className="truncate">{bought.text}</span>
+        </div>
+      )}
       <div className="flex items-start gap-3">
         <Swatch item={item} locked={locked} />
         <div className="min-w-0 flex-1">
@@ -241,10 +275,25 @@ function ShopItem({
 }
 
 /** Full office: the one "open the next ring" call above the list, a commit with its runway preview like every other. */
-function RingCta({ index, openCost, rent, cash, onOpen }: { index: number; openCost: number; rent: number; cash: number; onOpen: () => void }) {
+function RingCta({
+  index,
+  openCost,
+  rent,
+  cash,
+  hidden,
+  onOpen,
+}: {
+  index: number
+  openCost: number
+  rent: number
+  cash: number
+  /** Gone but held for layout: keeps its box, invisible and inert. */
+  hidden?: boolean
+  onOpen: () => void
+}) {
   const preview = useSpendPreview(-openCost, rent)
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3">
+    <div aria-hidden={hidden || undefined} className={cx('mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3', hidden && 'invisible')}>
       <Icon name="building" size={16} className="shrink-0 text-brand-ink" />
       <span className="min-w-0 flex-1 text-xs font-semibold text-ink">{t('shop.noRoomOpenRing', { n: index, cost: money(openCost) })}</span>
       <span className="flex shrink-0 items-center gap-1.5">

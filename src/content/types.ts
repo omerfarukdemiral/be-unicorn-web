@@ -134,6 +134,11 @@ export interface CrisisDef {
    * state for sizes (rent, burn).
    */
   effects: (s: GameState, severity: number) => EffectBundle
+  /**
+   * The remedy is in place: this storm cannot hit again (the reveal skips it, also as the lighter repeat). Missing =
+   * never settled.
+   */
+  settled?: (s: GameState) => boolean
 }
 
 // ---------------------------------------------------------------------------

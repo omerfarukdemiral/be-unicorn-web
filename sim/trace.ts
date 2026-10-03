@@ -54,7 +54,7 @@ const r = playBot(kind, seed, CONTENT, maxDays, (s, badDecisions) => {
       ` proj ${s.projects.map((p) => p.maturity.toFixed(2)).join(',')} round ${s.round?.active ? s.round.weeksLeft : '-'}`,
   )
 })
-const { gaps5: _g5, gapsAll: _ga, paydayRunway: _pr, crises: _cr, badDecisions: _bd, ...summary } = r
+const { gaps5: _g5, gapsAll: _ga, paydayRunway: _pr, crises: _cr, crisisDates: _cd, badDecisions: _bd, ...summary } = r
 console.log(JSON.stringify(summary))
 if (r.end === 'bankrupt' || r.end === 'teamLost') {
   const bad = r.badDecisions.filter((b) => b.day >= r.endDay - DEATH_TRACE_DAYS)

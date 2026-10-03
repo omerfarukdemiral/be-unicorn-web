@@ -46,7 +46,7 @@ export const GOALS: readonly StageGoal[] = [
     id: 'seed-price',
     stage: 2,
     text: 'Fiyatı ayarla, churn %6 altında kal',
-    hint: 'Fiyat ayarı pricing kavramıyla açılır.',
+    hint: 'Fiyat ayarı, müşterinin fiyat kartını açınca gelir.',
     check: (s, b) => s.finance.priceChangeDay !== undefined && s.finance.priceChangeDay >= b.day && s.finance.priceMultiplier !== 1 && s.stats.churn < 0.06,
   },
   {

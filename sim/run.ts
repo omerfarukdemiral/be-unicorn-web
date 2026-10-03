@@ -530,9 +530,11 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
 {
   // GAMEPLAY V2 §5.1 crisis calendar.
   const withCrises = [...goodRuns, ...careless, ...[...v2Runs.values()].flat(), ...unprepRuns.flatMap(([, runs]) => runs)]
-  const gaps = withCrises.flatMap((r) => r.crises.slice(1).map((k, i) => k.day - r.crises[i]!.day))
+  // Calendar spacing: a date skipped on the reveal (its storm settled, e.g. a remote team's lease hike) still counts.
+  const gaps = withCrises.flatMap((r) => r.crisisDates.slice(1).map((d, i) => d - r.crisisDates[i]!))
   const gapOk = gaps.length > 0 && Math.min(...gaps) >= balance.CRISIS_GAP_MIN && Math.max(...gaps) <= balance.CRISIS_GAP_MAX
-  line(`- Krizler arası boşluk (${gaps.length} aralık): ${gaps.length ? `${Math.min(...gaps)}–${Math.max(...gaps)}` : '—'} gün (hedef 150–300): **${yes(gapOk)}**`)
+  const skipped = withCrises.reduce((n, r) => n + r.crisesSkipped, 0)
+  line(`- Krizler arası boşluk (${gaps.length} aralık): ${gaps.length ? `${Math.min(...gaps)}–${Math.max(...gaps)}` : '—'} gün (hedef 150–300): **${yes(gapOk)}** · çözülmüş olduğu için atlanan tarih ${skipped}`)
   // Series C crises over every good run that reached C (§5.1 as written, no length filter).
   const reachedC = goodRuns.filter((r) => r.stageDays[5] != null).map((r) => r.crises.filter((k) => k.stage === 5).length)
   line(`- C'de kriz, iyi botlar (C'ye ulaşan ${reachedC.length} koşu, medyan): ${median(reachedC) ?? '—'} (hedef ≥ 2): **${yes((median(reachedC) ?? 0) >= 2)}** · ≥ 2 krizli koşu ${reachedC.filter((n) => n >= 2).length}/${reachedC.length}`)

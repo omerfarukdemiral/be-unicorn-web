@@ -146,7 +146,8 @@ export interface CalendarMarks {
  * `judged` ones before it, BOARD_QUARTER_DAYS apart back from its start (board.hits + misses; the event ring is capped).
  */
 export function calendarMarks(calendar: readonly CalendarEntry[] | undefined, board: BoardView | undefined, judged: number, day: number): CalendarMarks {
-  const crisis = (calendar ?? []).filter((c) => c.fired || c.day - day <= CRISIS_HORIZON_DAYS).map((c) => c.day)
+  // A date skipped on the reveal (every storm settled: fired, no id) passed quietly and is not marked.
+  const crisis = (calendar ?? []).filter((c) => (c.fired ? c.id !== null : c.day - day <= CRISIS_HORIZON_DAYS)).map((c) => c.day)
   const boardDays = board ? [board.endDay, ...Array.from({ length: Math.max(0, judged) }, (_, k) => board.endDay - (k + 1) * BOARD_QUARTER_DAYS)].filter((x) => x > 0).sort((a, b) => a - b) : []
   return {
     crisis: [...new Set(crisis)],

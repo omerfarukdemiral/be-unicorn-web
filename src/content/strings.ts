@@ -435,6 +435,8 @@ const BASE_TEXT: Record<string, string> = {
   'gameOver.xp': '+{v} Kurucu XP',
   'gameOver.xpHint': 'Sonraki oyunda başlangıç kasan %{v} daha fazla.',
   'gameOver.retry': 'Yeniden kur',
+  'ui.error.title': 'Bu ekran açılamadı. Oyun devam ediyor.',
+  'ui.error.retry': 'Tekrar dene',
   'victory.title': 'Unicorn oldun!',
   'victory.body': 'Garajdan bir milyar dolara. {days} günde.',
   'victory.lessons': '{n} ders öğrendin.',

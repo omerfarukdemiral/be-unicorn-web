@@ -26,6 +26,7 @@ import { ShopPanel } from './panels/ShopPanel'
 import { TeamPanel } from './panels/TeamPanel'
 import { ProjectsPanel } from './panels/ProjectsPanel'
 import { GrowthPanel } from './panels/GrowthPanel'
+import { ErrorCatch } from './ErrorCatch'
 import { JournalPanel } from './panels/JournalPanel'
 import { MetricsPanel } from './panels/MetricsPanel'
 import { DecisionPanel } from './panels/DecisionPanel'
@@ -191,7 +192,9 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   }
   const body = (
     <div key={panelKey(panel)} className={cx('@container ui-scroll min-h-0 flex-1 animate-fade-in', mobile ? 'px-3 pb-3 pt-3' : 'px-4 pb-4 pt-3')}>
-      <PanelBody panel={panel} />
+      <ErrorCatch key={panelKey(panel)} where={panelKey(panel)}>
+        <PanelBody panel={panel} />
+      </ErrorCatch>
     </div>
   )
 

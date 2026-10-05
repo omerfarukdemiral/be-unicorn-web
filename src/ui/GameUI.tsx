@@ -10,6 +10,7 @@ import { useGameStore } from '../store/gameStore'
 import { DOCK_TABS } from './Dock'
 import type { RenderPreview } from './DetailPanel'
 import { RightPanel } from './RightPanel'
+import { ErrorCatch } from './ErrorCatch'
 import { BubbleTray } from './bubbles'
 import { ModalHost } from './ModalHost'
 import { useKeyboardShortcuts } from './shortcuts'
@@ -54,7 +55,9 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
         {/* Paused start: one clear Başlat call in the middle of the scene area. */}
         <StartCall />
         {!worldBubbles && <BubbleTray ambient={screenAmbient} />}
-        <RightPanel renderPreview={renderPreview} />
+        <ErrorCatch where="panel">
+          <RightPanel renderPreview={renderPreview} />
+        </ErrorCatch>
         <TopBar pinned={pinned} onOpenMetrics={openMetrics} />
         <BottomStack />
       </div>

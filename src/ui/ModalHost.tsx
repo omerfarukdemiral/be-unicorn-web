@@ -14,6 +14,7 @@ import { requestOverlay, useModalQueue } from './modalQueue'
 import { PaydayOverlay } from './overlays/PaydayOverlay'
 import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
 import { CenterFrame } from './stats/CenterFrame'
+import { ErrorCatch } from './ErrorCatch'
 
 /** 'acquired' (the sale, GAMEPLAY V2 §8.2) routes to the post-mortem frame, which draws its own AcquiredOverlay screen. */
 function gameOverOverlay(kind: GameOverState['kind']): Overlay {
@@ -81,10 +82,10 @@ export function ModalHost() {
     case 'payday':
       return <PaydayOverlay onClose={close} />
     case 'stats':
-      return <CenterFrame kind="stats" tab={overlay.tab} onClose={closeOverlay} />
+      return <ErrorCatch where="stats"><CenterFrame kind="stats" tab={overlay.tab} onClose={closeOverlay} /></ErrorCatch>
     case 'lawbook':
     case 'market':
-      return <CenterFrame kind={overlay.kind} onClose={closeOverlay} />
+      return <ErrorCatch where={overlay.kind}><CenterFrame kind={overlay.kind} onClose={closeOverlay} /></ErrorCatch>
   }
 }
 

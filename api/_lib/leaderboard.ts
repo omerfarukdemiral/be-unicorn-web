@@ -276,6 +276,11 @@ async function readTop(kv: Kv, limit: number): Promise<{ top: { member: string; 
   return topCache
 }
 
+/** The house rivals moved (rivals.ts): the cached top list is stale. */
+export function dropTopCache(): void {
+  topCache = null
+}
+
 export async function list(kv: Kv, caller: AuthedUser | null, limit: number): Promise<LeaderboardOk> {
   const { top, total } = await readTop(kv, limit)
   const rows = top.map((x, i) => toRow(x.row, i + 1, caller?.emailHash === x.member))

@@ -10,7 +10,8 @@ import { handler as submitLb } from '../leaderboard/submit.js'
 import { setClockForTests, type ApiRequest, type ApiResult } from '../_lib/http.js'
 import { setKvForTests } from '../_lib/kv.js'
 import { MemoryKv } from '../_lib/memoryKv.js'
-import { lbScore } from '../_lib/leaderboard.js'
+import { lbScore, parseSubmission } from '../_lib/leaderboard.js'
+import { RIVAL_EPOCH, RIVALS, rivalRow } from '../_lib/rivals.js'
 import { acceptCompanyName, maskEmail, normalizeEmail, resetLimitsForTests, sanitizeCompanyName } from '../_lib/auth.js'
 import { pepperMissing } from '../_lib/kv.js'
 import { MIN_DAY_FOR_STAGE as MIN_DAY } from '../../src/net/stageRules.js'
@@ -469,5 +470,55 @@ describe('leaderboard', () => {
     playDays(5)
     const huge = { seed: 1, actions: ['x'.repeat(210 * 1024)] }
     expect((await call(submitLb, 'POST', { token: a, body: metrics({ day: 12, replay: huge }) })).status).toBe(413)
+  })
+})
+
+describe('house rivals', () => {
+  const at = (days: number) => RIVAL_EPOCH + days * 24 * 3600 * 1000
+
+  it('every row stays inside the server plausibility rules over months', () => {
+    for (const r of RIVALS) {
+      let prev: ReturnType<typeof rivalRow> = null
+      for (let d = 0; d < 120; d += 0.25) {
+        const row = rivalRow(r, at(d))
+        if (!row) continue
+        expect(row.day + 1).toBeGreaterThanOrEqual(MIN_DAY[row.stage]!)
+        expect(parseSubmission({ ...row, companyName: row.companyName }).stage).toBe(row.stage)
+        if (prev && prev.runIndex === row.runIndex) {
+          expect(row.day).toBeGreaterThanOrEqual(prev.day)
+          expect(row.stage).toBeGreaterThanOrEqual(prev.stage)
+        }
+        prev = row
+      }
+    }
+  })
+
+  it('a Unicorn rival keeps its winning row; the others go bankrupt and start over', () => {
+    const uni = RIVALS.find((r) => r.peak === 6)!
+    expect(rivalRow(uni, at(400))).toMatchObject({ stage: 6, status: 'unicorn', runIndex: 0 })
+    const other = RIVALS.find((r) => r.peak < 6)!
+    const seen = new Set<string>()
+    for (let d = 0; d < 120; d += 0.5) seen.add(rivalRow(other, at(d))?.status ?? 'none')
+    expect(seen.has('bankrupt')).toBe(true)
+    expect(rivalRow(other, at(120))!.runIndex).toBeGreaterThan(0)
+  })
+
+  it('LB_RIVALS=1 puts them on the board without accounts; LB_RIVALS=0 takes them off', async () => {
+    t = at(10)
+    const prev = process.env.LB_RIVALS
+    try {
+      process.env.LB_RIVALS = '1'
+      const a = await signUp()
+      const on = await call<LeaderboardOk>(board, 'GET', { token: a })
+      expect(on.body.total).toBe(RIVALS.length)
+      expect(on.body.rows.every((x) => x.email.includes('***') && !x.me)).toBe(true)
+      expect(kv.keys().filter((k) => k.startsWith('user:'))).toHaveLength(1)
+      process.env.LB_RIVALS = '0'
+      t += 301_000
+      expect((await call<LeaderboardOk>(board, 'GET')).body.total).toBe(0)
+    } finally {
+      if (prev === undefined) delete process.env.LB_RIVALS
+      else process.env.LB_RIVALS = prev
+    }
   })
 })

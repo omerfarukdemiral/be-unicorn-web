@@ -77,6 +77,15 @@ Tipler: `src/net/contract.ts` (sunucu ve istemci aynı dosyayı kullanır). Hata
 
 **Koşular:** gönderimde `runIndex` var. Yeni koşu satırı değiştirir; eski koşudan gelen 409 `staleRun`. Unicorn'la biten koşu, daha iyi bir koşu gelene kadar tabloda kalır, kazandığı şirket adıyla.
 
+## Ev rakipleri (`api/_lib/rivals.ts`)
+
+Tablo boşken ilk oyuncuların kovalayacağı biri olsun diye 8 uydurma şirket. Hesapları yok: üye `rival:{id}` (e-posta hash'i değil, gerçek bir hesapla çakışmaz), satır doğrudan `lb` / `lb:row:rival:{id}`'ye yazılır, e-posta tablodaki gibi maskeli görünür.
+
+- Saatten türer, durum tutmaz: her rakibin hızı (gerçek gün başına oyun günü), tavan aşaması ve yavaşlık katsayısı var (aşama günleri = `MEASURED_FASTEST_DAYS × slow`, hiçbiri `MIN_DAY_FOR_STAGE`'in altına inmez). Tavanına çıkan rakip bir süre büyür, batar (`bankrupt` satırı birkaç gün durur), sonra yeni koşuya Garaj'dan başlar. Unicorn tavanlı iki rakip bir kez bitirir ve satırı kalır (oyuncunun Unicorn'u gibi); biri açılışta zaten Unicorn (1985. gün), diğeri ~3 hafta içinde olur (2189. gün). Hepsi en iyi bot koşusundan yavaş: geçilebilirler.
+- `GET /api/leaderboard` en çok 5 dakikada bir (`lb:rivals:tick`, `SET NX EX 300`) satırları günceller: ~17 Redis komutu.
+- `LB_RIVALS=1` açar, `LB_RIVALS=0` satırlarını tablodan siler, tanımsızsa dokunmaz. Yerelde: `LB_RIVALS=1 MOCK_API=1 npm run dev`.
+- Testler: `api/_tests/api.test.ts › house rivals` (her satır `parseSubmission` + aşama günü sınırından geçer, koşu içinde gün/aşama geri gitmez).
+
 ## Güvenlik
 
 - PIN yalnızca scrypt hash'i olarak saklanır (+ `PIN_PEPPER`, production'da zorunlu), karşılaştırma `timingSafeEqual`.

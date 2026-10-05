@@ -226,7 +226,26 @@ function PriceSection() {
  * brand button (breathing coin) to that card: opening it is what unlocks the tool (learnConcept).
  */
 function PriceLock() {
-  const g = useGameStore(useShallow((s) => priceGate(s.state)))
+  // Flat primitives only: priceGate builds fresh nested checks, and useShallow compares one level deep (a nested
+  // object would read as a new snapshot every render and loop forever).
+  const g = useGameStore(
+    useShallow((s) => {
+      const p = priceGate(s.state)
+      return {
+        stage: p.stage,
+        waiting: p.waiting,
+        users: p.users.value,
+        usersBar: p.users.bar,
+        usersOk: p.users.ok,
+        maturity: p.maturity.value,
+        maturityBar: p.maturity.bar,
+        maturityOk: p.maturity.ok,
+        churn: p.churn.value,
+        churnBar: p.churn.bar,
+        churnOk: p.churn.ok,
+      }
+    }),
+  )
   if (g.waiting) {
     return (
       <button
@@ -245,9 +264,9 @@ function PriceLock() {
       <LockedHint text={t('growth.priceLocked')} />
       <ul className="mt-1.5 flex flex-wrap gap-1.5">
         <GateItem ok={g.stage} text={t('growth.gate.stage')} />
-        <GateItem ok={g.users.ok} text={t('growth.gate.users', { v: num(g.users.value), t: num(g.users.bar) })} />
-        <GateItem ok={g.maturity.ok} text={t('growth.gate.maturity', { v: pct(g.maturity.value), t: pct(g.maturity.bar) })} />
-        <GateItem ok={g.churn.ok} text={t('growth.gate.churn', { v: pct(g.churn.value, 1), t: pct(g.churn.bar) })} />
+        <GateItem ok={g.usersOk} text={t('growth.gate.users', { v: num(g.users), t: num(g.usersBar) })} />
+        <GateItem ok={g.maturityOk} text={t('growth.gate.maturity', { v: pct(g.maturity), t: pct(g.maturityBar) })} />
+        <GateItem ok={g.churnOk} text={t('growth.gate.churn', { v: pct(g.churn, 1), t: pct(g.churnBar) })} />
       </ul>
     </>
   )

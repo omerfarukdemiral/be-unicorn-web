@@ -1,7 +1,8 @@
 // House rivals: a few made-up companies on the live board so an early player has someone to chase. They have no
 // account (member `rival:{id}`, never an e-mail hash), write straight into `lb` / `lb:row:*`, and move with real
-// time: each one plays runs at its own pace, tops out at its own stage, goes bankrupt, rests and starts over. A
-// Unicorn rival finishes once and its row stays, like a player's kept Unicorn.
+// time: each one plays a run at its own pace up to its own stage and valuation ceiling, then holds there (or, with
+// `rest`, goes bankrupt and starts over). The current roster is a staircase from ~$1M up to ~$300M, no Unicorn; a
+// peak-6 rival would finish once and keep its row, like a player's kept Unicorn.
 //
 // Everything is a pure function of the clock (no stored state), refreshed at most every TICK_S from the board read.
 // LB_RIVALS=1 turns them on; LB_RIVALS=0 takes their rows off the board; unset leaves the board alone.
@@ -20,6 +21,8 @@ const TICK_S = 300
 const GARAGE_VALUATION = 60_000
 /** Game days a rival keeps growing at its top stage before it goes bankrupt. */
 const PLATEAU_DAYS = 140
+/** Share of `pace` a holding rival keeps playing at once it has topped out. */
+const HOLD_PACE = 0.25
 
 export interface Rival {
   id: string
@@ -27,25 +30,27 @@ export interface Rival {
   email: string
   /** Highest stage a run reaches (6 = finishes as Unicorn and stays). */
   peak: number
+  /** Where growth at the top stage stalls, as a share of the next stage's target (default 0.7). */
+  top?: number
   /** Multiplier on the fastest measured stage days (≥ 1: never faster than the best bot run). */
   slow: number
   /** Game days played per real day. */
   pace: number
-  /** Real days spent bankrupt on the board before a new run. */
-  rest: number
+  /** Real days spent bankrupt on the board before a new run; absent = never goes bankrupt, holds at the top. */
+  rest?: number
   /** Real days already played at RIVAL_EPOCH. */
   head: number
 }
 
 export const RIVALS: readonly Rival[] = [
-  { id: 'filika', companyName: 'Filika Labs', email: 'cagri.yildiz@gmail.com', peak: 6, slow: 1.07, pace: 160, rest: 0, head: 40 },
-  { id: 'sarnic', companyName: 'Sarnıç.io', email: 'elif.durmaz@outlook.com', peak: 6, slow: 1.18, pace: 95, rest: 0, head: 3 },
-  { id: 'kumbara', companyName: 'Kumbara Pay', email: 'mert.aydogan@icloud.com', peak: 5, slow: 1.22, pace: 65, rest: 4, head: 18 },
-  { id: 'rota', companyName: 'Rota Go', email: 'b.ozkan@hotmail.com', peak: 4, slow: 1.3, pace: 50, rest: 3, head: 11 },
-  { id: 'defne', companyName: 'Defne AI', email: 'defne.kocak@gmail.com', peak: 4, slow: 1.45, pace: 45, rest: 2, head: 3 },
-  { id: 'karinca', companyName: 'Karınca Works', email: 'onur.tas@yandex.com', peak: 3, slow: 1.35, pace: 35, rest: 2, head: 9 },
-  { id: 'tava', companyName: 'Tava Games', email: 'selin.ak@gmail.com', peak: 2, slow: 1.5, pace: 30, rest: 2, head: 4 },
-  { id: 'bereket', companyName: 'Bereket Cloud', email: 'hakan.e@outlook.com', peak: 3, slow: 1.6, pace: 25, rest: 2, head: 0.6 },
+  { id: 'filika', companyName: 'Filika Labs', email: 'cagri.yildiz@gmail.com', peak: 5, top: 0.31, slow: 1.1, pace: 40, head: 34 },
+  { id: 'kumbara', companyName: 'Kumbara Pay', email: 'mert.aydogan@icloud.com', peak: 4, top: 0.55, slow: 1.22, pace: 45, head: 24 },
+  { id: 'sarnic', companyName: 'Sarnıç.io', email: 'elif.durmaz@outlook.com', peak: 4, top: 0.3, slow: 1.18, pace: 45, head: 20 },
+  { id: 'rota', companyName: 'Rota Go', email: 'b.ozkan@hotmail.com', peak: 3, top: 0.5, slow: 1.3, pace: 35, head: 18 },
+  { id: 'defne', companyName: 'Defne AI', email: 'defne.kocak@gmail.com', peak: 3, top: 0.25, slow: 1.45, pace: 35, head: 15 },
+  { id: 'karinca', companyName: 'Karınca Works', email: 'onur.tas@yandex.com', peak: 2, top: 0.6, slow: 1.35, pace: 30, head: 9 },
+  { id: 'tava', companyName: 'Tava Games', email: 'selin.ak@gmail.com', peak: 2, top: 0.22, slow: 1.5, pace: 30, head: 7 },
+  { id: 'bereket', companyName: 'Bereket Cloud', email: 'hakan.e@outlook.com', peak: 1, top: 0.4, slow: 1.6, pace: 25, head: 4 },
 ]
 
 export interface RivalRow {
@@ -83,20 +88,22 @@ export function rivalRow(r: Rival, t: number): RivalRow | null {
   const sd = stageDays(r)
   const runGameDays = r.peak >= UNICORN ? sd[UNICORN]! : sd[r.peak]! + PLATEAU_DAYS
   const active = runGameDays / r.pace
-  const cycle = active + r.rest
+  // Without `rest` a rival never goes bankrupt: it holds at its top stage and keeps playing there, slower.
+  const holds = r.peak < UNICORN && !r.rest
+  const cycle = active + (r.rest ?? 0)
   const played = (t - RIVAL_EPOCH) / DAY_MS + r.head
   if (played <= 0) return null
 
-  let runIndex = Math.floor(played / cycle)
+  let runIndex = holds ? 0 : Math.floor(played / cycle)
   let inRun = played - runIndex * cycle
   if (r.peak >= UNICORN && runIndex >= 1) {
     // Finished as Unicorn on its first run: the row stays where it won.
     runIndex = 0
     inRun = active
   }
-  const day = Math.min(runGameDays, inRun * r.pace)
+  const day = holds && inRun > active ? runGameDays + (inRun - active) * r.pace * HOLD_PACE : Math.min(runGameDays, inRun * r.pace)
   if (day < 1) return null
-  const done = inRun >= active
+  const done = !holds && inRun >= active
 
   let stage = 0
   while (stage < r.peak && day >= sd[stage + 1]!) stage++
@@ -110,7 +117,7 @@ export function rivalRow(r: Rival, t: number): RivalRow | null {
   } else {
     // Top stage: growth slows and stalls short of the next round.
     const f = (day - sd[stage]!) / PLATEAU_DAYS
-    valuation = lerpLog(lo, STAGE_TARGET[stage + 1]! * 0.7, Math.sqrt(f))
+    valuation = lerpLog(lo, STAGE_TARGET[stage + 1]! * (r.top ?? 0.7), Math.sqrt(f))
   }
   const dayKey = Math.floor(day / 5)
   if (stage < UNICORN) valuation *= 1 + 0.04 * noise(dayKey, runIndex, seed)

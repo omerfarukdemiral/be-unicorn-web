@@ -493,14 +493,25 @@ describe('house rivals', () => {
     }
   })
 
-  it('a Unicorn rival keeps its winning row; the others go bankrupt and start over', () => {
-    const uni = RIVALS.find((r) => r.peak === 6)!
-    expect(rivalRow(uni, at(400))).toMatchObject({ stage: 6, status: 'unicorn', runIndex: 0 })
-    const other = RIVALS.find((r) => r.peak < 6)!
+  it('the roster is a staircase up to ~$300M with no Unicorn, and holds there', () => {
+    for (const d of [0, 30, 120]) {
+      const rows = RIVALS.map((r) => rivalRow(r, at(d))!)
+      expect(rows.every((x) => x.stage < 6 && x.status === 'playing' && x.runIndex === 0)).toBe(true)
+      expect(Math.max(...rows.map((x) => x.valuation))).toBeLessThan(360_000_000)
+      const vals = rows.map((x) => x.valuation)
+      expect(vals).toEqual([...vals].sort((x, y) => y - x))
+    }
+  })
+
+  it('a rival with rest goes bankrupt and starts over; a peak-6 rival keeps its Unicorn row', () => {
+    const base = RIVALS[0]!
+    const cycling = { ...base, id: 'c', peak: 3, rest: 2, pace: 60, head: 0 }
     const seen = new Set<string>()
-    for (let d = 0; d < 120; d += 0.5) seen.add(rivalRow(other, at(d))?.status ?? 'none')
+    for (let d = 0; d < 120; d += 0.5) seen.add(rivalRow(cycling, at(d))?.status ?? 'none')
     expect(seen.has('bankrupt')).toBe(true)
-    expect(rivalRow(other, at(120))!.runIndex).toBeGreaterThan(0)
+    expect(rivalRow(cycling, at(120))!.runIndex).toBeGreaterThan(0)
+    const uni = { ...base, id: 'u', peak: 6, pace: 150, head: 0 }
+    expect(rivalRow(uni, at(400))).toMatchObject({ stage: 6, status: 'unicorn', runIndex: 0 })
   })
 
   it('LB_RIVALS=1 puts them on the board without accounts; LB_RIVALS=0 takes them off', async () => {

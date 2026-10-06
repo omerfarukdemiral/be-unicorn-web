@@ -1,7 +1,7 @@
 // View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, İstatistik,
 // Liderlik, settings. No card of their own: they sit inside the top bar, divided from the speed control by a 1px rule.
 import { useEffect, useRef } from 'react'
-import { achievementsBadge, useGameStore } from '../../store/gameStore'
+import { useGameStore, waitingConcepts } from '../../store/gameStore'
 import type { ZoomLevel } from '../../store/types'
 import { Icon } from '../icons'
 import { t } from '../i18n'
@@ -53,12 +53,11 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
 const POP_MS = 600
 
 /**
- * Book → Kazanımlar (K, docs/GAMEPLAY_V2.md §12): stage goals, the concept shelf, Keşif. The badge counts concepts
- * waiting to be read + goals done since it was last opened; when it grows the icon pops once (audio plays the
- * milestone cue). Nothing else announces an achievement.
+ * Book → Kazanımlar (K, docs/GAMEPLAY_V2.md §12): the concept grid and Keşif. The badge counts concepts waiting to
+ * be read; when it grows the icon pops once (audio plays the milestone cue). Stage goals live in Yol haritası.
  */
 function AchievementsButton({ size }: { size: number }) {
-  const n = useGameStore((s) => achievementsBadge(s.state, s.ui.seenGoals))
+  const n = useGameStore((s) => waitingConcepts(s.state).length)
   const open = useGameStore((s) => s.ui.panel?.kind === 'journal')
   const box = useRef<HTMLSpanElement>(null)
   const prev = useRef(n)

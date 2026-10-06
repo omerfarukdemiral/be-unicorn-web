@@ -16,6 +16,7 @@ export const TOP_BAR_TEXT: Record<string, string> = {
   // Kasa: usable money + the daily NET flow (always with the word "net").
   'top.netPerDay': 'net {v}/gün',
   'top.netPerDayShort': 'net {v}/g',
+  'top.netDelta': '{v}/g',
   'top.dateShort': 'A{m}·G{d}',
   'top.cashTitle': 'Kullanılabilir {v} · kasada {bank} · ayrılan {owed}',
   'top.cashTitleNoOwed': 'Kullanılabilir para {v}',

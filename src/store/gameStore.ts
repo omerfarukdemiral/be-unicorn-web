@@ -112,10 +112,14 @@ export function waitingConcepts(s: GameState): ConceptId[] {
   return out
 }
 
-/** Kazanımlar badge (docs/GAMEPLAY_V2.md §12): concepts waiting to be read + stage goals done since last opened. */
+/** Stage goals done since Yol haritası was last opened (the dot on the stage name). */
+export function unseenGoals(s: GameState, seenGoals: readonly string[]): number {
+  return (s.goalsDone ?? NO_GOALS).filter((id) => !seenGoals.includes(id)).length
+}
+
+/** Everything newly earned (docs/GAMEPLAY_V2.md §12): concepts waiting to be read + unseen stage goals (the milestone cue). */
 export function achievementsBadge(s: GameState, seenGoals: readonly string[]): number {
-  const done = s.goalsDone ?? NO_GOALS
-  return waitingConcepts(s).length + done.filter((id) => !seenGoals.includes(id)).length
+  return waitingConcepts(s).length + unseenGoals(s, seenGoals)
 }
 
 /** Last step of each card thread (rival's step 4 has two branches; the investor's step 5 is the exit offer). */

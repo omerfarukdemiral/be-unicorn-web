@@ -354,7 +354,10 @@ const BASE_TEXT: Record<string, string> = {
   'growth.mom': 'Aylık büyüme {v}',
   'growth.adBudget': 'Reklam bütçesi',
   'growth.adLocked': 'Reklam bütçesi Series A’da açılır.',
-  'growth.cac': 'Kullanıcı edinme maliyeti',
+  'growth.cac': 'CAC',
+  'growth.cacInfo': 'Kullanıcı edinme maliyeti: reklamla gelen bir kullanıcının bedeli.',
+  'growth.ltvInfo': 'Bir kullanıcının getirdiği gelir ÷ onu getirmenin bedeli. 3× altı: reklam para yakıyor.',
+  'growth.arpuInfo': 'Kullanıcı başı aylık gelir. Zam bir ay churn’ü artırır.',
   'growth.paidUsers': 'Reklamdan gelen',
   'growth.price': 'Fiyat',
   'growth.priceMultiplier': 'Fiyat çarpanı',
@@ -391,6 +394,7 @@ const BASE_TEXT: Record<string, string> = {
   'journal.gotIt': 'Anladım',
   'journal.unlocked': 'Açıldı: {v}',
   'journal.waiting': 'Henüz keşfedilmedi',
+  'journal.new': 'Yeni',
   'journal.missing': 'Kart bulunamadı ({id})',
 
   // Bubbles & decisions

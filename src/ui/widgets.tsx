@@ -5,7 +5,7 @@
 // Look (docs/DESIGN.md): neutral chip on a warm card; each gauge owns a hue (WIDGET_COLOR) used on its icon (on a
 // ~12% tile) and on its thin bar / sparkline / stacked ramp. Values stay ink (AA). Red only for real danger
 // (LAYOUT §4.1: usable cash < 0, runway < 3, morale < 28); other thresholds are amber (energy / energy-ink).
-import type { ComponentType, ReactNode } from 'react'
+import { createContext, isValidElement, useContext, type ComponentType, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { previewSpend } from '../engine/loopSelectors'
 import type { HudWidget, SpendPreview } from '../engine/types'
@@ -17,6 +17,7 @@ import { compact, fixed, money, num, pct, signedMoney } from './format'
 import { cx, Dot } from './primitives'
 import { iconTone, Legend, ramp, RUNWAY_DANGER_MONTHS, soft, WIDGET_COLOR, type LegendPart } from './theme'
 import { cashFlow } from './cashflow'
+import { InfoTip, type InfoAction } from './InfoTip'
 
 /** 'panel' = Metrikler card (default), 'bar' = top-bar pin (h40, value only). */
 export type WidgetVariant = 'panel' | 'bar'
@@ -46,6 +47,25 @@ export interface WidgetDef {
 // ---------------------------------------------------------------------------
 // Chip shell
 // ---------------------------------------------------------------------------
+
+/**
+ * Set by a Metrikler row around its gauge: the panel chip drops its sub line and shows an ⓘ by the label instead,
+ * holding that sub line plus the concept's definition (simplified 2026-10-06: number on the row, words on demand).
+ */
+export interface ChipInfo {
+  text?: string
+  action?: InfoAction
+}
+export const ChipInfoContext = createContext<ChipInfo | null>(null)
+
+/** The words of a sub line (a string, or a tinted <span> around one) for the ⓘ. */
+function plainText(n: ReactNode): string | null {
+  if (typeof n === 'string') return n
+  if (typeof n === 'number') return String(n)
+  if (Array.isArray(n)) return n.map(plainText).filter(Boolean).join(' ') || null
+  if (isValidElement<{ children?: ReactNode }>(n)) return plainText(n.props.children)
+  return null
+}
 
 export function WidgetChip({
   icon,
@@ -96,8 +116,39 @@ export function WidgetChip({
       </div>
     )
   }
-  // Metrikler row (GAMEPLAY V2 §10.5): name on the left, the number on the right (the biggest thing), the sub and the
-  // spark / bar under them. 36px when there is nothing under the row.
+  // Metrikler row (GAMEPLAY V2 §10.5): name on the left, the number on the right (the biggest thing), the spark / bar
+  // under them. Inside a Metrikler row the sub folds into the ⓘ. 36px when there is nothing under the row.
+  return <PanelChip {...{ icon, color, label, value, sub, alert, warn, children, title, className, goal }} />
+}
+
+function PanelChip({
+  icon,
+  color = 'var(--color-ink-2)',
+  label,
+  value,
+  sub: rawSub,
+  alert,
+  warn,
+  children,
+  title,
+  className,
+  goal,
+}: {
+  icon: IconName
+  color?: string
+  label: string
+  value: ReactNode
+  sub?: ReactNode
+  alert?: boolean
+  warn?: boolean
+  children?: ReactNode
+  title?: string
+  className?: string
+  goal?: number
+}) {
+  const info = useContext(ChipInfoContext)
+  const sub = info ? undefined : rawSub
+  const tip = info ? [plainText(rawSub), info.text].filter((x): x is string => !!x) : []
   return (
     <div className={cx('min-w-0 rounded-control px-2 py-1', className)} title={title ?? label}>
       <div className="flex min-h-7 min-w-0 items-center gap-2">
@@ -105,7 +156,18 @@ export function WidgetChip({
           <Icon name={icon} size={14} />
         </span>
         {/* Label never truncates (a cut label loses its meaning): tighter tracking, wraps to 2 lines if needed. */}
-        <span className="ui-label line-clamp-2 min-w-0 flex-1 leading-[14px] tracking-[0.04em]">{label}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-1">
+          <span className="ui-label line-clamp-2 min-w-0 leading-[14px] tracking-[0.04em]">{label}</span>
+          {info && (tip.length > 0 || info.action) && (
+            <InfoTip title={label} action={info.action} size={13}>
+              {tip.map((x, i) => (
+                <span key={i} className="block [&+&]:mt-1">
+                  {x}
+                </span>
+              ))}
+            </InfoTip>
+          )}
+        </span>
         <StatusMark alert={alert} warn={warn} size={6} />
         {/* Values stay short (number + unit). Nothing is ellipsised: touch screens have no tooltip to recover a cut value. */}
         <span className="tabular shrink-0 text-right text-[15px] font-semibold leading-tight text-ink">{value}</span>

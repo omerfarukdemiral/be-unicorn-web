@@ -62,6 +62,7 @@ const PATHS = {
   desk: <><path d="M3 9.5h18M5 9.5V19M19 9.5V19M14 9.5V15h5" /><rect x="8" y="4" width="6" height="4" rx="1" /></>,
   sofa: <><path d="M5 11V8.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2V11" /><path d="M3.5 17v-5a1.5 1.5 0 0 1 3 0v1.5h11V12a1.5 1.5 0 0 1 3 0v5ZM6 17v2M18 17v2" /></>,
   door: <><path d="M6 20.5V4.5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v16" /><path d="M4 20.5h16M14.5 12.5h.01" /></>,
+  info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8h.01" /></>,
   warning: <><path d="M12 4 21 19.5H3Z" /><path d="M12 10v4.5M12 17.2h.01" /></>,
   refresh: <><path d="M19.5 7.5A8 8 0 1 0 20 13" /><path d="M20 3.5v4.5h-4.5" /></>,
   handshake: <><path d="m3 10 4-4 5 2 5-2 4 4-4 5-3 3-4-4" /><path d="m8 11 3 3M11 15l2 2M7 14l3 3" /></>,

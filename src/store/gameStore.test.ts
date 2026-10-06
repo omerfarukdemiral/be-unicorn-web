@@ -1165,13 +1165,15 @@ describe('overlays and the Defter card (§10.6)', () => {
 
   const report = (stage: StageIndex): StageReport => ({ stage, days: 60 + stage * 40, roundsClosed: stage, goalsDone: 1, threadSteps: 1, rivalRatio: 0, minRunway: 4.2 })
 
-  it('NotebookCard shows at most 20 words when it opens (every concept, numbers and unlock pill in)', () => {
+  it('NotebookCard is title + definition + unlock pill: at most 22 words, one paragraph, the definition is card.what', () => {
     const s = store().state
     useGameStore.setState({ state: { ...s, concepts: { ...s.concepts, triggered: [...CONCEPT_IDS] } } })
     for (const c of CONCEPTS) {
       const html = ssr(createElement(NotebookCard, { conceptId: c.id, onClose: () => {} }))
-      expect(visibleWords(html), c.id).toBeLessThanOrEqual(20)
+      // card.what ≤ 16 words (concepts.test) + a title of ≤ 3 + the unlock pill + "Anladım".
+      expect(visibleWords(html), c.id).toBeLessThanOrEqual(22)
       expect((html.match(/<p[\s>]/g) ?? []).length, c.id).toBeLessThanOrEqual(1)
+      expect(html, c.id).not.toContain(c.card.rule)
     }
   })
 

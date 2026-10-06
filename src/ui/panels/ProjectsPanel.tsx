@@ -11,6 +11,7 @@ import { money, pct } from '../format'
 import { launchGain } from '../loopUi'
 import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
+import { InfoTip } from '../InfoTip'
 
 /** Turkish project name from content, unique within the run. */
 function nextProjectName(): string {
@@ -70,32 +71,26 @@ export function ProjectsPanel() {
       </div>
       <div>
         <SectionTitle>{t('projects.new')}</SectionTitle>
-        <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
+        {/* A tile per category: icon + name; what the category is like sits behind its ⓘ (the button stays one tap). */}
+        <div className="grid grid-cols-3 gap-1.5">
           {PROJECT_CATEGORIES.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => dispatch({ type: 'startProject', category: c, name: nextProjectName() })}
-              className="flex min-h-16 flex-col items-start gap-1 rounded-control border border-border p-2.5 text-left transition-colors hover:border-border-strong hover:bg-surface-2"
-            >
-              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <IconBadge icon={CATEGORY_ICON[c]} size={24} color={CATEGORY_COLOR[c]} />
-                {PROJECT_CATEGORY_TEXT[c].name}
+            <div key={c} className="relative">
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'startProject', category: c, name: nextProjectName() })}
+                title={t('projects.start')}
+                className="flex min-h-[76px] w-full flex-col items-center justify-center gap-1 rounded-control border border-border px-1 py-2 transition-colors hover:border-border-strong hover:bg-surface-2"
+              >
+                <IconBadge icon={CATEGORY_ICON[c]} size={30} color={CATEGORY_COLOR[c]} />
+                <span className="text-center text-xs font-semibold leading-tight">{PROJECT_CATEGORY_TEXT[c].name}</span>
+                {gainTag && <span className="tabular text-[10.5px] font-semibold text-brand-ink">{gainTag}</span>}
+              </button>
+              <span className="absolute right-1.5 top-1.5 flex">
+                <InfoTip title={PROJECT_CATEGORY_TEXT[c].name} size={13}>
+                  {PROJECT_CATEGORY_TEXT[c].description}
+                </InfoTip>
               </span>
-              <span className="font-text text-[11px] leading-snug text-ink-2">{PROJECT_CATEGORY_TEXT[c].description}</span>
-              <span className="mt-auto flex w-full items-center justify-between gap-1 pt-1">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-ink">
-                  <Icon name="plus" size={12} />
-                  {t('projects.start')}
-                </span>
-                {gainTag && (
-                  <Pill tint="var(--color-brand)" className="tabular text-brand-ink">
-                    <Icon name="rocket" size={11} />
-                    {gainTag}
-                  </Pill>
-                )}
-              </span>
-            </button>
+            </div>
           ))}
         </div>
       </div>

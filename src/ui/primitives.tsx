@@ -8,6 +8,7 @@ import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { clamp01, fixed } from './format'
 import { useTween } from './hooks'
+import { InfoTip } from './InfoTip'
 import { iconTone, RUNWAY_DANGER_MONTHS, soft } from './theme'
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
@@ -320,10 +321,13 @@ export function Stat({
   delta,
   tween,
   format = plain,
+  info,
 }: {
   label: string
   value: ReactNode
   sub?: ReactNode
+  /** The explanation behind an ⓘ next to the label (instead of a sub line). */
+  info?: ReactNode
   icon?: IconName
   color?: string
   delta?: { value: number; text: string }
@@ -350,6 +354,11 @@ export function Stat({
           </span>
         )}
         <div className="ui-label line-clamp-2 min-w-0 leading-[14px] tracking-[0.04em]">{label}</div>
+        {info && (
+          <InfoTip title={label} size={12}>
+            {info}
+          </InfoTip>
+        )}
       </div>
       {sub && <div className="break-words text-[11px] font-medium text-ink-2">{sub}</div>}
     </div>

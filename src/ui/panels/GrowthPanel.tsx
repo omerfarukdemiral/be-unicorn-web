@@ -1,7 +1,7 @@
 // Büyüme: funding round, product health, channels (ad budget steps), price steps, enterprise + renewals, and one-line
 // rows to the center screens (Pazar haritası, Kanun Kitabı) with the Kurul row under them. HUD grammar (GAMEPLAY V2 §10.5): no sliders, every step is a
 // button with its CostPreview; the big surfaces open in the middle (CenterFrame), not stacked in this drawer.
-// Stage goals (☆) live in Kazanımlar (JournalPanel).
+// Stage goals (☆) live in Yol haritası (RoadmapPanel). Explanations sit behind ⓘ, never under a number.
 import { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { adBudgetSteps, nearestPriceStep, PRICE_STEPS } from '../../engine'
@@ -20,6 +20,7 @@ import { BoardRow } from './BoardRow'
 import { RenewalSection } from './RenewalSection'
 import { priceGate } from '../loopUi'
 import { openConceptCard } from '../uiActions'
+import { InfoTip } from '../InfoTip'
 
 function useTool(id: ToolId): boolean {
   return useGameStore((s) => s.state.unlockedTools.includes(id))
@@ -72,7 +73,7 @@ function ProductSection() {
           value={`${num(d.users)} / ${num(d.capacity)}`}
           sub={d.overload > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-ink"><Dot color="var(--color-negative)" size={6} />{t('hud.overload')}</span> : undefined}
         />
-        <Stat label={t('growth.mrr')} icon="cash" color={WIDGET_COLOR.cash} value={money(d.mrr)} sub={t('growth.mom', { v: pct(d.growth, 1) })} />
+        <Stat label={t('growth.mrr')} icon="cash" color={WIDGET_COLOR.cash} value={money(d.mrr)} delta={d.growth !== 0 ? { value: d.growth, text: `${d.growth > 0 ? '+' : ''}${pct(d.growth, 1)}` } : undefined} />
       </div>
       {/* What builds the valuation (playtest LD2): the same stacked bar as the goals card, count × rate in the legend. */}
       {d.parts && <ValuationParts parts={d.parts} />}
@@ -137,8 +138,9 @@ function ChannelSection() {
             ))}
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 @lg:grid-cols-3">
-            <Stat label={t('growth.cac')} icon="coin" color={WIDGET_COLOR.burnBreakdown} value={money(d.cac)} />
-            <Stat label={t('growth.paidUsers')} icon="magnet" color={WIDGET_COLOR.channelBreakdown} value={`+${num(d.ch.paid)}`} sub={t('hud.monthly')} />
+            <Stat label={t('growth.cac')} icon="coin" color={WIDGET_COLOR.burnBreakdown} value={money(d.cac)} info={t('growth.cacInfo')} />
+            {/* The channel row below already has the paid count. */}
+            {!showChannels && <Stat label={t('growth.paidUsers')} icon="magnet" color={WIDGET_COLOR.channelBreakdown} value={`+${num(d.ch.paid)}`} />}
             {showLtv && (
               <Stat
                 label={t('hud.ltvCac')}
@@ -146,19 +148,22 @@ function ChannelSection() {
                 color={WIDGET_COLOR.ltvCac}
                 // Same warning rule as the HUD chip: under 3x is red, otherwise green.
                 value={d.ltvCac === null ? '—' : <span className={d.ltvCac < 3 ? 'text-negative-ink' : 'text-positive-ink'}>{`${fixed(d.ltvCac, 1)}×`}</span>}
-                sub={d.ltvCac !== null && d.ltvCac < 3 ? t('hud.ltvLow') : undefined}
+                info={t('growth.ltvInfo')}
               />
             )}
           </div>
         </>
       )}
       {showChannels && (
-        <div className="mt-2 grid grid-cols-2 gap-2 @lg:grid-cols-4">
-          <Stat label={t('channel.organic')} value={`+${num(d.ch.organic)}`} />
-          <Stat label={t('channel.paid')} value={`+${num(d.ch.paid)}`} />
-          <Stat label={t('channel.manual')} value={`+${num(d.ch.manual)}`} />
-          <Stat label={t('channel.enterprise')} value={`+${num(d.ch.enterprise)}`} />
-        </div>
+        // New users a month by channel: one row of small figures (the four big Stats read as a wall of numbers).
+        <dl className="mt-2 grid grid-cols-4 gap-1 border-t border-border pt-2">
+          {(['organic', 'paid', 'manual', 'enterprise'] as const).map((k) => (
+            <div key={k} className="min-w-0">
+              <dd className="tabular text-[15px] font-semibold leading-tight text-ink">{`+${num(d.ch[k])}`}</dd>
+              <dt className="truncate text-[10.5px] font-medium text-ink-2">{t(`channel.${k}`)}</dt>
+            </div>
+          ))}
+        </dl>
       )}
     </section>
   )
@@ -196,7 +201,21 @@ function PriceSection() {
   const on = nearestPriceStep(d.mult)
   return (
     <section>
-      <SectionTitle right={<span className="tabular text-[15px] font-semibold text-ink">{`${fixed(d.mult, 2)}×`}</span>}>{t('growth.price')}</SectionTitle>
+      <SectionTitle
+        right={
+          unlocked ? (
+            <span className="tabular inline-flex items-center gap-1 text-[15px] font-semibold text-ink">
+              <Icon name="coin" size={13} style={{ color: iconTone(WIDGET_COLOR.arpu) }} />
+              {`$${fixed(d.arpu, 2)}`}
+              <InfoTip title={t('hud.arpu')} size={12}>
+                {t('growth.arpuInfo')}
+              </InfoTip>
+            </span>
+          ) : undefined
+        }
+      >
+        {t('growth.price')}
+      </SectionTitle>
       {!unlocked ? (
         <PriceLock />
       ) : (
@@ -208,12 +227,6 @@ function PriceSection() {
               </Chip>
             ))}
           </Segmented>
-          <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-ink-2">
-            <span className="inline-flex items-center gap-1">
-              <Icon name="coin" size={12} style={{ color: iconTone(WIDGET_COLOR.arpu) }} />
-              {t('growth.arpuNow', { v: `$${fixed(d.arpu, 2)}` })}
-            </span>
-          </div>
         </>
       )}
     </section>

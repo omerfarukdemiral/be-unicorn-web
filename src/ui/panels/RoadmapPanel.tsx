@@ -1,7 +1,7 @@
 // Yol haritası: the Unicorn yolu as a horizontal rail (GAMEPLAY V2 §10.5, §9.4). Passed and current stages show their
 // name, the next one its target, the later ones are silhouettes. Tapping a known stage shows its office, round and what
 // it opens under the rail as icon + number rows. The current stage carries the only sentence (how far the next one is).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ROADMAP_STEPS, STAGES, type StageDef } from '../../content'
 import { useGameStore } from '../../store/gameStore'
@@ -10,6 +10,7 @@ import { t } from '../i18n'
 import { money } from '../format'
 import { Bar, cx, Pill } from '../primitives'
 import { openRound } from '../layout/StageSection'
+import { GoalsCard, ValuationParts } from './GoalsCard'
 
 type Status = 'done' | 'here' | 'next' | 'later'
 
@@ -27,8 +28,13 @@ export function RoadmapPanel() {
       valuation: st.state.finance.valuation,
       canStart: st.state.derived.canStartRound,
       company: st.state.meta.companyName,
+      parts: st.state.derived.valuationParts,
+      goalsDone: st.state.goalsDone,
     })),
   )
+  const markGoalsSeen = useGameStore((st) => st.markGoalsSeen)
+  // Open = seen: the stage name's goal dot clears here (goals reached while it is open never show it either).
+  useEffect(() => markGoalsSeen(), [s.goalsDone, markGoalsSeen])
   const [picked, setPicked] = useState<number | null>(null)
   const next = STAGES[s.stage + 1]
   const gap = next ? (next.targetValuation ?? 0) - s.valuation : 0
@@ -53,6 +59,7 @@ export function RoadmapPanel() {
           </div>
         )}
         {next && <Bar value={s.progress} height={6} className="mt-1.5" />}
+        {next && s.parts && <ValuationParts parts={s.parts} />}
         <p className="font-text mt-1.5 text-xs text-ink-2">{line}</p>
         {next && s.canStart && (
           <button type="button" onClick={openRound} className="mt-2 inline-flex h-8 items-center gap-1 rounded-control bg-brand px-2.5 text-xs font-semibold text-on-ink transition-colors hover:bg-brand-hover">
@@ -61,6 +68,8 @@ export function RoadmapPanel() {
           </button>
         )}
       </div>
+
+      <GoalsCard />
 
       {/* The rail: one node per stage, the line between them filled once passed. */}
       <ol className="ui-scroll -mx-1 flex items-start overflow-x-auto px-1 pb-1" aria-label={t('roadmap.step', { n: s.stage + 1 })}>

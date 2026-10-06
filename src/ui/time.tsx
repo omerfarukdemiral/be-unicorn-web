@@ -68,7 +68,6 @@ function timeColor(s: Pick<TimeStatus, 'effective'>): string {
 // ---------------------------------------------------------------------------
 
 /** Ms a "Zaman akıyor" label stays after the clock (re)starts (speed control label). */
-export const FLOW_LABEL_MS = 4500
 /** Ms the "Önemli an · 1×'e yavaşladı" note stays after an automatic 4× → 1× slowdown. */
 const SLOWED_LABEL_MS = 3500
 

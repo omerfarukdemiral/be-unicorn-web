@@ -101,13 +101,15 @@ export function BarChip({
       <div className="relative min-w-0 flex-1">
         {density === 'full' ? (
           <>
-            {/* The sub (Kasa's daily net) rides on the label line, so the value line stays one short number. */}
             <div className="flex h-3 min-w-0 items-center gap-1 whitespace-nowrap">
               <span className="ui-label text-[10px] leading-3">{label}</span>
               <StatusMark mark={mark} />
-              {sub && <span className="tabular text-[10.5px] font-medium leading-3 text-ink-2">· {sub}</span>}
             </div>
-            <div className="tabular h-5 whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">{value}</div>
+            {/* The sub (Kasa's daily net) is a small coloured delta after the value: a number, not a phrase. */}
+            <div className="tabular flex h-5 items-baseline gap-1.5 whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">
+              {value}
+              {sub && <span className="text-[11px] font-semibold">{sub}</span>}
+            </div>
             {/* Extras (Moral's bar) hang under the value and take no layout height. */}
             {children && <div className="absolute inset-x-0 top-full">{children}</div>}
           </>
@@ -151,8 +153,6 @@ export function CashChip({ density }: { density: MetricDensity }) {
   )
   const shown = useTween(f.usable)
   const danger = f.usable < 0 || missed
-  const mobile = density === 'mobile'
-
   const net = f.netDay >= 0 ? signedMoney(f.netDay) : `−${money(-f.netDay)}`
   const title = [
     f.owed > 0.5 ? t('top.cashTitle', { v: ledgerMoney(f.usable), bank: ledgerMoney(f.bank), owed: money(f.owed) }) : t('top.cashTitleNoOwed', { v: ledgerMoney(f.usable) }),
@@ -171,7 +171,8 @@ export function CashChip({ density }: { density: MetricDensity }) {
       mark={danger ? 'danger' : null}
       title={title}
       value={<span className={danger ? 'text-negative-ink' : undefined}>{ledgerMoney(shown)}</span>}
-      sub={<span className={f.netDay > 0 ? 'text-positive-ink' : undefined}>{t(mobile ? 'top.netPerDayShort' : 'top.netPerDay', { v: net })}</span>}
+      // Burning is normal, so a negative net stays neutral (red is for real danger only, LAYOUT §4.1); a profit is green.
+      sub={<span className={f.netDay > 0 ? 'text-positive-ink' : 'text-ink-2'}>{t('top.netDelta', { v: net })}</span>}
     />
   )
 }

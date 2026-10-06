@@ -1,41 +1,63 @@
-// Kazanımlar (top-bar book icon, K; docs/GAMEPLAY_V2.md §12): ☆ stage goals, the concept shelf (one book per learned
-// card, plus the concepts waiting to be read) and Keşif: every thread step and secret card as a cell, a silhouette
-// until seen in some run ("23/64" over those cells; store ui.codex, outside the engine, §9.2).
-// Opening it clears the goals part of the badge.
-import { useEffect } from 'react'
+// Kazanımlar (top-bar book icon, K; docs/GAMEPLAY_V2.md §12): the concept grid (an icon tile per learned concept, a
+// glowing tile per concept waiting to be read, a lock for the rest) and Keşif: every thread step and secret card as a
+// cell, a silhouette until seen in some run ("23/64" over those cells; store ui.codex, outside the engine, §9.2).
+// Stage goals moved to Yol haritası (2026-10-06).
 import { useShallow } from 'zustand/react/shallow'
 import { CONCEPT_IDS, type ConceptId, type NpcRole } from '../../engine/types'
 import { DECISIONS, THREAD_IDS, type DecisionCard, type ThreadId } from '../../content'
 import { codexCount, useGameStore, waitingConcepts } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
-import { cx, Empty, SectionTitle } from '../primitives'
-import { readableOn, soft } from '../theme'
+import { cx, SectionTitle } from '../primitives'
+import { soft } from '../theme'
 import { conceptById, openConceptCard } from '../uiActions'
 import { NotebookCard } from '../NotebookCard'
 import { castName } from '../bubbles/speaker'
-import { GoalsCard } from './GoalsCard'
 
-const PER_SHELF = 9
+/** Each concept's glyph on its tile and card (the colour is its shelfColor). */
+const CONCEPT_ICON: Record<ConceptId, IconName> = {
+  runway: 'hourglass',
+  burn: 'flame',
+  'dont-scale': 'door',
+  pmf: 'magnet',
+  focus: 'compass',
+  'default-alive': 'trend',
+  dilution: 'pie',
+  safe: 'key',
+  'fundraise-time': 'timer',
+  'hire-bar': 'users',
+  'morale-compounds': 'heart',
+  churn: 'leak',
+  pricing: 'tag',
+  'feature-vs-product': 'grid',
+  'premature-scaling': 'rocket',
+  'ltv-cac': 'scale',
+  'organic-vs-paid': 'branch',
+  'tech-debt': 'bug',
+  'ten-x-myth': 'star',
+  'culture-freezes': 'building',
+  concentration: 'handshake',
+  compliance: 'flag',
+  trough: 'refresh',
+  'cap-table-health': 'coin',
+  'no-single-path': 'network',
+  'founder-burnout': 'bed',
+  'failure-is-data': 'search',
+}
+
+export function conceptIcon(id: ConceptId): IconName {
+  return CONCEPT_ICON[id] ?? 'book'
+}
 
 export function conceptTitle(id: ConceptId): string {
   return t(`concept.${id}`)
 }
 
-/** Kazanımlar; `conceptId` shows that card on top (opened from the badge list, a visitor, a decision or the shelf). */
+/** Kazanımlar; `conceptId` shows that card on top (opened from the badge list, a visitor, a decision or the grid). */
 export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
   const openPanel = useGameStore((s) => s.openPanel)
-  const markGoalsSeen = useGameStore((s) => s.markGoalsSeen)
   const learned = useGameStore((s) => s.state.concepts.learned)
   const waiting = useGameStore(useShallow((s) => waitingConcepts(s.state)))
-  const goalsDone = useGameStore((s) => s.state.goalsDone)
-  // Open = seen: goals reached while it is open never count on the badge either.
-  useEffect(() => markGoalsSeen(), [goalsDone, markGoalsSeen])
-
-  // Fixed shelf order (catalog order) so books keep their place.
-  const slots = CONCEPT_IDS.map((id) => ({ id, learned: learned.includes(id) }))
-  const shelves: (typeof slots)[] = []
-  for (let i = 0; i < slots.length; i += PER_SHELF) shelves.push(slots.slice(i, i + PER_SHELF))
 
   return (
     <div className="flex flex-col gap-4">
@@ -44,67 +66,53 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
           <NotebookCard conceptId={conceptId} onClose={() => openPanel({ kind: 'journal' }, { replace: true })} />
         </div>
       )}
-      <GoalsCard />
-      {waiting.length > 0 && (
-        <section>
-          <SectionTitle>{t('journal.waiting')}</SectionTitle>
-          <div className="flex flex-wrap gap-1.5">
-            {waiting.map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => openConceptCard(id)}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-border px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
-              >
-                <Icon name="book" size={14} className="animate-wiggle text-kind-concept" />
-                {conceptTitle(id)}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
       <section>
         <SectionTitle right={<span className="tabular text-[11px] font-semibold text-ink-2">{t('journal.count', { n: learned.length, total: CONCEPT_IDS.length })}</span>}>
           {t('journal.shelf')}
         </SectionTitle>
-        {learned.length === 0 && <Empty text={t('journal.empty')} icon="book" />}
-        <div className="flex flex-col gap-3">
-          {shelves.map((shelf, i) => (
-            <div key={i} className="relative">
-              <div className="flex h-28 items-end gap-1 px-2">
-                {shelf.map((b, j) => {
-                  const c = conceptById(b.id)
-                  const h = 90 + ((j * 37 + i * 13) % 5) * 5
-                  const spine = c?.shelfColor ?? '#8b5cf6'
-                  return b.learned ? (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => openConceptCard(b.id)}
-                      title={conceptTitle(b.id)}
-                      aria-label={conceptTitle(b.id)}
-                      className="group relative flex w-9 shrink-0 flex-col items-center gap-1.5 rounded-t-md rounded-b-sm px-0.5 pb-2 pt-2 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08),inset_3px_0_0_rgb(255_255_255/0.18)] transition-[transform,filter] hover:-translate-y-1.5 hover:brightness-105"
-                      style={{ height: h, background: spine, color: readableOn(spine) }}
-                    >
-                      {/* Learned book = a solid spine in its own shelf colour; two thin bands like a binding. */}
-                      <span aria-hidden="true" className="h-0.5 w-5 rounded-full bg-current opacity-50" />
-                      {/* One line, bottom-to-top; a title longer than the spine ends in an ellipsis (full title in aria-label/title). */}
-                      <span aria-hidden="true" className="min-h-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px] font-semibold leading-none tracking-[0.02em] [writing-mode:vertical-rl] rotate-180">
-                        {conceptTitle(b.id)}
-                      </span>
-                    </button>
-                  ) : (
-                    <span key={b.id} aria-hidden="true" className={cx('w-9 shrink-0 rounded-t-md border border-dashed border-border-strong')} style={{ height: h - 10 }} />
-                  )
-                })}
-              </div>
-              <div className="h-1.5 rounded-full bg-shelf" />
-            </div>
+        {/* Fixed catalog order so a tile keeps its place; a waiting (unread) one glows until it is opened. */}
+        <ul className="grid grid-cols-4 gap-1.5">
+          {CONCEPT_IDS.map((id) => (
+            <li key={id}>
+              <ConceptTile id={id} state={learned.includes(id) ? 'learned' : waiting.includes(id) ? 'new' : 'locked'} open={id === conceptId} />
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
       <DiscoveryGrid />
     </div>
+  )
+}
+
+function ConceptTile({ id, state, open }: { id: ConceptId; state: 'learned' | 'new' | 'locked'; open: boolean }) {
+  if (state === 'locked') {
+    return (
+      <span aria-hidden="true" className="grid h-[72px] place-items-center rounded-control border border-dashed border-border-strong text-ink-3/60">
+        <Icon name="lock" size={14} />
+      </span>
+    )
+  }
+  const c = conceptById(id)
+  const color = c?.shelfColor ?? 'var(--color-kind-concept)'
+  const title = conceptTitle(id)
+  return (
+    <button
+      type="button"
+      onClick={() => openConceptCard(id)}
+      title={title}
+      aria-label={state === 'new' ? `${title} · ${t('journal.new')}` : title}
+      aria-current={open || undefined}
+      className={cx(
+        'relative flex h-[72px] w-full flex-col items-center justify-center gap-1 rounded-control border px-1 transition-[transform,background-color] hover:-translate-y-0.5',
+        state === 'new' ? 'animate-cta-glow border-brand bg-brand-soft' : open ? 'border-ink/30 bg-surface-2' : 'border-border bg-surface hover:bg-surface-2',
+      )}
+    >
+      <span className="grid size-7 place-items-center rounded-[8px]" style={{ color, background: soft(color, 18) }}>
+        <Icon name={conceptIcon(id)} size={15} />
+      </span>
+      <span className="line-clamp-2 w-full text-center text-[10.5px] font-semibold leading-tight text-ink">{title}</span>
+      {state === 'new' && <span aria-hidden="true" className="absolute right-1.5 top-1.5 size-2 animate-pulse rounded-full bg-brand" />}
+    </button>
   )
 }
 

@@ -19,8 +19,9 @@ import { t } from '../i18n'
 import { Icon } from '../icons'
 import { PIN_VISIBLE } from '../layout/tokens'
 import { cx, Dot, IconBadge, IconButton, SectionTitle } from '../primitives'
+import { InfoTip } from '../InfoTip'
 import { WIDGET_COLOR } from '../theme'
-import { METRIC_CARDS, METRIC_GROUPS, ledgerMoney, usePinnedMetrics, visiblePins, WidgetChip, WIDGETS, type MetricGroup } from '../widgets'
+import { ChipInfoContext, METRIC_CARDS, METRIC_GROUPS, ledgerMoney, usePinnedMetrics, visiblePins, WidgetChip, WIDGETS, type ChipInfo, type MetricGroup } from '../widgets'
 
 /** How long a new card keeps its "Yeni" tint, and when it counts as seen (docs/LAYOUT.md §5.1). */
 const NEW_TINT_MS = 4000
@@ -122,10 +123,12 @@ export function MetricsPanel({ focus }: { focus?: HudWidget }) {
         )
       })}
 
-      <div className="flex items-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-2 text-xs text-ink-2">
-        <Icon name={lockedCount > 0 ? 'lock' : 'check'} size={14} className="shrink-0 text-ink-3" />
-        <span className="font-text">{lockedCount > 0 ? t('metrics.more', { n: lockedCount }) : t('metrics.allOpen')}</span>
-      </div>
+      {lockedCount > 0 && (
+        <div title={t('metrics.more', { n: lockedCount })} className="tabular flex items-center justify-center gap-1.5 rounded-control border border-dashed border-border-strong py-2 text-xs font-semibold text-ink-3">
+          <Icon name="lock" size={13} />
+          {lockedCount}
+        </div>
+      )}
     </div>
   )
 }
@@ -140,6 +143,15 @@ function MetricRow({ id, pins, onBar, isNew, focused }: { id: HudWidget; pins: r
   const pinned = pins.includes(id)
   const label = t(def.labelKey)
   const concept = conceptOf(id)
+  const def2 = concept ? CONCEPTS.find((c) => c.id === concept) : undefined
+  // The ⓘ: the gauge's sub line + its concept's definition, and the way to the concept card.
+  const info = useMemo<ChipInfo>(
+    () => ({
+      text: def2?.card.what,
+      action: concept ? { label: CONCEPT_TITLE[concept], onClick: () => openPanel({ kind: 'journal', conceptId: concept }) } : undefined,
+    }),
+    [concept, def2, openPanel],
+  )
   const W = def.Component
   // The hint names the pin the store would really evict (a pin locked in this run goes first, silently).
   const evictee = useGameStore((s) => (pinned ? null : pinEvictee(s.ui.pinnedMetrics, id, s.state.unlockedWidgets)))
@@ -172,20 +184,12 @@ function MetricRow({ id, pins, onBar, isNew, focused }: { id: HudWidget; pins: r
             }
           />
         ) : (
-          <W variant="panel" />
-        )}
-        {concept && (
-          <button
-            type="button"
-            onClick={() => openPanel({ kind: 'journal', conceptId: concept })}
-            className="ml-11 mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-ink-2 hover:text-brand-ink"
-          >
-            {t('metrics.concept', { c: CONCEPT_TITLE[concept] })}
-            <Icon name="chevronRight" size={12} />
-          </button>
+          <ChipInfoContext.Provider value={info}>
+            <W variant="panel" />
+          </ChipInfoContext.Provider>
         )}
       </div>
-      {isNew && <span className="mt-2 shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-ink">{t('metrics.new')}</span>}
+      {isNew && <span aria-label={t('metrics.new')} className="mt-3 size-2 shrink-0 rounded-full bg-brand" />}
       {/* A pinned row shows the pin (tap to unpin); a pinnable one a faint mark (pinning itself is the long press). */}
       {def.pinnable && !pinned && (
         <span data-pin-mark="" title={pinLabel} className="grid size-8 shrink-0 place-items-center text-ink-3/60">
@@ -269,6 +273,9 @@ function CashBreakdown() {
       <div className="flex items-center gap-2">
         <IconBadge icon="cash" size={28} color={WIDGET_COLOR.cash} className="rounded-[7px]" />
         <span className="ui-label">{t('metrics.cash.title')}</span>
+        <InfoTip title={t('metrics.cash.title')} size={13}>
+          {t('metrics.cash.note')}
+        </InfoTip>
       </div>
       <dl className="tabular mt-1.5 grid grid-cols-3 gap-2 pl-9">
         {cells.map(([k, v, danger]) => (
@@ -278,7 +285,6 @@ function CashBreakdown() {
           </div>
         ))}
       </dl>
-      <p className="font-text mt-1.5 pl-9 text-[11px] leading-snug text-ink-2">{t('metrics.cash.note')}</p>
       <LoanRow />
     </div>
   )

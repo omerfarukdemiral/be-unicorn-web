@@ -247,20 +247,14 @@ function ShopItem({
         )}
         {!locked &&
           (noRoom ? (
-            next ? (
-              // Blocked, not an action: neutral note; the single ring CTA sits above the list.
-              <span className="flex min-w-0 flex-col items-end gap-0.5">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-2">
-                  <Icon name="building" size={12} />
-                  {t('shop.noRoom')}
-                </span>
-                {place.roomRing !== null && place.roomRing !== next.index && (
-                  <span className="text-right text-[10px] leading-tight text-ink-2">{t('shop.roomInRing', { ring: place.roomRing })}</span>
-                )}
-              </span>
-            ) : (
-              <span className="text-right text-[11px] font-semibold text-ink-2">{t('shop.noRoomNextStage')}</span>
-            )
+            // Blocked, not an action: one quiet mark (the ring CTA above the list is the way out); the why is the tooltip.
+            <span
+              title={next ? (place.roomRing !== null && place.roomRing !== next.index ? t('shop.roomInRing', { ring: place.roomRing }) : undefined) : t('shop.noRoomNextStage')}
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-ink-3"
+            >
+              <Icon name="building" size={12} />
+              {t('shop.noRoom')}
+            </span>
           ) : (
             <span className="flex shrink-0 items-center gap-1.5">
               <CostPreview preview={preview} />

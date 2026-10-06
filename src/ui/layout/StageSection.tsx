@@ -5,7 +5,7 @@ import { useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { rivalNotch, type GameEvent, type StageIndex } from '../../engine'
 import { DECISIONS, STAGES, TEASERS } from '../../content'
-import { useGameStore } from '../../store/gameStore'
+import { unseenGoals, useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
@@ -36,6 +36,7 @@ function useStage() {
       weeksTotal: st.state.round?.weeksTotal ?? 0,
       gameOver: !!st.state.gameOver,
       company: st.state.meta.companyName,
+      newGoals: unseenGoals(st.state, st.ui.seenGoals),
     })),
   )
 }
@@ -156,7 +157,11 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
       )}
     >
       <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-brand" />
-      <span className="shrink-0">{name}</span>
+      <span className="relative shrink-0">
+        {name}
+        {/* A ☆ stage goal reached since Yol haritası was last opened. */}
+        {s.newGoals > 0 && <span aria-hidden="true" className="absolute -right-2 -top-0.5 size-1.5 rounded-full bg-brand" />}
+      </span>
       {/* Where on the Unicorn yolu: "3/7", always visible (phones too). */}
       <span className="tabular shrink-0 rounded bg-brand-soft px-1 text-[10px] font-semibold leading-4 tracking-normal text-brand-ink">
         {t('roadmap.step', { n: s.stage + 1 })}

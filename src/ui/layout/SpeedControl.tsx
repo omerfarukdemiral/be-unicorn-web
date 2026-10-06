@@ -1,14 +1,14 @@
 // Speed control (top bar, section C): ⏸ 1× 2× 4× + the time status label. With the thin ScreenFrame this is
 // the ONLY place the speed colour appears (docs/LAYOUT.md §4.2). Paused = calm red, running = green; the speeds
 // differ by icon (▶ / ▶▶ / ▶▶▶) and fill density, never by hue (docs/GAMEPLAY_V2.md §13).
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import type { GameSpeed } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx } from '../primitives'
 import { soft } from '../theme'
-import { FLOW_LABEL_MS, holdLabel, isFocusHold, SPEED_COLOR, SPEED_FILL, useRecentSlowdown, useTimeStatus, type TimeStatus } from '../time'
+import { holdLabel, isFocusHold, SPEED_COLOR, SPEED_FILL, useRecentSlowdown, useTimeStatus, type TimeStatus } from '../time'
 
 const SPEEDS: GameSpeed[] = [0, 1, 2, 4]
 
@@ -19,20 +19,10 @@ function setSpeed(speed: GameSpeed) {
   useGameStore.getState().dispatch({ type: 'setSpeed', speed })
 }
 
-/** Short label next to the segments (≤ 84px): why time is still, "Zaman akıyor" after a start, or the slowdown note. */
+/** Short label next to the segments (≤ 84px): only when something other than the player holds time, or the slowdown note. */
 function useStatusLabel(time: TimeStatus): { text: string; title: string; tone: 'ink' | 'ink-2' } | null {
   const flowing = time.effective > 0
   const slowed = useRecentSlowdown()
-  const [flowLabel, setFlowLabel] = useState(false)
-  useEffect(() => {
-    if (!flowing) {
-      setFlowLabel(false)
-      return
-    }
-    setFlowLabel(true)
-    const id = window.setTimeout(() => setFlowLabel(false), FLOW_LABEL_MS)
-    return () => window.clearTimeout(id)
-  }, [flowing])
 
   if (time.gameOver) return null
   if (!flowing) {
@@ -44,10 +34,11 @@ function useStatusLabel(time: TimeStatus): { text: string; title: string; tone: 
         tone: 'ink-2',
       }
     }
-    return { text: t('time.paused'), title: t('top.speedPausedTitle', { reason: holdLabel(time.hold) }), tone: 'ink-2' }
+    // Plain pause: the red frame on the speed buttons already says it (no "Duraklatıldı" word, 2026-10-06).
+    return null
   }
   if (slowed) return { text: t('top.slowed'), title: t('time.slowed'), tone: 'ink' }
-  if (flowLabel) return { text: t('time.flowing'), title: t('time.speedState', { v: `${time.effective}×` }), tone: 'ink-2' }
+  // Running: the green frame says it; no "Zaman akıyor" flash.
   return null
 }
 

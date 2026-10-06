@@ -15,10 +15,11 @@ export const MAX_SPEED = 4
 export const MIN_STAGE_SHARE = 0.65
 /**
  * Fastest day each stage was reached over 160 real-engine bot runs (`npx tsx sim/minStageDays.ts`: 4 archetypes ×
- * 2 decision policies × 20 seeds × 3000 days), measured after the GAMEPLAY V2 balance (T20). Rebalancing ⇒ re-measure.
+ * 2 decision policies × 20 seeds × 3000 days), re-measured 2026-10-06 after the project-category trade-off
+ * (CATEGORY_ARPU / CATEGORY_ORGANIC; was 0/109/155/381/695/1033/1855). Rebalancing ⇒ re-measure.
  */
-export const MEASURED_FASTEST_DAYS: readonly number[] = [0, 109, 155, 381, 695, 1033, 1855]
+export const MEASURED_FASTEST_DAYS: readonly number[] = [0, 105, 146, 332, 619, 947, 1681]
 /** MIN_STAGE_SHARE of the fastest day, floored to 5 days (never above the measured share). */
 export const minDayTable = (fastest: readonly number[]): number[] => fastest.map((d) => Math.floor((d * MIN_STAGE_SHARE) / 5) * 5)
 /** Earliest believable game day for each stage (cumulative from day 0) = minDayTable(MEASURED_FASTEST_DAYS). */
-export const MIN_DAY_FOR_STAGE: readonly number[] = [0, 70, 100, 245, 450, 670, 1205]
+export const MIN_DAY_FOR_STAGE: readonly number[] = [0, 65, 90, 215, 400, 615, 1090]

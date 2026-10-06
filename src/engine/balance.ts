@@ -104,10 +104,11 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
 /**
  * [Playtest 2026-10-06] The category is a real trade-off, not just a build time: per-user revenue and word of mouth
  * of the launched projects (their mean; 1 before any launch). Fast + cheap (web), slow + rich (ai), viral but poor
- * (game), B2B price with little buzz (api). Means ≈ 1.07 / 1.10 so the sim calibration moves little.
+ * (game), B2B price with little buzz (api). Means ≈ 0.99 / 1.04 and the rich end capped at 1.2: the first cut
+ * (api 1.25, ai 1.45) moved the fastest Unicorn from day 1855 to 1378 in sim/minStageDays.ts.
  */
-export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.85, mobile: 1, api: 1.25, ai: 1.45, game: 0.75, marketplace: 1.1 }
-export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1.15, api: 0.7, ai: 1, game: 1.5, marketplace: 1.25 }
+export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.85, mobile: 1, api: 1.1, ai: 1.2, game: 0.8, marketplace: 1 }
+export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1.1, api: 0.75, ai: 0.9, game: 1.35, marketplace: 1.15 }
 
 // ---------------------------------------------------------------------------
 // Users (PLAN §5.4)

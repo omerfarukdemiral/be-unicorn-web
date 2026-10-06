@@ -6,6 +6,7 @@ import { idleBuilders } from '../../engine/loopSelectors'
 import { DEPTS, type Candidate, type Dept, type Employee } from '../../engine/types'
 import { DEPT_TEXT } from '../../content'
 import { useGameStore } from '../../store/gameStore'
+import * as B from '../../engine/balance'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
@@ -110,6 +111,19 @@ function HireView() {
   )
 }
 
+/** Before candidateQuality: a rough low / mid / high (bolt pips), never the exact number. */
+function RoughQuality({ quality }: { quality: number }) {
+  const span = B.CANDIDATE_QUALITY_MAX - B.CANDIDATE_QUALITY_MIN
+  const n = quality < B.CANDIDATE_QUALITY_MIN + span / 3 ? 1 : quality < B.CANDIDATE_QUALITY_MIN + (2 * span) / 3 ? 2 : 3
+  return (
+    <span title={t('team.roughQuality')} aria-label={`${t('team.roughQuality')} ${n}/3`} className="inline-flex items-center gap-px text-g-equity">
+      {[0, 1, 2].map((i) => (
+        <Icon key={i} name="bolt" size={11} fill={i < n ? 'currentColor' : 'none'} className={i < n ? '' : 'text-ink-3'} />
+      ))}
+    </span>
+  )
+}
+
 /** One candidate: avatar, name + dept, the salary (the number), days left, the hire commit with its runway preview. */
 function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: Candidate; day: number; showQuality: boolean; onHire: () => void }) {
   const preview = useSpendPreview(0, c.salary)
@@ -121,7 +135,8 @@ function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: 
         <div className="flex min-w-0 items-center gap-1.5">
           <Dot color={DEPT_COLOR[c.dept].dot} size={6} />
           <span className="truncate text-[13px] font-semibold">{c.name}</span>
-          {showQuality && <QualityStars quality={c.quality} />}
+          {/* Exact stars once İşe alım çıtası is learned; before it a rough three-step read (the trade-off is visible from day one). */}
+          {showQuality ? <QualityStars quality={c.quality} /> : <RoughQuality quality={c.quality} />}
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
           <span className="tabular text-[15px] font-semibold leading-tight text-ink">{money(c.salary)}</span>

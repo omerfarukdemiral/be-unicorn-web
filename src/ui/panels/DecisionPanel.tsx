@@ -1,5 +1,5 @@
 // Decision card in the single panel (opened from its scene bubble; never a blocking modal).
-// After a choice the same panel shows the one-sentence reflection + Defter link.
+// After a choice the panel closes; the scene bubble shows the result chips + Defter link (an old `answered` link still renders it).
 // A loan offer (GAMEPLAY V2 §6.2) adds one number row per loan option: amount, monthly rate, term, covenant.
 import { defaultAfterDaysOf, defaultOptionOf } from '../../engine/decisions'
 import { loanAmount } from '../../engine'
@@ -15,7 +15,6 @@ export function DecisionPanel({ cardId, answered }: { cardId: DecisionCardId; an
   const card = decisionById(cardId)
   const stillActive = useGameStore((s) => s.state.decisions.active?.cardId === cardId)
   const dispatch = useGameStore((s) => s.dispatch)
-  const openPanel = useGameStore((s) => s.openPanel)
   const closePanel = useGameStore((s) => s.closePanel)
 
   if (card && answered !== undefined) {
@@ -37,14 +36,23 @@ export function DecisionPanel({ cardId, answered }: { cardId: DecisionCardId; an
         card={card}
         stacked
         onChoose={(optionIndex) => {
+          // No "Tamam" step: the panel closes and the scene bubble shows what the choice did (chips) for a moment.
           const r = dispatch({ type: 'answerDecision', cardId, optionIndex })
-          if (r.ok) openPanel({ kind: 'decision', cardId, answered: optionIndex }, { replace: true })
+          if (r.ok) closePanel()
         }}
       />
       {loans.map((l) => (
         <LoanRow key={l.i} label={l.label} terms={l.terms} />
       ))}
-      {def && <p className="font-text text-xs text-ink-3">{t('decision.defaultAfter', { d: defaultAfterDaysOf(card), v: def.label })}</p>}
+      {/* Unanswered → the default: "⌛ 60g → İkisini birden dene" (the full sentence is the tooltip). */}
+      {def && (
+        <span title={t('decision.defaultAfter', { d: defaultAfterDaysOf(card), v: def.label })} className="tabular inline-flex items-center gap-1 text-xs font-semibold text-ink-3">
+          <Icon name="hourglass" size={12} />
+          {t('horizon.daysShort', { v: defaultAfterDaysOf(card) })}
+          <Icon name="arrowRight" size={12} />
+          <span className="truncate font-medium">{def.label}</span>
+        </span>
+      )}
     </div>
   )
 }

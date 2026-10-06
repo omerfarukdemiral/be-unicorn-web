@@ -6,7 +6,7 @@ import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './f
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
-import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectId, type ValuationBreakdown } from './types'
+import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
 import { boardView, marketOf, marketUpkeep, marketView } from './world'
 
@@ -161,6 +161,13 @@ export function employeeMoraleTarget(s: GameState, content: EngineContent, e: Em
   return E.clamp(0, 100, globalTarget + aura)
 }
 
+/** Mean of a per-category factor over the launched projects (1 before the first launch). */
+export function categoryMix(s: GameState, table: Readonly<Record<ProjectCategory, number>>): number {
+  const live = s.projects.filter((p) => p.launched)
+  if (live.length === 0) return 1
+  return live.reduce((a, p) => a + (table[p.category] ?? 1), 0) / live.length
+}
+
 /** Mutates `s`: stats.arpu/churn, finance.*, derived.*. */
 export function recomputeDerived(s: GameState, content: EngineContent): Outputs {
   const o = computeOutputs(s, content)
@@ -171,7 +178,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
   const rivalShare = E.rivalShareTotal(s.rivals)
-  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu')
+  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu') * categoryMix(s, B.CATEGORY_ARPU)
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
   const anyLaunched = s.projects.some((p) => p.launched)
@@ -182,7 +189,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const tam = E.marketTam(marketOf(s).segments, s.time.day)
   const pen = E.penetration(s.stats.users, tam)
   const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac')
-  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic')
+  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic') * categoryMix(s, B.CATEGORY_ORGANIC)
   const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)
   const manualNow = Number(s.flags['manualThisMonth'] ?? 0)
   const manualLast = Number(s.flags['manualLastMonth'] ?? 0)

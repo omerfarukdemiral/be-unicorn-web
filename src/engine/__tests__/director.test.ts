@@ -12,10 +12,10 @@ const RESCUE = fakeCard(B.RESCUE_CARD_ID, { category: 'crisis', once: false, con
 const content = fakeContent({ decisions: [ANGEL, RESCUE] })
 const api = createEngine(content)
 
-/** A garage with a launched, finished web project and `users`: profitable without a team. */
+/** A garage with a launched, finished project and `users`: profitable without a team (mobile: CATEGORY_ARPU 1). */
 function profitable(seed: number, users = 3000): GameState {
   let s = api.createGame({ seed })
-  s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
+  s = api.applyAction(s, { type: 'startProject', category: 'mobile' }).state
   return api.step({ ...s, projects: s.projects.map((p) => ({ ...p, maturity: 1, launched: true, releaseLevel: 5 })), stats: { ...s.stats, users, cash: 200_000 } }, 1)
 }
 

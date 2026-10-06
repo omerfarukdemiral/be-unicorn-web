@@ -1,9 +1,9 @@
-// Decision bubble (PLAN §6.3): non-blocking. Question + options with visible trade-off, then what the choice did as
-// numbers (effectSummary) + a book icon to the related Defter card; the reflection sentence is the tooltip
+// Decision bubble (PLAN §6.3): non-blocking. Question + options with their effects as icon + number chips (the
+// trade-off sentence is the option's tooltip), then what the choice did as the same chips + a book icon to the related Defter card; the reflection sentence is the tooltip
 // (docs/GAMEPLAY_V2.md §11). One reading line per bubble: the question is the only paragraph.
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { DecisionCardId } from '../../engine/types'
+import type { DecisionCardId, NpcRole } from '../../engine/types'
 import { DECISIONS, type DecisionCard } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
@@ -12,8 +12,9 @@ import { cx, Dot, IconBadge, IconButton } from '../primitives'
 import { useIsMobile } from '../hooks'
 import { openConceptCard } from '../uiActions'
 import { conceptTitle } from '../panels/JournalPanel'
-import { effectSummary } from '../loopUi'
-import { npcLabel } from './speaker'
+import { OptionEffects } from '../EffectChips'
+import { castName, npcLabel } from './speaker'
+import { soft } from '../theme'
 
 export const REFLECTION_MS = 12_000
 
@@ -26,15 +27,32 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
   const crisis = card.category === 'crisis'
   // The run's cast speaks (GAMEPLAY V2 §9.1): a thread card's role becomes this run's name.
   const cast = useGameStore((s) => s.state.cast)
+  const memory = useGameStore((s) => lastWith(s.state.decisions.history, card))
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2.5">
         <span className="relative">
-          <IconBadge icon={crisis ? 'warning' : card.category === 'rival' ? 'flag' : 'chat'} size={32} color={crisis ? 'var(--color-negative)' : 'var(--color-kind-decision)'} />
-          {crisis && <Dot color="var(--color-negative)" size={7} className="absolute -right-0.5 -top-0.5 ring-2 ring-surface" />}
+          {/* The speaker's face: initials in the role's hue; the kind (crisis / rival) rides on it as a small mark. */}
+          <Portrait role={card.speaker} name={castName({ cast }, card.speaker)} />
+          {crisis ? (
+            <Dot color="var(--color-negative)" size={9} className="absolute -right-0.5 -top-0.5 ring-2 ring-surface" />
+          ) : card.category === 'rival' ? (
+            <span className="absolute -bottom-1 -right-1 grid size-4 place-items-center rounded-full bg-surface ring-1 ring-border" style={{ color: 'var(--color-kind-decision)' }}>
+              <Icon name="flag" size={10} />
+            </span>
+          ) : null}
         </span>
         <div className="min-w-0">
-          <div className="ui-label">{npcLabel(card.speaker, cast)}</div>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="ui-label">{npcLabel(card.speaker, cast)}</span>
+            {/* They remember: the last thing you chose with them, as a short tag (no sentence). */}
+            {memory && (
+              <span title={t('decision.memoryTitle', { v: memory })} className="inline-flex max-w-[180px] items-center gap-0.5 rounded-md bg-surface-2 px-1.5 py-px text-[10.5px] font-semibold text-ink-2">
+                <Icon name="refresh" size={10} className="shrink-0" />
+                <span className="truncate">{memory}</span>
+              </span>
+            )}
+          </div>
           <p className={cx('font-text mt-0.5 font-semibold leading-snug text-ink', dense ? 'text-sm' : 'text-base')}>{card.question}</p>
         </div>
       </div>
@@ -44,22 +62,53 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
             key={i}
             type="button"
             onClick={() => onChoose(i)}
-            className="group flex min-h-11 flex-col gap-1.5 rounded-control border border-border bg-transparent p-3 text-left transition-colors hover:border-brand hover:bg-brand-soft/60"
+            // The trade-off in words stays as the tooltip; the option shows its numbers (playtest 2026-10-06).
+            title={`+ ${o.tradeoff.gain}\n− ${o.tradeoff.cost}`}
+            className="group flex min-h-11 flex-col gap-2 rounded-control border border-border bg-transparent p-3 text-left transition-colors hover:border-brand hover:bg-brand-soft/60"
           >
             <span className="font-text text-sm font-semibold leading-snug text-ink">{o.label}</span>
-            <span className="font-text flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-2">
-              <Icon name="plus" size={12} className="mt-px shrink-0 text-positive" />
-              {o.tradeoff.gain}
-            </span>
-            <span className="font-text flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-2">
-              <Icon name="minus" size={12} className="mt-px shrink-0 text-negative" />
-              {o.tradeoff.cost}
-            </span>
+            <OptionEffects fx={o.effects} delayed={o.delayed} />
           </button>
         ))}
       </div>
     </div>
   )
+}
+
+const ROLE_COLOR: Record<NpcRole, string> = {
+  mentor: 'var(--color-kind-concept)',
+  cofounder: 'var(--color-brand)',
+  accountant: 'var(--color-g-cash)',
+  engineer: 'var(--color-g-users)',
+  investor: 'var(--color-g-equity)',
+  customer: 'var(--color-g-morale)',
+  journalist: 'var(--color-g-runway)',
+}
+
+function Portrait({ role, name }: { role: NpcRole; name: string }) {
+  const initials = name
+    .split(' ')
+    .map((p) => p[0] ?? '')
+    .join('')
+    .slice(0, 2)
+    .toLocaleUpperCase('tr')
+  const c = ROLE_COLOR[role]
+  return (
+    <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full border-2 text-[13px] font-bold tracking-wide" style={{ color: c, borderColor: c, background: soft(c, 14) }}>
+      {initials}
+    </span>
+  )
+}
+
+/** The option label of the last card this speaker brought that the player answered (not this card). */
+function lastWith(history: readonly { cardId: string; optionIndex: number }[], card: DecisionCard): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]!
+    if (h.cardId === card.id) continue
+    const c = DECISIONS.find((d) => d.id === h.cardId)
+    if (c?.speaker === card.speaker) return c.options[h.optionIndex]?.label ?? null
+  }
+  return null
 }
 
 /** After a choice: the choice, its numbers (Oxanium) and a book icon to the Defter card. The sentence is the tooltip. */
@@ -71,7 +120,7 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
       <IconBadge icon="sparkle" size={32} color="var(--color-kind-concept)" />
       <div className="min-w-0 flex-1">
         <div className="ui-label truncate">{t('decision.youChose', { v: opt.label })}</div>
-        <div className="tabular mt-0.5 text-[15px] font-semibold leading-snug text-ink">{effectSummary(opt.effects)}</div>
+        <OptionEffects fx={opt.effects} delayed={opt.delayed} className="mt-1" />
       </div>
       {opt.conceptId && (
         <button

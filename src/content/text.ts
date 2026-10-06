@@ -59,12 +59,12 @@ export const DEPT_TEXT: DeptTextTable = {
 // One line per category, ≤ 10 words: the category's trade-off in the engine (balance.ts PROJECT_SIZE: web 8 fastest,
 // api 9, mobile 10, game / marketplace 12, ai 14 slowest; api + marketplace lean the run toward the platform archetype).
 export const PROJECT_CATEGORY_TEXT: ProjectCategoryTextTable = {
-  mobile: { name: 'Mobil', description: 'Orta hızda çıkar; kasa biraz bekler.' },
-  web: { name: 'Web', description: 'En hızlı çıkar, ilk para erken gelir.' },
-  ai: { name: 'Yapay Zekâ', description: 'En uzun geliştirme; kasan buna dayanmalı.' },
-  api: { name: 'API', description: 'Hızlı çıkar, seni platform yoluna sokar.' },
-  game: { name: 'Oyun', description: 'Uzun sürer; ilk gelire kadar kasa erir.' },
-  marketplace: { name: 'Pazar Yeri', description: 'Uzun kurulur ama platform yolunu açar.' },
+  mobile: { name: 'Mobil', description: 'Dengeli: orta hız, orta gelir, iyi yayılır.' },
+  web: { name: 'Web', description: 'En hızlı çıkar; kullanıcı başı az kazandırır.' },
+  ai: { name: 'Yapay Zekâ', description: 'En uzun sürer; kullanıcı başı en çok kazandırır.' },
+  api: { name: 'API', description: 'Hızlı çıkar, iyi kazandırır ama kendiliğinden yayılmaz.' },
+  game: { name: 'Oyun', description: 'Uzun sürer, az kazandırır ama kendiliğinden yayılır.' },
+  marketplace: { name: 'Pazar Yeri', description: 'Uzun kurulur; iyi yayılır, platform yolunu açar.' },
 }
 
 export const NPC_TEXT: NpcTextTable = {

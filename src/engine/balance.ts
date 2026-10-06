@@ -101,6 +101,13 @@ export const REFACTOR_DAYS = 30
 export const REFACTOR_COOLDOWN_DAYS = 90
 /** Maturity per month = output / size; size per category. */
 export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile: 10, web: 8, ai: 14, api: 9, game: 12, marketplace: 12 }
+/**
+ * [Playtest 2026-10-06] The category is a real trade-off, not just a build time: per-user revenue and word of mouth
+ * of the launched projects (their mean; 1 before any launch). Fast + cheap (web), slow + rich (ai), viral but poor
+ * (game), B2B price with little buzz (api). Means ≈ 1.07 / 1.10 so the sim calibration moves little.
+ */
+export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.85, mobile: 1, api: 1.25, ai: 1.45, game: 0.75, marketplace: 1.1 }
+export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1.15, api: 0.7, ai: 1, game: 1.5, marketplace: 1.25 }
 
 // ---------------------------------------------------------------------------
 // Users (PLAN §5.4)

@@ -569,7 +569,8 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
 
   it('a profitable company never sees the desk (regression: no paydayShort while in profit)', () => {
     let s = api.createGame({ seed: 6 })
-    s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
+    // mobile: CATEGORY_ARPU 1, the revenue this fixture was sized for.
+    s = api.applyAction(s, { type: 'startProject', category: 'mobile' }).state
     s = api.step({ ...s, projects: s.projects.map((p) => ({ ...p, maturity: 1, launched: true, releaseLevel: 5 })), stats: { ...s.stats, users: 3000, cash: 2_000 } }, 1)
     expect(s.finance.net).toBeGreaterThan(0)
     let shorts = 0

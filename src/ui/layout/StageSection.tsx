@@ -1,7 +1,7 @@
 // Top bar, section A: stage name + date (neutral month ring) + stage progress (valuation / target) + the round.
 // The round clock lives ONLY here ("Tur 3/10 hf" chip, docs/LAYOUT.md §2.1); "Tur başlat" takes the same slot.
 // Curiosity (docs/GAMEPLAY_V2.md §9.4): the lead rival's notch rides the stage line, the next stage's ghost sits at its end.
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { rivalNotch, type GameEvent, type StageIndex } from '../../engine'
 import { DECISIONS, STAGES, TEASERS } from '../../content'
@@ -86,6 +86,48 @@ export function StageProgressLine({ className }: { className?: string }) {
       <RoadmapStepper size="line" stage={s.stage} progress={next ? s.progress : 1} notch={notch} className="flex-1" />
       {next && <Ghost size={10} ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
     </div>
+  )
+}
+
+/** Steps inside a stage (fractions of the next target): small wins between the big ones (playtest 2026-10-06). */
+export const STAGE_MILESTONES = [0.05, 0.1, 0.25, 0.5, 0.75] as const
+
+/** The highest milestone index reached at `progress` (−1 = none). */
+export function milestoneIndex(progress: number): number {
+  let i = -1
+  STAGE_MILESTONES.forEach((m, k) => {
+    if (progress >= m) i = k
+  })
+  return i
+}
+
+/**
+ * A milestone just crossed: "✦ $25K" pops beside the stage figures for a moment, then goes. No toast, no sound of its
+ * own; a fresh run, a loaded save or a new stage starts from where it stands (nothing flashes for the past).
+ */
+function MilestonePop({ stage, progress, target }: { stage: number; progress: number; target: number }) {
+  const generation = useGameStore((st) => st.ui.generation)
+  const base = useRef<{ key: string; idx: number } | null>(null)
+  const [pop, setPop] = useState<{ idx: number; at: number } | null>(null)
+  const key = `${generation}:${stage}`
+  const idx = milestoneIndex(progress)
+  if (!base.current || base.current.key !== key) base.current = { key, idx }
+  useEffect(() => {
+    const b = base.current
+    if (!b || idx <= b.idx) return
+    b.idx = idx
+    const at = performance.now()
+    setPop({ idx, at })
+    const id = window.setTimeout(() => setPop((p) => (p?.at === at ? null : p)), 2600)
+    return () => window.clearTimeout(id)
+  }, [idx])
+  if (!pop) return null
+  const m = STAGE_MILESTONES[pop.idx] ?? 0
+  return (
+    <span key={pop.at} className="tabular inline-flex shrink-0 animate-pop-in items-center gap-0.5 rounded-md bg-brand-soft px-1.5 text-[11px] font-semibold text-brand-ink">
+      <Icon name="sparkle" size={11} />
+      {money(target * m)}
+    </span>
   )
 }
 
@@ -203,6 +245,7 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
                 : t('top.nextShort', { next: next.name })}
           </span>
           {next && <Ghost ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
+          {next && <MilestonePop stage={s.stage} progress={s.progress} target={next.targetValuation ?? 0} />}
         </div>
       </div>
       <RoundSlot variant={variant} />

@@ -52,4 +52,5 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
   'horizon.item.roundReady': 'Tur açılabilir',
   'horizon.days': '{v} gün',
   'horizon.daysShort': '{v}g',
+  'horizon.paydayCountdownTitle': 'Maaş {d}g: {cash} / {pay}',
 }

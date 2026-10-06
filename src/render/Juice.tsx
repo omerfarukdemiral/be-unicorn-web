@@ -1,7 +1,9 @@
 // Scene juice for the core loop beats (docs/CORE_LOOP.md §7), kept apart from Office/Npc/Character:
 // - release moment: a banner over the founder desk (version name only, the numbers are in the strip), a light pulse,
 //   confetti (from v1 on; MVP already celebrates via projectLaunched) and a wave of simple user figures walking in;
-// - payday: a short warm-red light pulse over the office.
+// - payday: a short warm-red light pulse over the office, and the amount paid rising over the desk;
+// - a manual user hunt (founder action): a few figures walk in through the door and "+N" rises over the desk
+//   (playtest 2026-10-06: the result is seen where it happens, not only as a number changing in the top bar).
 // Watches state.events with its own cursor; a new game / loaded save skips the history.
 import { Html } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
@@ -23,6 +25,16 @@ const BANNER_MS = 3600
 /** The wave (banner + figures) unmounts after this long. */
 const WAVE_MS = 9000
 const PULSE_MS = 1400
+/** A scene float's life (ms); several stack upwards. */
+const FLOAT_MS = 1800
+const MAX_FLOATS = 3
+
+interface SceneFloat {
+  id: number
+  text: string
+  tone: 'users' | 'cash' | 'ink'
+  started: number
+}
 
 function text(key: string, params: Record<string, string | number>): string {
   return (UI_TEXT[key] ?? key).replace(/\{(\w+)\}/g, (m, k: string) => (params[k] === undefined ? m : String(params[k])))
@@ -45,6 +57,8 @@ export function JuiceLayer() {
   const cursor = useRef<{ generation: number; id: number } | null>(null)
   const [wave, setWave] = useState<Wave | null>(null)
   const [confetti, setConfetti] = useState(0)
+  const [floats, setFloats] = useState<SceneFloat[]>([])
+  const [hunt, setHunt] = useState<{ id: number; count: number } | null>(null)
   const pulse = useRef<{ at: number; color: THREE.Color } | null>(null)
 
   useEffect(() => {
@@ -69,10 +83,28 @@ export function JuiceLayer() {
         }
       } else if (e.kind === 'payday' && (e.value ?? 0) > 0.5) {
         pulse.current = { at: performance.now(), color: new THREE.Color('#ff9a8a') }
+        addFloat({ id: e.id, text: `−${money(e.value ?? 0)}`, tone: 'ink', started: performance.now() })
+        // Phones feel payday (a short tick); desktops ignore it.
+        try {
+          navigator.vibrate?.(30)
+        } catch {
+          /* not allowed: fine */
+        }
+      } else if (e.kind === 'founderActionDone' && e.refId === 'findUsers' && (e.value ?? 0) >= 1) {
+        const n = Math.round(e.value ?? 0)
+        addFloat({ id: e.id, text: `+${n}`, tone: 'users', started: performance.now() })
+        const id = e.id
+        setHunt({ id, count: Math.min(5, Math.max(1, n)) })
+        window.setTimeout(() => setHunt((h) => (h?.id === id ? null : h)), WAVE_MS)
       }
     }
     c.id = maxId
   }, [events, releases, generation])
+
+  function addFloat(f: SceneFloat) {
+    setFloats((cur) => [...cur.filter((x) => performance.now() - x.started < FLOAT_MS), f].slice(-MAX_FLOATS))
+    window.setTimeout(() => setFloats((cur) => cur.filter((x) => x.id !== f.id)), FLOAT_MS)
+  }
 
   const desk = useMemo<XZ>(() => layout.itemCenter.get('founder')?.pos ?? layout.slotWorld.get('founder') ?? layout.center, [layout])
 
@@ -102,8 +134,58 @@ export function JuiceLayer() {
       <Confetti trigger={confetti} origin={desk} />
       {wave && <ReleaseBanner key={wave.id} wave={wave} at={desk} />}
       {wave && <UserWave key={`w${wave.id}`} count={Math.min(MAX_FIGURES, Math.max(2, Math.round(Math.sqrt(wave.release.users))))} target={desk} />}
+      {hunt && !wave && <UserWave key={`h${hunt.id}`} count={hunt.count} target={desk} />}
+      {floats.length > 0 && <Floats items={floats} at={desk} />}
     </>
   )
+}
+
+const TONE_COLOR: Record<SceneFloat['tone'], string> = { users: 'var(--color-g-users)', cash: 'var(--color-g-cash)', ink: 'var(--color-ink)' }
+
+/** "+4 👤" / "−$3.2K" rising over the desk; newer ones sit above older ones. */
+function Floats({ items, at }: { items: readonly SceneFloat[]; at: XZ }) {
+  return (
+    <Html position={[at[0], 2.2, at[1]]} center zIndexRange={[14, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', gap: 4 }}>
+        {items.map((f) => (
+          <div
+            key={f.id}
+            className="tabular whitespace-nowrap rounded-[8px] px-2 py-0.5 shadow-pop"
+            style={{
+              background: 'var(--color-surface)',
+              color: TONE_COLOR[f.tone],
+              fontFamily: 'var(--font-ui, inherit)',
+              fontSize: 15,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              animation: `rise-float ${FLOAT_MS}ms ease-out both`,
+            }}
+          >
+            {f.tone === 'users' && <UsersGlyph />}
+            {f.text}
+          </div>
+        ))}
+      </div>
+    </Html>
+  )
+}
+
+function UsersGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <circle cx="9" cy="8.5" r="3.2" />
+      <path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" />
+      <circle cx="17" cy="9.5" r="2.4" />
+      <path d="M16 14.2c2.3.1 4 1.6 4.5 4.3" />
+    </svg>
+  )
+}
+
+function money(n: number): string {
+  const a = Math.abs(n)
+  return a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(a / 1e3).toFixed(1)}K` : `$${Math.round(a)}`
 }
 
 function ReleaseBanner({ wave, at }: { wave: Wave; at: XZ }) {

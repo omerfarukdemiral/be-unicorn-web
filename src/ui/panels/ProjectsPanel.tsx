@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_CATEGORIES, type Project, type ProjectCategory } from '../../engine/types'
+import * as B from '../../engine/balance'
 import { PROJECT_CATEGORY_TEXT, PROJECT_NAMES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
@@ -49,6 +50,37 @@ export const CATEGORY_COLOR: Record<ProjectCategory, string> = {
   marketplace: 'var(--color-g-morale)',
 }
 
+/** 1–4 pips on a 4-step scale, from the engine's own numbers (build size, revenue, word of mouth). */
+function pips(v: number, steps: readonly number[]): number {
+  return 1 + steps.filter((x) => v >= x).length
+}
+const TRAITS: readonly { key: 'time' | 'arpu' | 'organic'; icon: IconName; color: string; of: (c: ProjectCategory) => number }[] = [
+  { key: 'time', icon: 'hourglass', color: 'var(--color-g-runway)', of: (c) => pips(B.PROJECT_SIZE[c], [9, 11, 13]) },
+  { key: 'arpu', icon: 'coin', color: 'var(--color-g-cash)', of: (c) => pips(B.CATEGORY_ARPU[c], [0.9, 1.05, 1.3]) },
+  { key: 'organic', icon: 'trend', color: 'var(--color-g-users)', of: (c) => pips(B.CATEGORY_ORGANIC[c], [0.85, 1.1, 1.4]) },
+]
+
+/** The category's trade-off as three icon + pip rows: build time, money per user, word of mouth. */
+function TraitPips({ category }: { category: ProjectCategory }) {
+  return (
+    <span className="mt-0.5 flex flex-col gap-0.5">
+      {TRAITS.map((tr) => {
+        const n = tr.of(category)
+        return (
+          <span key={tr.key} title={t(`projects.trait.${tr.key}`)} className="flex items-center gap-1">
+            <Icon name={tr.icon} size={10} style={{ color: tr.color }} />
+            <span className="flex gap-0.5">
+              {[0, 1, 2, 3].map((i) => (
+                <span key={i} className="h-1 w-2.5 rounded-full" style={{ background: i < n ? tr.color : 'var(--color-border)' }} />
+              ))}
+            </span>
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
 export function ProjectsPanel() {
   const projects = useGameStore(useShallow((s) => s.state.projects))
   const dispatch = useGameStore((s) => s.dispatch)
@@ -70,7 +102,9 @@ export function ProjectsPanel() {
         )}
       </div>
       <div>
-        <SectionTitle>{t('projects.new')}</SectionTitle>
+        <SectionTitle right={gainTag ? <span className="tabular inline-flex items-center gap-1 text-[11px] font-semibold text-brand-ink"><Icon name="rocket" size={12} />{gainTag}</span> : undefined}>
+          {t('projects.new')}
+        </SectionTitle>
         {/* A tile per category: icon + name; what the category is like sits behind its ⓘ (the button stays one tap). */}
         <div className="grid grid-cols-3 gap-1.5">
           {PROJECT_CATEGORIES.map((c) => (
@@ -83,7 +117,7 @@ export function ProjectsPanel() {
               >
                 <IconBadge icon={CATEGORY_ICON[c]} size={30} color={CATEGORY_COLOR[c]} />
                 <span className="text-center text-xs font-semibold leading-tight">{PROJECT_CATEGORY_TEXT[c].name}</span>
-                {gainTag && <span className="tabular text-[10.5px] font-semibold text-brand-ink">{gainTag}</span>}
+                <TraitPips category={c} />
               </button>
               <span className="absolute right-1.5 top-1.5 flex">
                 <InfoTip title={PROJECT_CATEGORY_TEXT[c].name} size={13}>

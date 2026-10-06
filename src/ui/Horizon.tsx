@@ -121,6 +121,52 @@ function useHorizon() {
 
 const isDue = (h: HorizonItem): boolean => h.kind === 'payday' && !!h.due
 
+/** The last days before a payday turn the strip's payday into a countdown with the cash-vs-payroll bar. */
+export const PAYDAY_COUNTDOWN_DAYS = 7
+
+/** The next payday (not the desk) when it is within the countdown window. */
+function nearPayday(items: readonly HorizonItem[] | undefined, day: number): HorizonItem | undefined {
+  const p = items?.find((h) => h.kind === 'payday' && !h.due)
+  return p && p.day - day <= PAYDAY_COUNTDOWN_DAYS ? p : undefined
+}
+
+/**
+ * Payday countdown (playtest 2026-10-06: payday is the heartbeat): days left + a bar of the till against the payroll
+ * ("$12.6K / $3K"). Covered = green with a check; short = red and the timer beats. Numbers only, no sentence.
+ */
+export function PaydayCountdown({ compact }: { compact?: boolean }) {
+  const { items, day, deskOpen } = useHorizon()
+  const cash = useGameStore((s) => s.state.stats.cash)
+  const p = nearPayday(items, day)
+  if (!p || deskOpen) return null
+  const amount = Math.max(0, p.amount ?? 0)
+  const left = Math.max(0, Math.ceil(p.day - day))
+  const covered = cash >= amount
+  const fill = amount > 0 ? Math.min(1, Math.max(0, cash / amount)) : 1
+  const color = covered ? 'var(--color-positive)' : 'var(--color-negative)'
+  return (
+    <span
+      data-payday-countdown=""
+      title={t('horizon.paydayCountdownTitle', { d: left, cash: money(cash), pay: money(amount) })}
+      className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-semibold text-ink"
+    >
+      <span className={cx('inline-flex items-center gap-0.5', !covered && 'animate-heartbeat')} style={{ color }}>
+        <Icon name="cash" size={14} />
+        {t('horizon.daysShort', { v: left })}
+      </span>
+      {!compact && (
+        <span className="flex w-16 flex-col gap-0.5">
+          <span className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <span className="block h-full rounded-full transition-[width] duration-500" style={{ width: `${fill * 100}%`, background: color }} />
+          </span>
+        </span>
+      )}
+      <span className={covered ? 'text-ink-2' : 'text-negative-ink'}>{money(amount)}</span>
+      {covered && <Icon name="check" size={12} className="text-positive-ink" />}
+    </span>
+  )
+}
+
 /**
  * The desk's countdown: red cash icon + "3g", its own button beside the strip's horizon button (never inside it).
  * Hidden while the desk is open (time stands still there) or when no month waits.
@@ -192,7 +238,8 @@ function firstOfEachKind(items: readonly HorizonItem[]): HorizonItem[] {
  */
 export function HorizonMini({ max = 3, compact, className }: { max?: number; compact?: boolean; className?: string }) {
   const { items, day, projects } = useHorizon()
-  const list = items ? firstOfEachKind(items.filter((h) => !isDue(h))) : []
+  const near = nearPayday(items, day)
+  const list = items ? firstOfEachKind(items.filter((h) => !isDue(h) && !(near && h.kind === 'payday'))) : []
   const first = list[0]
   if (!first) return null
   const name = (id: string | undefined) => projects.find((p) => p.id === id)?.name ?? ''

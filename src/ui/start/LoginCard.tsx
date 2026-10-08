@@ -7,13 +7,10 @@ import { suggestCompanyName, type CompanyNameIssue } from '../../content'
 import { login, register, type AuthOk } from '../../net/api'
 import { looksLikeEmail, maskEmail } from '../../net/netText'
 import { t } from '../i18n'
-import { Button, cx } from '../primitives'
-import { CompanyNameField, liveIssue, resolveCompanyName } from './CompanyNameField'
+import { Button, Label, cx } from '../primitives'
+import { CompanyNameField, INPUT, inputRing, liveIssue, resolveCompanyName } from './CompanyNameField'
 
 export type AuthKind = 'login' | 'register'
-
-const INPUT =
-  'h-11 w-full min-w-0 rounded-control border bg-surface px-3 text-sm font-semibold text-ink outline-none transition-colors placeholder:font-medium placeholder:text-ink-3 focus:border-brand'
 
 function PinInput({
   label,
@@ -35,8 +32,8 @@ function PinInput({
   const id = useId()
   return (
     <div className="min-w-0 flex-1">
-      <label htmlFor={id} className="text-xs font-semibold tracking-wide text-ink-2">
-        {label}
+      <label htmlFor={id} className="block">
+        <Label>{label}</Label>
       </label>
       <input
         id={id}
@@ -53,7 +50,7 @@ function PinInput({
         onKeyDown={(e) => {
           if (e.key === 'Enter') onEnter()
         }}
-        className={cx(INPUT, 'tabular mt-1 tracking-[0.4em]', invalid ? 'border-negative' : 'border-border-strong')}
+        className={cx(INPUT, 'tabular mt-1 tracking-[0.4em]', inputRing(!!invalid))}
       />
     </div>
   )
@@ -124,7 +121,7 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
 
   return (
     <form
-      className="mt-6 flex flex-col gap-3"
+      className="flex flex-col gap-3"
       onSubmit={(ev) => {
         ev.preventDefault()
         void submit()
@@ -132,7 +129,7 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
       noValidate
     >
       <div>
-        <h2 className="text-sm font-semibold tracking-wide text-ink">{t('login.title')}</h2>
+        <h2 className="text-[17px] font-extrabold leading-tight text-ink">{t('login.title')}</h2>
         {/* One sentence at a time: in "new company" mode the message below replaces the subtitle. */}
         {!(mode === 'register' && msg) && (
           <p className="font-text mt-0.5 text-xs text-ink-2">{mode === 'login' ? t('login.sub') : t('login.subNew')}</p>
@@ -140,8 +137,8 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
       </div>
 
       <div>
-        <label htmlFor={emailId} className="text-xs font-semibold tracking-wide text-ink-2">
-          {t('login.email')}
+        <label htmlFor={emailId} className="block">
+          <Label>{t('login.email')}</Label>
         </label>
         <input
           id={emailId}
@@ -161,7 +158,7 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
           onKeyDown={(ev) => {
             if (ev.key === 'Enter') onEnter()
           }}
-          className={cx(INPUT, 'mt-1', bad === 'email' ? 'border-negative' : 'border-border-strong')}
+          className={cx(INPUT, 'mt-1', inputRing(bad === 'email'))}
         />
       </div>
 
@@ -218,7 +215,7 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
         </p>
       )}
 
-      <Button type="submit" tone="primary" icon={mode === 'login' ? 'play' : 'rocket'} disabled={busy} className="w-full">
+      <Button type="submit" tone="commit" icon={mode === 'login' ? 'play' : 'rocket'} disabled={busy} className="w-full">
         {busy ? t('login.busy') : mode === 'login' ? t('login.go') : t('login.create')}
       </Button>
 
@@ -228,22 +225,14 @@ export function LoginCard({ onAuthed, onOffline }: { onAuthed: (a: AuthOk, kind:
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <button
-          type="button"
-          onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
-          className="min-h-9 text-xs font-semibold text-brand-ink hover:underline max-md:min-h-11"
-        >
+      {/* Side doors, not links: quiet ghost keys under the commit. */}
+      <div className="-mx-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <Button tone="ghost" size="sm" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>
           {mode === 'login' ? t('login.switchNew') : t('login.switchBack')}
-        </button>
-        <button
-          type="button"
-          onClick={onOffline}
-          title={t('login.offlineNote')}
-          className="min-h-9 text-xs font-medium text-ink-2 hover:text-ink hover:underline max-md:min-h-11"
-        >
+        </Button>
+        <Button tone="ghost" size="sm" icon="cloud" onClick={onOffline} title={t('login.offlineNote')}>
           {t('login.offline')}
-        </button>
+        </Button>
       </div>
     </form>
   )

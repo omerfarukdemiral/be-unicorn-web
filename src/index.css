@@ -449,3 +449,101 @@ kbd {
     opacity: 0;
   }
 }
+
+/* Game event cards (overlays/OverlayFrame.tsx): entrance motion. Two beats: the card is dealt onto the table, then
+   its medallion lands; a lost run's stamp lands last. Reduced motion drops them all (rule above). */
+@theme {
+  --animate-deal: deal 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-emblem: pop-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3) 120ms both;
+  --animate-veil-slow: fade-in 900ms ease-out both;
+  --animate-slide-in-right: slide-in-right 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-stamp: stamp 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3) 450ms both;
+  --animate-grow-x: grow-x 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-page-turn: page-turn 220ms ease-out both;
+
+  @keyframes deal {
+    from { opacity: 0; transform: translateY(28px) rotate(-1.2deg); }
+    60% { opacity: 1; }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes stamp {
+    from { opacity: 0; transform: scale(1.35); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes grow-x {
+    from { transform: scaleX(0); }
+    to { transform: none; }
+  }
+  @keyframes page-turn {
+    from { opacity: 0; transform: perspective(900px) rotateY(-12deg) translateX(-6px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@layer components {
+  /* Mood veil base: fills the overlay; the mood class sets the light. It still takes clicks (blocking), but never closes. */
+  .ui-vignette {
+    position: absolute;
+    inset: 0;
+  }
+  /* Event-card veil: the scene the moment is about stays lit; the mood only changes the room's light. */
+  .ui-vignette-event {
+    background: radial-gradient(ellipse 70% 60% at 50% 45%, transparent 0%, color-mix(in oklab, var(--color-ink) 34%, transparent) 100%);
+  }
+  .ui-vignette-win {
+    background:
+      radial-gradient(circle at 50% 40%, color-mix(in oklab, var(--color-brand) 16%, transparent) 0%, transparent 45%),
+      radial-gradient(ellipse 75% 65% at 50% 45%, transparent 0%, color-mix(in oklab, var(--color-ink) 24%, transparent) 100%);
+  }
+  /* Lights out: the PauseVeil filter family (no blur), stronger. */
+  .ui-vignette-loss {
+    background: radial-gradient(ellipse 60% 55% at 50% 45%, color-mix(in oklab, var(--color-ink) 18%, transparent) 0%, color-mix(in oklab, var(--color-ink) 55%, transparent) 100%);
+    -webkit-backdrop-filter: grayscale(0.85) brightness(0.85);
+    backdrop-filter: grayscale(0.85) brightness(0.85);
+  }
+  /* Desk = the paused-world recipe (time.tsx PauseVeil): still, not dimmed. */
+  .ui-vignette-desk {
+    background: radial-gradient(ellipse at 50% 55%, transparent 45%, color-mix(in oklab, var(--color-ink) 22%, transparent) 100%);
+    -webkit-backdrop-filter: saturate(0.55) brightness(0.97);
+    backdrop-filter: saturate(0.55) brightness(0.97);
+  }
+  /* Medallion: a surface disc with a halo in the emblem's hue + the card shadow token (restyles with the material). */
+  .ui-medallion {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 9999px;
+    background: var(--color-surface);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--medallion-hue, var(--color-brand)) 30%, var(--color-surface)), var(--shadow-card);
+  }
+  /* Title ribbon: brand band with notched tails past the card edge; on-ink on brand (5.09:1). Never with gauge hues
+     (on-ink on g-equity / g-cash fails AA): hue lives only in the medallion. */
+  .ui-ribbon {
+    padding: 6px 22px;
+    color: var(--color-on-ink);
+    background: var(--color-brand);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 50%, 100% 100%, 0 100%, 8px 50%);
+  }
+  /* Run-lost stamp: the one red on the card (real danger). The rest angle sits on `rotate`, so reduced motion keeps it. */
+  .ui-stamp {
+    display: inline-block;
+    padding: 2px 14px;
+    border-radius: var(--radius-control);
+    color: var(--color-negative-ink);
+    box-shadow: inset 0 0 0 2.5px currentColor;
+    rotate: -3deg;
+  }
+}
+
+/* Commit key focus: a brand glow ring, not the global ink outline. Every blocking card autofocuses its commit key, and
+   after a keyboard input (Space to start, Esc on the last card) the black browser-style ring was the card's loudest
+   "HTML form" tell. Same 4px offset as .ui-key, so it still clears the lip; 3px brand+ink keeps a visible indicator. */
+.ui-key-commit:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--color-brand) 55%, var(--color-ink));
+  outline-offset: 4px;
+}

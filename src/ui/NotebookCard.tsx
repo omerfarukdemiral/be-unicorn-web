@@ -1,11 +1,12 @@
 // Defter card (docs/GAMEPLAY_V2.md §10.6, simplified 2026-10-06): the concept's icon and title, its definition
-// (card.what, ≤ 16 words) as the one sentence, the unlock as a pill. Nothing folds; nothing else is said.
+// (card.what, ≤ 16 words) as the one sentence, the unlock as a tagged label. Nothing folds; nothing else is said.
+// It reads as a notebook page (a shelf-coloured margin spine), not an onboarding tooltip.
 import type { ConceptId } from '../engine/types'
 import { HUD_WIDGETS, TOOL_IDS } from '../engine/types'
 import type { Concept } from '../content'
 import { Icon } from './icons'
 import { t } from './i18n'
-import { Button, IconBadge, Pill } from './primitives'
+import { Button, IconBadge, Label } from './primitives'
 import { conceptById } from './uiActions'
 import { conceptIcon, conceptTitle } from './panels/JournalPanel'
 
@@ -38,7 +39,9 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
   const unlock = unlockLabel(concept.unlocks)
   return (
     <article className="relative overflow-hidden rounded-card bg-surface" aria-label={t('journal.cardLabel')}>
-      <div className="flex flex-col gap-3 p-4 @lg:p-5">
+      {/* Page-margin spine in the shelf's hue: the card is a page torn from the Defter. */}
+      <span aria-hidden="true" className="absolute inset-y-3 left-0 w-1 rounded-full" style={{ background: concept.shelfColor }} />
+      <div className="flex flex-col gap-3 p-4 pl-5 @lg:p-5 @lg:pl-6">
         <header className="flex min-w-0 items-center gap-2.5">
           <IconBadge icon={conceptIcon(concept.id)} size={32} color={concept.shelfColor} />
           <h2 className="min-w-0 text-lg font-semibold leading-tight tracking-tight text-ink">{conceptTitle(concept.id)}</h2>
@@ -48,15 +51,16 @@ export function NotebookCard({ conceptId, onClose }: { conceptId: ConceptId; onC
         {(unlock || onClose) && (
           <footer className="flex flex-wrap items-center justify-between gap-2">
             {unlock ? (
-              <Pill tint="var(--color-brand)" className="text-brand-ink">
-                <Icon name="plus" size={12} />
-                {unlock}
-              </Pill>
+              <span className="inline-flex items-center gap-1">
+                <Icon name="plus" size={12} className="text-brand" />
+                <Label className="text-brand-ink">{unlock}</Label>
+              </span>
             ) : (
               <span />
             )}
             {onClose && (
-              <Button tone="primary" onClick={onClose} autoFocus>
+              // Routine, not commit: acknowledging spends nothing, and commit is kept for real answers.
+              <Button tone="routine" size="md" onClick={onClose} autoFocus>
                 {t('journal.gotIt')}
               </Button>
             )}

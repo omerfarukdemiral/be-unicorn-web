@@ -2,14 +2,17 @@
 // middle of the scene area between the bars (store.ui.sceneInset, viewport px: hence `fixed`), at most 960px wide.
 // z-45: above the bottom stack (41), under the blocking modals (50) and the time frame (55), so the green / red
 // frame stays visible and the bars stay clickable. Time keeps flowing (§14.1); a click on the scene around the card
-// or Esc (shortcuts.ts) closes it. Title strip = the content kind's hue (identity, never a warning). The header's tab
-// strip switches between the three screens (İstatistik | Kanun Kitabı | Pazar haritası) without closing the frame.
+// or Esc (shortcuts.ts) closes it. A board dealt onto the table, not a web dialog: the shared card material (.ui-card +
+// --shadow-panel), the kind as a duotone sticker (identity, never a warning), no header bar and no visible title (the
+// active tab names the board).
+// The header's tab strip switches between the three screens (İstatistik | Kanun Kitabı | Pazar haritası) without
+// closing the frame; tab switches are static (only the first open is dealt).
 import type { ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import type { CenterKind, StatsTab } from '../../store/types'
-import { Icon, type IconName } from '../icons'
+import type { IconName } from '../icons'
 import { t } from '../i18n'
-import { Chip, IconButton, Segmented } from '../primitives'
+import { Chip, cx, IconBadge, IconButton, Segmented } from '../primitives'
 import { LawbookScreen } from '../center/LawbookScreen'
 import { MarketScreen } from '../center/MarketScreen'
 import { StatsScreen } from './StatsScreen'
@@ -43,15 +46,18 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
         role="dialog"
         aria-labelledby="center-title"
         onClick={(e) => e.stopPropagation()}
-        className="relative flex h-full w-full min-w-0 animate-rise flex-col overflow-hidden rounded-card border border-border bg-surface shadow-panel"
+        // The board hugs its content (the office shows under a short lawbook or market); past the scene height its own
+        // scroller takes over. Stats keeps a tall floor so its charts do not jump between tabs.
+        className={cx(
+          'ui-card shadow-panel relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal',
+          kind === 'stats' && 'min-h-[70%]',
+        )}
         style={{ maxWidth: CENTER_MAX_W }}
       >
-        <div aria-hidden="true" className="h-[3px] w-full shrink-0" style={{ background: k.color }} />
         <header className="flex shrink-0 items-center gap-2 px-3 pt-2">
-          <span aria-hidden="true" style={{ color: k.color }}>
-            <Icon name={k.icon} size={20} />
-          </span>
-          <h2 id="center-title" className="min-w-0 flex-1 truncate text-[13px] font-semibold uppercase tracking-[0.06em] text-ink max-[639px]:sr-only">
+          <IconBadge icon={k.icon} size={24} color={k.color} />
+          {/* Named for screen readers only: the active tab already says which board this is. */}
+          <h2 id="center-title" className="sr-only">
             {t(`center.${kind}`)}
           </h2>
           <Segmented label={t('center.tabs')} className="max-[639px]:flex-1 max-[639px]:justify-between">
@@ -61,7 +67,7 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
               </Chip>
             ))}
           </Segmented>
-          <IconButton icon="close" label={t('common.close')} onClick={onClose} size={36} />
+          <IconButton icon="close" label={t('common.close')} onClick={onClose} size={36} className="ml-auto" />
         </header>
         <div className="flex min-h-0 flex-1 flex-col">{children ?? <CenterContent kind={kind} tab={tab} />}</div>
       </section>

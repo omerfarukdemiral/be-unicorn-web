@@ -1,7 +1,7 @@
-// Blocking overlay contents (the only centered modals): move scene, post-mortem, the sale (acquired), victory. HUD
-// grammar (docs/GAMEPLAY_V2.md §10.6): numbers first, at most one sentence. The move scene and the victory draw the
-// stage report cards (§9.3).
-import { useState } from 'react'
+// Blocking moment contents, each a game event card in OverlayFrame (medallion + ribbon / stamp + one pinned key): move
+// scene, post-mortem, the sale (acquired), victory. HUD grammar (docs/GAMEPLAY_V2.md §10.6): numbers first, at most one
+// sentence; hero numbers sit in recessed ui-inset trays. The move scene and the victory draw the stage report cards (§9.3).
+import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ARCHETYPES, type Archetype, type ConceptId, type PostMortemCode, type StageReport } from '../../engine/types'
 import { STAGES, TEASERS } from '../../content'
@@ -9,7 +9,7 @@ import { codexCount, useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
-import { Button, Dot, Label, Pill, Stat } from '../primitives'
+import { Button, IconBadge, IconButton, Label, Stat } from '../primitives'
 import { NotebookCard } from '../NotebookCard'
 import { conceptTitle } from '../panels/JournalPanel'
 import { useModalQueue } from '../modalQueue'
@@ -39,24 +39,35 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
   const report = lastReport(s.reports, s.stage)
   const verb = stageVerb(s.stage)
   return (
-    <OverlayFrame onClose={onClose}>
-      <div className="flex flex-col items-center gap-5 p-6 text-center">
-        <div>
-          <Label>{t('move.kicker', { stage: def?.name ?? '' })}</Label>
-          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{def?.officeName}</h2>
-        </div>
-        {/* The new verb, big: what this stage put in the player's hands. */}
-        <div className="flex flex-col items-center gap-1.5">
-          <span className="grid size-16 place-items-center rounded-card bg-brand text-on-ink shadow-[0_10px_24px_-8px_var(--color-brand)]">
-            <Icon name={verb.icon} size={34} />
-          </span>
-          <span className="text-sm font-semibold text-ink">{verb.label}</span>
-        </div>
+    // Dealt low in the scene area, so the new office stays lit above the card; the medallion carries the new verb.
+    <OverlayFrame
+      onClose={onClose}
+      mood="event"
+      place="low"
+      emblem={{ icon: verb.icon }}
+      title={def?.officeName}
+      // One line under the ribbon: the new stage and its verb (no second label repeating the same news).
+      kicker={def ? `${def.name} · ${verb.label}` : verb.label}
+      actions={
+        <Button tone="commit" icon="arrowRight" className="w-full" onClick={onClose} autoFocus>
+          {t('move.go')}
+        </Button>
+      }
+    >
+      <div className="flex flex-col items-center gap-4 text-center">
         {report && (
-          <div className="grid w-full grid-cols-3 gap-3 text-left">
-            <Stat label={t('report.days')} value={num(report.days)} />
-            <Stat label={t('report.goals')} value={num(report.goalsDone)} icon="star" color="var(--color-g-equity)" />
-            <Stat label={t('report.minRunway')} value={reportRunway(report.minRunway)} />
+          <div className="ui-inset grid w-full grid-cols-3 gap-3 p-3 text-left">
+            {/* The numbers land one after another, a stage report read off the card. `backwards` holds each one at its
+                first frame through its delay (the shared count token has no fill), so it does not show, then pop. */}
+            <div className="animate-count" style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}>
+              <Stat label={t('report.days')} value={num(report.days)} />
+            </div>
+            <div className="animate-count" style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}>
+              <Stat label={t('report.goals')} value={num(report.goalsDone)} icon="star" color="var(--color-g-equity)" />
+            </div>
+            <div className="animate-count" style={{ animationDelay: '160ms', animationFillMode: 'backwards' }}>
+              <Stat label={t('report.minRunway')} value={reportRunway(report.minRunway)} />
+            </div>
           </div>
         )}
         {next && (
@@ -73,9 +84,6 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
             <span className="text-xs font-semibold text-ink-2">{TEASERS[s.stage as keyof typeof TEASERS]}</span>
           </div>
         )}
-        <Button tone="commit" className="w-full" onClick={onClose} autoFocus>
-          {t('move.go')}
-        </Button>
       </div>
     </OverlayFrame>
   )
@@ -127,6 +135,16 @@ export function PostMortemOverlay() {
     useShallow((st) => ({ go: st.state.gameOver, day: st.state.time.day, stage: st.state.stage, peak: peakMrr(st.state.finance.mrrHistory, st.state.finance.mrr) })),
   )
   const [open, setOpenRaw] = useState<ConceptId | null>(null)
+  // The page turn unmounts whichever key was focused (the book key, then "back"): focus follows it, so keyboard play
+  // never drops to <body> behind the modal. "Back" takes focus on mount (autoFocus); the book key takes it back here.
+  const book = useRef<HTMLButtonElement>(null)
+  const returning = useRef(false)
+  useEffect(() => {
+    if (open === null && returning.current) {
+      returning.current = false
+      book.current?.focus()
+    }
+  }, [open])
   // Opening a card from the post-mortem also learns it (openConcept is allowed after game over).
   const setOpen = (c: ConceptId | null) => {
     setOpenRaw(c)
@@ -138,26 +156,54 @@ export function PostMortemOverlay() {
   if (s.go.kind === 'acquired') return <AcquiredOverlay day={s.day} xp={s.go.xpEarned} />
   const cause = s.go.reasons[0]
   const cid = cause?.conceptId
+  const xp = t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })
+  // Lights out: the office goes grey under the card, the title is the red stamp (the one red here). No onClose: a lost
+  // run is answered with "Yeniden", which stays pinned even while a Defter page is open.
   return (
-    <OverlayFrame wide>
-      <div className="flex flex-col gap-5 p-5 sm:p-7">
-        <header>
-          <div className="flex items-center gap-1.5">
-            <Dot color="var(--color-negative)" size={7} />
-            <Label>{t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}</Label>
-          </div>
-          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}</h2>
-        </header>
-        <div className="grid grid-cols-2 gap-3">
-          <Stat label={t('pm.day')} value={num(Math.floor(s.day))} />
-          <Stat label={t('pm.peakMrr')} value={money(s.peak)} icon="trend" color="var(--color-g-cash)" />
+    <OverlayFrame
+      wide
+      mood="loss"
+      emblem={{ icon: s.go.kind === 'teamLost' ? 'users' : 'cash', color: 'var(--color-ink-2)' }}
+      title={t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}
+      kicker={t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}
+      actions={
+        <Button tone="commit" icon="refresh" className="w-full" onClick={restart} autoFocus cost={xp}>
+          {t('gameOver.retry')}
+        </Button>
+      }
+    >
+      {open ? (
+        // The Defter card turns in as a page over the ledger (keyed, so a different card turns again).
+        <div key={open} className="animate-page-turn flex flex-col gap-2">
+          <IconButton
+            icon="chevronLeft"
+            label={t('common.back')}
+            onClick={() => {
+              returning.current = true
+              setOpen(null)
+            }}
+            autoFocus
+          />
+          <NotebookCard conceptId={open} />
         </div>
-        {cause && (
-          <div className="border-t border-border pt-2">
-            <div className="flex items-start gap-2">
-              <p className="min-w-0 flex-1 text-lg font-semibold leading-snug text-ink">{t(`postMortem.${cause.code}`)}</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="ui-inset grid grid-cols-2 gap-3 p-3">
+            <Stat label={t('pm.day')} value={num(Math.floor(s.day))} />
+            <Stat label={t('pm.peakMrr')} value={money(s.peak)} icon="trend" color="var(--color-g-cash)" />
+          </div>
+          {cause && (
+            <div className="ui-inset flex items-start gap-2 p-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <p className="text-lg font-semibold leading-snug text-ink">{t(`postMortem.${cause.code}`)}</p>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <Label>{t('pm.cause')}</Label>
+                  {cause.value !== undefined && <span className="tabular text-[15px] font-extrabold text-ink">{PM_FORMAT[cause.code](cause.value)}</span>}
+                </div>
+              </div>
               {cid && (
                 <button
+                  ref={book}
                   type="button"
                   onClick={() => setOpen(open === cid ? null : cid)}
                   title={t('decision.notebookLink', { v: conceptTitle(cid) })}
@@ -169,49 +215,46 @@ export function PostMortemOverlay() {
                 </button>
               )}
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <Label>{t('pm.cause')}</Label>
-              {cause.value !== undefined && <Pill className="tabular text-ink">{PM_FORMAT[cause.code](cause.value)}</Pill>}
-            </div>
-          </div>
-        )}
-        {open && (
-          <div className="overflow-hidden rounded-card border border-border animate-fade-in">
-            <NotebookCard conceptId={open} />
-          </div>
-        )}
-        <Button tone="commit" icon="refresh" onClick={restart} autoFocus cost={t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })}>
-          {t('gameOver.retry')}
-        </Button>
-      </div>
+          )}
+        </div>
+      )}
     </OverlayFrame>
   )
 }
 
 /**
- * The sale (acquired, §8.2): the price the company went for, the founder's share of it and the day, then the XP on
- * the "Yeniden" commit. No sentence; nothing goes to the leaderboard (cloud.ts sends no 'acquired' run).
+ * The sale (acquired, §8.2): a signed contract, not a success modal. The price is the one hero number, then the
+ * founder's share and the day, then the XP on the "Yeniden" commit. No sentence; nothing goes to the leaderboard
+ * (cloud.ts sends no 'acquired' run).
  */
 export function AcquiredOverlay({ day, xp }: { day: number; xp: number }) {
   const s = useGameStore(useShallow((st) => ({ valuation: st.state.finance.valuation, equity: st.state.stats.equity, stage: st.state.stage })))
   return (
-    <OverlayFrame>
-      <div className="flex flex-col items-center gap-5 p-6 text-center" data-acquired>
-        <span className="grid size-16 place-items-center rounded-card bg-g-equity/15 text-g-equity">
-          <Icon name="handshake" size={34} />
-        </span>
-        <div>
-          <Label>{STAGES[s.stage]?.name}</Label>
-          <h2 className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{t('gameOver.acquiredTitle')}</h2>
-        </div>
-        <div className="grid w-full grid-cols-3 gap-3 text-left">
-          <Stat label={t('acq.valuation')} value={money(s.valuation)} icon="coin" color="var(--color-g-cash)" />
-          <Stat label={t('acq.equity')} value={pct(s.equity, 1)} icon="pie" color="var(--color-g-equity)" />
-          <Stat label={t('acq.day')} value={num(Math.floor(day))} />
-        </div>
+    <OverlayFrame
+      mood="win"
+      emblem={{ icon: 'handshake', color: 'var(--color-g-equity)' }}
+      title={t('gameOver.acquiredTitle')}
+      kicker={STAGES[s.stage]?.name}
+      actions={
         <Button tone="commit" icon="refresh" className="w-full" onClick={restart} autoFocus cost={t('gameOver.xp', { v: fixed(xp, 1) })}>
           {t('gameOver.retry')}
         </Button>
+      }
+    >
+      <div data-acquired="" className="flex flex-col items-center gap-3 text-center">
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="inline-flex items-center gap-2">
+            <Icon name="coin" size={30} tone="var(--color-g-equity)" />
+            <span className="tabular text-[40px] font-extrabold leading-none text-ink">{money(s.valuation)}</span>
+          </span>
+          <Label>{t('acq.valuation')}</Label>
+        </div>
+        {/* The signature line under the price: the contract is closed. */}
+        <span aria-hidden="true" className="h-0.5 w-40 rounded-full bg-border-strong" />
+        <div className="ui-inset grid w-full grid-cols-2 gap-3 p-3 text-left">
+          <Stat label={t('acq.equity')} value={pct(s.equity, 1)} icon="pie" color="var(--color-g-equity)" />
+          <Stat label={t('acq.day')} value={num(Math.floor(day))} />
+        </div>
       </div>
     </OverlayFrame>
   )
@@ -244,31 +287,43 @@ export function VictoryOverlay() {
   const longest = Math.max(1, ...reports.map((r) => r.days))
   const found = codexCount(s.codex)
   return (
-    <OverlayFrame wide>
-      <div className="relative flex flex-col items-center gap-5 overflow-hidden p-6 text-center sm:p-8">
-        <span className="relative grid size-16 place-items-center rounded-card bg-brand text-on-ink shadow-[0_10px_24px_-8px_var(--color-brand)]">
-          <Icon name="unicorn" size={36} />
-        </span>
-        <div className="relative">
-          <Label>{t('victory.kicker')}</Label>
-          <h2 className="mt-1.5 text-3xl font-semibold tracking-tight text-ink">{t('victory.title')}</h2>
-          <p className="font-text mt-1 text-sm text-ink-2">{t('victory.body', { days: Math.floor(s.day) })}</p>
+    // Award screen over the final office: the win veil's brand glow keeps the scene's own confetti visible.
+    <OverlayFrame
+      wide
+      mood="win"
+      emblem={{ icon: 'unicorn' }}
+      title={t('victory.title')}
+      actions={
+        <Button tone="commit" icon="refresh" className="w-full" onClick={restart} autoFocus>
+          {t('victory.again')}
+        </Button>
+      }
+    >
+      <div className="flex flex-col items-center gap-5 text-center">
+        {/* Numbers first: the valuation right under the ribbon, the tray, then the one sentence. */}
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="tabular text-[40px] font-extrabold leading-none text-ink">{money(s.valuation)}</span>
+          <Label>{t('victory.valuation')}</Label>
         </div>
-        <div className="relative grid w-full grid-cols-2 gap-3 text-left sm:grid-cols-4">
-          <Stat label={t('victory.valuation')} value={money(s.valuation)} />
+        <div className="ui-inset grid w-full grid-cols-3 gap-3 p-3 text-left">
           <Stat label={t('hud.equity')} value={pct(s.equity, 1)} />
           <Stat label={t('victory.team')} value={num(s.team)} />
           <Stat label={t('victory.learned')} value={s.learned} />
         </div>
+        <p className="font-text text-sm text-ink-2">{t('victory.body', { days: Math.floor(s.day) })}</p>
         {reports.length > 0 && (
-          <div className="relative w-full text-left" data-report-rows={reports.length + 1}>
+          <div className="w-full text-left" data-report-rows={reports.length + 1}>
             <Label>{t('report.title')}</Label>
             <ol className="mt-1.5 flex flex-col gap-1">
-              {reports.map((r) => (
+              {reports.map((r, i) => (
                 <li key={r.stage} className="flex h-6 items-center gap-2">
                   <span className="w-20 shrink-0 truncate text-xs font-semibold text-ink">{STAGES[r.stage]?.name}</span>
                   <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-brand/15">
-                    <span className="block h-full rounded-full bg-brand" style={{ width: `${(r.days / longest) * 100}%` }} />
+                    {/* The karne fills in stage by stage: each bar grows from the left after the one before. */}
+                    <span
+                      className="block h-full origin-left animate-grow-x rounded-full bg-brand"
+                      style={{ width: `${(r.days / longest) * 100}%`, animationDelay: `${300 + 70 * i}ms` }}
+                    />
                   </span>
                   <span className="tabular w-12 shrink-0 text-right text-xs font-semibold text-ink">{t('report.daysShort', { v: num(r.days) })}</span>
                   <span className="tabular inline-flex w-8 shrink-0 items-center justify-end gap-0.5 text-xs font-semibold text-ink-2" title={t('report.goals')}>
@@ -279,36 +334,34 @@ export function VictoryOverlay() {
               ))}
               <li className="flex h-6 items-center gap-2">
                 <span className="w-20 shrink-0 truncate text-xs font-semibold text-brand-ink">{STAGES[STAGE_LAST]?.name}</span>
-                <Icon name="unicorn" size={14} className="text-brand" />
+                <Icon name="unicorn" size={14} className="animate-pop-once text-brand" style={{ animationDelay: `${300 + 70 * reports.length}ms` }} />
               </li>
             </ol>
           </div>
         )}
-        <div className="relative flex w-full flex-wrap items-center justify-between gap-3">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2" title={TEASERS[6]}>
             {s.archetype && (
-              <Pill tint="var(--color-brand)" className="text-brand-ink">
-                <Icon name={ARCHETYPE_ICON[s.archetype]} size={13} />
-                {t(`archetype.${s.archetype}`)}
-              </Pill>
+              <span className="inline-flex items-center gap-1.5">
+                <IconBadge icon={ARCHETYPE_ICON[s.archetype]} size={28} color="var(--color-brand)" />
+                <Label className="text-brand-ink">{t(`archetype.${s.archetype}`)}</Label>
+              </span>
             )}
-            {/* The roads not walked: grey silhouettes, unnamed. */}
+            {/* The roads not walked: neutral stickers, faded and unnamed. */}
             {ARCHETYPES.filter((a) => a !== s.archetype)
               .slice(0, 3)
               .map((a) => (
-                <span key={a} aria-hidden="true" className="grid size-7 place-items-center rounded-[8px] border border-dashed border-border-strong text-ink-3 opacity-60">
-                  <Icon name={ARCHETYPE_ICON[a]} size={14} />
+                <span key={a} aria-hidden="true" className="opacity-50">
+                  <IconBadge icon={ARCHETYPE_ICON[a]} size={28} />
                 </span>
               ))}
           </div>
-          <Pill className="tabular text-ink">
-            <Icon name="sparkle" size={12} className="text-brand" />
-            {t('victory.codex')} {t('codex.count', found)}
-          </Pill>
+          <span className="inline-flex items-center gap-1.5" title={t('victory.codex')}>
+            <Icon name="sparkle" size={18} tone="var(--color-brand)" />
+            <Label>{t('victory.codex')}</Label>
+            <span className="tabular text-[15px] font-extrabold text-ink">{t('codex.count', found)}</span>
+          </span>
         </div>
-        <Button tone="commit" icon="refresh" className="relative w-full" onClick={restart}>
-          {t('victory.again')}
-        </Button>
       </div>
     </OverlayFrame>
   )

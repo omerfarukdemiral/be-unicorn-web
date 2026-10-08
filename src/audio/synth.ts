@@ -8,7 +8,7 @@ export type CueId =
   | 'hired' | 'left' | 'itemPlaced' | 'itemSold' | 'itemMoved' | 'ringOpened'
   | 'milestone' | 'roundStarted' | 'roundClosed' | 'stageUp'
   | 'conceptQueued' | 'conceptLearned' | 'decisionShown' | 'decisionAnswered'
-  | 'visitor' | 'warning' | 'error' | 'gameOver' | 'victory'
+  | 'visitor' | 'warning' | 'error' | 'gameOver' | 'victory' | 'desk'
 
 /** Overall loudness. Kept low on purpose: feedback, not music. */
 const MASTER = 0.32
@@ -194,6 +194,11 @@ const CUES: Record<CueId, () => void> = {
   },
   warning: () => arp([N.G4, N.E4], 0.18, 0.45, { gain: 0.06 }),
   error: () => tone(N.A4, 0, 0.12, { type: 'triangle', gain: 0.045, to: N.G4 }),
+  // Payday desk: a sheet slid across the table (falling band-passed noise), then one soft low note to settle it.
+  desk: () => {
+    noise(0, 0.18, 2400, 0.045, 700, 0.8)
+    tone(N.D4, 0.15, 0.32, { gain: 0.045, attack: 0.02 })
+  },
   gameOver: () => arp([N.G4, N.E4, N.D4, N.C4], 0.28, 0.7, { gain: 0.06, attack: 0.02 }),
   victory: () => {
     CUES.stageUp()
@@ -202,7 +207,7 @@ const CUES: Record<CueId, () => void> = {
 }
 
 /** Minimum real ms between two plays of the same cue. */
-const COOLDOWN: Partial<Record<CueId, number>> = { tap: 35, confirm: 60, visitor: 20_000, conceptQueued: 4000, decisionShown: 4000, speed: 80 }
+const COOLDOWN: Partial<Record<CueId, number>> = { tap: 35, confirm: 60, visitor: 20_000, conceptQueued: 4000, decisionShown: 4000, speed: 80, desk: 4000 }
 const lastPlayed = new Map<CueId, number>()
 
 export function playCue(id: CueId): void {

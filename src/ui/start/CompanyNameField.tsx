@@ -3,9 +3,19 @@
 import { useId } from 'react'
 import { COMPANY_NAME_ISSUE_TEXT, checkCompanyName, suggestCompanyName, type CompanyNameIssue } from '../../content'
 import { COMPANY_NAME_MAX } from '../../engine/types'
-import { Icon } from '../icons'
 import { t } from '../i18n'
-import { cx } from '../primitives'
+import { IconButton, Label, cx } from '../primitives'
+
+/** Start-screen text field: a recessed well (no 1px frame). 16px text: iOS zooms the page into any smaller input. */
+export const INPUT = 'ui-inset h-11 w-full min-w-0 px-3 font-ui text-[16px] font-bold text-ink placeholder:font-semibold placeholder:text-ink-3'
+
+/**
+ * Invalid mark: a 2px negative ring drawn as an inset shadow, not an outline. The global :focus-visible rule is
+ * unlayered and replaces any outline on focus, so an outline ring would vanish on the very field the error focuses.
+ */
+export function inputRing(invalid: boolean): string {
+  return invalid ? 'shadow-[inset_0_0_0_2px_var(--color-negative)]' : ''
+}
 
 /** The name to start with: the typed one when valid, the suggestion when blank, else the issue to show. */
 export function resolveCompanyName(value: string, suggestion: string): { name: string } | { issue: CompanyNameIssue } {
@@ -45,10 +55,10 @@ export function CompanyNameField({
   const id = useId()
   return (
     <div>
-      <label htmlFor={id} className="text-xs font-semibold tracking-wide text-ink-2">
-        {t('start.companyLabel')}
+      <label htmlFor={id} className="block">
+        <Label>{t('start.companyLabel')}</Label>
       </label>
-      <div className="mt-1 flex items-center gap-1.5">
+      <div className="mt-1 flex items-center gap-2">
         <input
           id={id}
           type="text"
@@ -64,24 +74,19 @@ export function CompanyNameField({
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSubmit?.()
           }}
-          className={cx(
-            'h-11 min-w-0 flex-1 rounded-control border bg-surface px-3 text-sm font-semibold text-ink outline-none transition-colors placeholder:font-medium placeholder:text-ink-3 focus:border-brand',
-            issue ? 'border-negative' : 'border-border-strong',
-          )}
+          className={cx(INPUT, 'flex-1', inputRing(!!issue))}
         />
-        <button
-          type="button"
+        {/* A dice key beside the well: rolling a name is a toy, not a form control. */}
+        <IconButton
+          raised
+          icon="refresh"
+          label={t('start.companyRandom')}
           onClick={() => {
             let next = suggestCompanyName()
             for (let i = 0; i < 4 && next === value; i++) next = suggestCompanyName()
             onSuggest(next)
           }}
-          title={t('start.companyRandom')}
-          aria-label={t('start.companyRandom')}
-          className="grid size-11 shrink-0 place-items-center rounded-control border border-border-strong text-ink-2 transition-colors hover:bg-surface-2 hover:text-brand-ink"
-        >
-          <Icon name="refresh" size={18} />
-        </button>
+        />
       </div>
       {(!quiet || issue) && (
         <p id={`${id}-hint`} className={cx('font-text mt-1.5 min-h-4 text-[11px]', issue ? 'text-negative-ink' : 'text-ink-2')}>

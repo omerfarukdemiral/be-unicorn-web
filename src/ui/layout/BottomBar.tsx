@@ -75,7 +75,10 @@ export function BottomStack() {
   const compact = mode !== 'desktop'
   const sheetOpen = mode === 'portrait' && panelOpen
   const stripH = compact ? STRIP_H_MOBILE : STRIP_H
-  const stripRight = mode !== 'portrait' && panelOpen ? panelWidth(vw, mode) + GAP : 0
+  // The payday desk docks into the panel's slot (OverlayFrame place="dock"): the strip re-centres in the scene left of
+  // it as it does for the panel, instead of running under the desk's edge.
+  const deskOpen = useGameStore((s) => s.ui.overlay?.kind === 'payday')
+  const stripRight = mode !== 'portrait' && (panelOpen || deskOpen) ? panelWidth(vw, mode) + GAP : 0
   // Reserved strip slot (the camera does not jump with each message), except on a landscape phone: 44px of a
   // ~390px-tall screen is worth more to the scene, so there the strip overlays the scene's bottom edge.
   const reserve = mode === 'desktop' || (mode === 'portrait' && !sheetOpen)

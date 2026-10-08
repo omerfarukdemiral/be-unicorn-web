@@ -77,9 +77,11 @@ export function StatsScreen({ tab }: { tab: StatsTab }) {
   }, [])
 
   return (
-    <>
-      <div className="shrink-0 overflow-x-auto px-3 pb-2 pt-1 [scrollbar-width:none]">
-        <Segmented label={t('stats.tabs')}>
+    // Two tab bars stacked under the board's own tabs read as a web page: from 900px the stats tabs stand as a
+    // vertical rail beside the charts instead. Below that they stay a horizontal strip over the scroller.
+    <div className="flex min-h-0 flex-1 flex-col min-[900px]:flex-row">
+      <div className="shrink-0 overflow-x-auto px-3 pb-2 pt-1 [scrollbar-width:none] min-[900px]:overflow-visible min-[900px]:pb-3 min-[900px]:pr-0">
+        <Segmented label={t('stats.tabs')} className="min-[900px]:w-[140px] min-[900px]:flex-col min-[900px]:items-stretch min-[900px]:self-start">
           {STATS_TABS.map((id) => (
             <Chip key={id} segment active={tab === id} icon={TAB_ICON[id]} onClick={() => openOverlay({ kind: 'stats', tab: id })}>
               {t(`stats.tab.${id}`)}
@@ -95,7 +97,7 @@ export function StatsScreen({ tab }: { tab: StatsTab }) {
           {tab === 'profile' && <ProfileTab day={live.day} />}
         </div>
       </div>
-    </>
+    </div>
   )
 }
 

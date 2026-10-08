@@ -4,6 +4,9 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './icons'
+// primitives.tsx also imports InfoTip (Stat's ⓘ). The cycle is safe: both are function declarations only touched at
+// render time, never during module evaluation.
+import { Button } from './primitives'
 
 const WIDTH = 240
 const GAP = 6
@@ -138,23 +141,26 @@ export function InfoTip({
             role="tooltip"
             onPointerEnter={hoverIn}
             onPointerLeave={hoverOut}
-            className="animate-fade-in fixed z-[70] rounded-control border border-border bg-surface px-3 py-2.5 text-ink shadow-card"
+            // Material comes from .ui-card only, so the pending button/material decision restyles the bubble too.
+            className="ui-card animate-fade-in fixed z-[70] px-3 py-2.5 text-ink"
             style={{ width: WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
           >
             {title && <div className="mb-1 text-[13px] font-semibold leading-tight">{title}</div>}
             <div className="font-text text-[13px] leading-snug text-ink-2">{children}</div>
             {action && (
-              <button
-                type="button"
+              <Button
+                tone="ghost"
+                size="sm"
+                icon="chevronRight"
                 onClick={() => {
                   close()
                   action.onClick()
                 }}
-                className="mt-2 inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-brand-ink hover:underline"
+                // Pulled left by the key's own padding so its text lines up with the bubble body.
+                className="mt-2 -ml-3"
               >
                 {action.label}
-                <Icon name="chevronRight" size={12} />
-              </button>
+              </Button>
             )}
           </div>,
           document.body,

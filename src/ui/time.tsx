@@ -12,7 +12,7 @@ import type { PauseReason, UiState } from '../store/types'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { money } from './format'
-import { cx } from './primitives'
+import { Label, cx } from './primitives'
 import { soft } from './theme'
 import { useIsMobile } from './hooks'
 
@@ -199,7 +199,8 @@ export function PauseVeil() {
 
 /** One clear call on a paused start: the stage goal as a number, one sentence and a big Başlat (Space / 1 / 2 / 3 work
  * too; docs/GAMEPLAY_V2.md §10.1 D1-D2: the number is the biggest thing, the sentence the only one). Centred in the
- * scene area between the bars (store.ui.sceneInset, viewport px: hence `fixed`). */
+ * scene area between the bars (store.ui.sceneInset, viewport px: hence `fixed`). A HUD callout, not a plate: the text
+ * sits on the scene itself; a soft canvas glow behind it keeps it readable over the desaturated office (PauseVeil). */
 export function StartCall() {
   const mobile = useIsMobile()
   const inset = useGameStore((st) => st.ui.sceneInset)
@@ -216,27 +217,31 @@ export function StartCall() {
   const next = STAGES[s.stage + 1]
   return (
     <div className="pointer-events-none fixed left-0 z-10 grid place-items-center px-4" style={{ top: inset.top, right: inset.right, bottom: inset.bottom }}>
-      <div className="pointer-events-auto flex w-full max-w-[320px] animate-pop-in flex-col items-center gap-3 rounded-card border border-border bg-surface/95 p-5 text-center shadow-pop">
+      <div
+        className="pointer-events-none flex max-w-[320px] animate-pop-in flex-col items-center gap-3 text-center"
+        style={{ padding: 28, background: 'radial-gradient(closest-side, color-mix(in oklab, var(--color-canvas-bg) 85%, transparent), transparent)' }}
+      >
         {next?.targetValuation ? (
           <div className="flex flex-col items-center gap-0.5">
-            <span className="ui-label inline-flex items-center gap-1 text-brand-ink">
+            <Label className="inline-flex items-center gap-1 text-brand-ink">
               <Icon name="flag" size={12} />
               {t('start.goalLabel', { stage: STAGES[s.stage]?.name ?? '' })}
-            </span>
-            <span className="tabular text-[28px] font-bold leading-none text-ink">{money(next.targetValuation)}</span>
+            </Label>
+            <span className="tabular text-[34px] font-extrabold leading-none text-ink">{money(next.targetValuation)}</span>
           </div>
         ) : null}
         <p className="text-[15px] font-semibold leading-tight text-ink-2">{t('time.startTitle')}</p>
-        {/* The glow sits on a wrapper: cta-glow replaces box-shadow, which on the key itself would pin its lip. */}
-        <span className="flex w-full animate-cta-glow rounded-control">
+        {/* The breath sits on a wrapper: a transform on the key itself would fight its own press transform and lip. */}
+        <span className="flex animate-breathe rounded-control">
           <button
             type="button"
             onClick={() => dispatch({ type: 'setSpeed', speed: 1 })}
-            className="ui-key ui-key-commit inline-flex min-h-14 w-full items-center justify-center gap-2 px-6 text-lg font-extrabold"
+            aria-keyshortcuts="Space"
+            className="ui-key ui-key-commit pointer-events-auto inline-flex min-h-14 items-center justify-center gap-2 px-8 text-lg font-extrabold"
           >
             <Icon name="play" size={22} fill="currentColor" />
             {t('time.start')}
-            {!mobile && <kbd className="ml-1 rounded-[6px] border border-on-ink/40 px-1.5 py-0.5 text-[11px] font-bold opacity-85">Space</kbd>}
+            {!mobile && <span className="ml-1 text-[11px] font-bold opacity-80">Space</span>}
           </button>
         </span>
       </div>

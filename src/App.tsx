@@ -1,8 +1,8 @@
-// App shell: 3D office (render) under the HTML game layer (ui), plus the start card.
-// Before a run starts, the canvas shows the garage behind the title card and the loop is stopped.
+// App shell: 3D office (render) under the HTML game layer (ui), plus the title screen.
+// Before a run starts, the canvas shows the garage behind the title screen and the loop is stopped.
 // Start card phases (net/cloud): boot (probe the backend + resume the token) → login (e-posta + PIN, or play
 // offline) → ready (Devam et / Yeni oyun). Without a backend the card goes straight to ready, local save only.
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { STAGES, suggestCompanyName, type CompanyNameIssue } from './content'
 import { balance } from './engine'
 import type { GameState } from './engine/types'
@@ -15,7 +15,7 @@ import { GameUI } from './ui/GameUI'
 import { renderWorldBubble } from './ui/bubbles'
 import { Icon } from './ui/icons'
 import { t } from './ui/i18n'
-import { Button } from './ui/primitives'
+import { Button, IconBadge, IconButton } from './ui/primitives'
 import { usePrefs } from './ui/hooks'
 import { CompanyNameField, liveIssue, resolveCompanyName } from './ui/start/CompanyNameField'
 import { LoginCard, type AuthKind } from './ui/start/LoginCard'
@@ -45,22 +45,46 @@ function nextRunIndex(saved: GameState | null): number {
   return Math.max(readProfile().runIndex, saved ? saved.meta.runIndex + 1 : 0, cloudRun >= 0 ? cloudRun + 1 : 0)
 }
 
-/** The start card frame: logo, title, tagline, then the phase's content. */
-function StartShell({ children }: { children: ReactNode }) {
+/**
+ * The title screen: a light-fall over the live garage (no veil, no blur), the logo medallion and the big title set
+ * straight on the scene, then the phase's one menu plate, then an optional strip under it (account + XP).
+ */
+function StartShell({ children, strip }: { children: ReactNode; strip?: ReactNode }) {
   const title = splitTitle(t('start.title'))
   return (
-    <div className="absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-canvas-bg/55 p-4 backdrop-blur-[2px] safe-top safe-bottom safe-x">
-      <div className="w-full max-w-sm animate-pop-in rounded-card border border-border bg-surface/95 p-6 text-ink shadow-pop">
-        <span className="grid size-10 place-items-center rounded-control bg-brand text-on-ink shadow-[0_6px_16px_-6px_var(--color-brand)]">
-          <Icon name="unicorn" size={24} />
-        </span>
-        {/* Title: Nunito, uppercase, tight; the second word carries the weight. */}
-        <h1 lang="en" aria-label={t('start.title')} className="mt-5 text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink">
-          {title.head && <span className="block text-ink-2">{title.head}</span>}
-          <span className="block font-bold text-brand-ink">{title.tail}</span>
-        </h1>
-        <p className="font-text mt-3 text-sm leading-snug text-ink-2">{t('start.tagline')}</p>
-        {children}
+    // Light falls from the column's side (bottom on phones) and holds 92% canvas behind the text before it fades,
+    // so the title and tagline keep AA over any garage pixel while the right/top of the scene stays fully lit. On wide
+    // screens it eases out over ~500px (92 → 60 → 25 → 0%): one straight fade read as a wash with a seam on the wall.
+    // Safe-area padding sits on the scroller and the gutter on the inner box: .safe-* is unlayered and would beat p-*.
+    <div
+      className="absolute inset-0 z-50 overflow-y-auto bg-[linear-gradient(0deg,var(--fall)_0,var(--fall)_45%,transparent_80%)] text-ink safe-top safe-bottom safe-x sm:bg-[linear-gradient(90deg,var(--fall)_0,var(--fall)_440px,var(--fall-mid)_600px,var(--fall-low)_780px,transparent_max(70%,960px))]"
+      style={
+        {
+          '--fall': 'color-mix(in oklab, var(--color-canvas-bg) 92%, transparent)',
+          '--fall-mid': 'color-mix(in oklab, var(--color-canvas-bg) 60%, transparent)',
+          '--fall-low': 'color-mix(in oklab, var(--color-canvas-bg) 25%, transparent)',
+        } as CSSProperties
+      }
+    >
+      {/* mt-auto / my-auto instead of items-end / items-center: an auto margin never pushes a tall column (register
+          mode on a short phone) past the scroller's reachable top. */}
+      <div className="flex min-h-full flex-col p-4 sm:p-10">
+        <div className="mt-auto flex w-full max-w-sm animate-deal flex-col gap-4 max-sm:mx-auto sm:my-auto">
+          <span className="ui-medallion">
+            <IconBadge icon="unicorn" size={36} color="var(--color-brand)" />
+          </span>
+          <div>
+            {/* Title: Nunito, uppercase, tight; the second word carries the weight. */}
+            <h1 lang="en" aria-label={t('start.title')} className="text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink sm:text-[48px]">
+              {title.head && <span className="block text-ink-2">{title.head}</span>}
+              <span className="block font-extrabold text-brand-ink">{title.tail}</span>
+            </h1>
+            <p className="font-text mt-2 text-sm font-medium leading-snug text-ink">{t('start.tagline')}</p>
+          </div>
+          {/* The one surface: the phase's menu plate. */}
+          <div className="ui-card p-4 shadow-pop">{children}</div>
+          {strip}
+        </div>
       </div>
     </div>
   )
@@ -69,48 +93,63 @@ function StartShell({ children }: { children: ReactNode }) {
 function BootCard() {
   return (
     <StartShell>
-      <p className="font-text mt-6 flex items-center gap-2 text-xs text-ink-2">
+      <span className="flex items-center gap-2 text-[13px] font-bold text-ink-2">
         <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-brand" />
         {t('login.checking')}
-      </p>
+      </span>
     </StartShell>
   )
 }
 
-/** Who is playing: e-mail + Çıkış, or the offline badge. */
+/** Who is playing: e-mail + Çıkış, or the offline mark (its sentence moves to the tooltip: one sentence on screen). */
 function AccountRow() {
   const account = useCloud((s) => s.account)
   const backend = useCloud((s) => s.backend)
   const [busy, setBusy] = useState(false)
   if (account) {
     return (
-      <div className="mt-4 flex min-w-0 items-center gap-2 text-xs text-ink-2">
-        <Icon name="mail" size={14} className="shrink-0" />
-        <span className="min-w-0 flex-1 truncate font-semibold text-ink" title={account.email}>
+      <div className="flex min-h-10 min-w-0 items-center gap-2">
+        <Icon name="mail" size={16} className="shrink-0 text-ink-2" />
+        <span className="min-w-0 flex-1 truncate font-bold text-ink" title={account.email}>
           {t('start.signedAs', { v: account.email })}
         </span>
-        <button
-          type="button"
+        <IconButton
+          icon="logout"
+          label={t('start.signOut')}
+          size={40}
           disabled={busy}
           onClick={() => {
             setBusy(true)
             void signOut()
           }}
-          className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-control px-2 font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink max-md:min-h-11"
-        >
-          <Icon name="logout" size={14} />
-          {t('start.signOut')}
-        </button>
+        />
       </div>
     )
   }
   return (
-    <div className="mt-4 flex items-center gap-2 text-xs text-ink-2">
-      <span className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-px text-[11px] font-semibold">
-        <Icon name="cloud" size={12} />
-        {t('start.offlineBadge')}
-      </span>
-      <span className="font-text">{backend === 'offline' ? t('start.offlineHint') : t('login.offlineNote')}</span>
+    <div className="flex min-h-10 items-center gap-2" title={backend === 'offline' ? t('start.offlineHint') : t('login.offlineNote')}>
+      <Icon name="cloud" size={16} className="shrink-0 text-ink-2" />
+      <span className="font-bold text-ink">{t('start.offlineBadge')}</span>
+    </div>
+  )
+}
+
+/** Under the menu plate, on the light-fall: who is playing, then the founder XP carried between runs. */
+function StartStrip({ xp, bonus }: { xp: number; bonus: number }) {
+  return (
+    <div className="flex flex-col px-1 text-[13px]" title={t('start.hint')}>
+      <AccountRow />
+      <div className="flex min-h-8 min-w-0 items-center gap-2">
+        <Icon name="star" size={16} fill="currentColor" className="shrink-0 text-g-equity" />
+        {xp > 0 ? (
+          <>
+            <span className="tabular font-extrabold text-ink">{t('start.xp', { v: xp })}</span>
+            <span className="tabular ml-auto font-bold text-positive-ink">{t('start.xpBonus', { v: bonus })}</span>
+          </>
+        ) : (
+          <span className="font-bold text-ink-2">{t('start.noXp')}</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -152,9 +191,9 @@ function StartScreen({ onStart }: { onStart: () => void }) {
   }
 
   return (
-    <StartShell>
+    <StartShell strip={<StartStrip xp={xp} bonus={bonus} />}>
       {naming ? (
-        <div className="mt-6 flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <CompanyNameField
             value={company}
             onChange={(v) => {
@@ -171,7 +210,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
             onSubmit={startNew}
             autoFocus
           />
-          <Button tone="primary" icon="rocket" onClick={startNew} className="w-full">
+          <Button tone="commit" icon="rocket" onClick={startNew} className="w-full">
             {t('start.go')}
           </Button>
           {canContinue && (
@@ -181,12 +220,12 @@ function StartScreen({ onStart }: { onStart: () => void }) {
           )}
         </div>
       ) : (
-        <div className="mt-6 flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           {canContinue && saved && (
-            <Button tone="primary" icon="play" onClick={resume} className="w-full py-2">
+            <Button tone="commit" icon="play" onClick={resume} className="w-full py-2">
               <span className="flex min-w-0 flex-col items-start leading-tight">
                 <span>{t('start.continue')}</span>
-                <span className="tabular max-w-full truncate text-[11px] font-medium opacity-70">
+                <span className="tabular max-w-full truncate text-[12px] font-bold opacity-90">
                   {saved.meta.companyName ? `${saved.meta.companyName} · ` : ''}
                   {t('start.continueSub', { stage: STAGES[saved.stage]?.name ?? '', day: Math.floor(saved.time.day) + 1 })}
                 </span>
@@ -194,31 +233,17 @@ function StartScreen({ onStart }: { onStart: () => void }) {
             </Button>
           )}
           {canContinue && cloudLoaded && (
-            <p className="font-text flex items-center gap-1 text-[11px] text-positive-ink">
-              <Icon name="cloud" size={12} />
+            <span className="flex items-center gap-1 text-[12px] font-bold text-positive-ink">
+              <Icon name="cloud" size={14} />
               {t('start.cloudLoaded')}
-            </p>
+            </span>
           )}
-          <Button tone={canContinue ? 'secondary' : 'primary'} icon="rocket" onClick={() => setNaming(true)} className="w-full">
+          {/* Only a menu key when there is something to continue; with nothing saved it is the run's one answer. */}
+          <Button tone={canContinue ? 'routine' : 'commit'} size="md" icon="rocket" onClick={() => setNaming(true)} className="w-full">
             {t('start.new')}
           </Button>
         </div>
       )}
-
-      <AccountRow />
-
-      <div className="mt-4 flex items-center gap-2 border-t border-border pt-4 text-xs text-ink-2">
-        {xp > 0 ? (
-          <>
-            <Icon name="star" size={14} fill="currentColor" className="shrink-0 text-g-equity" />
-            <span className="tabular font-semibold text-ink">{t('start.xp', { v: xp })}</span>
-            <span className="tabular ml-auto text-positive-ink">{t('start.xpBonus', { v: bonus })}</span>
-          </>
-        ) : (
-          <span className="font-text">{t('start.noXp')}</span>
-        )}
-      </div>
-      <p className="font-text mt-3 text-[11px] text-ink-2">{t('start.hint')}</p>
     </StartShell>
   )
 }

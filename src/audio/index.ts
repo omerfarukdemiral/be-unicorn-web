@@ -1,7 +1,7 @@
-// Wires sound cues to the game: engine events (own cursor over state.events), panel changes,
+// Wires sound cues to the game: engine events (own cursor over state.events), panel / center board changes, the payday desk,
 // speed/pause, action errors, game over, the Kazanımlar badge growing — plus a soft tap for any UI button press.
 import type { GameEvent, GameEventKind, GameState } from '../engine/types'
-import { achievementsBadge, blockingOverlay, useGameStore } from '../store/gameStore'
+import { achievementsBadge, blockingOverlay, centerOpen, useGameStore } from '../store/gameStore'
 import type { GameStore } from '../store/types'
 import { usePrefs } from '../ui/hooks'
 import { playCue, setAudioEnabled, unlockAudio, type CueId } from './synth'
@@ -134,13 +134,22 @@ function onStore(next: GameStore, prev: GameStore): void {
     else cue('speed')
   }
 
+  // The center board and the right panel are one surface, so they share one open/close pair. Opening the board
+  // closes the panel in the same update: only the open plays. A tab switch (center → center) stays quiet.
+  const centerNow = centerOpen(next.ui)
+  const centerBefore = centerOpen(prev.ui)
   const a = next.ui.panel
   const b = prev.ui.panel
-  if (a !== b && a?.kind !== b?.kind && a?.kind !== 'decision') {
+  if (centerNow && !centerBefore) cue('panelOpen')
+  else if (!centerNow && centerBefore && !next.ui.overlay && !a) cue('panelClose')
+  else if (a !== b && a?.kind !== b?.kind && a?.kind !== 'decision') {
     if (a && !b) cue('panelOpen')
     else if (!a && b) cue('panelClose')
     else if (a) cue('panelOpen')
   }
+
+  // The payday desk slides into the panel's slot: a paper slide, not a modal chime (cooldown in synth).
+  if (next.ui.overlay?.kind === 'payday' && prev.ui.overlay?.kind !== 'payday') cue('desk')
 }
 
 let cursor = 0

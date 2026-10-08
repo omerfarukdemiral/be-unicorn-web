@@ -265,7 +265,7 @@ export function FounderSlot({
           </>
         )}
         {!a.locked && a.moves > 0 && (
-          // Move cost (GAMEPLAY V2 §7.1): Oxanium figure in the top-right corner.
+          // Move cost (GAMEPLAY V2 §7.1): Nunito figure in the top-right corner.
           <span aria-hidden="true" className={cx('tabular absolute right-[3px] top-[2px] text-[10px] font-bold leading-none', a.outOfMoves ? 'text-ink-3' : 'text-ink-2')}>
             {a.moves}
           </span>

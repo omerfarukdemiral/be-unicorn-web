@@ -14,4 +14,5 @@ export const PANEL_W_NARROW = 360
 export const PANEL_NARROW_BELOW = 1280
 /** Landscape phone: the panel is a right column, at most this wide and never over 46% of the screen. */
 export const PANEL_W_LANDSCAPE = 360
-export const PIN_VISIBLE = (vw: number): number => (vw >= 1440 ? 2 : vw >= 1280 ? 1 : 0)
+/** Pinned gauges shown on the bar; the rest sit behind "+N". Nunito's 0.6em digits leave no room for a pin below 1366. */
+export const PIN_VISIBLE = (vw: number): number => (vw >= 1440 ? 2 : vw >= 1366 ? 1 : 0)

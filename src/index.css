@@ -1,62 +1,70 @@
-/* Fonts: Oxanium (UI) + Inter (reading text), latin + latin-ext only (Turkish ğ/ş/İ live in latin-ext).
-   The woff2 files are copied from @fontsource-variable/{oxanium,inter} into public/fonts so index.html can
-   preload them (no mixed-font frame while latin-ext arrives) and the unused cyrillic/greek/vietnamese
-   subsets stay out of the bundle. Keep the paths in sync with the <link rel="preload"> tags in index.html. */
+/* Fonts: Nunito (UI, labels, buttons, HUD numbers) + Figtree (reading text), latin + latin-ext only
+   (Turkish ğ/ş/İ live in latin-ext). Nunito is rounded and chunky (a toy/board-game voice, not sci-fi) and its 10
+   digits all advance 600 units at every weight, so HUD figures are tabular without a tnum lookup (it has none).
+   Turkish "fi" stays two letters only through the TRK locl, i.e. <html lang="tr">: never swap in Baloo 2 (ligates
+   fi even under tr) or Fredoka (its subsets lack ğ/ş/İ). The woff2 files are copied from
+   @fontsource-variable/{nunito,figtree} into public/fonts so index.html can preload them (no mixed-font frame
+   while latin-ext arrives) and the unused cyrillic/greek/vietnamese subsets stay out of the bundle. Keep the
+   paths in sync with the <link rel="preload"> tags in index.html. */
 @font-face {
-  font-family: "Oxanium Variable";
+  font-family: "Nunito Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 200 800;
-  src: url("/fonts/oxanium-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 200 1000;
+  src: url("/fonts/nunito-latin-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Oxanium Variable";
+  font-family: "Nunito Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 200 800;
-  src: url("/fonts/oxanium-latin-ext-wght-normal.woff2") format("woff2-variations");
+  font-weight: 200 1000;
+  src: url("/fonts/nunito-latin-ext-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Inter Variable";
+  font-family: "Figtree Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 300 900;
+  src: url("/fonts/figtree-latin-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Inter Variable";
+  font-family: "Figtree Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url("/fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  font-weight: 300 900;
+  src: url("/fonts/figtree-latin-ext-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @import "tailwindcss";
 
-/* Design tokens: "calm UI + coloured accents" (docs/DESIGN.md). Owned by the foundation lane.
-   Warm off-white surfaces and ink text stay neutral; hue lives on the brand CTA / progress, on each HUD
-   gauge's icon + bar, on department marks and on small bubble/kind marks. Text stays ink (AA). */
+/* Design tokens: "toy UI + coloured accents" (docs/DESIGN.md). Owned by the foundation lane.
+   Warm paper surfaces tied to the garage scene (canvas #F3EBDF, walls #F2E8D7, trim #C9AA8A) and warm ink text;
+   hue lives on the brand commit key / active state / progress, on each HUD gauge's duotone icon + bar, on
+   department marks and on small bubble/kind marks. Text stays ink (AA). */
 @theme {
-  /* --- Neutrals (slightly warm) --- */
-  --color-surface: #fbfaf7;       /* panels, cards, bubbles */
-  --color-surface-2: #f3f1ec;     /* inset fills: hover, pressed, segmented-control track */
-  --color-canvas-bg: #f3ebdf;     /* page backdrop behind the scene (warm light) */
-  --color-border: #e8e4dc;        /* 1px hairlines, progress track */
-  --color-border-strong: #d6d0c5; /* dividers that must read on surface-2, dashed hints */
-  --color-ink: #1f1d24;           /* primary text */
-  --color-ink-2: #64616b;         /* secondary text, neutral icons */
-  --color-ink-3: #9b978f;         /* tertiary text, disabled, placeholders */
-  --color-ink-4: #c4bfb6;         /* lightest ramp step that still reads on a bg-border track */
-  --color-on-ink: #fbfaf7;        /* text/icons on ink or brand fills */
+  /* --- Neutrals (warm, from the garage: canvas #F3EBDF, walls #F2E8D7, trim #C9AA8A) --- */
+  --color-surface: #fffaf2;       /* cards, panels, keycaps */
+  --color-surface-2: #f6eee1;     /* inset wells (speed tray, Segmented), hover */
+  --color-surface-3: #efe4d3;     /* pressed / hover on surface-2 */
+  --color-canvas-bg: #f3ebdf;     /* page backdrop behind the scene (= the 3D clear colour) */
+  --color-border: #e4d5bf;        /* 2px card + chip frame, progress track (1.39:1 vs surface, 1.22:1 vs canvas) */
+  --color-border-strong: #cdb696; /* key edges, dividers that must read on surface-2 (1.88:1) */
+  --color-lip: #c9aa8a;           /* the solid lip under cards and keys = the scene trim exactly (2.10:1 vs surface) */
+  --color-ink: #2b2420;           /* primary text: 14.7:1 on surface, 13.3:1 on surface-2, 12.9:1 on canvas */
+  --color-ink-2: #6b5f55;         /* secondary text, neutral icons: 5.96:1 on surface, 5.37:1 on surface-2 */
+  --color-ink-3: #857767;         /* 4.18:1 on surface: disabled, placeholder, or >=14px bold only (not AA small text) */
+  --color-ink-4: #c9b9a5;         /* decorative ramp step only */
+  --color-on-ink: #fffaf2;        /* text/icons on ink or brand fills */
 
-  /* --- Brand: unicorn violet. Primary buttons, active tab/chip, stage progress, "Tur başlat". --- */
-  --color-brand: #6b4ef0;         /* fills (white text 5.3:1) */
-  --color-brand-hover: #5a3de0;
-  --color-brand-ink: #4b2fc9;     /* brand-coloured text on light surfaces (7.9:1) */
-  --color-brand-soft: #efebfe;    /* ~12% brand on surface: active chip, selected row */
+  /* --- Brand: unicorn violet, an ACCENT only: commit key, active tab/chip/key, stage progress, "Tur başlat". --- */
+  --color-brand: #6b4ef0;         /* fills (on-ink text 5.09:1) */
+  --color-brand-hover: #5a3de0;   /* on-ink 6.36:1 */
+  --color-brand-deep: #4733bf;    /* commit key edge + lip, badge lip (on-ink 8.10:1) */
+  --color-brand-ink: #4b2fc9;     /* brand-coloured text: 7.93:1 on surface, 6.94:1 on brand-soft */
+  --color-brand-soft: #eee9fc;    /* active chip, selected row, soft key */
   --color-accent: #6b4ef0;        /* 3D selection ring (= brand); the focus ring is ink */
 
   /* --- Status (numbers + small marks) --- */
@@ -66,9 +74,9 @@
   --color-positive-ink: #1b7248;
   --color-negative-ink: #b3372e;
 
-  /* --- HUD gauge hues: icon + thin bar/track + ~12% icon tile. Never body text. (theme.ts WIDGET_COLOR)
+  /* --- HUD gauge hues: duotone icon body + thin bar/track. Never body text. (theme.ts WIDGET_COLOR)
          Identity only: a threshold warning uses --color-negative, so no gauge hue is a warning red.
-         Icons on their tile go through iconTone() (hue 80% + ink 20%) to keep >= 3:1. --- */
+         The icon outline goes through iconTone() (hue 62% + ink 38%): >= 3:1 on surface and on its own 30% body. --- */
   --color-g-cash: #1f9d63;        /* kasa, kâr projeksiyonu */
   --color-g-users: #3a7bea;       /* kullanıcı, kanallar */
   --color-g-morale: #ec6fa8;      /* moral, moral haritası, kültür (clear pink, not a warning red) */
@@ -82,10 +90,10 @@
   --color-g-indigo: #5b6ce0;      /* gelir dağılımı */
   --color-g-debt: #7d6b5d;        /* teknik borç (taupe) */
   --color-energy: #f2a11f;        /* founder energy bar (fill only) */
-  --color-energy-ink: #a45f00;    /* energy number (4.8:1 on surface) */
+  --color-energy-ink: #985800;    /* energy number (5.42:1 on surface, 4.89:1 on surface-2) */
 
   /* --- Time state: ONLY the speed control's active segment and the thin screen frame (docs/LAYOUT.md §4.2).
-         Frames/fills only: the text on them stays ink (AA). Paused = calm red + a DASHED frame, running = green
+         Frames/fills only: the text on them stays ink (AA). Paused = calm red + a solid frame on a sunk key, running = green
          (1×/2×/4× alike; the icon ▶/▶▶/▶▶▶ and the fill density tell them apart). The pause red is a separate,
          less saturated token than --color-negative: waiting, not danger (docs/DESIGN.md "One red rule"). --- */
   --color-speed-pause: #c94a3f;
@@ -105,45 +113,51 @@
 
   /* --- Legacy aliases (DEPRECATED, mapped to neutrals so old classes keep working).
          Migrate with the map in docs/DESIGN.md; do not use in new code. --- */
-  --color-cream-50: #fbfaf7;
-  --color-cream-100: #f3f1ec;
-  --color-cream-200: #f0ede7;
-  --color-cream-300: #e8e4dc;
-  --color-ink-900: #1f1d24;
-  --color-ink-700: #3a3840;
-  --color-ink-600: #64616b;
-  --color-ink-400: #9b978f;
-  --color-lilac-100: #f3f1ec;
-  --color-lilac-300: #d6d0c5;
-  --color-lilac-500: #1f1d24;
-  --color-mint-100: #f3f1ec;
-  --color-mint-300: #d6d0c5;
+  --color-cream-50: #fffaf2;
+  --color-cream-100: #f6eee1;
+  --color-cream-200: #f6eee1;
+  --color-cream-300: #e4d5bf;
+  --color-ink-900: #2b2420;
+  --color-ink-700: #463d36;
+  --color-ink-600: #6b5f55;
+  --color-ink-400: #857767;
+  --color-lilac-100: #f6eee1;
+  --color-lilac-300: #cdb696;
+  --color-lilac-500: #2b2420;
+  --color-mint-100: #f6eee1;
+  --color-mint-300: #cdb696;
   --color-mint-600: #1f9d63;
-  --color-peach-100: #f3f1ec;
-  --color-peach-300: #d6d0c5;
-  --color-peach-600: #64616b;
-  --color-sky-100: #f3f1ec;
-  --color-sky-300: #d6d0c5;
-  --color-sky-600: #64616b;
-  --color-lemon-100: #f3f1ec;
-  --color-lemon-300: #d6d0c5;
-  --color-lemon-600: #64616b;
-  --color-rose-100: #f3f1ec;
-  --color-rose-300: #d6d0c5;
+  --color-peach-100: #f6eee1;
+  --color-peach-300: #cdb696;
+  --color-peach-600: #6b5f55;
+  --color-sky-100: #f6eee1;
+  --color-sky-300: #cdb696;
+  --color-sky-600: #6b5f55;
+  --color-lemon-100: #f6eee1;
+  --color-lemon-300: #cdb696;
+  --color-lemon-600: #6b5f55;
+  --color-rose-100: #f6eee1;
+  --color-rose-300: #cdb696;
   --color-rose-600: #e0483e;
 
   /* --- Type --- */
-  --font-ui: "Oxanium Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-text: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-sans: "Oxanium Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* UI weight ladder (never below 600): 600 secondary text · 700 labels, chips, sub figures · 800 values, buttons,
+     stage name (ui-num). Reading text (Figtree): 500 body, 600 emphasis, never 300. */
+  --font-ui: "Nunito Variable", ui-rounded, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-text: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Nunito Variable", ui-rounded, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* --- Shape --- */
-  --radius-card: 10px;
-  --radius-control: 10px;
-  --shadow-card: 0 1px 2px rgb(31 29 36 / 0.05), 0 4px 12px -6px rgb(31 29 36 / 0.10);
-  --shadow-pop: 0 12px 32px -12px rgb(31 29 36 / 0.22), 0 2px 6px -2px rgb(31 29 36 / 0.08);
-  /* The right panel / sheet: a tight contact shadow + a soft lift (opaque surface, no blur). */
-  --shadow-panel: 0 1px 2px rgb(31 29 36 / 0.08), 0 14px 32px -14px rgb(31 29 36 / 0.28);
+  --radius-card: 14px;
+  --radius-control: 12px;
+  /* The solid 3px lip lives INSIDE the shadow tokens, so every shadow-card / shadow-pop user (and the attention
+     keyframe) keeps it: a toy tray sitting on the table, then a soft warm lift. */
+  --shadow-card: 0 3px 0 var(--color-lip), 0 8px 18px -10px rgb(74 52 28 / 0.28);
+  --shadow-pop: 0 3px 0 var(--color-lip), 0 16px 34px -14px rgb(74 52 28 / 0.32);
+  /* The right panel / sheet: the lip + a soft lift (opaque surface, no blur). */
+  --shadow-panel: 0 3px 0 var(--color-lip), 0 16px 34px -16px rgb(74 52 28 / 0.30);
+  /* Recessed wells (speed tray, Segmented track): a top inner shade instead of a frame. */
+  --shadow-inset: inset 0 2px 0 rgb(74 52 28 / 0.08);
 
   --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   --animate-fade-in: fade-in 200ms ease-out both;
@@ -228,7 +242,8 @@
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(0.55); opacity: 0.55; }
   }
-  /* The Başlat CTA glows while the run waits for the player. */
+  /* The Başlat CTA glows while the run waits for the player. Lip-free: it replaces its element's box-shadow, so on a key
+     it goes on a wrapper (a key's own lip must stay free to sink), and non-key rows (a new Defter card) get no dark bar. */
   @keyframes cta-glow {
     0%, 100% { box-shadow: 0 6px 18px -6px var(--color-brand); }
     50% { box-shadow: 0 6px 26px -2px var(--color-brand), 0 0 0 5px color-mix(in oklab, var(--color-brand) 18%, transparent); }
@@ -274,7 +289,7 @@ canvas {
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .safe-x { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
 
-/* Reading text (bubbles, notebook cards, decision copy, long descriptions): Inter.
+/* Reading text (bubbles, notebook cards, decision copy, long descriptions): Figtree.
    Declared with @utility so they live in the utilities layer: Tailwind utilities passed alongside
    (text-ink-3, tracking-*, text-[12px]...) can override them, and they sort before them. */
 @utility font-text {
@@ -287,23 +302,112 @@ canvas {
   font-variant-numeric: tabular-nums;
 }
 
+/* HUD / value number: Nunito 800. Its digits are all 0.6em wide, so figures are tabular by construction (identical
+   in every browser); tabular-nums only guards the fallback stack. Never pair with a font-* weight utility (same
+   layer, order not guaranteed): use `tabular font-bold` when 700 is wanted. */
+@utility ui-num {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
 @layer components {
-  /* Small uppercase label (KASA, KULLANICI...). Components layer: any utility overrides it. */
+  /* Small sentence-case label (Kasa, Kullanıcı...): no caps, no tracking; a game caption, not a dashboard column.
+     Components layer: any utility overrides it. */
   .ui-label {
     font-family: var(--font-ui);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-ink-2);
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--color-ink-2); /* 5.96:1 on surface, 5.37:1 on surface-2 */
   }
 
-  /* Shared card surface: flat, opaque, 1px hairline, soft shadow (no blur: a HUD plate, not frosted glass). */
+  /* Shared card surface: a warm plate with a 2px frame and the scene-trim lip under it (a toy tray, not glass; no blur). */
   .ui-card {
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 2px solid var(--color-border);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
+  }
+
+  /* Recessed well inside a card (speed tray, Segmented track): no frame, a top inner shade. A card inside a card
+     uses this or a border-t row, never .ui-card. */
+  .ui-inset {
+    background: var(--color-surface-2);
+    border-radius: var(--radius-control);
+    box-shadow: var(--shadow-inset);
+  }
+
+  /* Physical key: fill + 2px edge + a solid lip; pressing (or [data-down]) sinks it by the lip's depth, 90 ms, no
+     scale. Tones only set the variables, so a caller can retint one key inline (style={{ '--key-fill': ... }}).
+     The lip is a box-shadow: it takes no layout space, but an overflow-hidden parent with a tight height clips it. */
+  .ui-key {
+    --key-fill: var(--color-surface);
+    --key-edge: var(--color-border-strong);
+    --key-lip: var(--color-lip);
+    --key-depth: 3px;
+    background-color: var(--key-fill);
+    border: 2px solid var(--key-edge);
+    border-radius: var(--radius-control);
+    box-shadow: 0 var(--key-depth) 0 0 var(--key-lip);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, background-color 120ms, border-color 120ms, color 120ms;
+  }
+  .ui-key:enabled:active,
+  .ui-key[data-down] {
+    transform: translateY(var(--key-depth));
+    box-shadow: 0 0 0 0 var(--key-lip);
+  }
+  /* Flat = not pressable. */
+  .ui-key:disabled {
+    box-shadow: none;
+  }
+  .ui-key-sm {
+    --key-depth: 2px;
+  }
+  .ui-key-routine {
+    color: var(--color-ink);
+  }
+  .ui-key-routine:enabled:hover {
+    --key-fill: var(--color-surface-2);
+  }
+  .ui-key-commit {
+    --key-fill: var(--color-brand);
+    --key-edge: var(--color-brand-deep);
+    --key-lip: var(--color-brand-deep);
+    color: var(--color-on-ink);
+  }
+  .ui-key-commit:enabled:hover {
+    --key-fill: var(--color-brand-hover);
+  }
+  /* A disabled commit drops to a neutral key with ink-2 text (readable, clearly inactive), not a faded violet. */
+  .ui-key-commit:disabled {
+    --key-fill: var(--color-surface-2);
+    --key-edge: var(--color-border-strong);
+    color: var(--color-ink-2);
+  }
+  .ui-key-soft {
+    --key-fill: var(--color-brand-soft);
+    --key-edge: color-mix(in oklab, var(--color-brand) 35%, var(--color-surface));
+    --key-lip: color-mix(in oklab, var(--color-brand) 35%, var(--color-surface));
+    color: var(--color-brand-ink);
+  }
+  .ui-key-soft:enabled:hover {
+    --key-fill: color-mix(in oklab, var(--color-brand) 20%, var(--color-surface));
+  }
+  .ui-key-danger {
+    --key-edge: color-mix(in oklab, var(--color-negative) 45%, var(--color-surface));
+    --key-lip: color-mix(in oklab, var(--color-negative) 45%, var(--color-surface));
+    color: var(--color-negative-ink);
+  }
+  .ui-key-danger:enabled:hover {
+    --key-fill: color-mix(in oklab, var(--color-negative) 6%, var(--color-surface));
+  }
+  .ui-key-routine:disabled,
+  .ui-key-danger:disabled {
+    opacity: 0.6;
   }
 }
 
@@ -322,12 +426,16 @@ kbd {
 }
 
 
-/* Keyboard focus: ink outline + a surface gap, so it never reads as the brand "selected" state
-   (active tab / chip / row are brand) and still shows on brand fills. */
+/* Keyboard focus: an offset ink outline, so it never reads as the brand "selected" state (active tab / chip / row
+   are brand) and still shows on brand fills. Outline only: this rule is unlayered, so a box-shadow here would beat
+   @layer components and erase every focused key's lip. */
 :focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;
-  box-shadow: 0 0 0 2px var(--color-surface);
+}
+/* A key's ring clears its 2–3px lip (+1px air) instead of running through it. */
+.ui-key:focus-visible {
+  outline-offset: 4px;
 }
 
 /* Reduced motion: no keyframes at all (every animation lands on its resting state) and near-instant transitions.

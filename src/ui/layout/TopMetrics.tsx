@@ -12,7 +12,7 @@ import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, num, signedMoney } from '../format'
 import { cx } from '../primitives'
-import { iconTone, soft, WIDGET_COLOR } from '../theme'
+import { soft, WIDGET_COLOR } from '../theme'
 import { useTween } from '../time'
 import { GoalNotch, ledgerMoney, runwayTone } from '../widgets'
 import { cashFlow } from '../cashflow'
@@ -38,7 +38,7 @@ function Pop({ n, children }: { n: number; children: ReactNode }) {
 }
 
 
-/** full = label + value (desktop ≥1280); tight = value only, sub under it (1024–1279); mobile = 44px cells. */
+/** full = value over label (desktop ≥1280); tight = value only, sub under it (1024–1279); mobile = 44px cells. */
 export type MetricDensity = 'full' | 'tight' | 'mobile'
 
 type Mark = 'danger' | 'warn' | null
@@ -47,14 +47,15 @@ const DANGER = 'var(--color-negative)'
 const WARN = 'var(--color-energy)'
 
 function StatusMark({ mark }: { mark: Mark }) {
-  if (mark === 'danger') return <span aria-hidden="true" className="inline-block size-1.5 shrink-0 rounded-full" style={{ background: DANGER }} />
-  if (mark === 'warn') return <span aria-hidden="true" className="inline-block size-1.5 shrink-0 rounded-full border-[1.5px]" style={{ borderColor: WARN }} />
+  if (mark === 'danger') return <span aria-hidden="true" className="inline-block size-[7px] shrink-0 rounded-full ring-[1.5px] ring-surface" style={{ background: DANGER }} />
+  if (mark === 'warn') return <span aria-hidden="true" className="inline-block size-[7px] shrink-0 rounded-full border-2" style={{ borderColor: WARN }} />
   return null
 }
 
 /**
- * One gauge cell of the bar: 24px hue tile + (label) + value. h40 on desktop, h44 on phones; no frame of its own
- * (cells are divided by 1px rules in the bar). `valueClass` carries the only colour a value may take.
+ * One gauge cell of the bar: a bare duotone sticker in the gauge's hue + the value OVER its small sentence-case label
+ * (the number is the biggest thing; docs/GAMEPLAY_V2.md §10.1 D1). h40 on desktop, h44 on phones; no frame or tile of
+ * its own. The value's span carries the only colour a value may take.
  */
 export function BarChip({
   icon,
@@ -85,41 +86,37 @@ export function BarChip({
   const mobile = density === 'mobile'
   return (
     <div
-      className={cx('relative flex min-w-0 items-center gap-2 rounded-control', mobile ? 'h-11 gap-1.5 px-1.5' : 'h-10 px-2', className)}
+      className={cx('relative flex min-w-0 items-center rounded-control', mobile ? 'h-11 gap-1.5 px-1' : density === 'tight' ? 'h-10 gap-1.5 px-1' : 'h-10 gap-2 px-1', className)}
       title={title ?? label}
       aria-label={ariaValue !== undefined ? `${label}: ${ariaValue}` : typeof value === 'string' ? `${label}: ${value}` : undefined}
     >
-      <span
-        aria-hidden="true"
-        className={cx('grid shrink-0 place-items-center rounded-[7px]', mobile ? 'size-5' : 'size-6')}
-        style={{ color: iconTone(color), background: soft(color) }}
-      >
-        <Icon name={icon} size={mobile ? 12 : 14} />
-      </span>
-      {/* Every cell has the same fixed rows (label / value on desktop, value / sub on compact bars), so the four
+      <Icon name={icon} tone={color} size={mobile ? 18 : density === 'tight' ? 20 : 22} className="shrink-0" />
+      {/* Every cell has the same fixed rows (value / label on desktop, value / sub on compact bars), so the four
           values share one baseline whether or not a cell has a sub line or Moral's bar. */}
       <div className="relative min-w-0 flex-1">
         {density === 'full' ? (
           <>
-            <div className="flex h-3 min-w-0 items-center gap-1 whitespace-nowrap">
-              <span className="ui-label text-[10px] leading-3">{label}</span>
+            {/* The sub (Kasa's daily net) is a small coloured delta after the value: a number, not a phrase.
+                17px below 1440 keeps "$10.2M net −$270/gün" + "+N" inside a 1280 bar (Nunito digits are 0.6em). */}
+            <div className="ui-num flex h-[22px] items-baseline gap-1.5 whitespace-nowrap text-[17px] leading-[22px] text-ink min-[1440px]:text-[18px]">
+              {value}
+              {sub && <span className="text-[12px]">{sub}</span>}
+            </div>
+            <div className="flex h-[14px] min-w-0 items-center gap-1.5 whitespace-nowrap">
+              <span className="ui-label">{label}</span>
               <StatusMark mark={mark} />
             </div>
-            {/* The sub (Kasa's daily net) is a small coloured delta after the value: a number, not a phrase. */}
-            <div className="tabular flex h-5 items-baseline gap-1.5 whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">
-              {value}
-              {sub && <span className="text-[11px] font-semibold">{sub}</span>}
-            </div>
-            {/* Extras (Moral's bar) hang under the value and take no layout height. */}
-            {children && <div className="absolute inset-x-0 top-full">{children}</div>}
+            {/* Extras (Moral's bar, the goal notch) hang under the label and take no width: inline they cost a 1280
+                bar ~46px, which pushed the pinned gauge out (Nunito digits are 0.6em, the row has no slack left). */}
+            {children && <div className="absolute inset-x-0 top-full mt-0.5">{children}</div>}
           </>
         ) : (
           <>
-            <div className={cx('tabular flex min-w-0 items-center gap-1 whitespace-nowrap font-semibold text-ink', mobile ? 'h-4 text-sm leading-4' : 'h-5 text-[15px] leading-5')}>
+            <div className={cx('ui-num flex min-w-0 items-center gap-1 whitespace-nowrap text-ink', mobile ? 'h-[18px] text-[15px] leading-[18px]' : 'h-5 text-[16px] leading-5')}>
               <span className="min-w-0 truncate">{value}</span>
               <StatusMark mark={mark} />
             </div>
-            <div className={cx('tabular h-3 min-w-0 truncate font-medium text-ink-2', mobile ? 'text-[10px] leading-3' : 'text-[11px] leading-3')}>
+            <div className={cx('tabular min-w-0 truncate font-bold text-ink-2', mobile ? 'h-3 text-[10.5px] leading-3' : 'h-3.5 text-[11px] leading-[14px]')}>
               {sub ?? children}
             </div>
           </>
@@ -221,7 +218,7 @@ export function UsersChip({ density }: { density: MetricDensity }) {
       ariaValue={num(users)}
     >
       {goal !== null && (
-        <GoalNotch goal={goal} color={WIDGET_COLOR.users} className={cx(density === 'mobile' ? 'w-full min-w-6 max-w-14' : 'w-14', density === 'full' ? 'mt-px' : 'mt-[5px]')} />
+        <GoalNotch goal={goal} color={WIDGET_COLOR.users} className={density === 'full' ? 'w-10' : cx(density === 'mobile' ? 'w-full min-w-6 max-w-14' : 'w-14', 'mt-[5px]')} />
       )}
     </BarChip>
   )
@@ -243,7 +240,11 @@ export function MoraleChip({ density }: { density: MetricDensity }) {
       title={title}
       value={<span className={danger ? 'text-negative-ink' : undefined}>{v}</span>}
     >
-      <div className={cx('h-0.5 overflow-hidden rounded-full', density === 'mobile' ? 'w-full min-w-6 max-w-14' : 'w-14', density === 'full' ? 'mt-px' : 'mt-[5px]')} style={{ background: soft(WIDGET_COLOR.morale, 18) }} aria-hidden="true">
+      <div
+        className={cx('h-1 overflow-hidden rounded-full', density === 'full' ? 'w-10' : density === 'mobile' ? 'w-full min-w-6 max-w-14' : 'w-14', density !== 'full' && 'mt-[5px]')}
+        style={{ background: soft(WIDGET_COLOR.morale, 20) }}
+        aria-hidden="true"
+      >
         <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.max(0, Math.min(100, morale))}%`, background: danger ? DANGER : WIDGET_COLOR.morale }} />
       </div>
     </BarChip>

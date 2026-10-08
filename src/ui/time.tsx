@@ -1,5 +1,5 @@
 // Time flow made visible: paused start (Başlat call), focus pauses (decision / Defter card / modal),
-// the speed colour code (paused = calm red + dashed, running = green at 1×/2×/4×: docs/GAMEPLAY_V2.md §13),
+// the speed colour code (paused = calm red, a thicker frame; running = green at 1×/2×/4×: docs/GAMEPLAY_V2.md §13),
 // the day clock with its (neutral) month ring and the paused veil over the scene.
 // The speed colour lives only in the speed control (layout/SpeedControl.tsx) and the thin ScreenFrame.
 // Effective speed = the player's speed (state.time.speed) unless a store pause reason holds it at 0.
@@ -111,7 +111,7 @@ export function DayClock({ compact }: { compact?: boolean }) {
         <circle cx={9} cy={9} r={r} fill="none" stroke="var(--color-ink-2)" strokeWidth={2.5} strokeLinecap="round" strokeDasharray={`${Math.max(0.001, monthFrac) * c} ${c}`} />
       </svg>}
       {/* No per-day motion (at 2×/4× it would never rest): only a new month fades in, opacity alone. */}
-      <span key={flowing ? month : 'still'} className={cx('tabular inline-block shrink-0 text-[11px] font-semibold text-ink-2', flowing && 'animate-fade-in')}>
+      <span key={flowing ? month : 'still'} className={cx('tabular inline-block shrink-0 text-[12px] font-bold text-ink-2', flowing && 'animate-fade-in')}>
         {t(compact ? 'top.dateShort' : 'hud.date', { m: month + 1, d: dayOfMonth })}
       </span>
     </span>
@@ -127,11 +127,12 @@ export function holdLabel(hold: TimeHold): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Thin frame around the viewport in the time colour: running = green, SOLID (any speed). Any pause is the calm
- * pause red and DASHED: waiting, not danger (--color-speed-pause is not --color-negative; docs/GAMEPLAY_V2.md §13).
- * A focus pause (decision / Defter card / modal) adds a faint inner band in the chosen speed's colour (the speed
- * time returns to). While time flows a soft glow runs along it once per game day. Colour is never the only
- * signal: solid vs dashed + the speed control's ⏸/▶ icon and label carry the same state.
+ * Frame around the viewport in the time colour, always solid (no dashes: the HUD reads as toy keys, not a wireframe).
+ * Running = a 1px soft green hairline (any speed). Any pause is the calm pause red, softened and thicker (3px, 2px on
+ * phones): waiting, not danger (--color-speed-pause is not --color-negative; docs/GAMEPLAY_V2.md §13). A focus pause
+ * (decision / Defter card / modal) adds a faint inner band in the chosen speed's colour (the speed time returns to).
+ * While time flows a soft glow runs along it once per game day. Colour is never the only signal: thick vs thin + the
+ * speed control's ⏸/▶ icon and label carry the same state.
  */
 export function ScreenFrame() {
   const mobile = useIsMobile()
@@ -140,8 +141,8 @@ export function ScreenFrame() {
   if (status.gameOver) return null
   const color = timeColor(status)
   const focus = isFocusHold(status.hold) && status.chosen > 0
-  const w = mobile ? 2 : 3
   const flowing = status.effective > 0
+  const w = flowing ? 1 : mobile ? 2 : 3
   return (
     <div
       aria-hidden="true"
@@ -153,8 +154,8 @@ export function ScreenFrame() {
         right: 'env(safe-area-inset-right, 0px)',
         bottom: 'env(safe-area-inset-bottom, 0px)',
         left: 'env(safe-area-inset-left, 0px)',
-        border: `${w}px ${flowing ? 'solid' : 'dashed'} ${color}`,
-        boxShadow: focus ? `inset 0 0 0 ${w + 3}px ${soft(SPEED_COLOR[status.chosen], 22)}` : flowing ? `inset 0 0 0 1px ${soft(color, 25)}` : undefined,
+        border: `${w}px solid ${soft(color, flowing ? 25 : 55)}`,
+        boxShadow: focus ? `inset 0 0 0 ${w + 3}px ${soft(SPEED_COLOR[status.chosen], 22)}` : undefined,
         transition: 'border-color 300ms ease, box-shadow 300ms ease',
       }}
     >
@@ -226,15 +227,18 @@ export function StartCall() {
           </div>
         ) : null}
         <p className="text-[15px] font-semibold leading-tight text-ink-2">{t('time.startTitle')}</p>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: 'setSpeed', speed: 1 })}
-          className="inline-flex min-h-14 w-full animate-cta-glow items-center justify-center gap-2 rounded-control bg-brand px-6 text-lg font-bold tracking-wide text-on-ink transition-colors hover:bg-brand-hover active:scale-[0.98]"
-        >
-          <Icon name="play" size={22} />
-          {t('time.start')}
-          {!mobile && <kbd className="ml-1 rounded-[6px] border border-on-ink/40 px-1.5 py-0.5 text-[11px] font-semibold opacity-85">Space</kbd>}
-        </button>
+        {/* The glow sits on a wrapper: cta-glow replaces box-shadow, which on the key itself would pin its lip. */}
+        <span className="flex w-full animate-cta-glow rounded-control">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'setSpeed', speed: 1 })}
+            className="ui-key ui-key-commit inline-flex min-h-14 w-full items-center justify-center gap-2 px-6 text-lg font-extrabold"
+          >
+            <Icon name="play" size={22} fill="currentColor" />
+            {t('time.start')}
+            {!mobile && <kbd className="ml-1 rounded-[6px] border border-on-ink/40 px-1.5 py-0.5 text-[11px] font-bold opacity-85">Space</kbd>}
+          </button>
+        </span>
       </div>
     </div>
   )

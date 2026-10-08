@@ -1,7 +1,8 @@
 // Shared UI building blocks: cards, buttons, bars, chips, labels, the spend preview.
-// "Calm UI + coloured accents" (docs/DESIGN.md) in the HUD grammar of docs/GAMEPLAY_V2.md §10.1: number over label,
-// commit buttons carry their cost, warm neutral surfaces, brand (unicorn violet) for the commit / active state /
-// progress, per-meaning hues on icons, bars and small marks. Text stays ink.
+// "Toy UI + coloured accents" (docs/DESIGN.md) in the HUD grammar of docs/GAMEPLAY_V2.md §10.1: number over label,
+// commit buttons carry their cost, warm paper surfaces with a lip, pressable things are keys (.ui-key), brand
+// (unicorn violet) for the commit / active state / progress, per-meaning hues on duotone icons, bars and small
+// marks. Text stays ink.
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { SpendPreview } from '../engine/types'
 import { Icon, type IconName } from './icons'
@@ -9,7 +10,7 @@ import { t } from './i18n'
 import { clamp01, fixed } from './format'
 import { useTween } from './hooks'
 import { InfoTip } from './InfoTip'
-import { iconTone, RUNWAY_DANGER_MONTHS, soft } from './theme'
+import { RUNWAY_DANGER_MONTHS, soft } from './theme'
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ')
@@ -21,30 +22,30 @@ export function Card({ className, children }: { className?: string; children: Re
 
 /**
  * Button ladder (docs/GAMEPLAY_V2.md §10.1 D3):
- * commit  = spends money / equity / a move: brand fill, optional `cost` chip (`−$4.2K/ay`), a 120 ms press
- *           (scale 0.96 → 1) and the `confirm` cue (data-cue, read by the click sound hook)
- * routine = Anladım, Kapat, Sonra: hairline frame, small by default
- * danger  = İşten çıkar, Sat: hairline in a faint negative, red text
- * ghost   = text only, hover tint
- * onInk   = routine for dark (ink) surfaces: toasts, banners
+ * commit  = spends money / equity / a move: brand key, optional `cost` chip (`−$4.2K/ay`), a 90 ms sink onto
+ *           its lip and the `confirm` cue (data-cue, read by the click sound hook)
+ * routine = Anladım, Kapat, Sonra: surface key, small by default
+ * danger  = İşten çıkar, Sat: surface key with a faint negative edge + lip, red text
+ * ghost   = text only, hover tint (not a key)
+ * onInk   = routine for dark (ink) surfaces: toasts, banners (no lip)
  * primary / secondary / soft / mint = DEPRECATED aliases (commit look / routine look at md size) kept so old
  * callers compile; migrate with the panel content waves.
  *
- * Disabled: commit drops to a neutral frame with ink-2 text (readable, clearly inactive) instead of fading its
- * light label into a grey fill; the other tones fade with opacity.
+ * Keys are .ui-key* classes (src/index.css): the tone only sets the fill / edge / lip variables. Disabled keys lose
+ * their lip (flat = not pressable); commit drops to a neutral key with ink-2 text (readable, clearly inactive)
+ * instead of fading its light label into a grey fill; the other tones fade with opacity.
  */
 type Tone = 'commit' | 'routine' | 'danger' | 'ghost' | 'onInk' | 'primary' | 'secondary' | 'soft' | 'mint'
 
-const COMMIT =
-  'border border-brand bg-brand text-on-ink enabled:hover:border-brand-hover enabled:hover:bg-brand-hover enabled:active:scale-[0.96] disabled:border-border-strong disabled:bg-surface-2 disabled:text-ink-2'
-const ROUTINE = 'border border-border-strong bg-transparent text-ink enabled:hover:bg-surface-2 enabled:active:scale-[0.98] disabled:opacity-50'
+const COMMIT = 'ui-key ui-key-commit'
+const ROUTINE = 'ui-key ui-key-routine'
 
 const TONE: Record<Tone, string> = {
   commit: COMMIT,
   routine: ROUTINE,
-  danger: 'border border-negative/35 bg-transparent text-negative-ink enabled:hover:bg-negative/5 enabled:active:scale-[0.98] disabled:opacity-50',
-  ghost: 'bg-transparent text-ink-2 enabled:hover:bg-surface-2 enabled:hover:text-ink enabled:active:scale-[0.98] disabled:opacity-50',
-  onInk: 'border border-on-ink/30 bg-transparent text-on-ink enabled:hover:bg-on-ink/10 enabled:active:scale-[0.98] disabled:opacity-50',
+  danger: 'ui-key ui-key-danger',
+  ghost: 'border-2 border-transparent bg-transparent text-ink-2 transition-colors enabled:hover:bg-surface-2 enabled:hover:text-ink enabled:active:translate-y-px disabled:opacity-50',
+  onInk: 'border-2 border-on-ink/30 bg-transparent text-on-ink transition-colors enabled:hover:bg-on-ink/10 enabled:active:translate-y-px disabled:opacity-50',
   primary: COMMIT,
   secondary: ROUTINE,
   soft: ROUTINE,
@@ -69,8 +70,8 @@ export function Button({
       type="button"
       data-cue={tone === 'commit' ? 'confirm' : undefined}
       className={cx(
-        'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-semibold tracking-wide transition-[color,background-color,border-color,transform] duration-[120ms] disabled:cursor-not-allowed',
-        sz === 'md' ? 'min-h-11 px-4 text-sm' : 'min-h-9 px-3 text-xs max-md:min-h-11',
+        'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-extrabold disabled:cursor-not-allowed',
+        sz === 'md' ? 'min-h-11 px-4 text-[15px]' : 'ui-key-sm min-h-9 px-3 text-[13px] max-md:min-h-11',
         TONE[tone],
         className,
       )}
@@ -79,20 +80,25 @@ export function Button({
       {icon && <Icon name={icon} size={sz === 'md' ? 18 : 16} />}
       {children}
       {cost && (
-        <span className={cx('tabular rounded-[6px] px-1.5 py-px text-[11px] font-semibold', filled ? 'bg-on-ink/15' : 'bg-surface-2 text-ink-2')}>{cost}</span>
+        <span className={cx('tabular rounded-lg px-1.5 py-px text-[12px] font-extrabold', filled ? 'bg-brand-deep' : 'bg-surface-2 text-ink-2')}>{cost}</span>
       )}
     </button>
   )
 }
 
+/**
+ * Square icon button. Quiet by default (panel close / back / collapse: no frame, hover tint). `raised` makes it a
+ * small key with a lip (the top-bar view controls); active (panel open) is then the brand commit key.
+ */
 export function IconButton({
   icon,
   label,
   active,
+  raised = false,
   className,
   size = 44,
   ...rest
-}: { icon: IconName; label: string; active?: boolean; size?: number } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: { icon: IconName; label: string; active?: boolean; raised?: boolean; size?: number } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
@@ -100,14 +106,16 @@ export function IconButton({
       title={label}
       aria-pressed={active}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center rounded-control transition-colors active:scale-95 disabled:opacity-40',
-        active ? 'bg-brand text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
+        'inline-flex shrink-0 items-center justify-center rounded-control disabled:opacity-40',
+        raised
+          ? cx('ui-key ui-key-sm', active ? 'ui-key-commit' : 'ui-key-routine text-ink-2 enabled:hover:text-ink')
+          : cx('transition-colors enabled:active:translate-y-px', active ? 'bg-brand text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink'),
         className,
       )}
       style={{ width: size, height: size }}
       {...rest}
     >
-      <Icon name={icon} size={Math.round(size * 0.45)} />
+      <Icon name={icon} size={Math.round(size * 0.5)} />
     </button>
   )
 }
@@ -158,11 +166,12 @@ export function Ring({ value, size = 44, stroke = 2, tone = 'var(--color-brand)'
 }
 
 /**
- * Filter / segment chip. Active = brand tint + brand frame + brand-ink text; idle = hairline frame.
+ * Filter / segment chip. Active = brand tint + brand frame + brand-ink text; idle = 2px warm frame on surface.
  * `count` adds a tabular number after the label (icon + number is the HUD way: "👥 12"); `label` names an
- * icon-only chip for screen readers. Inside a <Segmented> track pass `segment`: no frame, the active one lifts.
+ * icon-only chip for screen readers. Inside a <Segmented> track pass `segment`: no frame, the active one is a
+ * surface tile with a small lip.
  * Identity colours (e.g. a department) go in as a <Dot> child, never as the selected state: a dept hue
- * on a 1px frame is below 3:1 for sales/ops, and selected must read the same on every chip.
+ * on a thin frame is below 3:1 for sales/ops, and selected must read the same on every chip.
  */
 export function Chip({
   active,
@@ -181,28 +190,26 @@ export function Chip({
       aria-label={label}
       title={label}
       className={cx(
-        'inline-flex shrink-0 items-center gap-1 rounded-control text-xs font-semibold transition-colors',
-        segment ? 'min-h-8 px-2.5 max-md:min-h-11' : 'min-h-9 border px-3 max-md:min-h-11',
+        'inline-flex shrink-0 items-center gap-1 text-[12px] font-bold transition-colors',
         segment
-          ? active
-            ? 'bg-surface text-ink shadow-card'
-            : 'text-ink-2 hover:text-ink'
-          : active
-            ? 'border-brand bg-brand-soft text-brand-ink'
-            : 'border-border bg-transparent text-ink-2 hover:bg-surface-2 hover:text-ink',
+          ? cx('min-h-8 rounded-[9px] px-2.5 max-md:min-h-11', active ? 'bg-surface text-ink shadow-[0_2px_0_var(--color-lip)]' : 'text-ink-2 hover:text-ink')
+          : cx(
+              'min-h-9 rounded-full border-2 px-3 max-md:min-h-11',
+              active ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink',
+            ),
       )}
     >
       {icon && <Icon name={icon} size={14} />}
       {children}
-      {count !== undefined && <span className="tabular font-bold">{count}</span>}
+      {count !== undefined && <span className="tabular font-extrabold">{count}</span>}
     </button>
   )
 }
 
-/** Segment control track: a row of `<Chip segment>` on a surface-2 inset (one of them active). */
+/** Segment control track: a row of `<Chip segment>` in a recessed surface-2 well (one of them active). */
 export function Segmented({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div role="group" aria-label={label} className={cx('inline-flex items-center gap-0.5 rounded-control bg-surface-2 p-0.5', className)}>
+    <div role="group" aria-label={label} className={cx('ui-inset inline-flex items-center gap-1 p-1', className)}>
       {children}
     </div>
   )
@@ -211,14 +218,14 @@ export function Segmented({ label, children, className }: { label: string; child
 const TEXT_COLOR = /(^|\s)text-(ink|brand|positive|negative|on-ink)/
 
 /**
- * Small tag: hairline frame, neutral text. Pass a text colour via className; `dot` adds a coloured mark;
+ * Small tag: thin warm frame, neutral text. Pass a text colour via className; `dot` adds a coloured mark;
  * `tint` (CSS colour) swaps the frame for a light fill of that hue (department / live tags), text stays ink.
  */
 export function Pill({ className, children, dot, tint }: { className?: string; children: ReactNode; dot?: string; tint?: string }) {
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-md border px-1.5 py-px text-[11px] font-medium',
+        'inline-flex items-center gap-1 rounded-lg border-[1.5px] px-1.5 py-px text-[11px] font-bold',
         tint ? 'border-transparent' : 'border-border',
         // Default text colour only when the caller passes none (two text-* utilities would race on CSS order).
         !TEXT_COLOR.test(className ?? '') && (tint ? 'text-ink' : 'text-ink-2'),
@@ -237,7 +244,7 @@ export function Dot({ color, size = 8, className }: { color: string; size?: numb
   return <span aria-hidden="true" className={cx('inline-block shrink-0 rounded-full', className)} style={{ width: size, height: size, background: color }} />
 }
 
-/** Small uppercase tracked label (KASA, KULLANICI...). */
+/** Small sentence-case label (Kasa, Kullanıcı...). */
 export function Label({ className, children }: { className?: string; children: ReactNode }) {
   return <span className={cx('ui-label', className)}>{children}</span>
 }
@@ -245,35 +252,40 @@ export function Label({ className, children }: { className?: string; children: R
 /** Signed number: green when > 0, red when < 0. Pass the formatted text as children. */
 export function Delta({ value, className, children }: { value: number; className?: string; children: ReactNode }) {
   return (
-    <span className={cx('tabular font-semibold', value > 0 ? 'text-positive-ink' : value < 0 ? 'text-negative-ink' : 'text-ink-2', className)}>{children}</span>
+    <span className={cx('tabular font-bold', value > 0 ? 'text-positive-ink' : value < 0 ? 'text-negative-ink' : 'text-ink-2', className)}>{children}</span>
   )
 }
 
 /**
- * Icon badge. Neutral: ink-2 icon, optional faint square (`filled`). With `color`: icon in that hue on a
- * ~12% tile of the same hue (HUD gauges, bubble kinds, section headers). Small and light, never a solid disc.
+ * Icon badge. Neutral: ink-2 duotone icon, optional faint round well (`filled`). With `color`: a bare duotone sticker
+ * in that hue (HUD gauges, bubble kinds, section headers): Icon `tone` = iconTone() outline over a 30% body of the hue,
+ * the same formula everywhere, so a metric is the same sticker in every place. No tile.
  */
 export function IconBadge({ icon, size = 32, filled = false, color, className }: { icon: IconName; size?: number; filled?: boolean; color?: string; className?: string }) {
+  if (color) {
+    return (
+      <span aria-hidden="true" className={cx('grid shrink-0 place-items-center', className)} style={{ width: size, height: size }}>
+        <Icon name={icon} size={Math.round(size * 0.75)} tone={color} />
+      </span>
+    )
+  }
   return (
-    <span
-      className={cx('grid shrink-0 place-items-center rounded-control', !color && 'text-ink-2', !color && filled && 'border border-border bg-surface-2', className)}
-      style={{ width: size, height: size, ...(color ? { color: iconTone(color), background: soft(color) } : null) }}
-    >
-      <Icon name={icon} size={Math.round(size * 0.55)} />
+    <span className={cx('grid shrink-0 place-items-center rounded-full text-ink-2', filled && 'bg-surface-2', className)} style={{ width: size, height: size }}>
+      <Icon name={icon} size={Math.round(size * 0.6)} />
     </span>
   )
 }
 
 export function Divider({ className }: { className?: string }) {
-  return <div className={cx('h-px w-full bg-border', className)} />
+  return <div className={cx('h-0.5 w-full rounded-full bg-border', className)} />
 }
 
-/** Section head: a 3px colour stripe (the section's hue; neutral by default) + the uppercase label, `right` at the end. */
+/** Section head: a 4px colour stripe (the section's hue; neutral by default) + the sentence-case label, `right` at the end. */
 export function SectionTitle({ children, right, color = 'var(--color-border-strong)' }: { children: ReactNode; right?: ReactNode; color?: string }) {
   return (
     <div className="mb-2 flex items-center justify-between gap-2">
-      <h3 className="ui-label flex min-w-0 items-center gap-1.5">
-        <span aria-hidden="true" className="h-3 w-[3px] shrink-0 rounded-full" style={{ background: color }} />
+      <h3 className="ui-label flex min-w-0 items-center gap-1.5 text-[13px] text-ink">
+        <span aria-hidden="true" className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: color }} />
         {children}
       </h3>
       {right}
@@ -307,10 +319,10 @@ function TweenValue({ value, format }: { value: number; format: (n: number) => s
 const plain = (n: number): string => String(Math.round(n))
 
 /**
- * Metric in the HUD grammar (docs/GAMEPLAY_V2.md §10.1 D1): the number is the biggest thing (22px tabular), the
- * tracked label sits under it. `icon` + `color` add the metric's gauge tile next to the label (same hue as its HUD
- * chip). `delta` prints a signed change next to the value (green / red text only); `tween` eases a numeric `value`
- * through `format`. Grids of Stats read as rows separated by hairlines (no card-in-card). Nothing ellipsises.
+ * Metric in the HUD grammar (docs/GAMEPLAY_V2.md §10.1 D1): the number is the biggest thing (24px ui-num), the
+ * sentence-case label sits under it. `icon` + `color` add the metric's duotone sticker next to the label (same hue as
+ * its HUD chip). `delta` prints a signed change next to the value (green / red text only); `tween` eases a numeric `value`
+ * through `format`. Grids of Stats read as rows separated by 2px rules (no card-in-card). Nothing ellipsises.
  */
 export function Stat({
   label,
@@ -335,9 +347,9 @@ export function Stat({
   format?: (n: number) => string
 }) {
   return (
-    <div className="min-w-0 border-t border-border pt-2">
+    <div className="min-w-0 border-t-2 border-border pt-2">
       <div className="flex min-w-0 items-baseline gap-1.5">
-        <div className="tabular break-words text-[22px] font-semibold leading-none text-ink">
+        <div className="ui-num break-words text-[24px] leading-none text-ink">
           {typeof value === 'number' ? tween ? <TweenValue value={value} format={format} /> : format(value) : value}
         </div>
         {delta && (
@@ -347,20 +359,16 @@ export function Stat({
         )}
       </div>
       <div className="mt-1 flex min-w-0 items-center gap-1.5">
-        {/* Same gauge hue + tile as the HUD chip for this metric (WIDGET_COLOR), so a metric keeps its colour everywhere. */}
-        {icon && color && (
-          <span aria-hidden="true" className="grid size-[16px] shrink-0 place-items-center rounded-[5px]" style={{ color: iconTone(color), background: soft(color) }}>
-            <Icon name={icon} size={10} />
-          </span>
-        )}
-        <div className="ui-label line-clamp-2 min-w-0 leading-[14px] tracking-[0.04em]">{label}</div>
+        {/* Same duotone sticker as the HUD chip for this metric (WIDGET_COLOR), so a metric keeps its colour everywhere. */}
+        {icon && color && <Icon name={icon} size={14} tone={color} className="shrink-0" />}
+        <div className="ui-label line-clamp-2 min-w-0">{label}</div>
         {info && (
           <InfoTip title={label} size={12}>
             {info}
           </InfoTip>
         )}
       </div>
-      {sub && <div className="break-words text-[11px] font-medium text-ink-2">{sub}</div>}
+      {sub && <div className="break-words text-[11px] font-semibold text-ink-2">{sub}</div>}
     </div>
   )
 }
@@ -382,7 +390,7 @@ export function CostPreview({ preview, cost, className }: { preview: SpendPrevie
     <span
       data-danger={danger ? '' : undefined}
       className={cx(
-        'tabular inline-flex items-center gap-1 rounded-md border px-1.5 py-px text-[11px] font-semibold',
+        'tabular inline-flex items-center gap-1 rounded-lg border-[1.5px] px-1.5 py-px text-[11px] font-bold',
         danger ? 'border-negative/35 text-negative-ink' : 'border-border text-ink-2',
         className,
       )}

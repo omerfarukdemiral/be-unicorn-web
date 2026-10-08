@@ -1,5 +1,6 @@
 // View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, İstatistik,
-// Liderlik, settings. No card of their own: they sit inside the top bar, divided from the speed control by a 1px rule.
+// Liderlik, settings. Keycaps (raised IconButtons; an open panel = the brand commit key), no card of their own: they sit
+// inside the top bar, divided from the speed control by a 2px rule.
 import { useEffect, useRef } from 'react'
 import { useGameStore, waitingConcepts } from '../../store/gameStore'
 import type { ZoomLevel } from '../../store/types'
@@ -22,11 +23,11 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
   const settingsOpen = useGameStore((s) => s.ui.panel?.kind === 'settings')
   const z = (d: number) => setZoom(Math.max(0, Math.min(2, zoom + d)) as ZoomLevel)
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
+    <div className="flex shrink-0 items-center gap-1.5">
       {showZoom && (
         <>
-          <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} size={size} />
-          <IconButton icon="zoomIn" label={t('view.zoomIn')} onClick={() => z(1)} disabled={zoom === 2} size={size} />
+          <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} size={size} raised />
+          <IconButton icon="zoomIn" label={t('view.zoomIn')} onClick={() => z(1)} disabled={zoom === 2} size={size} raised />
         </>
       )}
       {showLanguage && (
@@ -35,7 +36,7 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
           title={t('view.languageSoon')}
           aria-label={t('view.language')}
           onClick={toggleSettings}
-          className="flex h-10 w-12 shrink-0 items-center justify-center gap-1 rounded-control text-[11px] font-semibold tracking-wide text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+          className="ui-key ui-key-sm ui-key-routine flex h-9 w-12 shrink-0 items-center justify-center gap-1 text-[12px] font-extrabold text-ink-2 hover:text-ink"
         >
           <Icon name="globe" size={16} />
           TR
@@ -44,7 +45,7 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
       <AchievementsButton size={size} />
       <StatsButton size={size} />
       <LeaderboardButton size={size} />
-      <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={size} active={settingsOpen} />
+      <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={size} active={settingsOpen} raised />
     </div>
   )
 }
@@ -69,11 +70,11 @@ function AchievementsButton({ size }: { size: number }) {
   }, [n])
   return (
     <span ref={box} className="relative inline-flex shrink-0">
-      <IconButton icon="book" label={t('achv.open')} onClick={toggleAchievements} size={size} active={open} />
+      <IconButton icon="book" label={t('achv.open')} onClick={toggleAchievements} size={size} active={open} raised />
       {n > 0 && (
         <span
           aria-hidden="true"
-          className="tabular pointer-events-none absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-on-ink ring-2 ring-surface"
+          className="tabular pointer-events-none absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand px-1 text-[11px] font-extrabold leading-none text-on-ink shadow-[0_1.5px_0_var(--color-brand-deep)] ring-2 ring-surface"
         >
           {n}
         </span>
@@ -86,7 +87,7 @@ function AchievementsButton({ size }: { size: number }) {
 function StatsButton({ size }: { size: number }) {
   const open = useGameStore((s) => s.ui.overlay?.kind === 'stats')
   const toggleCenter = useGameStore((s) => s.toggleCenter)
-  return <IconButton icon="trend" label={t('stats.open')} onClick={() => toggleCenter('stats')} size={size} active={open} />
+  return <IconButton icon="trend" label={t('stats.open')} onClick={() => toggleCenter('stats')} size={size} active={open} raised />
 }
 
 /** Trophy → Liderlik (L). Only when the backend answers; a signed-in player sees their rank as a small badge. */
@@ -97,11 +98,11 @@ function LeaderboardButton({ size }: { size: number }) {
   if (!online) return null
   return (
     <span className="relative inline-flex shrink-0">
-      <IconButton icon="trophy" label={t('lb.open')} onClick={toggleLeaderboard} size={size} active={open} />
+      <IconButton icon="trophy" label={t('lb.open')} onClick={toggleLeaderboard} size={size} active={open} raised />
       {rank !== null && (
         <span
           aria-hidden="true"
-          className="tabular pointer-events-none absolute -right-1 -top-1 rounded-full border border-surface bg-ink px-1 text-[9px] font-bold leading-[14px] text-on-ink"
+          className="tabular pointer-events-none absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-ink px-1 text-[10px] font-extrabold leading-none text-on-ink ring-2 ring-surface"
         >
           {t('lb.rankBadge', { v: rank })}
         </span>

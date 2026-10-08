@@ -1,7 +1,7 @@
 // Top bar, section A: stage name + date (neutral month ring) + stage progress (valuation / target) + the round.
 // The round clock lives ONLY here ("Tur 3/10 hf" chip, docs/LAYOUT.md §2.1); "Tur başlat" takes the same slot.
 // Curiosity (docs/GAMEPLAY_V2.md §9.4): the lead rival's notch rides the stage line, the next stage's ghost sits at its end.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { rivalNotch, type GameEvent, type StageIndex } from '../../engine'
 import { DECISIONS, STAGES, TEASERS } from '../../content'
@@ -69,6 +69,19 @@ function useRivalNotch(): RivalNotch | null {
   return { at: r.at, ahead: r.ahead, title: t('rival.notchTitle', { name: r.name, v: money(r.valuation) }), pulse: card > base.current.id ? card : 0 }
 }
 
+/** Nunito has no U+2192: the i18n "→" is drawn with the icon set's arrow, so no thin system-font glyph sits among 800-weight figures. */
+function withArrow(text: string): ReactNode {
+  const i = text.indexOf('→')
+  if (i < 0) return text
+  return (
+    <>
+      {text.slice(0, i)}
+      <Icon name="arrowRight" size={12} className="-mx-0.5 inline-block align-[-1px]" />
+      {text.slice(i + 1)}
+    </>
+  )
+}
+
 function progressTitle(s: ReturnType<typeof useStage>): string {
   const next = STAGES[s.stage + 1]
   if (!next) return t('top.lastStage')
@@ -124,8 +137,8 @@ function MilestonePop({ stage, progress, target }: { stage: number; progress: nu
   if (!pop) return null
   const m = STAGE_MILESTONES[pop.idx] ?? 0
   return (
-    <span key={pop.at} className="tabular inline-flex shrink-0 animate-pop-in items-center gap-0.5 rounded-md bg-brand-soft px-1.5 text-[11px] font-semibold text-brand-ink">
-      <Icon name="sparkle" size={11} />
+    <span key={pop.at} className="ui-num inline-flex shrink-0 animate-pop-in items-center gap-0.5 rounded-full bg-brand-soft px-2 text-[12px] text-brand-ink">
+      <Icon name="sparkle" size={12} />
       {money(target * m)}
     </span>
   )
@@ -147,32 +160,32 @@ function RoundSlot({ variant }: { variant: StageVariant }) {
         title={title}
         aria-label={title}
         className={cx(
-          'tabular inline-flex shrink-0 items-center gap-1 rounded-md bg-brand-soft text-[11px] font-semibold text-brand-ink transition-colors hover:bg-brand/20',
-          // Phones: a 44px target (the row is h44); desktop: a small h24 chip.
-          variant === 'mobile' ? 'h-11 px-2' : 'h-6 px-2',
+          'ui-key ui-key-sm ui-key-soft ui-num inline-flex shrink-0 items-center gap-1 px-2 text-[12px]',
+          // Phones: a 44px target (the row is h44); desktop: a small h28 key.
+          variant === 'mobile' ? 'h-11' : 'h-7',
         )}
       >
-        <Icon name="timer" size={12} />
+        <Icon name="timer" size={14} tone="var(--color-brand)" />
         {/* Same meaning everywhere: weeks DONE of the total ("3/11"), never a bare countdown number. */}
         {variant === 'mobile' ? t('top.roundShort', { w: week, t: total }) : t('top.round', { w: week, t: total })}
       </button>
     )
   }
   if (!s.canStart) return null
+  // The pop-in lives on a wrapper: its fill-mode `both` pins `transform`, which would stop the key from sinking.
   return (
-    <button
-      type="button"
-      onClick={openRound}
-      title={t('top.roundStart')}
-      aria-label={t('top.roundStart')}
-      className={cx(
-        'inline-flex shrink-0 animate-pop-in items-center gap-1 rounded-control bg-brand px-2 text-xs font-semibold tracking-wide text-on-ink transition-colors hover:bg-brand-hover',
-        variant === 'mobile' ? 'h-11' : 'h-8',
-      )}
-    >
-      <Icon name="rocket" size={14} />
-      {variant === 'wide' ? t('top.roundStart') : t('top.roundStartShort')}
-    </button>
+    <span className="inline-flex shrink-0 animate-pop-in">
+      <button
+        type="button"
+        onClick={openRound}
+        title={t('top.roundStart')}
+        aria-label={t('top.roundStart')}
+        className={cx('ui-key ui-key-commit inline-flex shrink-0 items-center gap-1.5 px-3 text-[13px] font-extrabold', variant === 'mobile' ? 'h-11' : 'h-9')}
+      >
+        <Icon name="rocket" size={15} />
+        {variant === 'wide' ? t('top.roundStart') : t('top.roundStartShort')}
+      </button>
+    </span>
   )
 }
 
@@ -194,22 +207,23 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
       onClick={openRoadmap}
       title={roadmapTitle(s.stage)}
       className={cx(
-        'inline-flex min-w-0 items-center gap-1.5 rounded-md text-[13px] font-semibold tracking-wide text-ink transition-colors hover:text-brand-ink',
+        'inline-flex min-w-0 items-center gap-1.5 rounded-md text-[15px] font-extrabold leading-5 text-ink transition-colors hover:text-brand-ink',
         variant === 'mobile' && 'h-11',
       )}
     >
-      <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-brand" />
+      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-brand shadow-[0_1.5px_0_var(--color-brand-deep)]" />
       <span className="relative shrink-0">
         {name}
         {/* A ☆ stage goal reached since Yol haritası was last opened. */}
         {s.newGoals > 0 && <span aria-hidden="true" className="absolute -right-2 -top-0.5 size-1.5 rounded-full bg-brand" />}
       </span>
       {/* Where on the Unicorn yolu: "3/7", always visible (phones too). */}
-      <span className="tabular shrink-0 rounded bg-brand-soft px-1 text-[10px] font-semibold leading-4 tracking-normal text-brand-ink">
+      <span className="ui-num shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] leading-4 text-brand-ink">
         {t('roadmap.step', { n: s.stage + 1 })}
       </span>
-      {variant !== 'mobile' && s.company && (
-        <span title={t('top.companyTitle', { v: s.company })} className="font-text min-w-0 truncate text-[11px] font-medium tracking-normal text-ink-2">
+      {/* Wide only: below 1280 the gauges need the room. */}
+      {variant === 'wide' && s.company && (
+        <span title={t('top.companyTitle', { v: s.company })} className="font-text min-w-0 truncate text-[12px] font-medium text-ink-2">
           {s.company}
         </span>
       )}
@@ -237,12 +251,12 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
         <div className="mt-1 flex items-center gap-2" title={progressTitle(s)}>
           <RoadmapStepper stage={s.stage} progress={next ? s.progress : 1} notch={notch} />
           {/* The next stop by name: "$12K → Pre-seed $500K" (narrow: just "→ Pre-seed"). */}
-          <span className="tabular shrink-0 text-[11px] font-medium text-ink-2">
+          <span className="tabular shrink-0 text-[12px] font-bold text-ink-2">
             {!next
               ? t('top.lastStage')
               : variant === 'wide'
-                ? t('top.progressNext', { v: money(s.valuation), next: next.name, target: money(next.targetValuation ?? 0) })
-                : t('top.nextShort', { next: next.name })}
+                ? withArrow(t('top.progressNext', { v: money(s.valuation), next: next.name, target: money(next.targetValuation ?? 0) }))
+                : withArrow(t('top.nextShort', { next: next.name }))}
           </span>
           {next && <Ghost ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
           {next && <MilestonePop stage={s.stage} progress={s.progress} target={next.targetValuation ?? 0} />}

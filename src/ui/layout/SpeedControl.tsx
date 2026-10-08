@@ -1,13 +1,14 @@
 // Speed control (top bar, section C): ⏸ 1× 2× 4× + the time status label. With the thin ScreenFrame this is
 // the ONLY place the speed colour appears (docs/LAYOUT.md §4.2). Paused = calm red, running = green; the speeds
-// differ by icon (▶ / ▶▶ / ▶▶▶) and fill density, never by hue (docs/GAMEPLAY_V2.md §13).
-import { useRef } from 'react'
+// differ by icon (▶ / ▶▶ / ▶▶▶) and fill density, never by hue (docs/GAMEPLAY_V2.md §13). The segments are physical
+// keys in an inset tray: the active segment = a sunk key in its colour; the chosen speed during a focus pause keeps a
+// solid green edge on its raised key. No dashed frames anywhere.
+import { useRef, type CSSProperties } from 'react'
 import type { GameSpeed } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx } from '../primitives'
-import { soft } from '../theme'
 import { holdLabel, isFocusHold, SPEED_COLOR, SPEED_FILL, useRecentSlowdown, useTimeStatus, type TimeStatus } from '../time'
 
 const SPEEDS: GameSpeed[] = [0, 1, 2, 4]
@@ -34,19 +35,20 @@ function useStatusLabel(time: TimeStatus): { text: string; title: string; tone: 
         tone: 'ink-2',
       }
     }
-    // Plain pause: the red frame on the speed buttons already says it (no "Duraklatıldı" word, 2026-10-06).
+    // Plain pause: the sunk red pause key already says it (no "Duraklatıldı" word, 2026-10-06).
     return null
   }
   if (slowed) return { text: t('top.slowed'), title: t('time.slowed'), tone: 'ink' }
-  // Running: the green frame says it; no "Zaman akıyor" flash.
+  // Running: the sunk green key says it; no "Zaman akıyor" flash.
   return null
 }
 
 /**
- * Desktop: segmented ⏸ 1× 2× 4×. The active segment is the speed time really runs at (a focus pause lights
- * the red pause segment; the player's chosen speed keeps a dashed green frame meanwhile). Every active segment
- * gets the same treatment: its colour at SPEED_FILL density + a 2px inset ring.
- * Phone (`compact`): one 44px button cycling pause → 1× → 2× → 4×.
+ * Desktop: segmented ⏸ 1× 2× 4×. The active segment is the speed time really runs at (a focus pause sinks the red
+ * pause key; the chosen speed keeps a solid green edge meanwhile). Every active segment gets the same treatment: a
+ * sunk key filled with its colour at SPEED_FILL density, a solid 2px edge in that colour and ink text (calm: a focus
+ * pause never flashes a solid red key).
+ * Phone (`compact`): one 44px key cycling pause → 1× → 2× → 4× (no sunk state: it cycles).
  */
 export function SpeedControl({ compact, showLabel = true }: { compact?: boolean; showLabel?: boolean }) {
   const time = useTimeStatus()
@@ -72,8 +74,14 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
         disabled={time.gameOver}
         aria-label={t('top.speedCycle', { v: now, next })}
         title={label?.title ?? t('top.speedCycle', { v: now, next })}
-        className="tabular flex h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 rounded-control border-2 px-1.5 text-xs font-bold text-ink transition-[border-color,background-color] duration-300 disabled:opacity-40"
-        style={{ borderColor: c, borderStyle: still ? 'dashed' : 'solid', background: soft(c, SPEED_FILL[effective]) }}
+        className="ui-key ui-num flex h-11 min-w-11 shrink-0 items-center justify-center gap-0.5 px-2 text-[13px] text-ink disabled:opacity-40"
+        style={
+          {
+            '--key-fill': `color-mix(in srgb, ${c} ${SPEED_FILL[effective]}%, var(--color-surface))`,
+            '--key-edge': c,
+            '--key-lip': `color-mix(in oklab, ${c} 70%, var(--color-ink))`,
+          } as CSSProperties
+        }
       >
         <Icon name={effective === 0 ? 'pause' : SPEED_ICON[effective]} size={effective === 4 ? 16 : 14} fill={still ? undefined : 'currentColor'} />
         {!still && `${effective}×`}
@@ -87,13 +95,13 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
         <span
           role="status"
           title={label.title}
-          className={cx('max-w-[84px] truncate text-[11px] font-semibold animate-fade-in', label.tone === 'ink' ? 'text-ink' : 'text-ink-2')}
+          className={cx('max-w-[84px] truncate text-[12px] font-bold animate-fade-in', label.tone === 'ink' ? 'text-ink' : 'text-ink-2')}
         >
           {label.text}
         </span>
       )}
       <div
-        className="flex h-10 shrink-0 items-center gap-0.5 rounded-control bg-surface-2 p-0.5"
+        className="ui-inset flex h-11 shrink-0 items-center gap-1 p-1"
         role="group"
         aria-label={t('speed.label')}
         title={held ? t('time.resumesAt', { v: chosen }) : undefined}
@@ -101,10 +109,11 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
         {SPEEDS.map((v) => {
           const active = effective === v
           const c = SPEED_COLOR[v]
+          // Active: sunk, tinted, solid edge in its colour. The chosen speed under a focus pause: raised, green edge only.
           const style = active
-            ? { background: soft(c, SPEED_FILL[v]), boxShadow: `inset 0 0 0 2px ${c}` }
+            ? ({ '--key-fill': `color-mix(in srgb, ${c} ${SPEED_FILL[v]}%, var(--color-surface))`, '--key-edge': c } as CSSProperties)
             : held && chosen === v
-              ? { outline: `1.5px dashed ${c}`, outlineOffset: -3 }
+              ? ({ '--key-edge': c } as CSSProperties)
               : undefined
           return (
             <button
@@ -115,19 +124,20 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
               aria-pressed={chosen === v}
               aria-label={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pause')) : t('speed.hint', { v })}
               title={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pauseHint')) : t('speed.hint', { v })}
+              data-down={active ? '' : undefined}
               className={cx(
-                'tabular flex h-9 w-9 flex-col items-center justify-center rounded-[8px] text-xs font-semibold leading-none transition-[background-color,box-shadow,color] duration-300 disabled:opacity-40',
-                active ? 'text-ink' : 'text-ink-2 hover:bg-surface hover:text-ink',
+                'ui-key ui-key-sm flex h-8 w-9 flex-col items-center justify-center gap-px rounded-[9px] disabled:opacity-40',
+                active ? 'text-ink' : 'ui-key-routine text-ink-2 hover:text-ink',
               )}
               style={style}
             >
               {v === 0 ? (
-                <Icon name={playerPaused ? 'play' : 'pause'} size={14} />
+                <Icon name={playerPaused ? 'play' : 'pause'} size={15} fill={playerPaused ? 'currentColor' : undefined} />
               ) : (
                 <>
                   {/* ▶ / ▶▶ / ▶▶▶ over the 1× / 2× / 4× text: the speed reads without the (shared) green. */}
-                  <Icon name={SPEED_ICON[v]} size={v === 4 ? 14 : 12} fill="currentColor" />
-                  <span className="text-[10px]">{`${v}×`}</span>
+                  <Icon name={SPEED_ICON[v]} size={v === 4 ? 15 : 13} fill="currentColor" />
+                  <span className="ui-num text-[10px] leading-none">{`${v}×`}</span>
                 </>
               )}
             </button>

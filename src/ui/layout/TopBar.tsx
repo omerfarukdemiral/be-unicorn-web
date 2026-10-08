@@ -35,8 +35,9 @@ function useViewport(): { w: number; h: number } {
   return { w: w ?? 1440, h: h ?? 900 }
 }
 
-function Rule() {
-  return <span aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
+/** Warm 2px divider between the bar's sections (a toy tray's seam, not a 1px hairline). */
+function Rule({ className }: { className?: string }) {
+  return <span aria-hidden="true" className={cx('h-7 w-0.5 shrink-0 rounded-full bg-border', className)} />
 }
 
 export interface TopBarProps {
@@ -64,11 +65,12 @@ export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
     <header
       data-scene-top
       aria-label={t('top.label')}
-      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex h-14 items-center gap-2 px-2"
+      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex h-14 items-center gap-2 px-2 min-[1440px]:gap-2.5 min-[1440px]:px-2.5"
     >
       <StageSection variant={wide ? 'wide' : 'narrow'} />
       <Rule />
-      <div className="flex min-w-0 flex-1 items-center justify-center-safe overflow-hidden">
+      {/* overflow-x-clip (not hidden): Runway's danger-pulse ring and a value's pop-once swell may spill vertically. */}
+      <div className="flex min-w-0 flex-1 items-center justify-center-safe gap-0.5 overflow-x-clip">
         {/* Cells size to their content (labels and values never cut); min widths keep them from jumping per tick. */}
         <div className={cx('shrink-0', wide ? 'min-w-32' : 'min-w-28')}>
           <CashChip density={density} />
@@ -82,7 +84,7 @@ export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
         <div className="shrink-0">
           <MoraleChip density={density} />
         </div>
-        {(visible.length > 0 || hidden > 0) && <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-border" />}
+        {(visible.length > 0 || hidden > 0) && <Rule className="mx-0.5" />}
         {visible.map((id) => (
           <PinnedMetric key={id} id={id} className="h-10 max-w-[136px] shrink-0 overflow-hidden" />
         ))}
@@ -92,7 +94,7 @@ export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
             onClick={onOpenMetrics}
             title={visible.length > 0 ? t('top.pinnedMore', { n: hidden }) : t('top.pinnedAll', { n: hidden })}
             aria-label={visible.length > 0 ? t('top.pinnedMore', { n: hidden }) : t('top.pinnedAll', { n: hidden })}
-            className="tabular inline-flex h-10 min-w-10 shrink-0 items-center justify-center gap-0.5 rounded-control px-1.5 text-[11px] font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+            className="ui-key ui-key-sm ui-key-routine ui-num inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-0.5 px-1.5 text-[12px] text-ink-2 hover:text-ink"
           >
             <Icon name="bars" size={16} />
             {visible.length > 0 ? `+${hidden}` : hidden}
@@ -100,12 +102,13 @@ export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
         )}
       </div>
       <Rule />
-      {/* Below 1440 the status label lives in the segments' title (the dashed chosen speed + neutral ⏸ still show it):
+      {/* Below 1440 the status label lives in the segments' title (the green-edged chosen speed + sunk ⏸ still show it):
           at 1280 the label would push the pinned metric out. */}
       <SpeedControl showLabel={w >= 1440} />
       <Rule />
-      {/* TR (placeholder, opens Settings) needs ≥1536: at 1440 a running round + 2 pins already fill the bar. */}
-      <ViewControls size={wide ? 40 : 36} showLanguage={w >= 1536} />
+      {/* TR (placeholder, opens Settings) needs ≥1536: at 1440 a running round + 2 pins already fill the bar.
+          Below 1280 the zoom keys go (wheel / pinch still zoom): the gauges need those ~80px. */}
+      <ViewControls size={wide ? 36 : 34} showLanguage={w >= 1536} showZoom={wide} />
     </header>
   )
 }
@@ -122,7 +125,8 @@ function MobileBar() {
       aria-label={t('top.label')}
       className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex flex-col px-1 py-0.5"
     >
-      <div className="flex h-11 min-w-0 items-center gap-1 pl-1.5">
+      {/* mb-1: the 44px keycaps' 2px lip needs air above the progress line (sceneInset measures the bar, so +4px is safe). */}
+      <div className="mb-1 flex h-11 min-w-0 items-center gap-1 pl-1.5">
         <StageSection variant="mobile" />
         <SpeedControl compact />
         <ViewControls size={44} showZoom={false} />

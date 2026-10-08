@@ -41,11 +41,12 @@ export function Legend({ parts, format, className }: { parts: readonly LegendPar
 }
 
 /**
- * Icon colour for a gauge hue drawn on its own soft() tile: the hue pulled 20% toward ink so the icon keeps
- * >= 3:1 on the tile (WCAG 1.4.11) even where it is the only identifier (compact HUD). Bars keep the bright hue.
+ * Outline of a duotone icon: the hue pulled 38% toward ink so the outline keeps >= 3:1 on surface and on its own
+ * 30% body (WCAG 1.4.11) even where it is the only identifier (compact HUD). Lowest case: energy, 4.21:1 on surface
+ * and 3.39:1 on its body. Bars and the icon body keep the bright hue.
  */
 export function iconTone(color: string): string {
-  return `color-mix(in oklab, ${color} 80%, var(--color-ink))`
+  return `color-mix(in oklab, ${color} 62%, var(--color-ink))`
 }
 
 /** Ink or white, whichever reads better on a solid hex fill (book spines in the Defter shelf). */

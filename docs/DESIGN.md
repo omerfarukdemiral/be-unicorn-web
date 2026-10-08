@@ -1,10 +1,12 @@
-# Be Unicorn — Design System ("calm UI + coloured accents")
+# Be Unicorn — Design System ("toy UI + coloured accents")
 
-Direction: **the scene is lively, the UI is calm with coloured accents.** Warm off-white cards and ink
-text stay neutral; hue carries meaning: one brand colour (unicorn violet) for the primary action, active
-state and progress, one hue per HUD gauge (icon + thin bar), department hues, and small kind marks on
-bubbles. Replaces the all-neutral minimal restyle (98ba48c / 4304584), which read as lifeless. Oxanium +
-Inter and the sparse layout stay.
+Direction **A — toy / Two Point Hospital**: the UI is made of the same warm material as the scene. Cards are
+warm plates with a 2px frame and a solid lip in the garage trim colour; buttons are physical keys that sink
+when pressed; icons are duotone stickers; one rounded display face (Nunito) carries numbers, labels and
+buttons. Hue carries meaning: one brand colour (unicorn violet) **only** for the commit action, active state
+and progress, one hue per HUD gauge (sticker + thin bar), department hues, and small kind marks on bubbles.
+Replaces the flat violet SaaS look (Oxanium + Inter, uppercase tracked labels, Lucide-like line icons on pale
+12% tiles, 1px hairlines), which read as a dashboard, not a game. The sparse layout stays.
 
 Source of truth: `src/index.css` (`@theme`). Shared components: `src/ui/primitives.tsx`.
 UI constants and colour maps: `src/ui/theme.ts` (`WIDGET_COLOR`, `FOUNDER_COLOR`, `DEPT_COLOR`, `soft()`,
@@ -46,37 +48,44 @@ The scene carries most of the colour. Pastel lightness, but enough chroma that n
 
 ## 1. Tokens
 
-### Neutrals (slightly warm)
+### Neutrals (warm, derived from the garage: canvas `#F3EBDF`, walls `#F2E8D7`, trim `#C9AA8A`)
 
 | Token | Value | Use |
 |---|---|---|
-| `surface` | `#FBFAF7` | Panels, cards, bubbles, sheets |
-| `surface-2` | `#F3F1EC` | Inset fills: hover, pressed, segmented-control track |
-| `canvas-bg` | `#F3EBDF` | Page backdrop / 3D clear colour (warm light) |
-| `border` | `#E8E4DC` | 1px hairlines, neutral progress track |
-| `border-strong` | `#D6D0C5` | Secondary-button frame, dashed hints (locked / unavailable) |
-| `ink` | `#1F1D24` | Primary text |
-| `ink-2` | `#64616B` | Secondary text, neutral icons (5.8:1 on surface) |
-| `ink-3` | `#9B978F` | Tertiary text, disabled, placeholders |
-| `on-ink` | `#FBFAF7` | Text/icon on ink or brand fills |
+| `surface` | `#FFFAF2` | Cards, panels, bubbles, sheets, keycaps |
+| `surface-2` | `#F6EEE1` | Inset wells (speed tray, `Segmented` track), hover |
+| `surface-3` | `#EFE4D3` | Pressed / hover on `surface-2` |
+| `canvas-bg` | `#F3EBDF` | Page backdrop / 3D clear colour (`theme-color` too) |
+| `border` | `#E4D5BF` | 2px card + chip frame, progress track, rules |
+| `border-strong` | `#CDB696` | Key edges, dividers on `surface-2`, dashed locked hints |
+| `lip` | `#C9AA8A` | The solid lip under cards and keys (= the scene trim colour) |
+| `ink` | `#2B2420` | Primary text (14.7:1 on surface) |
+| `ink-2` | `#6B5F55` | Secondary text, labels, neutral icons (5.96:1 on surface, 5.37:1 on `surface-2`) |
+| `ink-3` | `#857767` | Disabled / placeholder / ≥14px bold only (4.18:1, below AA for small text) |
+| `ink-4` | `#C9B9A5` | Decorative track step only |
+| `on-ink` | `#FFFAF2` | Text/icon on ink or brand fills |
+
+Surface vs canvas is only 1.14:1: cards separate from the scene through the 2px frame and the lip, so never
+thin the frame to 1px. If the garage trim changes, re-derive `lip`, `border` and `border-strong` from it.
 
 ### Brand — unicorn violet
 
 | Token | Value | Use |
 |---|---|---|
-| `brand` | `#6B4EF0` | Primary button fill, active dock tab, "Tur başlat", stage progress bar, range thumb, active IconButton (white text 5.3:1) |
+| `brand` | `#6B4EF0` | Commit key fill, active dock tab, "Tur başlat", stage progress bar, range thumb, active raised IconButton (on-ink text 5.09:1) |
 | `brand-hover` | `#5A3DE0` | Hover of brand fills |
-| `brand-ink` | `#4B2FC9` | Brand-coloured text on light surfaces (7.9:1): active chip label, links like "Kazanımlara bak" |
-| `brand-soft` | `#EFEBFE` | Active chip / selected row / running-round button fill |
+| `brand-deep` | `#4733BF` | Commit key edge + lip, brand badge / dot lip |
+| `brand-ink` | `#4B2FC9` | Brand-coloured text on light surfaces (7.93:1): active chip label, links like "Kazanımlara bak" |
+| `brand-soft` | `#EEE9FC` | Active chip / selected row / running-round key fill |
 | `accent` | = brand | 3D selection ring. **Not** the focus ring (see Rules) |
 
 ### Gauge hues (HUD) — `--color-g-*`
 
-Icon + ~12% icon tile + thin bar / sparkline / stacked ramp. **Never body text**; values stay ink,
+Duotone sticker (no tile) + thin bar / sparkline / stacked ramp. **Never body text**; values stay ink,
 warnings still turn the number `negative-ink`. Gauge hues are **identity, not alarm**: none of them is the
-warning red (`negative` is reserved for thresholds). An icon drawn on its own tile goes through
-`iconTone(color)` (hue 80% + ink 20%), which keeps every gauge icon at >= 3.5:1 on its tile; bars and
-sparklines keep the bright hue.
+warning red (`negative` is reserved for thresholds). A toned icon draws its outline in
+`iconTone(color)` (hue 62% + ink 38%) over a 30% body of the hue itself; bars and sparklines keep the bright
+hue.
 
 | Token | Value | Widgets (`WIDGET_COLOR`) |
 |---|---|---|
@@ -93,33 +102,36 @@ sparklines keep the bright hue.
 | `g-indigo` | `#5B6CE0` | Gelir dağılımı |
 | `g-debt` | `#7D6B5D` | Teknik borç (taupe) |
 | `brand` | — | Tur (round timer), Arketip |
-| `energy` / `energy-ink` | `#F2A11F` / `#A45F00` | Founder energy bar fill / its number |
+| `energy` / `energy-ink` | `#F2A11F` / `#985800` | Founder energy bar fill / its number (5.42:1 on surface) |
 
-Icons through `iconTone()` are >= 3.5:1 on their 12% tile (compact HUD shows the icon without its label,
-so this is the identifier there). `energy` is a fill only.
+Every toned outline is >= 4.21:1 on surface and >= 3.39:1 on its own body (minimum: `energy`; compact HUD
+shows the icon without its label, so this is the identifier there). `energy` is a fill only.
 
 ### Time state — `--color-speed-*`
 
 Frames and fills only (text on them stays ink, AA). The speed colour lives in **two places only**
-(docs/LAYOUT.md §4.2): the speed control's active segment (~22% fill + 2px inset ring, top bar section C) and
-the thin viewport frame (`ScreenFrame`, 3px desktop / 2px phone). The stage section, the month ring next to the
+(docs/LAYOUT.md §4.2): the speed control's active segment (a sunk key with a tinted fill + solid 2px edge, top bar section C) and
+the viewport frame (`ScreenFrame`, always solid: paused 3px desktop / 2px phone, running a 1px hairline). The stage section, the month ring next to the
 date and the date itself stay **neutral** (`ink-2`); there is no running dot and no "DURAKLATILDI" pill.
 Colour follows the speed time *actually* runs at.
 
 **Paused = red, running = green** (docs/GAMEPLAY_V2.md §13; replaces DECISIONS #13/#14's grey/yellow/orange/green).
 Any pause (the player's own or a focus pause for a decision / Kazanımlar card / round offer / modal) is the calm
-pause red and **dashed**. 1×, 2× and 4× share one green: the speed segments tell them apart by icon (▶ / ▶▶ / ▶▶▶
-over `1×/2×/4×`) and fill density (18 / 24 / 32%). A focus pause adds a faint inner band in the chosen speed's
-colour (where time returns to) and the chosen segment gets a dashed frame. The time status label ("Duraklatıldı",
+pause red. 1×, 2× and 4× share one green: the speed segments tell them apart by icon (▶ / ▶▶ / ▶▶▶ over
+`1×/2×/4×`) and fill density. The active segment is a **sunk** key (`data-down`) with a tinted fill and a solid
+2px edge in its colour, ink text; idle segments are raised keys. A focus pause adds a faint inner band in the
+chosen speed's colour (where time returns to) and the chosen segment stays raised with a solid green edge.
+**No dashes on the speed control.** The phone key cycles, so it is never sunk; its lip is the colour mixed 70%
+with ink. The time status label ("Duraklatıldı",
 "Karar · 2×", "Zaman akıyor", "Önemli an · 1×") sits next to the segments (≥1440; in the segment tooltips below
-that). Colour is never the only signal: solid vs dashed, ⏸ vs ▶ and the label carry the same state.
+that). Colour is never the only signal: sunk vs raised, ⏸ vs ▶ and the label carry the same state.
 
 | Token | Value | State |
 |---|---|---|
-| `speed-pause` | `#C94A3F` | Duraklatıldı / odak duraklaması (frame **dashed**, ⏸ segment, label `ink-2`) |
-| `speed-run` | `#1F9D63` (= `positive`) | 1× / 2× / 4× (frame solid; segment ▶ / ▶▶ / ▶▶▶) |
+| `speed-pause` | `#C94A3F` | Duraklatıldı / odak duraklaması (⏸ segment, label `ink-2`; `ScreenFrame` a solid 3px / 2px phone frame at 55%) |
+| `speed-run` | `#1F9D63` (= `positive`) | 1× / 2× / 4× (frame a 1px solid hairline at 25%; segment ▶ / ▶▶ / ▶▶▶) |
 
-The frame is the one place a border above 1px is allowed (see Shape). Motion: `animate-day-tick` (date pops
+Motion: `animate-day-tick` (date pops
 each day), `animate-frame-beat` (frame glow once per game day while flowing), `animate-cash-rise` (daily Kasa
 delta, `ink-2` / `positive-ink`), `animate-payday-drop` (payday lump, bold ink: rhythm, not danger),
 `animate-danger-pulse` (runway < 3 ay only), `animate-attention` (new decision bubble), `animate-cta-glow`
@@ -135,7 +147,7 @@ revenue concentration, founder stake < %50, error icon, leaving-employee badge) 
 payday lump, receipt net, the stage section). Counter badges on the tabs are `brand`.
 
 **Exception: the speed frame red is not danger.** `speed-pause` is its own, less saturated token (`#C94A3F`, never
-`negative`) and only ever appears as the **dashed** viewport frame + the ⏸ segment: the dashed line and the ⏸ icon
+`negative`) and only ever appears as the viewport frame + the ⏸ segment: the frame and the ⏸ icon
 tell "waiting" apart from "this can end the run". It never colours a number.
 
 ### Data viz (`src/ui/charts/`, GAMEPLAY V2 §14.4)
@@ -143,7 +155,7 @@ tell "waiting" apart from "this can end the run". It never colours a number.
 Hand-drawn SVG, no chart dependency; data and colours come in as props. A series takes its **gauge hue**
 (`WIDGET_COLOR`), at most 4 hues per chart; stacked parts are `ramp()` strengths of one hue. The lead rival is a
 thin grey reference line with no value. Red only where the run can end (`negative`: the death point, the runway < 3
-band) — the one red rule holds inside charts too. Numbers Oxanium tabular, ≤ 4 ticks (`niceTicks`); no hover
+band) — the one red rule holds inside charts too. Numbers Nunito tabular, ≤ 4 ticks (`niceTicks`); no hover
 tooltip (touch): tap selects a month and the tile header prints it. A series not learned yet is a `LockedTile`
 (icon + name, dashed, no sentence). Charts live in the center `StatsScreen`, which never pauses time.
 
@@ -165,56 +177,85 @@ Opacity modifiers work (`bg-brand/15`, `bg-g-morale/45`). Inline / dynamic hue: 
 
 | Token | Value | Tailwind |
 |---|---|---|
-| `--radius-card` | 10px | `rounded-card` (cards, panels, sheets, overlays) |
-| `--radius-control` | 10px | `rounded-control` (buttons, chips, inputs, stat tiles) |
-| — | 6px | `rounded-md` (pills / tags) |
-| `--shadow-card` | very light 2-layer | `shadow-card` — floating HUD cards, bubbles |
-| `--shadow-pop` | light drop | `shadow-pop` — modals, toasts |
-| `--shadow-panel` | contact + soft lift, 2-layer | `shadow-[var(--shadow-panel)]` — the right panel / bottom sheet |
+| `--radius-card` | 14px | `rounded-card` (cards, panels, sheets, overlays) |
+| `--radius-control` | 12px | `rounded-control` (keys, chips, inputs) |
+| — | 8px | `rounded-lg` (pills / tags, cost chip) |
+| `--shadow-card` | 3px `lip` + soft warm drop | `shadow-card` — floating HUD cards, bubbles |
+| `--shadow-pop` | 3px `lip` + larger drop | `shadow-pop` — modals, toasts |
+| `--shadow-panel` | 3px `lip` + soft lift | `shadow-[var(--shadow-panel)]` — the right panel / bottom sheet |
+| `--shadow-inset` | inset 2px top shade | wells (`.ui-inset`) |
+
+The lip lives **inside** the shadow tokens, so every `shadow-card` / `shadow-pop` user, `animate-attention`
+and `animate-cta-glow` (brand-deep lip) keep it. It is a box-shadow and takes no layout space, but it needs
+vertical room: an `overflow-hidden` ancestor with a tight height clips it (use `overflow-x-clip`).
 
 Surfaces are **opaque** (no backdrop blur): HUD plates over a lively scene, not frosted glass. The right panel
-carries a 3px kind stripe on top (`theme.ts PANEL_COLOR`), a 20px icon, a 13px uppercase title and its primary
+carries a 3px kind stripe on top (`theme.ts PANEL_COLOR`), a 20px icon, a 13px title and its primary
 number on the right (`panelHeadline.ts`). Motion keyframes (all off under `prefers-reduced-motion`):
 `animate-rise` (panel opens, 180 ms, scale 0.96 → 1), `animate-pop-once` (a gauge whose number moved),
 `animate-breathe` (the one object to look at next, 1.6 s), `animate-count` (a number ticks).
 
-Borders are always **1px** (exception: the viewport time frame, 2–3px, see Time state). Brand CTAs may carry a soft brand glow (`shadow-[0_4px_12px_-4px_var(--color-brand)]`).
+Frames are **2px** (cards, chips, keys; pills 1.5px); no 1px hairlines. `Divider` and rules are 2px rounded
+bars in `border`. Brand CTAs may carry a soft brand glow (`animate-cta-glow`, lip kept).
 
 ### Helper classes (index.css)
 
-- `.ui-card` — surface + 1px border + card radius + light shadow (use via `<Card>`).
-- `.ui-label` — Oxanium 10.5px, 600, uppercase, `0.08em` tracking, `ink-2`.
-- `.font-text` — Inter, resets tabular numerals (reading text). `.font-ui` — Oxanium.
-- `.tabular` — tabular numerals.
+- `.ui-card` — warm plate: `surface` + 2px `border` frame + card radius + `shadow-card` (lip). Use via `<Card>`.
+  A card inside a card uses `.ui-inset` or a `border-t-2` row, never `.ui-card`.
+- `.ui-inset` — recessed well: `surface-2`, control radius, `shadow-inset`, no frame (speed tray, `Segmented`).
+- `.ui-key` — physical key: `--key-fill` + 2px `--key-edge` + solid `--key-lip` of `--key-depth` (3px). Pressing
+  (`:enabled:active`, `<button>` only) or `[data-down]` sinks it by the lip depth (90 ms, translateY, no scale);
+  `:disabled` is flat (no lip = not pressable). Tones only set the variables: `.ui-key-routine` (surface),
+  `.ui-key-commit` (brand fill, brand-deep edge + lip, on-ink text), `.ui-key-soft` (brand-soft, brand-ink),
+  `.ui-key-danger` (surface, negative-tinted edge + lip, negative-ink text); `.ui-key-sm` = 2px lip. Retint one
+  inline with `style={{ '--key-fill': …, '--key-edge': … } as CSSProperties}`. An animation with fill `both`
+  (`animate-pop-in`) pins `transform` and blocks the sink: put it on a wrapping span.
+- `.ui-label` — Nunito 12/14px, 700, **sentence case, no tracking**, `ink-2` (a game caption, not a dashboard
+  column). Components layer, so any utility overrides it.
+- `ui-num` — Nunito 800, tabular, `-0.01em`: HUD values, buttons' figures, badges. Never combine it with a
+  `font-*` weight utility (layer order is not guaranteed); use `tabular font-bold` for 700.
+- `.font-text` — Figtree, resets tabular numerals (reading text). `.font-ui` — Nunito.
+- `.tabular` — tabular numerals (a no-op on Nunito, protects the fallback stack).
 
 ## 2. Fonts
 
 Loaded in `src/index.css` with `@font-face` from `public/fonts` (woff2 copied from
-`@fontsource-variable/{oxanium,inter}`, latin + latin-ext only, which covers Turkish) and preloaded in
-`index.html`. Not in `main.tsx`.
+`@fontsource-variable/{nunito,figtree}`, latin + latin-ext only; `ğĞşŞİ` live in latin-ext) and preloaded in
+`index.html` (4 links). Not in `main.tsx`. About 105 KB in total.
 
 | Role | Font | Where |
 |---|---|---|
-| UI (default on `body`) | **Oxanium Variable** (`font-ui`) | Layout, HUD, headings, tab labels, labels, buttons, numbers (tabular), chips, pills, stats, toasts |
-| Reading | **Inter Variable** (`font-text`) | Speech/world bubbles, Notebook (Defter) cards, decision text and option descriptions, long descriptions / help copy, empty & locked hints, tooltips longer than one line |
+| UI (default on `body`) | **Nunito Variable** (`font-ui` = `font-sans`) | HUD, headings, tab labels, labels, buttons, numbers, chips, pills, stats, toasts |
+| Reading | **Figtree Variable** (`font-text`) | Speech/world bubbles, Notebook (Defter) cards, decision text and option descriptions, long hints, the company name, tooltips longer than one line |
 
-Rules: numbers are always Oxanium with tabular figures, even inside an Inter paragraph
-(wrap in `<span className="font-ui tabular">`). Headings inside a notebook card may stay Oxanium.
-Weights: 500 body UI, 600 buttons/labels/values, 700 only for the single most important number on a
-card. No 800+.
+Rules:
+- Numbers are always Nunito, even inside a Figtree paragraph (wrap in `<span className="font-ui tabular">`).
+  Nunito has **no `tnum` lookup**: its 10 digits are all 600/1000 em at every weight, so figures are tabular by
+  construction in every browser. Never hand-write `font-feature-settings: "tnum"`, and do not move HUD numbers
+  to a proportional face without re-checking.
+- Turkish shaping relies on `<html lang="tr">`: Nunito's `fi` ligature is suppressed only through its TRK
+  `locl`. Never bring back Baloo 2 (it ligates `fi` → "fıyat" even under `tr`) or Fredoka (no `ğĞşŞİ`).
+- `→` and `∞` are missing from both faces and fall back to the system font: use `<Icon name="arrowRight">`.
+- `--font-ui` keeps its name: `src/render/WorldBubbles.tsx` and `Juice.tsx` read `var(--font-ui)`.
+
+Weights (UI never below 600): 600 secondary UI text · 700 (`font-bold`) labels, chips, sub figures ·
+800 (`font-extrabold` / `ui-num`) values, buttons, stage name · 900 unused. Figtree body copy 500 at 12–13px,
+emphasis 600, never 300.
 
 ## 3. Rules
 
 1. **Text stays ink.** Body text, labels and values are `ink` / `ink-2`. Hue on text only for: green/red
    numbers (`*-ink` variants, `<Delta>`), `brand-ink` for active chip labels and links, `energy-ink` for
    the energy number. Everything else coloured is an icon, a bar, a dot or a light tint.
-2. **Brand = action + progress.** `<Button tone="primary">` (brand fill), active dock tab, "Tur başlat",
-   stage progress bar, `Bar` default fill, active `IconButton`, range thumb. One primary per surface.
-3. **Every HUD gauge has its hue** (`WIDGET_COLOR` / `WidgetDef.color`): icon on a ~12% tile of that hue
-   and its thin bar / sparkline / stacked ramp (`ramp(color)`: 100/70/45/25%). No solid discs.
+2. **Brand = action + progress, nothing else.** Commit key (`<Button tone="commit">`), active dock tab,
+   "Tur başlat", stage progress bar, `Bar` default fill, active raised `IconButton`, range thumb. One commit
+   key per surface. Never brand as decoration or as a neutral surface tint.
+3. **Every HUD gauge has its hue** (`WIDGET_COLOR` / `WidgetDef.color`): a duotone sticker of that hue
+   (`<Icon tone>`, no tile) and its thin bar / sparkline / stacked ramp (`ramp(color)`: 100/70/45/25%). No solid
+   discs.
 4. **Departments are vivid**: dot + a light tint on pills (`<Pill tint>`) and avatars (18% fill, 45% ring).
    Filter chips carry the department as a `<Dot>` child; the **selected** state is always the brand chip
-   (a 1px sales/ops frame is under 3:1, so a dept-tinted "selected" was not visible). Text on tints stays ink.
+   (a sales/ops-tinted frame is under 3:1, so a dept-tinted "selected" was not visible). Text on tints stays ink.
 5. **Bubbles**: neutral body; kind = small tinted tile next to the speaker (`<SpeakerLine color>`):
    karar = `kind-decision` orange (crisis = `negative`), kavram = `kind-concept` violet.
 6. **Founder actions**: available/running buttons use their own hue (`FOUNDER_COLOR`: icon, 12% fill,
@@ -225,10 +266,11 @@ card. No 800+.
    takes ink text at >= 4.5:1 (guarded by `src/content/__tests__/concepts.test.ts`).
 8. **Locked / disabled stays neutral** (dashed `border-strong`, `ink-3`), so colour always means "live".
 9. **HUD grammar, not calm web UI** (docs/GAMEPLAY_V2.md §10.1 D1–D9, DECISIONS #30; replaces "generous whitespace,
-   hairline, light shadows"). The number is the biggest thing on every surface (Oxanium `tabular-nums`, primary
-   22–28px); one readable sentence at a time (≤ 12 words, Inter only there, no paragraphs); buttons come in tiers —
-   *commit* (spends cash/equity: fill + cost chip `−$4.2K/ay` / `runway 9→7`, 120 ms press + `confirm` cue),
-   *routine* (hairline, small), *danger* (negative hairline); the panel frame has a 3px state stripe, radius 10,
+   hairline, light shadows"). The number is the biggest thing on every surface (Nunito `ui-num`, primary
+   22–28px); one readable sentence at a time (≤ 12 words, Figtree only there, no paragraphs); labels are small
+   sentence case, never uppercase + tracking; buttons are keys in tiers — *commit* (spends cash/equity: brand key +
+   cost chip `−$4.2K/ay` / `runway 9→7`, sinks onto its lip + `confirm` cue), *routine* (surface key), *danger*
+   (negative-edged key); the panel frame has a 3px state stripe, radius 14,
    fully opaque; rows 36px, 4px gaps instead of `divide-y`; numbers tween 300–600 ms (`useTween`), ≤ 3 flashes a
    second, `prefers-reduced-motion` stops the keyframes; guidance is object emphasis (a breathing Dock icon, ghost
    slot, target notch; ≤ 2 at once), never "click here" text; the strip shows 1 item, ≤ 2 P2 a game day.
@@ -239,28 +281,42 @@ card. No 800+.
 11. **One brand CTA per list.** A blocked state is never a primary button: e.g. Mağaza with no room shows
     one "Boş yer yok — N. halkayı aç" banner with a single primary button above the list; items show a
     neutral "Boş yer yok" note.
-12. **Focus ≠ selected.** `:focus-visible` = 2px **ink** outline + 2px surface gap, so keyboard focus never
-    reads as the brand selected state (active tab / chip / row) and still shows on brand fills.
+12. **Focus ≠ selected.** `:focus-visible` = 2px **ink** outline, 2px offset, and **no box-shadow** (an
+    unlayered box-shadow would erase every key's lip on focus), so keyboard focus never reads as the brand
+    selected state (active tab / chip / row) and still shows on brand fills.
+13. **Icons are duotone stickers** (`src/ui/icons.tsx`). `PATHS` is the outline layer (2px round stroke, 2.2 at
+    ≤14px); `BODY` is the fill layer: `true` = reuse the outline paths, a node = a dedicated closed silhouette
+    (hourglass sand, lock body, bag…), absent = line-only (chevrons, arrows, close, check…). The body sits in one
+    `<g opacity>` group so overlapping sub-paths never double-tint. `<Icon tone={hue}>`: outline `iconTone(hue)`,
+    body = hue at 30%; no tone: `currentColor` outline over a 20% `currentColor` body (works on any fill, e.g. a
+    brand key). `body={false}` = outline only, `body="<css colour>"` overrides the fill; a caller `fill` keeps its
+    old meaning (`currentColor` = solid glyph, `none` = hollow). A metric is the same sticker everywhere because
+    tone → `iconTone` / hue is one formula. A new glyph whose chord-closed outline misreads gets a dedicated body.
 
 ## 4. Components (`src/ui/primitives.tsx`)
 
 | Component | Notes |
 |---|---|
 | `Card` | `.ui-card` |
-| `Button` | tones `commit` (brand fill; spends money / equity / a move; `cost` chip, 120 ms press, `data-cue="confirm"`) / `routine` (hairline, small) / `danger` (faint negative hairline, red text) / `ghost` / `onInk`; `primary`/`mint` = deprecated commit, `secondary`/`soft` = deprecated routine at md size |
-| `IconButton` | `rounded-control`; `active` = brand fill |
+| `Button` | keys (`.ui-key`), Nunito 800, no tracking: `commit` (brand key; spends money / equity / a move; `cost` chip, sinks onto its lip, `data-cue="confirm"`) / `routine` (surface key) / `danger` (negative-edged key, red text) / `ghost` and `onInk` (not keys, 1px press); `md` 44px / 15px, `sm` 36px / 13px with a 2px lip; `primary`/`mint` = deprecated commit, `secondary`/`soft` = deprecated routine |
+| `IconButton` | quiet by default (panel close / back / collapse); `raised` = routine keycap, `raised active` = commit key; icon `size*0.5` |
 | `Bar` | brand fill by default; `tone` = Tailwind class, or `color` = CSS hue (track becomes a 16% tint of it) |
 | `Ring` | brand stroke by default; pass `tone` |
-| `Chip` | active = brand-soft + brand frame + brand-ink text (always; identity hues go in as a `<Dot>` child); `count` = tabular number after the label; `segment` inside `Segmented` (surface-2 track, active lifts) |
-| `Pill` | hairline tag; `dot` mark; `tint` = light fill of a hue (dept, live) |
+| `Chip` | 2px frame, 12px bold; active = brand-soft + brand frame + brand-ink text (always; identity hues go in as a `<Dot>` child); `count` = extrabold tabular number after the label; `segment` inside `Segmented` (`.ui-inset` track, active = surface with a 2px lip) |
+| `Pill` | 1.5px framed tag, 11px bold; `dot` mark; `tint` = light fill of a hue (dept, live) |
 | `Dot` | department / status / kind mark |
-| `IconBadge` | neutral, `filled` faint square, or `color` = `iconTone(color)` icon on ~12% tile |
-| `Stat` | 22px tabular value first, label under it; `icon` + `color` add the metric's gauge tile (same as its HUD chip); `delta`, `tween` + `format` |
+| `IconBadge` | `color` = a bare duotone sticker in that hue (icon 75% of `size`, no tile); otherwise a neutral icon, `filled` = round `surface-2` disc |
+| `Stat` | 24px `ui-num` value first, `.ui-label` under it, `border-t-2` top rule; `icon` + `color` add the metric's 14px sticker (same as its HUD chip); `delta`, `tween` + `format` |
 | `CostPreview` | `⌛ 9 → 7 ay` chip (+ `cost`) drawn from the engine's `previewSpend()` result; red only when runway < 3 or the next payday is short |
-| `SectionTitle` | 3px colour stripe (`color`, neutral by default) + uppercase label |
+| `SectionTitle` | 4px rounded colour stripe (`color`, neutral by default) + 13px sentence-case label in ink |
 | `Label`, `Delta`, `Divider`, `LockedHint`, `Empty`, `QualityStars` (amber) | — |
 
-HUD: `WidgetChip` takes `color`; `WIDGETS[id].color` is the registry field. Panel header: kind stripe + 20px icon in the kind hue (`PANEL_COLOR`) + primary number.
+HUD (top bar, `src/ui/layout/`): the desktop bar is one `.ui-card` (h-14, 2px frame, 3px lip) split by 2px rules.
+A gauge (`BarChip`, `WidgetChip variant="bar"`) is number **over** label: sticker (22px at full density) +
+`ui-num` value (17px, 18px ≥1440; 16px tight; 15px phone) with its sub delta, then a 12px `.ui-label` row that
+also holds the Moral bar / goal notch inline. View controls are raised keycaps (36/34px, 44 on mobile); the speed
+control is a `.ui-inset` tray of keys (see Time state); "Tur başlat" is a commit key, the running round a
+`.ui-key-soft` key. `WidgetChip` takes `color`; `WIDGETS[id].color` is the registry field. Panel header: kind stripe + 20px icon in the kind hue (`PANEL_COLOR`) + primary number.
 Project categories: `CATEGORY_COLOR` in `panels/ProjectsPanel.tsx`.
 
 ## 5. Legacy token migration map (historical)
@@ -286,7 +342,7 @@ delete the alias block once `rg -e '(cream|lilac|mint|peach|sky|lemon|rose)-[0-9
 | `text-ink-600` | ink-2 | `text-ink-2` |
 | `text-ink-400`, `bg-ink-400` | ink-3 | `text-ink-3` |
 | `bg-ink-900/35`, `/40` (scrims) | ink alpha | `bg-ink/35` |
-| `bg-{lilac,mint,peach,sky,lemon,rose}-100` (+ `/xx`) | surface-2 | **remove fill**; hairline `border border-border` if a frame is needed |
+| `bg-{lilac,mint,peach,sky,lemon,rose}-100` (+ `/xx`) | surface-2 | **remove fill**; `border-2 border-border` if a frame is needed |
 | `bg-{…}-300` (bars, chips, dots) | border-strong | bars → `bg-ink`; chips → `<Chip>`; status → `<Dot>` |
 | `border-{lilac,lemon,sky,rose}-300` | border-strong | `border-border` |
 | `text-lilac-500`, `bg-lilac-500`, `var(--color-lilac-500)` | ink | `text-ink` / `text-ink-2` for icons; `bg-ink`; focus → `accent` |
@@ -305,7 +361,7 @@ delete the alias block once `rg -e '(cream|lilac|mint|peach|sky|lemon|rose)-[0-9
 | `PASTEL.*` in `WorldBubbles.tsx` (UI parts) | unchanged | `UI_TONES.*` |
 | `rounded-3xl`, `rounded-2xl` on cards/bubbles | — | `rounded-card` |
 | `rounded-full` on text buttons/chips | — | `rounded-control` |
-| `font-bold`/`font-extrabold` everywhere | — | `font-semibold`; bold only for the key figure |
+| `font-bold`/`font-extrabold` everywhere | — | the §2 weight ladder (superseded the old "semibold only" rule) |
 
 Remaining legacy references per file (at time of writing): widgets.tsx 58, overlays/Overlays.tsx 30,
 DetailPanel.tsx 22, panels/ShopPanel.tsx 21, panels/ProjectsPanel.tsx 14, panels/TeamPanel.tsx 12,

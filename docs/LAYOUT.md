@@ -341,18 +341,18 @@ segmenti ve ince ekran kenarı (`ScreenFrame`). Ay halkası, aşama bölümü, t
 
 | Durum | Ekran kenarı | Hız kontrolü |
 |---|---|---|
-| Akıyor 1×/2×/4× | 2px (mobil) / 3px **düz** yeşil, günlük hafif parıltı | aktif segment yeşil dolgu (%18/%24/%32) + 2px iç halka; ▶ / ▶▶ / ▶▶▶ + `1×/2×/4×` |
-| Oyuncu duraklattı | 2/3px **kesik** kırmızı (`speed-pause`) | ⏸ segmenti kırmızı %18 dolgu + 2px iç halka, "▶" gösterir; etiket "Duraklatıldı" (`ink-2`) |
-| Odak duraklaması (karar/kavram/teklif/modal) | kesik kırmızı + seçili hızın %22'lik yeşil iç bandı | ⏸ segmenti aktif (kırmızı), seçili hız segmentinde kesik yeşil çerçeve; etiket "Karar · 2×'e dönecek" |
+| Akıyor 1×/2×/4× | 1px düz, yumuşak yeşil (%25), günlük hafif parıltı | aktif segment çökük tuş: yeşil dolgu (%18/%24/%32) + 2px düz yeşil kenar; ▶ / ▶▶ / ▶▶▶ + `1×/2×/4×` |
+| Oyuncu duraklattı | 2/3px **kalın** düz, yumuşak kırmızı (`speed-pause` %55) | ⏸ segmenti çökük tuş: kırmızı dolgu + 2px düz kırmızı kenar, "▶" gösterir; etiket "Duraklatıldı" (`ink-2`) |
+| Odak duraklaması (karar/kavram/teklif/modal) | kalın kırmızı + seçili hızın %22'lik yeşil iç bandı | ⏸ segmenti aktif (kırmızı), seçili hız tuşunda düz yeşil kenar; etiket "Karar · 2×'e dönecek" |
 | 4× → 1× otomatik yavaşlama | yeşil (değişmez) | 3.5 sn "Önemli an · 1×" etiketi |
 | Oyun bitti | yok | devre dışı |
 
-Duraklı kırmızısı tehlike kırmızısı değildir: ayrı, daha az doygun token (`--color-negative` değil), yalnız **kesik**
-çizgi ve ⏸ segmentinde görünür, hiçbir sayıyı boyamaz (tek kırmızı kuralının istisnası, `docs/DESIGN.md` › One red
-rule). Renk tek sinyal değildir: düz/kesik, ⏸/▶ ve etiket aynı durumu taşır. Ortadaki `CenterFrame` ekranları
+Duraklı kırmızısı tehlike kırmızısı değildir: ayrı, daha az doygun token (`--color-negative` değil), yalnız **kalın**
+çerçevede ve ⏸ segmentinde görünür, hiçbir sayıyı boyamaz (tek kırmızı kuralının istisnası, `docs/DESIGN.md` › One red
+rule). Renk tek sinyal değildir: kalın/ince çerçeve, ⏸/▶ ve etiket aynı durumu taşır (kesik çizgi yok). Ortadaki `CenterFrame` ekranları
 (İstatistik, Kanun Kitabı, Pazar haritası) zamanı durdurmaz; çerçeve onların üstünde kalır, açıkken `PauseVeil` çizilmez.
 Önemli olay (`decisionShown`, `paydayShort`, `crisis`, `roundWindow`, `payrollMissed`, `roundFailed`, `loanCalled`) açık
-`CenterFrame`'i kapatır ve 4×'i 1×'e indirir. Yeni pause sebebi yalnız `payday`: maaş masası açıkken kesik kırmızı;
+`CenterFrame`'i kapatır ve 4×'i 1×'e indirir. Yeni pause sebebi yalnız `payday`: maaş masası açıkken kalın kırmızı;
 "Sonra" ile kapanınca zaman akar ve ufukta 3 günlük sayaç işler.
 `docs/DESIGN.md` › Time state bölümü buna göre güncellendi.
 
@@ -533,7 +533,7 @@ export const MOBILE_BOTTOM_TABS_H = 56
 export const PANEL_W = 400
 export const PANEL_W_NARROW = 360
 export const PANEL_NARROW_BELOW = 1280
-export const PIN_VISIBLE = (vw: number): number => (vw >= 1440 ? 2 : vw >= 1280 ? 1 : 0)
+export const PIN_VISIBLE = (vw: number): number => (vw >= 1440 ? 2 : vw >= 1366 ? 1 : 0)
 ```
 
 `src/ui/cashflow.ts` (METRICS oluşturur; TOP erken ihtiyaç duyarsa birebir aynısını yazar):

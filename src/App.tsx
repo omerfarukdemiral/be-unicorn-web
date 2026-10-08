@@ -54,7 +54,7 @@ function StartShell({ children }: { children: ReactNode }) {
         <span className="grid size-10 place-items-center rounded-control bg-brand text-on-ink shadow-[0_6px_16px_-6px_var(--color-brand)]">
           <Icon name="unicorn" size={24} />
         </span>
-        {/* Title: Oxanium, uppercase, tight; the second word carries the weight. */}
+        {/* Title: Nunito, uppercase, tight; the second word carries the weight. */}
         <h1 lang="en" aria-label={t('start.title')} className="mt-5 text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink">
           {title.head && <span className="block text-ink-2">{title.head}</span>}
           <span className="block font-bold text-brand-ink">{title.tail}</span>

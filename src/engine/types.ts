@@ -816,6 +816,8 @@ export interface DerivedMetrics {
   findUsers?: FindUsersPreview
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
   nextStep?: NextStep
+  /** The player's play style today (engine/style.ts); null = none clear yet. */
+  playStyle?: Archetype | null
   /** What is coming in the next weeks: paydays, delayed decision effects, releases, round (§5 "Ufuk şeridi"). */
   horizon?: HorizonItem[]
   /** Maturity gained per day by each project (unfinished: maturity; finished: update progress). For release ETAs. */

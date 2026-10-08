@@ -96,7 +96,8 @@ describe('thread and secret card text', () => {
   it('ids are unique across the deck', () => {
     const ids = CONTENT.decisions.map((c) => c.id)
     expect(new Set(ids).size).toBe(ids.length)
-    expect(ids.length).toBeLessThanOrEqual(65)
+    // Style cards (2026-10-08) sit on top of the 65: a player only meets the ones of their own play style.
+    expect(ids.filter((id) => !id.startsWith('style-')).length).toBeLessThanOrEqual(65)
   })
 })
 

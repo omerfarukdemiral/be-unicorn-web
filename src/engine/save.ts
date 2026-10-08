@@ -1,5 +1,5 @@
 // Versioned (de)serialization. Storage-agnostic: the store owns localStorage.
-import { BOARD_FROM_STAGE, DILIGENCE_MOM, DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
+import { BOARD_FROM_STAGE, DILIGENCE_MOM, INITIAL_TOOLS, DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
 import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt, type ToolId } from './types'
@@ -127,6 +127,8 @@ export function migrate(file: { version: number; state: unknown }): GameState | 
   if (!out.meta || !out.time || !out.stats) return null
   // Renamed stage goals keep the ☆ already earned (any version: the rename landed inside v4).
   if (Array.isArray(out.goalsDone)) out.goalsDone = [...new Set(out.goalsDone.map((id) => RENAMED_GOALS[id] ?? id))]
+  // Garage levers (2026-10-08) open for any save, whatever its version.
+  if (Array.isArray(out.unlockedTools)) for (const tool of INITIAL_TOOLS) uniquePush(out.unlockedTools, tool)
   out.meta.saveVersion = SAVE_VERSION
   return out
 }

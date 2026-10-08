@@ -5,6 +5,7 @@ import { CONCEPTS, PRICING_GATE } from './concepts'
 import { BOARD_CARDS, DECISIONS as CARD_DECISIONS } from './decisions'
 import { CRISES, CRISIS_CARDS } from './crises'
 import { SECRET_CARDS, THREAD_CARDS } from './threads'
+import { STYLE_CARDS } from './styleCards'
 import { TEASERS } from './teasers'
 import { FURNITURE } from './furniture'
 import { OFFICE_LINES } from './officeLines'
@@ -26,7 +27,7 @@ import { MARKET_SEGMENTS, segmentDef, type MarketSegmentDef } from './markets'
  * Every decision card: the rolled ones, the thread steps and secret cards (GAMEPLAY V2 §9.2) + the crisis cards the
  * calendar brings (§5.1) + the board's review card (§8.3). At most 65 in all (§3 md.11).
  */
-const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...CRISIS_CARDS, ...BOARD_CARDS]
+const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...CRISIS_CARDS, ...BOARD_CARDS, ...STYLE_CARDS]
 
 /** strings.ts + feature tables (time flow, core loop, V2 HUD). One flat key → text dictionary. */
 const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT, ...HUD_TEXT }
@@ -38,7 +39,7 @@ export { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_
 export { NPC_NAMES, PROJECT_NAMES, ENTERPRISE_NAMES }
 export { GOALS, goalsOfStage }
 export { CRISES, CRISIS_CARDS, BOARD_CARDS }
-export { THREAD_CARDS, SECRET_CARDS, TEASERS }
+export { THREAD_CARDS, SECRET_CARDS, TEASERS, STYLE_CARDS }
 export { POLICIES, REMOTE_FIRST_FLAG }
 export { MARKET_SEGMENTS, segmentDef, type MarketSegmentDef }
 export {

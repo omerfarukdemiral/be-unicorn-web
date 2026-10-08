@@ -276,6 +276,8 @@ export function founderActionError(s: GameState, kind: FounderActionKind): Actio
   const moves = movesError(s, def.moves)
   if (moves) return moves
   if (kind === 'talkToUsers' && s.projects.length === 0) return 'notFound'
+  // Nothing to sell before a product is live.
+  if (kind === 'salesCall' && !s.projects.some((p) => p.launched)) return 'notFound'
   // No debt to pay back: the sprint would only cost the month.
   if (kind === 'refactorSprint' && s.techDebt < 1) return 'notFound'
   return null

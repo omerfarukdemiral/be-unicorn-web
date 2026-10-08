@@ -6,8 +6,8 @@ export const STAGES: readonly StageDef[] = [
   {
     index: 0, key: 'garage', name: 'Garaj', officeName: 'Garaj', rings: 1, totalSlots: 4,
     targetValuation: null, roundAmount: null, roundEquity: null, newSlotType: 'desk',
-    unlockActions: ['findUsers', 'talkToUsers', 'rest'],
-    unlocksText: 'Masa slotu, elle kullanıcı bulma', paletteKey: 'concrete',
+    unlockActions: ['findUsers', 'talkToUsers', 'rest', 'salesCall'],
+    unlocksText: 'Masa, kullanıcı, reklam, fiyat, satış', paletteKey: 'concrete',
     tagline: 'Her şey bir garajda başlar.',
   },
   {
@@ -20,15 +20,14 @@ export const STAGES: readonly StageDef[] = [
   {
     index: 2, key: 'seed', name: 'Seed', officeName: 'Küçük ofis', rings: 3, totalSlots: 18,
     targetValuation: 3_000_000, roundAmount: 800_000, roundEquity: 0.15, newSlotType: 'room',
-    unlockActions: ['salesCall'],
-    unlocksText: 'Toplantı odası, satış', paletteKey: 'smallOffice',
+    unlocksText: 'Toplantı odası', paletteKey: 'smallOffice',
     tagline: 'Kapısında adımız yazan ilk ofis.',
   },
   {
     index: 3, key: 'seriesA', name: 'Series A', officeName: 'Açık plan kat', rings: 4, totalSlots: 30,
     targetValuation: 15_000_000, roundAmount: 4_000_000, roundEquity: 0.18,
-    unlockTools: ['adBudget', 'refactor', 'segments', 'renewal'], unlockActions: ['refactorSprint'],
-    unlocksText: 'Reklam, refactor, yeni pazar, yenileme', paletteKey: 'openPlan',
+    unlockTools: ['refactor', 'segments', 'renewal'], unlockActions: ['refactorSprint'],
+    unlocksText: 'Refactor, yeni pazar, yenileme', paletteKey: 'openPlan',
     tagline: 'Koca bir kat, büyümeyi ölçme zamanı.',
   },
   {

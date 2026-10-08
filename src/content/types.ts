@@ -2,6 +2,7 @@
 // Ownership: content lane. Changes after scaffold must be ADDITIVE.
 import type {
   ActivityKind,
+  Archetype,
   ConceptId,
   CrisisId,
   DecisionCardId,
@@ -115,6 +116,8 @@ export interface DecisionCard {
   thread?: CardThread
   /** A secret card (GAMEPLAY V2 §9.2): rare, deterministic, counted by the discovery grid. */
   secret?: boolean
+  /** A style card (2026-10-08): only for a player whose play style (engine/style.ts) is this one today. */
+  style?: Archetype
 }
 
 // ---------------------------------------------------------------------------

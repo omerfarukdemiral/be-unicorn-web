@@ -58,12 +58,12 @@ export function guidanceTargets(s: GuidanceState): GuidanceTarget[] {
       if (find) out.push({ kind: 'slot', action: 'findUsers' })
       break
     case 'users':
+      // The goal, not the road (2026-10-08): a notch on Kullanıcı; finding by hand, ads, a sales call or a launch
+      // all get there, so no single lever breathes.
       out.push({ kind: 'gauge', gauge: 'users', goal: clamp01(step.progress ?? 0) })
-      if (find) out.push({ kind: 'slot', action: 'findUsers' })
       break
     case 'traction':
-      // Pre-revenue valuation is users + releases: the hands-on find (while it pays) and the product.
-      if (find) out.push({ kind: 'slot', action: 'findUsers' })
+      // Pre-revenue valuation is users + releases: the product is the one road every strategy shares.
       out.push({ kind: 'dock', tab: 'projects' })
       break
     default: {

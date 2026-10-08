@@ -2,7 +2,6 @@
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
 import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
-import { firstFreeDesk, isFreeDesk } from './office'
 import { diligenceNow, offerFactor, priceRatio } from './round'
 import { modifierMult } from './util'
 import { rivalOut } from './world'
@@ -20,8 +19,12 @@ import {
   type SpendPreview,
 } from './types'
 
-/** Chain order; round / roundWait / grow share the last link. */
-const CHAIN: readonly NextStepId[] = ['idea', 'findUsers', 'desk', 'hire', 'launch', 'users', 'traction', 'round']
+/**
+ * Chain order; round / roundWait / grow share the last link. Goals, not moves (playtest 2026-10-08, "tek yol
+ * dayatılmasın"): the old findUsers → desk → hire links told everyone to open the same way; how the player gets to
+ * the MVP and the users (alone, with a hire, with ads, with sales) is theirs. The ids stay in NEXT_STEP_IDS for saves.
+ */
+const CHAIN: readonly NextStepId[] = ['idea', 'launch', 'users', 'traction', 'round']
 const CHAIN_TOTAL = CHAIN.length
 
 function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = {}): NextStep {
@@ -39,22 +42,13 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
 }
 
 /**
- * First unmet link of: idea → first manual users → desk → hire → release (MVP) → users → traction → round.
+ * First unmet link of: idea → release (MVP) → users → traction → round.
  * 'traction' is the garage / pre-seed valuation link before revenue: valuation there is launched × $150K + users ×
  * $400 + releases (max 5) × $15K (economy.valuationPreRevenue, GAMEPLAY V2 §4.1): users and releases, not hires.
  * Links that are done stay done (a later stage never sends the player back to "pick an idea" once a project runs).
  */
 export function nextStep(s: GameState): NextStep {
   if (s.projects.length === 0) return step('idea')
-  const hired = (s.counters.hires ?? 0) > 0 || s.employees.length > 0
-  if (!hired && s.stage === 0 && (s.counters.manualFinds ?? 0) === 0 && s.stats.users < B.NEXT_STEP_FIRST_USERS) return step('findUsers')
-  if (!hired) {
-    if (!firstFreeDesk(s.office)) {
-      const empty = s.office.slots.find((x) => isFreeDesk(s.office, x) && x.itemId === undefined && x.spanOf === undefined)
-      return step('desk', empty ? { slotId: empty.id } : {})
-    }
-    return step('hire')
-  }
   if (!s.projects.some((p) => p.launched)) {
     const best = s.projects.reduce((m, p) => Math.max(m, p.maturity), 0)
     return step('launch', { progress: clamp01(best / B.MVP_MATURITY), target: B.MVP_MATURITY })

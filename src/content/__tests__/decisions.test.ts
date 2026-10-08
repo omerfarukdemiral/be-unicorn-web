@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CONCEPT_IDS, type EffectBundle } from '../../engine/types'
 import { BOARD_CARDS, DECISIONS as CARD_DECISIONS } from '../decisions'
-import { CONTENT, SECRET_CARDS, THREAD_CARDS } from '../index'
+import { CONTENT, SECRET_CARDS, STYLE_CARDS, THREAD_CARDS } from '../index'
 import { makeBusyState, makeState, sentenceCount, wordCount } from './fixture'
 
 // PLAN §6.3 v1 selection, after the GAMEPLAY V2 §3 md.11 retirement (threads.ts brought as many cards in).
@@ -35,7 +35,7 @@ const allEffects = (fx: EffectBundle[]): EffectBundle[] => fx
  * The cards this lane writes: the rolled deck, the thread steps, the secret cards and the board's review card (crisis
  * cards live in crises.ts).
  */
-const DECISIONS = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...BOARD_CARDS]
+const DECISIONS = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...BOARD_CARDS, ...STYLE_CARDS]
 const conceptSet = new Set<string>(CONCEPT_IDS)
 const cardIds = new Set(CONTENT.decisions.map((d) => d.id))
 
@@ -48,7 +48,8 @@ describe('decision cards', () => {
   it('the whole deck stays within the card budget: ≤ 65 cards, unique ids, the retired ones gone (§3 md.11)', () => {
     const ids = CONTENT.decisions.map((d) => d.id)
     expect(new Set(ids).size).toBe(ids.length)
-    expect(ids.length).toBeLessThanOrEqual(65)
+    // Style cards (2026-10-08) sit on top of the 65: a player only ever meets the ones of their own play style.
+    expect(ids.length - STYLE_CARDS.length).toBeLessThanOrEqual(65)
     expect(RETIRED.filter((id) => ids.includes(id))).toEqual([])
     // As many weak cards went out as thread / secret cards came in (the secret founder-burnout is the old card moved).
     const added = THREAD_CARDS.length + SECRET_CARDS.filter((c) => c.id !== 'founder-burnout').length
@@ -70,7 +71,7 @@ describe('decision cards', () => {
     const over = (xs: [string, string][], max: number) => xs.filter(([, t]) => wordCount(t) > max).map(([k, t]) => `${k}: ${t}`)
     expect(over(DECISIONS.map((d) => [d.id, d.question]), 12)).toEqual([])
     expect(over(DECISIONS.flatMap((d) => d.options.map((o, i) => [`${d.id}#${i}`, o.label] as [string, string])), 5)).toEqual([])
-    const fresh = [...THREAD_CARDS, ...SECRET_CARDS]
+    const fresh = [...THREAD_CARDS, ...SECRET_CARDS, ...STYLE_CARDS]
     expect(over(fresh.flatMap((d) => d.options.map((o, i) => [`${d.id}#${i}`, o.reflection] as [string, string])), 10)).toEqual([])
   })
 

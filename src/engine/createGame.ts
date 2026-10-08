@@ -75,7 +75,7 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
     modifiers: [],
     techDebt: 0,
     unlockedWidgets: [...INITIAL_WIDGETS],
-    unlockedTools: [],
+    unlockedTools: [...B.INITIAL_TOOLS],
     visitors: [],
     bubbles: [],
     milestones: [],

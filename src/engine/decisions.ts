@@ -3,6 +3,7 @@
 // cards share the same card budget.
 import type { CrisisDef, DecisionCard } from '../content/index'
 import * as B from './balance'
+import { playStyle } from './style'
 import { clamp } from './economy'
 import { applyEffects } from './effects'
 import type { Rng } from './rng'
@@ -56,6 +57,8 @@ export function isCardEligible(c: DecisionCard, s: GameState, opts: { ignoreCool
   // There is only ever one loan: its offers close while it runs.
   if (loanRuns(s) && offersLoan(c)) return false
   if (!threadOpen(c, s, opts.cards)) return false
+  // A style card (2026-10-08) only comes to a player playing that way today.
+  if (c.style !== undefined && c.style !== playStyle(s)) return false
   const once = c.once ?? true
   if (once && (s.decisions.history.some((h) => h.cardId === c.id) || s.decisions.active?.cardId === c.id)) return false
   if (!once) {
@@ -102,7 +105,11 @@ export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng
   // GAMEPLAY V2 §5.2: the director weighs crisis and rival cards (× (1 + pressure)); how often a card comes stays fixed.
   const pressure = directorOf(s).pressure
   // GAMEPLAY V2 §9.2: thread cards weigh THREAD_CARD_WEIGHT unless they say otherwise.
-  const pick = rng.weighted(eligibleCards(s, content.decisions), (c) => (c.weight ?? (c.thread ? B.THREAD_CARD_WEIGHT : 1)) * (c.category === 'crisis' || c.category === 'rival' ? 1 + pressure : 1))
+  // Style cards (2026-10-08) weigh STYLE_CARD_WEIGHT: the deck leans toward the player's own story.
+  const pick = rng.weighted(
+    eligibleCards(s, content.decisions),
+    (c) => (c.weight ?? (c.thread ? B.THREAD_CARD_WEIGHT : c.style ? B.STYLE_CARD_WEIGHT : 1)) * (c.category === 'crisis' || c.category === 'rival' ? 1 + pressure : 1),
+  )
   if (pick) showCard(s, pick)
 }
 

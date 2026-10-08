@@ -68,11 +68,13 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'cofounder',
     question: 'Bir ajans serbest iş teklif ediyor. Kasa rahatlar ama zaman gider.',
+    // Only for a company that is really burning toward the wall (2026-10-08: it came to everyone, every run).
+    condition: (s) => s.finance.net < 0 && s.finance.runway !== null && s.finance.runway < 8,
     options: [
       {
         label: 'İşi al',
         tradeoff: { gain: '+$3K kasa', cost: 'Ürün 20 gün yavaşlar' },
-        effects: { cash: 3000, modifiers: [mod('production', 0.8, 20)] },
+        effects: { cash: 3000, modifiers: [mod('production', 0.8, 20)], setFlag: 'sideGig' },
         reflection: 'Runway satın almak bazen en akıllıca yatırımdır.',
         conceptId: 'runway',
       },

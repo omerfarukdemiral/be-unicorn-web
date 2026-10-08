@@ -24,11 +24,18 @@ export const STAGE_SLOTS: readonly number[] = [4, 10, 18, 30, 44, 60, 0]
 /** Valuation needed to reach stage i (index = target stage). */
 export const STAGE_TARGET_VALUATION: readonly (number | null)[] = [null, 500_000, 3_000_000, 15_000_000, 75_000_000, 300_000_000, 1_000_000_000]
 export const ROUND_AMOUNT: readonly (number | null)[] = [null, 150_000, 800_000, 4_000_000, 20_000_000, 150_000_000, null]
+/**
+ * Strategy levers open from the garage (playtest 2026-10-08, "kilit değil bedel"): ads and price are there from day 0,
+ * priced by the stage (CAC_BASE × growth, CAC_SPEND_FLOOR saturation; price moves churn). Concepts explain, never gate.
+ */
+/** A play style counts from this score on (engine/style.ts); style cards weigh STYLE_CARD_WEIGHT for a matching player. */
+export const STYLE_MIN_SCORE = 0.6
+export const STYLE_CARD_WEIGHT = 3
+export const INITIAL_TOOLS: readonly ToolId[] = ['adBudget', 'priceControl']
 /** Tools unlocked on arriving at a stage (mirrors content STAGES.unlockTools). */
 export const STAGE_UNLOCK_TOOLS: Readonly<Partial<Record<number, readonly ToolId[]>>> = {
   1: ['capTableView'],
-  // Seed's price control is unlocked by the `pricing` concept (Hisset → Adlandır → Kullan).
-  3: ['adBudget', 'refactor', 'segments', 'renewal'],
+  3: ['refactor', 'segments', 'renewal'],
   4: ['enterpriseSales', 'mna'],
 }
 export const ROUND_EQUITY: readonly (number | null)[] = [null, 0.1, 0.15, 0.18, 0.15, 0.12, null]
@@ -448,7 +455,8 @@ export const FOUNDER_ACTION_DEFS: Readonly<Record<FounderActionKind, FounderActi
   talkToUsers: { stage: 0, durationDays: 1, energy: 10, cooldownDays: 3, moves: 1 },
   motivateTeam: { stage: 1, durationDays: 0.5, energy: 20, cooldownDays: 5, moves: 1 },
   investorCoffee: { stage: 1, durationDays: 1, energy: 15, cooldownDays: 4, moves: 1 },
-  salesCall: { stage: 2, durationDays: 2, energy: 20, cooldownDays: 7, moves: 2 },
+  // From the garage (a B2B opening), once a product is live: the contract is seats × ARPU, small early, saturating.
+  salesCall: { stage: 0, durationDays: 2, energy: 20, cooldownDays: 7, moves: 2 },
   rest: { stage: 0, durationDays: 2, energy: 0, cooldownDays: 0, moves: 0 },
   refactorSprint: { stage: TECH_DEBT_MIN_STAGE, durationDays: 1, energy: 15, cooldownDays: REFACTOR_COOLDOWN_DAYS, moves: MOVE_COST.refactorSprint },
 }

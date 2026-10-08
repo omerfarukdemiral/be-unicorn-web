@@ -209,22 +209,12 @@ describe('next step chain (sıradaki adım)', () => {
     expect(v.mrr * 12 * v.multiple * v.blend + v.preFade).toBeCloseTo(v.total, 6)
   })
 
-  it('garage: idea → first users → desk → hire → launch → users → traction → grow', () => {
+  it('garage: goals, not moves: idea → launch → users → traction → grow (no find / desk / hire links)', () => {
     let s = api.createGame({ seed: 1 })
     expect(nextStep(s).id).toBe('idea')
     expect(s.derived.nextStep?.id).toBe('idea')
     s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
-    expect(nextStep(s).id).toBe('findUsers')
-    s = api.applyAction(s, { type: 'founderAction', kind: 'findUsers' }).state
-    s = api.step(s, 1.5)
-    // No desk item yet: the chip points at the shop and an empty desk slot (no noDesk trap).
-    const desk = nextStep(s)
-    expect(desk.id).toBe('desk')
-    expect(desk.slotId).toBeDefined()
-    expect(s.office.slots.find((x) => x.id === desk.slotId)?.type).toBe('desk')
-    s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: desk.slotId! }).state
-    expect(nextStep(s).id).toBe('hire')
-    s = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id }).state
+    // Straight to the MVP goal: alone, with a hire, with ads — the way there is the player's (2026-10-08).
     const launch = nextStep(s)
     expect(launch.id).toBe('launch')
     expect(launch.progress).toBeGreaterThanOrEqual(0)
@@ -239,15 +229,10 @@ describe('next step chain (sıradaki adım)', () => {
     s = { ...s, finance: { ...s.finance, mrr: 2000 } }
     expect(nextStep(s).id).toBe('grow')
     // Links are numbered along the chain.
-    expect(nextStep(s).index).toBe(8)
+    expect(nextStep(s).index).toBe(5)
   })
 
-  it('a free desk skips the desk link; a ready or running round is the last link', () => {
-    let s = api.createGame({ seed: 1 })
-    s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state
-    s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
-    s = { ...s, counters: { ...s.counters, manualFinds: 1 } }
-    expect(nextStep(s).id).toBe('hire')
+  it('a ready or running round is the last link', () => {
     const hired = withTeam()
     const grown: GameState = {
       ...hired,

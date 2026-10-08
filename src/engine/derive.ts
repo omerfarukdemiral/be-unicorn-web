@@ -5,6 +5,7 @@ import { loanMonthlyService } from './effects'
 import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './founder'
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
+import { playStyle } from './style'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
@@ -310,6 +311,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.nextStep = nextStep(s)
+  s.derived.playStyle = playStyle(s)
   // GAMEPLAY V2 §8.3–8.4: the board's quarter and the contracts up for renewal (the horizon lists both).
   const board = boardView(s)
   if (board) s.derived.board = board

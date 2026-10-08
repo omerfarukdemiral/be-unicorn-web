@@ -72,8 +72,10 @@ describe('actions', () => {
     const cases: [Action, string][] = [
       [{ type: 'hire', candidateId: 'nope' }, 'notFound'],
       [{ type: 'openRing', ring: 3 }, 'notFound'],
-      [{ type: 'setPrice', multiplier: 1.2 }, 'notUnlocked'],
-      [{ type: 'founderAction', kind: 'salesCall' }, 'notUnlocked'],
+      // Price and ads are garage levers (INITIAL_TOOLS); an out-of-range price is still refused.
+      [{ type: 'setPrice', multiplier: 9 }, 'invalid'],
+      // A sales call needs a live product.
+      [{ type: 'founderAction', kind: 'salesCall' }, 'notFound'],
       [{ type: 'startRound' }, 'roundNotReady'],
       [{ type: 'placeItem', itemId: 'coffee', slotId: 'r1-s0' }, 'notUnlocked'],
       [{ type: 'placeItem', itemId: 'desk-basic', slotId: 'founder' }, 'invalid'],

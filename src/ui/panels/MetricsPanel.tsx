@@ -190,23 +190,20 @@ function MetricRow({ id, pins, onBar, isNew, focused }: { id: HudWidget; pins: r
         )}
       </div>
       {isNew && <span aria-label={t('metrics.new')} className="mt-3 size-2 shrink-0 rounded-full bg-brand" />}
-      {/* A pinned row shows the pin (tap to unpin); a pinnable one a faint mark (pinning itself is the long press). */}
-      {def.pinnable && !pinned && (
-        <span data-pin-mark="" title={pinLabel} className="grid size-8 shrink-0 place-items-center text-ink-3/60">
-          <Icon name="pin" size={13} />
-        </span>
-      )}
-      {def.pinnable && pinned && (
+      {/* The pin is a real toggle: tap pins / unpins (the row's long press stays as a shortcut). A faint mark that only
+          looked tappable read as broken. */}
+      {def.pinnable && (
         <IconButton
           icon="pin"
           label={pinLabel}
-          aria-pressed
+          aria-pressed={pinned}
+          data-pin-mark={pinned ? undefined : ''}
           size={mobile ? 44 : 32}
           onClick={togglePin}
           // A press here is the button's own tap, never the row's long press (it would toggle twice).
           onPointerDown={(e) => e.stopPropagation()}
           // Pinned = quiet brand tint (a solid brand disc per row would shout louder than the numbers).
-          className="bg-brand-soft text-brand-ink hover:bg-brand-soft hover:text-brand-ink"
+          className={pinned ? 'bg-brand-soft text-brand-ink hover:bg-brand-soft hover:text-brand-ink' : 'text-ink-3 hover:text-brand-ink'}
         />
       )}
     </div>

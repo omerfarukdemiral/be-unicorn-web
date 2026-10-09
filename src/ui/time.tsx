@@ -30,8 +30,9 @@ export const SPEED_COLOR: Record<GameSpeed, string> = {
   4: 'var(--color-speed-run)',
 }
 
-/** Fill density (% of the speed colour) of the active speed segment: faster = denser. */
-export const SPEED_FILL: Record<GameSpeed, number> = { 0: 18, 1: 18, 2: 24, 4: 32 }
+/** Fill density (% of the speed colour) of the active speed segment: faster = denser. Dense enough that the active
+ * fill never reads like the ink hover wash of an idle segment; ink text stays >= 7:1 on every step. */
+export const SPEED_FILL: Record<GameSpeed, number> = { 0: 30, 1: 28, 2: 36, 4: 46 }
 
 export type TimeHold = PauseReason | 'start' | 'manual' | null
 
@@ -231,7 +232,7 @@ export function StartCall() {
           </div>
         ) : null}
         <p className="text-[15px] font-semibold leading-tight text-ink-2">{t('time.startTitle')}</p>
-        {/* The breath sits on a wrapper: a transform on the key itself would fight its own press transform and lip. */}
+        {/* The breath sits on a wrapper: a transform on the key itself would fight its own press transform. */}
         <span className="flex animate-breathe rounded-control">
           <button
             type="button"

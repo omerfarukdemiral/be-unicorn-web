@@ -1,6 +1,6 @@
 // Shared UI building blocks: cards, buttons, bars, chips, labels, the spend preview.
 // "Toy UI + coloured accents" (docs/DESIGN.md) in the HUD grammar of docs/GAMEPLAY_V2.md §10.1: number over label,
-// commit buttons carry their cost, warm paper surfaces with a lip, pressable things are keys (.ui-key), brand
+// commit buttons carry their cost, warm paper surfaces lifted by soft shadow, pressable things are keys (.ui-key), brand
 // (unicorn violet) for the commit / active state / progress, per-meaning hues on duotone icons, bars and small
 // marks. Text stays ink.
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
@@ -22,17 +22,17 @@ export function Card({ className, children }: { className?: string; children: Re
 
 /**
  * Button ladder (docs/GAMEPLAY_V2.md §10.1 D3):
- * commit  = spends money / equity / a move: brand key, optional `cost` chip (`−$4.2K/ay`), a 90 ms sink onto
- *           its lip and the `confirm` cue (data-cue, read by the click sound hook)
+ * commit  = spends money / equity / a move: brand key, optional `cost` chip (`−$4.2K/ay`), a 90 ms 1px sink
+ *           (shadow tightens) and the `confirm` cue (data-cue, read by the click sound hook)
  * routine = Anladım, Kapat, Sonra: surface key, small by default
- * danger  = İşten çıkar, Sat: surface key with a faint negative edge + lip, red text
+ * danger  = İşten çıkar, Sat: surface key with a faint negative glow, red text
  * ghost   = text only, hover tint (not a key)
- * onInk   = routine for dark (ink) surfaces: toasts, banners (no lip)
+ * onInk   = routine for dark (ink) surfaces: toasts, banners (faint light wash, no frame)
  * primary / secondary / soft / mint = DEPRECATED aliases (commit look / routine look at md size) kept so old
  * callers compile; migrate with the panel content waves.
  *
- * Keys are .ui-key* classes (src/index.css): the tone only sets the fill / edge / lip variables. Disabled keys lose
- * their lip (flat = not pressable); commit drops to a neutral key with ink-2 text (readable, clearly inactive)
+ * Keys are .ui-key* classes (src/index.css): the tone only sets the fill / shade / shadow-tint variables. Disabled keys lose
+ * their drop shadow (flat = not pressable); commit drops to a neutral key with ink-2 text (readable, clearly inactive)
  * instead of fading its light label into a grey fill; the other tones fade with opacity.
  */
 type Tone = 'commit' | 'routine' | 'danger' | 'ghost' | 'onInk' | 'primary' | 'secondary' | 'soft' | 'mint'
@@ -45,7 +45,7 @@ const TONE: Record<Tone, string> = {
   routine: ROUTINE,
   danger: 'ui-key ui-key-danger',
   ghost: 'border-2 border-transparent bg-transparent text-ink-2 transition-colors enabled:hover:bg-surface-2 enabled:hover:text-ink enabled:active:translate-y-px disabled:opacity-50',
-  onInk: 'border-2 border-on-ink/30 bg-transparent text-on-ink transition-colors enabled:hover:bg-on-ink/10 enabled:active:translate-y-px disabled:opacity-50',
+  onInk: 'border-2 border-transparent bg-on-ink/10 text-on-ink transition-colors enabled:hover:bg-on-ink/20 enabled:active:translate-y-px disabled:opacity-50',
   primary: COMMIT,
   secondary: ROUTINE,
   soft: ROUTINE,
@@ -70,7 +70,7 @@ export function Button({
       type="button"
       data-cue={tone === 'commit' ? 'confirm' : undefined}
       className={cx(
-        'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-extrabold disabled:cursor-not-allowed',
+        'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-bold disabled:cursor-not-allowed',
         sz === 'md' ? 'min-h-11 px-4 text-[15px]' : 'ui-key-sm min-h-9 px-3 text-[13px] max-md:min-h-11',
         TONE[tone],
         className,
@@ -86,19 +86,26 @@ export function Button({
   )
 }
 
+/** Hover / press tint of a frameless control: a faint round wash of ink over whatever plate it sits on. Shared by every
+ * bare control on the top bar (tools, speed segments, language, "+N") so they never drift apart. */
+export const BARE_HOVER = 'enabled:hover:bg-[color-mix(in_oklab,var(--color-ink)_7%,transparent)] enabled:active:bg-[color-mix(in_oklab,var(--color-ink)_12%,transparent)]'
+
 /**
- * Square icon button. Quiet by default (panel close / back / collapse: no frame, hover tint). `raised` makes it a
- * small key with a lip (the top-bar view controls); active (panel open) is then the brand commit key.
+ * Square icon button. Quiet by default (panel close / back / collapse: no frame, hover tint, active = brand tile).
+ * `bare` is the top-bar tool: the icon sits on the bar with no box, border or shadow of its own; hover = a soft
+ * round tint, active (panel open / toggle on) = brand-ink icon with a 4px brand dot under it (absolute, so the
+ * icon never moves). `raised` keeps the small key look for callers that want a physical key.
  */
 export function IconButton({
   icon,
   label,
   active,
   raised = false,
+  bare = false,
   className,
   size = 44,
   ...rest
-}: { icon: IconName; label: string; active?: boolean; raised?: boolean; size?: number } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: { icon: IconName; label: string; active?: boolean; raised?: boolean; bare?: boolean; size?: number } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
@@ -106,19 +113,28 @@ export function IconButton({
       title={label}
       aria-pressed={active}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center rounded-control disabled:opacity-40',
+        'relative inline-flex shrink-0 items-center justify-center disabled:opacity-40',
         raised
-          ? cx('ui-key ui-key-sm', active ? 'ui-key-commit' : 'ui-key-routine text-ink-2 enabled:hover:text-ink')
-          : cx('transition-colors enabled:active:translate-y-px', active ? 'bg-brand text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink'),
+          ? cx('ui-key ui-key-sm rounded-control', active ? 'ui-key-commit' : 'ui-key-routine text-ink-2 enabled:hover:text-ink')
+          : bare
+            ? cx('rounded-full transition-colors', active ? 'text-brand-ink enabled:hover:bg-brand-soft' : cx('text-ink-2 enabled:hover:text-ink', BARE_HOVER))
+            : cx('rounded-control transition-colors enabled:active:translate-y-px', active ? 'bg-brand text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink'),
         className,
       )}
       style={{ width: size, height: size }}
       {...rest}
     >
       <Icon name={icon} size={Math.round(size * 0.5)} />
+      {bare && active && <span aria-hidden="true" className="absolute bottom-[3px] left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-brand" />}
     </button>
   )
 }
+
+/**
+ * Soft lift of a selected tile resting in a well (active segment, selected chip): a 1px top highlight and a blurred
+ * two-step drop. No edge, no hard offset.
+ */
+export const SOFT_LIFT = 'shadow-[inset_0_1px_0_#fff,0_1px_2px_rgb(74_52_28/.16),0_3px_6px_-3px_rgb(74_52_28/.3)]'
 
 /**
  * Horizontal progress bar with optional marker (e.g. MVP at 0.2). Brand fill by default; pass a Tailwind
@@ -166,10 +182,11 @@ export function Ring({ value, size = 44, stroke = 2, tone = 'var(--color-brand)'
 }
 
 /**
- * Filter / segment chip. Active = brand tint + brand frame + brand-ink text; idle = 2px warm frame on surface.
+ * Filter / segment chip. Active = brand tint + brand-ink text; idle = surface. No frame: both sit on a
+ * soft lift (top highlight + blurred drop), so a row of chips reads as small pebbles, not outlined pills.
  * `count` adds a tabular number after the label (icon + number is the HUD way: "👥 12"); `label` names an
  * icon-only chip for screen readers. Inside a <Segmented> track pass `segment`: no frame, the active one is a
- * surface tile with a small lip.
+ * surface tile with the same soft lift.
  * Identity colours (e.g. a department) go in as a <Dot> child, never as the selected state: a dept hue
  * on a thin frame is below 3:1 for sales/ops, and selected must read the same on every chip.
  */
@@ -192,16 +209,19 @@ export function Chip({
       className={cx(
         'inline-flex shrink-0 items-center gap-1 text-[12px] font-bold transition-colors',
         segment
-          ? cx('min-h-8 rounded-[9px] px-2.5 max-md:min-h-11', active ? 'bg-surface text-ink shadow-[0_2px_0_var(--color-lip)]' : 'text-ink-2 hover:text-ink')
+          ? cx('min-h-8 rounded-[9px] px-2.5 max-md:min-h-11', active ? cx('bg-surface text-ink', SOFT_LIFT) : 'text-ink-2 hover:text-ink')
           : cx(
-              'min-h-9 rounded-full border-2 px-3 max-md:min-h-11',
-              active ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink',
+              'min-h-9 rounded-full px-3 transition-[background,color,box-shadow] max-md:min-h-11',
+              'shadow-[inset_0_1px_0_#fff,0_1px_2px_rgb(74_52_28/.12),0_3px_6px_-3px_rgb(74_52_28/.26)]',
+              active
+                ? 'bg-brand-soft text-brand-ink'
+                : 'bg-surface text-ink-2 hover:bg-[color-mix(in_oklab,var(--color-ink)_4%,var(--color-surface))] hover:text-ink',
             ),
       )}
     >
       {icon && <Icon name={icon} size={14} />}
       {children}
-      {count !== undefined && <span className="tabular font-extrabold">{count}</span>}
+      {count !== undefined && <span className="tabular font-bold">{count}</span>}
     </button>
   )
 }
@@ -217,16 +237,19 @@ export function Segmented({ label, children, className }: { label: string; child
 
 const TEXT_COLOR = /(^|\s)text-(ink|brand|positive|negative|on-ink)/
 
+/** Faint ink wash for small neutral tags: reads on surface and surface-2 alike, with no frame (ink-2 stays >= 5:1). */
+const TAG_WASH = 'bg-[color-mix(in_oklab,var(--color-ink)_6%,transparent)]'
+
 /**
- * Small tag: thin warm frame, neutral text. Pass a text colour via className; `dot` adds a coloured mark;
- * `tint` (CSS colour) swaps the frame for a light fill of that hue (department / live tags), text stays ink.
+ * Small tag: a faint ink wash, neutral text, no frame. Pass a text colour via className; `dot` adds a coloured mark;
+ * `tint` (CSS colour) swaps the wash for a light fill of that hue (department / live tags), text stays ink.
  */
 export function Pill({ className, children, dot, tint }: { className?: string; children: ReactNode; dot?: string; tint?: string }) {
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-lg border-[1.5px] px-1.5 py-px text-[11px] font-bold',
-        tint ? 'border-transparent' : 'border-border',
+        'inline-flex items-center gap-1 rounded-lg px-1.5 py-px text-[11px] font-bold',
+        !tint && TAG_WASH,
         // Default text colour only when the caller passes none (two text-* utilities would race on CSS order).
         !TEXT_COLOR.test(className ?? '') && (tint ? 'text-ink' : 'text-ink-2'),
         className,
@@ -295,7 +318,7 @@ export function SectionTitle({ children, right, color = 'var(--color-border-stro
 
 export function LockedHint({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-3 text-xs text-ink-2">
+    <div className="flex items-center gap-2 rounded-control bg-surface-2/60 px-3 py-3 text-xs text-ink-2">
       <Icon name="lock" size={16} className="shrink-0 text-ink-3" />
       <span className="font-text">{text}</span>
     </div>
@@ -390,8 +413,8 @@ export function CostPreview({ preview, cost, className }: { preview: SpendPrevie
     <span
       data-danger={danger ? '' : undefined}
       className={cx(
-        'tabular inline-flex items-center gap-1 rounded-lg border-[1.5px] px-1.5 py-px text-[11px] font-bold',
-        danger ? 'border-negative/35 text-negative-ink' : 'border-border text-ink-2',
+        'tabular inline-flex items-center gap-1 rounded-lg px-1.5 py-px text-[11px] font-bold',
+        danger ? 'bg-[color-mix(in_oklab,var(--color-negative)_10%,transparent)] text-negative-ink' : cx(TAG_WASH, 'text-ink-2'),
         className,
       )}
     >

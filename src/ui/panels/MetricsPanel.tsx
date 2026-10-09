@@ -124,7 +124,7 @@ export function MetricsPanel({ focus }: { focus?: HudWidget }) {
       })}
 
       {lockedCount > 0 && (
-        <div title={t('metrics.more', { n: lockedCount })} className="tabular flex items-center justify-center gap-1.5 rounded-control border border-dashed border-border-strong py-2 text-xs font-semibold text-ink-3">
+        <div title={t('metrics.more', { n: lockedCount })} className="tabular flex items-center justify-center gap-1.5 rounded-control bg-surface-2/60 py-2 text-xs font-semibold text-ink-3">
           <Icon name="lock" size={13} />
           {lockedCount}
         </div>

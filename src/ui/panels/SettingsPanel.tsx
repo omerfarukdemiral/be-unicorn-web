@@ -4,7 +4,7 @@ import { useGameStore } from '../../store/gameStore'
 import type { ZoomLevel } from '../../store/types'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
-import { Button, cx } from '../primitives'
+import { Button, cx, SOFT_LIFT } from '../primitives'
 import { usePrefs } from '../hooks'
 import { useModalQueue } from '../modalQueue'
 import { AccountSection } from './AccountSection'
@@ -20,9 +20,10 @@ const SHORTCUTS: [string, string][] = [
   ['+ / −', 'shortcut.zoom'],
 ]
 
-/** Segmented control states, same as the HUD speed control (docs/DESIGN.md). */
-const SEG_ON = 'bg-surface text-brand-ink shadow-[0_0_0_1px_var(--color-border-strong),var(--shadow-card)]'
-const SEG_OFF = 'text-ink-2 hover:bg-surface hover:text-ink'
+/** Segmented control states: same recipe as the active speed segment, fill + soft lift, no edge (docs/DESIGN.md).
+ * Hover is a faint ink wash so a hovered segment never reads as the selected one. */
+const SEG_ON = cx('bg-surface text-brand-ink', SOFT_LIFT)
+const SEG_OFF = 'text-ink-2 hover:bg-[color-mix(in_oklab,var(--color-ink)_5%,transparent)] hover:text-ink'
 
 /** Settings as panel content (was a modal). */
 export function SettingsPanel() {

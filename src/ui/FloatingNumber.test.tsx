@@ -89,12 +89,12 @@ describe('ability slot', () => {
     }
   })
 
-  it('locked: grey silhouette + lock + stage pill, the teaser in the tooltip, nothing that opens a panel', () => {
+  it('locked: grey silhouette + lock + stage code pill, the teaser in the tooltip, nothing that opens a panel', () => {
     const tip = TEASERS[1]
     const html = renderToStaticMarkup(<FounderSlot a={view({ kind: 'salesCall', locked: true, disabled: true, moves: 0, stageName: 'Seed', tip })} />)
-    expect(html).toContain('border-dashed')
+    expect(html).not.toContain('border-dashed')
     expect(html).toContain('aria-disabled="true"')
-    expect(visibleText(html)).toBe('Seed')
+    expect(visibleText(html)).toBe('S')
     expect(html).toContain(tip)
   })
 

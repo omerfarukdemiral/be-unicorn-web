@@ -74,7 +74,7 @@ function StartShell({ children, strip }: { children: ReactNode; strip?: ReactNod
             <IconBadge icon="unicorn" size={36} color="var(--color-brand)" />
           </span>
           <div>
-            {/* Title: Nunito, uppercase, tight; the second word carries the weight. */}
+            {/* Title: the UI face (Bricolage), uppercase, tight; the second word carries the weight. */}
             <h1 lang="en" aria-label={t('start.title')} className="text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink sm:text-[48px]">
               {title.head && <span className="block text-ink-2">{title.head}</span>}
               <span className="block font-extrabold text-brand-ink">{title.tail}</span>

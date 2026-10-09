@@ -97,7 +97,7 @@ export function BarChip({
         {density === 'full' ? (
           <>
             {/* The sub (Kasa's daily net) is a small coloured delta after the value: a number, not a phrase.
-                17px below 1440 keeps "$10.2M net −$270/gün" + "+N" inside a 1280 bar (Nunito digits are 0.6em). */}
+                17px below 1440 keeps "$10.2M net −$270/gün" + "+N" inside a 1280 bar (Bricolage tabular digits are ~0.62em at 700). */}
             <div className="ui-num flex h-[22px] items-baseline gap-1.5 whitespace-nowrap text-[17px] leading-[22px] text-ink min-[1440px]:text-[18px]">
               {value}
               {sub && <span className="text-[12px]">{sub}</span>}
@@ -107,7 +107,7 @@ export function BarChip({
               <StatusMark mark={mark} />
             </div>
             {/* Extras (Moral's bar, the goal notch) hang under the label and take no width: inline they cost a 1280
-                bar ~46px, which pushed the pinned gauge out (Nunito digits are 0.6em, the row has no slack left). */}
+                bar ~46px, which pushed the pinned gauge out (Bricolage tabular digits are ~0.62em at 700, the row has no slack left). */}
             {children && <div className="absolute inset-x-0 top-full mt-0.5">{children}</div>}
           </>
         ) : (

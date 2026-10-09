@@ -14,7 +14,7 @@ import { Icon } from './icons'
 import { t } from './i18n'
 import { Bar, cx } from './primitives'
 import { money } from './format'
-import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone } from './theme'
+import { FOUNDER_COLOR, FOUNDER_ICON, founderActionStage, iconTone, stageCode } from './theme'
 import { guidedSlot } from './guidance'
 
 /** "+3–6", or "+1" when both ends are the same (never "+1–1"). */
@@ -197,7 +197,7 @@ export const SLOT = 44
 /**
  * One ability slot (docs/GAMEPLAY_V2.md §10.4): a 44px square, icon 22 in the action's hue, the move cost top right
  * (on the budget), saturation "½" / "¼" / "6%" top left (a dead lever greys its icon), running / cooldown as a 2px line along the bottom edge. No visible label:
- * the name (≤ 2 words) lives in the tooltip. Locked = grey silhouette + lock + the unlocking stage's pill; a tap shows
+ * the name (≤ 2 words) lives in the tooltip. Locked = grey silhouette + lock + the unlocking stage's code pill (PS / S / A); a tap shows
  * the teaser and opens nothing. `tipAlign` keeps tips on screen. `floats`: numbers rising above the slot.
  * Exported pieces are pure props (no store): FloatingNumber.test.tsx renders a slot to a string.
  */
@@ -238,12 +238,16 @@ export function FounderSlot({
         aria-label={a.label}
         data-slot={a.kind}
         className={cx(
-          'group relative grid shrink-0 place-items-center rounded-control border transition-colors',
-          a.locked ? 'border-dashed border-border-strong bg-transparent' : 'border-border bg-surface-2',
-          a.running && 'border-border-strong',
-          !a.disabled && 'hover:border-border-strong hover:bg-surface active:scale-[0.96]',
-          idle && !a.locked && 'bg-transparent',
-          a.guided && !a.disabled && 'animate-breathe border-brand',
+          // No frames: a tappable slot is a small key that lifts; a busy / spent one sits pressed into a well; a locked
+          // one is a faint ghost tile. Guided = the breathing key with a soft brand glow (outline, so the key's own
+          // shadow stack is kept).
+          'group relative grid shrink-0 place-items-center rounded-control',
+          a.locked
+            ? 'bg-surface-2/50'
+            : !a.disabled && !a.running
+              ? 'ui-key ui-key-sm ui-key-routine'
+              : cx('ui-inset transition-colors', idle && 'opacity-80'),
+          a.guided && !a.disabled && 'animate-breathe outline-3 outline-[color-mix(in_oklab,var(--color-brand)_28%,transparent)]',
         )}
         style={{ width: SLOT, height: SLOT }}
       >
@@ -259,13 +263,13 @@ export function FounderSlot({
               <Icon name="lock" size={11} />
             </span>
             {/* The stage that opens it: a small pill along the bottom edge (inside: the phone row clips). */}
-            <span aria-hidden="true" className="tabular absolute bottom-[3px] left-1/2 max-w-[40px] -translate-x-1/2 truncate whitespace-nowrap rounded-full bg-surface-2 px-1 text-[8px] font-bold uppercase leading-3 text-ink-2">
-              {a.stageName}
+            <span aria-hidden="true" className="tabular absolute bottom-[3px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-surface-2 px-1 text-[8px] font-bold uppercase leading-3 text-ink-2">
+              {stageCode(a.stageName)}
             </span>
           </>
         )}
         {!a.locked && a.moves > 0 && (
-          // Move cost (GAMEPLAY V2 §7.1): Nunito figure in the top-right corner.
+          // Move cost (GAMEPLAY V2 §7.1): a UI-face (Bricolage) figure in the top-right corner.
           <span aria-hidden="true" className={cx('tabular absolute right-[3px] top-[2px] text-[10px] font-bold leading-none', a.outOfMoves ? 'text-ink-3' : 'text-ink-2')}>
             {a.moves}
           </span>

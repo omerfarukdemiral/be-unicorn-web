@@ -111,7 +111,7 @@ function lastWith(history: readonly { cardId: string; optionIndex: number }[], c
   return null
 }
 
-/** After a choice: the choice, its numbers (Nunito) and a book icon to the Defter card. The sentence is the tooltip. */
+/** After a choice: the choice, its numbers (Bricolage) and a book icon to the Defter card. The sentence is the tooltip. */
 export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionCard; optionIndex: number; onClose?: () => void }) {
   const opt = card.options[optionIndex]
   if (!opt) return null

@@ -101,7 +101,7 @@ function LawCardButton({ card, on, waitLeft, onPick }: { card: LawCard; on: bool
       title={card.text}
       className={cx(
         'flex min-h-11 w-full items-center gap-2 rounded-control border px-2 py-1.5 text-left transition-colors',
-        on ? 'border-brand bg-brand-soft' : silhouette ? 'border-dashed border-border-strong' : 'border-border hover:bg-surface-2',
+        on ? 'border-brand bg-brand-soft' : silhouette ? 'border-hairline bg-surface-2/50' : 'border-border hover:bg-surface-2',
         card.status === 'signed' && !on && 'bg-surface-2',
       )}
     >

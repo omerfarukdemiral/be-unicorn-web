@@ -182,8 +182,9 @@ function AdStep({ label, amount, budget }: { label: string; amount: number; budg
         data-cue={on ? undefined : 'confirm'}
         onClick={() => !on && dispatch({ type: 'setAdBudget', amount })}
         className={cx(
-          'flex min-h-11 flex-col items-center justify-center rounded-control border px-1 py-1 transition-[background-color,border-color,transform] duration-[120ms] active:scale-[0.96]',
-          on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border-strong text-ink hover:bg-surface-2',
+          // Soft option keys, no frames: the chosen step is the brand-soft key, the others plain surface keys.
+          'ui-key ui-key-sm flex min-h-11 flex-col items-center justify-center rounded-control px-1 py-1',
+          on ? 'ui-key-soft' : 'ui-key-routine',
         )}
       >
         <span className="tabular text-[17px] font-semibold leading-none">{label}</span>
@@ -264,7 +265,7 @@ function PriceLock() {
       <button
         type="button"
         onClick={() => openConceptCard('pricing')}
-        className="flex min-h-9 w-full items-center gap-2 rounded-control border border-brand bg-brand-soft px-3 py-2 text-left text-brand-ink"
+        className="ui-key ui-key-sm ui-key-soft flex min-h-9 w-full items-center gap-2 rounded-control px-3 py-2 text-left"
       >
         <Icon name="coin" size={16} className="shrink-0 animate-breathe" />
         <span className="min-w-0 flex-1 text-xs font-semibold">{t('growth.priceWaiting')}</span>

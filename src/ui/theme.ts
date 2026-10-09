@@ -172,6 +172,18 @@ export function stageName(i: number): string {
   return STAGES[i]?.name ?? '—'
 }
 
+/**
+ * A stage name as a 1–2 letter code for the 8px pill on a locked slot ("Pre-seed" -> "PS", "Seed" -> "S",
+ * "Series A" -> "A"): the full name truncated to "PRE-S…" in 40px; the name itself lives in the tooltip.
+ */
+export function stageCode(name: string): string {
+  return name
+    .split(/[\s-]+/)
+    .filter((w) => w && w.toLowerCase() !== 'series')
+    .map((w) => w[0]!.toUpperCase())
+    .join('')
+}
+
 /** First stage at which a slot type becomes available (from STAGES.newSlotType). */
 export function slotTypeStage(type: SlotType): StageIndex {
   const s = STAGES.find((st) => st.newSlotType === type)

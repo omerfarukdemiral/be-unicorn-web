@@ -87,7 +87,7 @@ export function JournalPanel({ conceptId }: { conceptId?: ConceptId }) {
 function ConceptTile({ id, state, open }: { id: ConceptId; state: 'learned' | 'new' | 'locked'; open: boolean }) {
   if (state === 'locked') {
     return (
-      <span aria-hidden="true" className="grid h-[72px] place-items-center rounded-control border border-dashed border-border-strong text-ink-3/60">
+      <span aria-hidden="true" className="grid h-[72px] place-items-center ui-inset rounded-control text-ink-3/60">
         <Icon name="lock" size={14} />
       </span>
     )
@@ -177,7 +177,7 @@ function DiscoveryGrid() {
   )
 }
 
-/** A card cell: filled tile once seen, a dashed silhouette before ("?" for a secret). */
+/** A card cell: filled tile once seen, a grey well before ("?" for a secret). */
 function Cell({ seen, icon, color, secret }: { seen: boolean; icon: IconName; color: string; secret?: boolean }) {
   if (seen) {
     return (
@@ -187,7 +187,7 @@ function Cell({ seen, icon, color, secret }: { seen: boolean; icon: IconName; co
     )
   }
   return (
-    <span aria-hidden="true" className="grid size-6 place-items-center rounded-[6px] border border-dashed border-border-strong text-[10px] font-bold text-ink-3">
+    <span aria-hidden="true" className="grid size-6 place-items-center rounded-[6px] bg-surface-2 text-[10px] font-bold text-ink-3">
       {secret ? t('codex.locked') : null}
     </span>
   )

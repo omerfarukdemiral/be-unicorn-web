@@ -73,7 +73,7 @@ export function useFloatingNumbers(): FloatItem[] {
 }
 
 /**
- * The numbers above one slot: absolutely placed over the slot's top edge, Nunito, positive ink. Each rises and fades
+ * The numbers above one slot: absolutely placed over the slot's top edge, UI face (Bricolage), positive ink. Each rises and fades
  * in FLOAT_MS (the `rise-float` keyframe; reduced motion lands it at rest). Never takes pointer events.
  */
 export function FloatingNumbers({ items, className }: { items: readonly FloatItem[]; className?: string }) {

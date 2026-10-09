@@ -132,10 +132,10 @@ export function ProjectsPanel() {
   )
 }
 
-/** The empty place of the first project: dashed, the rocket as a silhouette, one slow breath (no flash). */
+/** The empty place of the first project: a faint brand wash (no frame), the rocket as a silhouette, one slow breath (no flash). */
 function GhostSlot() {
   return (
-    <div className="flex min-h-14 items-center gap-2.5 rounded-control border border-dashed border-brand/50 bg-brand-soft/40 px-3">
+    <div className="flex min-h-14 items-center gap-2.5 rounded-control bg-brand-soft/50 px-3">
       {/* Only the icon breathes: a scaled full-width block would spill over the panel's edges. */}
       <span className="grid shrink-0 animate-breathe place-items-center">
         <Icon name="rocket" size={22} className="text-brand-ink opacity-50" />

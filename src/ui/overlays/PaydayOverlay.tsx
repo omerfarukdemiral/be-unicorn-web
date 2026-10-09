@@ -33,8 +33,8 @@ function costLook(c: PaydayCost): { icon: IconName; text: string } {
   }
 }
 
-// Receipt row: a dashed tear line between entries, no tinted box (the card is the paper).
-const ROW = 'flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b-2 border-dashed border-border py-2.5 last:border-0'
+// Receipt row: a thin 1px line between entries, no tinted box (the card is the paper).
+const ROW = 'flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border py-2.5 last:border-0'
 // Dotted leader between the name and the amount, as on a printed receipt.
 const LEADER = 'mb-1 min-w-4 flex-1 border-b-2 border-dotted border-border-strong'
 

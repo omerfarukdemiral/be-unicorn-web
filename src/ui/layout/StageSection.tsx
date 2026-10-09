@@ -69,7 +69,7 @@ function useRivalNotch(): RivalNotch | null {
   return { at: r.at, ahead: r.ahead, title: t('rival.notchTitle', { name: r.name, v: money(r.valuation) }), pulse: card > base.current.id ? card : 0 }
 }
 
-/** Nunito has no U+2192: the i18n "→" is drawn with the icon set's arrow, so no thin system-font glyph sits among 800-weight figures. */
+/** The UI face (Bricolage) has no U+2192: the i18n "→" is drawn with the icon set's arrow, so no thin system-font glyph sits among bold figures. */
 function withArrow(text: string): ReactNode {
   const i = text.indexOf('→')
   if (i < 0) return text
@@ -207,11 +207,11 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
       onClick={openRoadmap}
       title={roadmapTitle(s.stage)}
       className={cx(
-        'inline-flex min-w-0 items-center gap-1.5 rounded-md text-[15px] font-extrabold leading-5 text-ink transition-colors hover:text-brand-ink',
+        'inline-flex min-w-0 items-center gap-1.5 rounded-md text-[15px] font-bold leading-5 text-ink transition-colors hover:text-brand-ink',
         variant === 'mobile' && 'h-11',
       )}
     >
-      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-brand shadow-[0_1.5px_0_var(--color-brand-deep)]" />
+      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-brand shadow-[0_1px_2px_rgb(71_51_191/.35)]" />
       <span className="relative shrink-0">
         {name}
         {/* A ☆ stage goal reached since Yol haritası was last opened. */}

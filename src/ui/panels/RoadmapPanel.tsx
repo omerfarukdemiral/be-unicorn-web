@@ -107,7 +107,7 @@ function StageNode({ def, status, last, active, onPick }: { def: StageDef; statu
             status === 'done' && 'border-brand bg-brand text-on-ink',
             status === 'here' && 'border-brand bg-brand-soft text-brand-ink ring-4 ring-brand/15',
             status === 'next' && 'border-brand/50 bg-surface text-brand-ink',
-            hidden && 'border-dashed border-border-strong bg-surface-2 text-ink-3',
+            hidden && 'border-transparent bg-surface-2 text-ink-3',
             active && status !== 'here' && 'ring-2 ring-brand/40',
           )}
         >

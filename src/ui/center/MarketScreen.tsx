@@ -89,7 +89,7 @@ function SegmentCard({ seg }: { seg: SegmentTile }) {
     <div
       data-segment={seg.id}
       data-status={seg.status}
-      className={cx('flex h-full min-w-0 flex-col gap-1.5 rounded-control border p-2.5', locked ? 'border-dashed border-border-strong' : 'border-border', seg.status === 'open' && 'bg-surface-2/60')}
+      className={cx('flex h-full min-w-0 flex-col gap-1.5 rounded-control border p-2.5', locked ? 'border-hairline bg-surface-2/50' : 'border-border', seg.status === 'open' && 'bg-surface-2/60')}
     >
       <div className="flex items-center gap-1.5">
         <span className={cx('min-w-0 flex-1 truncate text-[13px] font-semibold text-ink', locked && 'opacity-55')}>{t(`mkt.segment.${seg.id}`)}</span>

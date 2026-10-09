@@ -16,6 +16,7 @@ import { unseenMetrics } from '../store/metricPins'
 import { Icon, type IconName } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
+import { stageCode } from './theme'
 import { deskNeeded, dropDeskError, guidedTab, shopSlotTarget } from './guidance'
 import { lockedTools } from './center/centerData'
 
@@ -140,7 +141,8 @@ export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'
   )
 }
 
-/** The next stage's late tools as grey silhouettes: icon, lock, the stage pill along the bottom edge (no action). */
+/** The next stage's late tools as grey silhouettes: icon, lock, the stage code pill along the bottom edge (no action;
+ * the full stage name is in the title). */
 function LockedTools({ size }: { size: number }) {
   const tools = useGameStore(useShallow((s) => lockedTools(STAGES, s.state.unlockedTools, s.state.stage).map((x) => `${x.id}:${x.stage}`)))
   return tools.map((key) => {
@@ -154,15 +156,15 @@ function LockedTools({ size }: { size: number }) {
         aria-label={title}
         title={title}
         data-locked-tool={id}
-        className="relative grid shrink-0 place-items-center rounded-control border border-dashed border-border-strong text-ink-3"
+        className="relative grid shrink-0 place-items-center rounded-control bg-surface-2/50 text-ink-3"
         style={{ width: size, height: size }}
       >
         <Icon name={TOOL_ICON[id] ?? 'lock'} size={18} className="-mt-2.5 opacity-40" />
         <span aria-hidden="true" className="absolute right-0.5 top-0.5 text-ink-2">
           <Icon name="lock" size={10} />
         </span>
-        <span aria-hidden="true" className="tabular absolute bottom-[3px] left-1/2 max-w-[40px] -translate-x-1/2 truncate whitespace-nowrap rounded-full bg-surface-2 px-1 text-[8px] font-bold uppercase leading-3 text-ink-2">
-          {stage}
+        <span aria-hidden="true" className="tabular absolute bottom-[3px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-surface-2 px-1 text-[8px] font-bold uppercase leading-3 text-ink-2">
+          {stageCode(stage)}
         </span>
       </span>
     )

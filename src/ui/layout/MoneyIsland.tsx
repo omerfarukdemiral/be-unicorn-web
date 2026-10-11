@@ -12,6 +12,7 @@ import { Icon } from '../icons'
 import { t } from '../i18n'
 import { BARE_HOVER, cx } from '../primitives'
 import { PinnedMetric, visiblePins } from '../widgets'
+import { PaydayCard } from './PaydayCard'
 import { CashChip, MoraleChip, RunwayChip, UsersChip } from './TopMetrics'
 import { EDGE, PIN_VISIBLE } from './tokens'
 
@@ -45,6 +46,7 @@ export const MoneyIsland = forwardRef<HTMLDivElement, MoneyIslandProps>(function
       className="ui-card pointer-events-auto absolute z-[41] flex max-w-[500px] flex-col gap-1 px-2.5 pb-3 pt-2"
       style={{ left: EDGE, bottom: `max(${EDGE}px, env(safe-area-inset-bottom, 0px))` }}
     >
+      <PaydayCard />
       <CashChip density="full" hero />
       {/* overflow-visible: Runway's danger-pulse ring, Moral's bar and a value's pop-once swell hang outside the cells. */}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-3">

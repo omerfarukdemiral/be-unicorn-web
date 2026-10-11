@@ -3,6 +3,8 @@
 export const TOP_BAR_TEXT: Record<string, string> = {
   'top.label': 'Durum çubuğu',
   'top.gauges': 'Kasa ve göstergeler',
+  'top.paydayCard': 'Maaş günü · {n} kişi',
+  'top.paydayCardCash': 'Kasa {v}',
   'top.progress': '{v} / {target}',
   'top.progressNext': '{v} → {next} {target}',
   'top.nextShort': '→ {next}',

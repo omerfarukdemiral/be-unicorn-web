@@ -200,7 +200,8 @@ function budgeted(add: readonly Item[]): Item[] {
 }
 
 /** Feeds engine events, errors, runway and activity into the queue (through the daily budget). Returns the digest count too. */
-function useStripQueue(): [Item[], (key: number) => void, number, () => void] {
+/** `island` (desktop): the month receipt is left to the money island's payday card. */
+function useStripQueue(island = false): [Item[], (key: number) => void, number, () => void] {
   const [queue, setQueue] = useState<Item[]>([])
   const [digest, setDigest] = useState(0)
   const recent = useRef<{ kind: TransientKind; at: number }[]>([])
@@ -219,8 +220,8 @@ function useStripQueue(): [Item[], (key: number) => void, number, () => void] {
     if (add.length) setQueue((cur) => enqueue(cur, add, { fast: fast() }))
   }
 
-  // Moments (engine events).
-  useMomentSource((ms) => push(ms.map((moment): Item => ({ key: moment.key, kind: moment.kind, moment }))))
+  // Moments (engine events). Desktop (`island`): the month receipt is the money island's payday card (T09), not a pill.
+  useMomentSource((ms) => push(ms.filter((m) => !(island && m.kind === 'receipt')).map((moment): Item => ({ key: moment.key, kind: moment.kind, moment }))))
 
   // The lead rival passing the player (the one rival line; its dedupe key holds it to once a month per rival).
   useFreshEvents((events, s) => {
@@ -298,7 +299,7 @@ export function NotificationStrip({
   island?: boolean
   className?: string
 }) {
-  const [queue, drop, digest, readAll] = useStripQueue()
+  const [queue, drop, digest, readAll] = useStripQueue(island)
   const bankrupt = useGameStore(useShallow((s) => (s.state.finance.payrollMissed && !s.state.gameOver ? { days: Math.max(0, BANKRUPT_DAYS - s.state.finance.negativeCashDays) } : null)))
   const placing = usePlacing()
   const step = useNextStep()

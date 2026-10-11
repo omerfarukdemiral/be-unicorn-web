@@ -108,7 +108,7 @@ export function BarChip({
               )}
             >
               {value}
-              {sub && <span className="text-[12px]">{sub}</span>}
+              {sub && <span className={cx('text-[12px]', hero && 'flex self-center')}>{sub}</span>}
               {/* No word label (T08): the icon says which gauge, the name is the tooltip and the aria-label. */}
               <StatusMark mark={mark} />
             </div>
@@ -175,9 +175,26 @@ export function CashChip({ density, hero = false }: { density: MetricDensity; he
       mark={danger ? 'danger' : null}
       title={title}
       value={<span className={danger ? 'text-negative-ink' : undefined}>{ledgerMoney(shown)}</span>}
-      // Burning is normal, so a negative net stays neutral (red is for real danger only, LAYOUT §4.1); a profit is green.
-      sub={<span className={f.netDay > 0 ? 'text-positive-ink' : 'text-ink-2'}>{t('top.netDelta', { v: net })}</span>}
+      // Burning is normal, so a negative net never turns red (red is for real danger only, LAYOUT §4.1): the money
+      // island (hero) wears it as a soft pill in the burn hue with its flame, green when profitable (T09); phones keep
+      // the plain sub line.
+      sub={hero ? <BurnPill netDay={f.netDay} text={t('top.netDelta', { v: net })} /> : <span className={f.netDay > 0 ? 'text-positive-ink' : 'text-ink-2'}>{t('top.netDelta', { v: net })}</span>}
     />
+  )
+}
+
+/** The daily net next to the hero Kasa: a soft pill, flame + burn hue while burning, trend + green in profit. */
+function BurnPill({ netDay, text }: { netDay: number; text: string }) {
+  const color = netDay > 0 ? 'var(--color-positive-ink)' : WIDGET_COLOR.burnBreakdown
+  return (
+    <span
+      data-burn-pill=""
+      className="inline-flex items-center gap-1 self-center rounded-full py-0.5 pl-1.5 pr-2 text-[14px] font-bold leading-5"
+      style={{ color, background: soft(color, 14) }}
+    >
+      <Icon name={netDay > 0 ? 'trend' : 'flame'} size={15} className="shrink-0" />
+      {text}
+    </span>
   )
 }
 

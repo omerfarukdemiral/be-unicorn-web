@@ -1,7 +1,7 @@
 // Top bar (docs/LAYOUT.md §1.2–§1.4). Desktop ("dört köşe", T03): no strip, two corner islands over the scene:
 //   top-left: stage · date · progress · round                top-right: speed │ zoom (TR) ⚙ (two islands)
 // The gauges live in the bottom-left money island (MoneyIsland, mounted by BottomStack). Phones: portrait = a gauge
-// island + a round ⏸ island in one row (T06), the stage as a tag under it; landscape = ONE full-width bar.
+// island + a round ⏸ island in one row (T06), the stage as a tag under it; landscape = the same islands in one row (T23).
 // Positions itself (absolute, EDGE 8 from the top of its parent, which already carries the safe-area padding
 // like GameUI's root). Root carries `data-scene-top` (sceneInset + BubbleAnchor read it): on desktop it is the
 // pointer-transparent row that holds the islands, so the inset is the islands' height, as before.
@@ -16,7 +16,7 @@ import { StageProgressLine, StageSection } from './StageSection'
 import { CashChip, MoraleChip, RunwayChip, UsersChip } from './TopMetrics'
 import { SpeedControl } from './SpeedControl'
 import { ViewControls } from './ViewControls'
-import { MOBILE_TOP_H } from './tokens'
+import { LANDSCAPE_BAR_H, MOBILE_TOP_H } from './tokens'
 
 function subscribeResize(cb: () => void): () => void {
   window.addEventListener('resize', cb)
@@ -128,20 +128,28 @@ function GaugeRow({ className }: { className?: string }) {
   )
 }
 
-/** Phone landscape: one row (stage · 4 gauges · speed · ⚙), h52. */
+/**
+ * Phone landscape (T23): one row of islands, h52, like the portrait row: stage | gauges | round ⏸. Kazanımlar,
+ * İstatistik and ⚙ live behind the tab island's ⋯ (BottomBar › MoreMenu), as in portrait.
+ */
 function LandscapeBar() {
   return (
     <header
       data-scene-top
       aria-label={t('top.label')}
-      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex h-[52px] min-w-0 items-center gap-1 px-1.5"
+      className="pointer-events-none absolute inset-x-2 top-2 z-30 flex min-w-0 items-start gap-2"
+      style={{ height: LANDSCAPE_BAR_H }}
     >
-      <div className="flex min-w-0 max-w-[30%] flex-1 items-center">
+      <div className="ui-card pointer-events-auto flex h-full min-w-0 max-w-[300px] flex-1 flex-col justify-center px-2.5 pb-1">
         <StageSection variant="mobile" />
+        <StageProgressLine className="-mt-1.5" />
       </div>
-      <GaugeRow className="flex-[2]" />
-      <SpeedControl compact />
-      <ViewControls size={44} showZoom={false} />
+      <div className="ui-card pointer-events-auto ml-auto flex h-full shrink-0 items-center px-1">
+        <GaugeRow className="gap-2 [&>*]:shrink-0" />
+      </div>
+      <div className="ui-card pointer-events-auto grid h-full w-12 shrink-0 place-items-center rounded-full">
+        <SpeedControl compact />
+      </div>
     </header>
   )
 }

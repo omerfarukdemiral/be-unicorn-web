@@ -5,8 +5,9 @@
 // floats 8px above the founder island only while it speaks; the next step hangs under the stage island and the
 // horizon (payday clock, upcoming) sits in the money island.
 // Portrait phone (T06): the founder island over the tab island (h56 each, h120); with the full-page sheet open only the
-// tab island stays and the strip floats over the sheet's foot (it then takes no part in the scene inset). Landscape phone: one row h52, 44px
-// tabs, a side panel (no sheet) and the strip overlaying the scene's bottom edge (no reserved slot).
+// tab island stays and the strip floats over the sheet's foot (it then takes no part in the scene inset).
+// Landscape phone (T23): the same two islands in one row h52, 44px tabs, a side panel (no sheet) and the strip
+// overlaying the scene's bottom edge (no reserved slot).
 // The wrapper carries `data-scene-bottom` for useSceneInset; on desktop / portrait the strip's height is reserved
 // even when it is empty so the camera does not jump with each message. The layout mode comes from useLayoutMode.
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -56,9 +57,16 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
   }
   if (layout === 'landscape') {
     return (
-      <nav aria-label={t('bottom.label')} className="@container ui-card pointer-events-auto flex items-center justify-between gap-2 bg-surface/95 px-1 backdrop-blur-sm" style={{ height: LANDSCAPE_BAR_H }}>
-        {!sheetOpen && <FounderBar variant="mobile" className="min-w-0 shrink" />}
-        <DockTabs variant="bar" touch />
+      // T23: the portrait islands side by side: founder island left (shrinks, its slots scroll), tab island right (44px
+      // keys, no locked silhouettes, ⋯ for the top-right tools).
+      <nav aria-label={t('bottom.label')} className="pointer-events-none flex items-center justify-between gap-2" style={{ height: LANDSCAPE_BAR_H }}>
+        <div className="ui-card pointer-events-auto flex h-full min-w-0 shrink items-center px-2">
+          <FounderBar variant="mobile" className="min-w-0" />
+        </div>
+        <div className="ui-card pointer-events-auto relative flex h-full shrink-0 items-center gap-1 px-1">
+          <DockTabs variant="bar" touch locked={false} />
+          <MoreMenu />
+        </div>
       </nav>
     )
   }

@@ -43,6 +43,7 @@ export const MoneyIsland = forwardRef<HTMLDivElement, MoneyIslandProps>(function
       // Outside the data-scene-bottom wrapper: a bubble laid out under it could not be tapped.
       data-scene-obstacle=""
       data-scene-island=""
+      data-money-island=""
       aria-label={t('top.gauges')}
       className="ui-card pointer-events-auto absolute z-[41] flex max-w-[500px] flex-col gap-1 px-2.5 pb-3 pt-2"
       style={{ left: EDGE, bottom: `max(${EDGE}px, env(safe-area-inset-bottom, 0px))` }}

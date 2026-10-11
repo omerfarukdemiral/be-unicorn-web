@@ -4,10 +4,10 @@
 // frame stays visible and the bars stay clickable. Time keeps flowing (§14.1); a click on the scene around the card
 // or Esc (shortcuts.ts) closes it. A board dealt onto the table, not a web dialog: the shared card material (.ui-card +
 // --shadow-panel), the kind as a duotone sticker (identity, never a warning), no header bar and no visible title (the
-// active tab names the board).
+// active tab names the board). T19: İstatistik and Pazar wear the laptop bezel + app bar (layout/device).
 // The header's tab strip switches between the three screens (İstatistik | Kanun Kitabı | Pazar haritası) without
 // closing the frame; tab switches are static (only the first open is dealt).
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import type { CenterKind, StatsTab } from '../../store/types'
 import type { IconName } from '../icons'
@@ -17,6 +17,7 @@ import { LawbookScreen } from '../center/LawbookScreen'
 import { MarketScreen } from '../center/MarketScreen'
 import { StatsScreen } from './StatsScreen'
 import { GAP } from '../layout/tokens'
+import { AppBar, DEVICE_SHELL } from '../layout/device'
 
 const KIND: Record<CenterKind, { icon: IconName; color: string }> = {
   stats: { icon: 'trend', color: 'var(--color-g-sky)' },
@@ -30,16 +31,41 @@ export const CENTER_TABS: readonly CenterKind[] = ['stats', 'lawbook', 'market']
 /** Width cap of the center card (the scene stays visible around it on a wide screen). */
 export const CENTER_MAX_W = 960
 
+/**
+ * Desktop: the money island (bottom-left, taller than the founder / tab islands) is outside [data-scene-bottom], so
+ * the scene inset's bottom does not clear it; the board keeps above its top edge too. 0 when there is no island.
+ */
+function useMoneyIslandClearance(): number {
+  const [h, setH] = useState(0)
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('[data-money-island]')
+    if (!el) return
+    const read = () => setH(Math.max(0, Math.round(window.innerHeight - el.getBoundingClientRect().top + GAP)))
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    window.addEventListener('resize', read)
+    read()
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', read)
+    }
+  }, [])
+  return h
+}
+
 export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind; tab?: StatsTab; onClose: () => void; children?: ReactNode }) {
   const inset = useGameStore((s) => s.ui.sceneInset)
+  const money = useMoneyIslandClearance()
   const openOverlay = useGameStore((s) => s.openOverlay)
 
   const k = KIND[kind]
+  // T19: İstatistik and Pazar are apps on the founder's laptop; Kanun Kitabı stays a book (card).
+  const device = kind !== 'lawbook'
   return (
     <div
       data-center-frame={kind}
       className="pointer-events-auto fixed z-[45] flex justify-center"
-      style={{ top: inset.top, bottom: inset.bottom, left: GAP, right: Math.max(GAP, inset.right) }}
+      style={{ top: inset.top, bottom: inset.bottom > money ? inset.bottom : money, left: GAP, right: Math.max(GAP, inset.right) }}
       onClick={onClose}
     >
       <section
@@ -49,11 +75,13 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
         // The board hugs its content (the office shows under a short lawbook or market); past the scene height its own
         // scroller takes over. Stats keeps a tall floor so its charts do not jump between tabs.
         className={cx(
-          'ui-card shadow-panel relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal',
+          'relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal',
+          device ? DEVICE_SHELL : 'ui-card shadow-panel',
           kind === 'stats' && 'min-h-[70%]',
         )}
         style={{ maxWidth: CENTER_MAX_W }}
       >
+        {device && <AppBar title={t(`center.${kind}`)} />}
         <header className="flex shrink-0 items-center gap-2 px-3 pt-2">
           <IconBadge icon={k.icon} size={24} color={k.color} />
           {/* Named for screen readers only: the active tab already says which board this is. */}

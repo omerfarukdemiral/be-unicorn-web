@@ -1,5 +1,5 @@
 // Desktop bottom-left corner island (docs/LAYOUT.md §1.2, "dört köşe"): Kasa as the screen's hero number (32px) over
-// the other fixed gauges and the pinned metrics, and under them the horizon row (payday clock, upcoming; T05). Pins wrap to a third row instead of widening the island (max 440).
+// the other fixed gauges and the pinned metrics, and under them the horizon row (payday clock, upcoming; T05). Pins wrap to a third row instead of widening the island (max 500: one row with two pins at 1440 once the word labels went, T08).
 // Positions itself (absolute, EDGE from the left and the bottom); BottomStack reads its width so the founder island and
 // the strip start right of it. Phones keep the gauges in the top bar (TopBar › GaugeRow).
 import { forwardRef } from 'react'
@@ -42,7 +42,7 @@ export const MoneyIsland = forwardRef<HTMLDivElement, MoneyIslandProps>(function
       // Outside the data-scene-bottom wrapper: a bubble laid out under it could not be tapped.
       data-scene-obstacle=""
       aria-label={t('top.gauges')}
-      className="ui-card pointer-events-auto absolute z-[41] flex max-w-[440px] flex-col gap-1 px-2.5 pb-3 pt-2"
+      className="ui-card pointer-events-auto absolute z-[41] flex max-w-[500px] flex-col gap-1 px-2.5 pb-3 pt-2"
       style={{ left: EDGE, bottom: `max(${EDGE}px, env(safe-area-inset-bottom, 0px))` }}
     >
       <CashChip density="full" hero />

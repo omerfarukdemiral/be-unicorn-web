@@ -53,7 +53,7 @@ function StatusMark({ mark }: { mark: Mark }) {
 }
 
 /**
- * One gauge cell of the bar: a bare duotone sticker in the gauge's hue + the value OVER its small sentence-case label
+ * One gauge cell of the bar: a bare duotone sticker in the gauge's hue + the value (desktop: no word label, T08; the name is the tooltip)
  * (the number is the biggest thing; docs/GAMEPLAY_V2.md §10.1 D1). h40 on desktop, h44 on phones; no frame or tile of
  * its own. The value's span carries the only colour a value may take.
  */
@@ -94,7 +94,7 @@ export function BarChip({
       aria-label={ariaValue !== undefined ? `${label}: ${ariaValue}` : typeof value === 'string' ? `${label}: ${value}` : undefined}
     >
       <Icon name={icon} tone={color} size={hero ? 30 : mobile ? 18 : density === 'tight' ? 20 : 22} className={cx('shrink-0', hero && 'self-start mt-1')} />
-      {/* Every cell has the same fixed rows (value / label on desktop, value / sub on compact bars), so the four
+      {/* Every cell has the same fixed rows (value alone on desktop, value / sub on compact bars), so the four
           values share one baseline whether or not a cell has a sub line or Moral's bar. */}
       <div className="relative min-w-0 flex-1">
         {density === 'full' ? (
@@ -109,12 +109,10 @@ export function BarChip({
             >
               {value}
               {sub && <span className="text-[12px]">{sub}</span>}
-            </div>
-            <div className="flex h-[14px] min-w-0 items-center gap-1.5 whitespace-nowrap">
-              <span className="ui-label">{label}</span>
+              {/* No word label (T08): the icon says which gauge, the name is the tooltip and the aria-label. */}
               <StatusMark mark={mark} />
             </div>
-            {/* Extras (Moral's bar, the goal notch) hang under the label and take no width: inline they cost a 1280
+            {/* Extras (Moral's bar, the goal notch) hang under the value and take no width: inline they cost a 1280
                 bar ~46px, which pushed the pinned gauge out (Bricolage tabular digits are ~0.62em at 700, the row has no slack left). */}
             {children && <div className="absolute inset-x-0 top-full mt-0.5">{children}</div>}
           </>

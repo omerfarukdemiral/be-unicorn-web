@@ -99,14 +99,14 @@ export function WidgetChip({
   goal?: number
 }) {
   if (variant === 'bar') {
-    // Top-bar pin: a bare duotone sticker + value over label (the fixed gauges' grammar), 40px tall. No sub, no bars.
+    // Money island pin: a bare duotone sticker + the value (the fixed gauges' grammar, T08: no word label, the name is
+    // the tooltip and the button's aria-label), 40px tall. No sub, no bars.
     return (
       <div className={cx('flex h-10 min-w-0 items-center gap-2 rounded-control px-1.5', className)} title={title ?? label}>
         <Icon name={icon} tone={color} size={20} className="shrink-0" />
         <div className="min-w-0">
-          <div className="ui-num truncate text-[15px] leading-[18px] text-ink">{value}</div>
           <div className="flex min-w-0 items-center gap-1">
-            <span className="ui-label truncate">{label}</span>
+            <span className="ui-num truncate text-[15px] leading-[18px] text-ink">{value}</span>
             <StatusMark alert={alert} warn={warn} size={6} />
           </div>
           {goal !== undefined && <GoalNotch goal={goal} color={color} className="mt-0.5 w-14" />}

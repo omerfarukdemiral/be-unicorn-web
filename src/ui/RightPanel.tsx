@@ -2,7 +2,7 @@
 // open here and replace each other (store.ui.panel). Desktop = right column between the top bar and the bottom bar
 // (top 72, bottom 72, 400px / 360px below 1280: docs/LAYOUT.md §1.2); landscape phones = the same side column between
 // the h52 bars (min(360, 46vw) wide, so the sheet never covers the top bar or pushes the strip off-screen); portrait
-// = one bottom sheet 8px above the bottom bar's tab row. The element carries data-scene-right / data-scene-sheet:
+// = one full-page sheet between the gauge row and the tab island (T06). The element carries data-scene-right / data-scene-sheet:
 // layout/useSceneInset measures it.
 // Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 13px uppercase title + the panel's labelled primary
 // number (KASA $15.1K: the label says which figure, since each panel shows a different one).
@@ -21,7 +21,7 @@ import { useIsMobile, useLayoutMode, useTween } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
 import { usePanelWidth } from './layout/useSceneInset'
-import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_TABS_H } from './layout/tokens'
+import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_TABS_H, MOBILE_TOP_H } from './layout/tokens'
 import { ShopPanel } from './panels/ShopPanel'
 import { TeamPanel } from './panels/TeamPanel'
 import { ProjectsPanel } from './panels/ProjectsPanel'
@@ -199,14 +199,14 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   )
 
   if (mode === 'portrait') {
-    // Above the bottom bar's tab row (the action row hides while the sheet is open), 8px apart, EDGE from the sides:
-    // the same card family as the bars.
+    // Full page (T06): from under the gauge row to above the tab island (the founder island hides while it is open),
+    // EDGE from the sides: the gauges and the tabs stay in reach, the office is behind it.
     return (
       <section
         data-scene-sheet=""
         aria-label={meta.title || t('panel.label')}
-        className="ui-card pointer-events-auto absolute z-20 flex max-h-[52vh] animate-slide-up flex-col overflow-hidden shadow-[var(--shadow-panel)]"
-        style={{ left: EDGE, right: EDGE, bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${MOBILE_BOTTOM_TABS_H + GAP}px)` }}
+        className="ui-card pointer-events-auto absolute z-20 flex animate-slide-up flex-col overflow-hidden shadow-[var(--shadow-panel)]"
+        style={{ left: EDGE, right: EDGE, top: EDGE + MOBILE_TOP_H + GAP, bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${MOBILE_BOTTOM_TABS_H + GAP}px)` }}
       >
         {stripe}
         <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-border-strong" />

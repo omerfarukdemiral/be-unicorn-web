@@ -117,6 +117,9 @@ describe('format', () => {
     expect(formatMoney(11_000)).toBe('$11K')
     expect(formatMoney(950)).toBe('$950')
     expect(formatMoney(-4200)).toBe('−$4.2K')
+    // Never exponent notation on a HUD.
+    expect(formatMoney(2.5e12)).toBe('$2.5T')
+    expect(formatMoney(-3e77)).toBe('−$∞')
     expect(formatMoney(999_999)).toBe('$1M')
     expect(formatMoney(1_000_000_000)).toBe('$1B')
     expect(formatMoney(150_000)).toBe('$150K')

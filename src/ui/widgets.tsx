@@ -607,7 +607,7 @@ export function PinnedMetric({ id, className }: { id: HudWidget; className?: str
       data-pinned-metric={card}
       onClick={() => openPanel({ kind: 'metrics', focus: card }, { root: true })}
       aria-label={t('metrics.openTitle', { label })}
-      className={cx('block min-w-0 max-w-[152px] rounded-control text-left transition-colors hover:bg-surface-2', className)}
+      className={cx('block min-w-0 rounded-control text-left transition-colors hover:bg-surface-2', className ?? 'max-w-[152px]')}
     >
       <W variant="bar" />
     </button>

@@ -7,7 +7,10 @@ export const LANDSCAPE_BAR_H = 52
 export const STRIP_H = 40
 /** Phone strip: 44 so its ⌃ button is a full touch target. */
 export const STRIP_H_MOBILE = 44
-export const MOBILE_BOTTOM_H = 104
+/** Portrait phone (T06): the top row of islands (gauges, ⏸). */
+export const MOBILE_TOP_H = 52
+/** Portrait phone: the founder island over the tab island, both h56, GAP apart. */
+export const MOBILE_BOTTOM_H = 120
 export const MOBILE_BOTTOM_TABS_H = 56
 export const PANEL_W = 400
 export const PANEL_W_NARROW = 360

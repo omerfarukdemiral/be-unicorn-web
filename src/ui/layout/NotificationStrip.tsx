@@ -1,5 +1,5 @@
 // Notification strip (docs/LAYOUT.md §3): ONE channel, one style, one line, one item at a time, right above the
-// bottom bar. Sources: bankruptcy clock (P0), runway falling under 3 months (P0, 6 s), placing mode (P1), errors,
+// bottom bar. Desktop (`island`, T05): no band; a pill above the founder island only while a message is up. Sources: bankruptcy clock (P0), runway falling under 3 months (P0, 6 s), placing mode (P1), errors,
 // moments (receipt, release, outcome), activity (P2), and the next step (P3, resting). No achievements: a new gauge,
 // concept or goal only badges its home (docs/GAMEPLAY_V2.md §12 D9). At most 2 P2 items a game day; the rest fold
 // into a digest counted on the ⌃ button. The one rival item: the lead rival passing the player (`rivalPassed`, P2, once
@@ -9,14 +9,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { BANKRUPT_DAYS } from '../../engine/balance'
-import type { ActivityEntry, ActivityKind, GameEvent, GameState } from '../../engine/types'
+import { FOUNDER_ACTIONS, type ActivityEntry, type ActivityKind, type FounderActionKind, type GameEvent, type GameState } from '../../engine/types'
 import { blockingOverlay, useGameStore } from '../../store/gameStore'
 import type { Panel } from '../../store/types'
 import { Icon, type IconName } from '../icons'
+import { STAGES, UI_TEXT } from '../../content'
 import { t } from '../i18n'
 import { fixed } from '../format'
 import { cx } from '../primitives'
-import { soft } from '../theme'
+import { founderActionStage, soft } from '../theme'
 import { useExclusiveExpander } from '../hooks'
 import { activityText, ActivityHistory } from '../ActivityLine'
 import { errorText, usePlacing } from '../Feedback'
@@ -44,7 +45,7 @@ import { STRIP_H, STRIP_H_MOBILE } from './tokens'
 type Item =
   | { key: number; kind: Moment['kind']; moment: Moment }
   | { key: number; kind: 'runwayLow'; runway: number }
-  | { key: number; kind: 'error'; code: string }
+  | { key: number; kind: 'error'; code: string; action?: string; detail?: string }
   | { key: number; kind: 'activity'; entry: ActivityEntry }
   | RivalItem
 
@@ -56,6 +57,51 @@ export function rivalPassedItems(events: readonly GameEvent[], s: Pick<GameState
   return events
     .filter((e) => e.kind === 'rivalPassed')
     .map((e): RivalItem => ({ key: e.id, kind: 'activity', rival: s.rivals?.find((r) => r.id === e.refId)?.name ?? t('rival.unknown'), dedupeKey: `rivalPassed:${e.refId ?? ''}` }))
+}
+
+/**
+ * Whether the strip shell is on screen. A shell only exists while it holds something to read: a message (`content`),
+ * the horizon (rows only) or the open history. Under a blocking modal (stage-up, move scene) it steps away; the front
+ * item keeps its time (stripClockRuns) and comes back with the world. QA: an empty white pill under every stage-up.
+ */
+export function stripShellShown(p: { visible: boolean; content: boolean; horizon: boolean; more: boolean; overlay: boolean }): boolean {
+  if (p.overlay) return false
+  if (p.more) return true
+  return p.visible && (p.content || p.horizon)
+}
+
+/** Shell exit: the strip fades out instead of blinking away (ms). */
+const STRIP_EXIT_MS = 180
+
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/**
+ * Entry motion through WAAPI with no fill: a CSS `both` fill parks the text at opacity 0 while the animation waits
+ * for its first frame (QA: a busy frame under a paused scene left a blank pill for seconds). Here the resting style
+ * stays opaque, and the shell fades in as a whole: a stalled start hides the whole pill, never only its text.
+ * Module-level (stable) so the ref runs once per mount.
+ */
+const fadeInShell = (el: HTMLElement | null) => {
+  if (el && !reducedMotion()) el.animate?.([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' })
+}
+// The first keyframe is still a legible line: on a slow device the timeline can sit on it for a few frames, and the old
+// 35% / 14px start read as faint text cut off by the card's bottom edge (QA "empty white pill").
+const riseInRow = (el: HTMLElement | null) => {
+  if (el && !reducedMotion()) el.animate?.([{ opacity: 0.7, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' })
+}
+
+/** True while `on`, and for `ms` after it turns off (the exit fade keeps the last frame on screen). */
+function useLinger(on: boolean, ms: number): boolean {
+  const [linger, setLinger] = useState(on)
+  useEffect(() => {
+    if (on) {
+      setLinger(true)
+      return
+    }
+    const id = window.setTimeout(() => setLinger(false), ms)
+    return () => window.clearTimeout(id)
+  }, [on, ms])
+  return on || linger
 }
 
 /** Keys for non-engine items (errors, runway, activity) never collide with engine event ids. */
@@ -113,7 +159,7 @@ function lookOf(item: Item): Look {
       }
     }
     case 'error': {
-      const text = errorText(item.code)
+      const text = errorLine(item)
       return { icon: 'warning', color: 'var(--color-energy)', title: text, panel: null, body: <span className="font-semibold text-ink">{text}</span> }
     }
     case 'activity': {
@@ -130,6 +176,17 @@ function lookOf(item: Item): Look {
       return { icon, color, panel, title: momentText(m), body: <MomentLine m={m} /> }
     }
   }
+}
+
+/**
+ * "İşe alım: Masasız." A founder action names itself, and a locked one its stage ("Ekibi motive et Pre-seed aşamasında
+ * açılır"): "Kurucu aksiyonu: Kilitli." told the player nothing (QA).
+ */
+function errorLine(item: { code: string; action?: string; detail?: string }): string {
+  const founder = item.action === 'founderAction' && item.detail && (FOUNDER_ACTIONS as readonly string[]).includes(item.detail) ? (item.detail as FounderActionKind) : null
+  if (founder && item.code === 'notUnlocked') return t('founder.lockedAt', { action: t(`founder.${founder}`), stage: STAGES[founderActionStage(founder)]?.name ?? '' })
+  const subject = founder ? t(`founder.${founder}`) : item.action ? UI_TEXT[`actionSubject.${item.action}`] : undefined
+  return subject ? `${subject}: ${errorText(item.code)}` : errorText(item.code)
 }
 
 /** Lets items through the day's budget (shared with the office lines); the rest go to the digest or are dropped. */
@@ -177,7 +234,9 @@ function useStripQueue(): [Item[], (key: number) => void, number, () => void] {
   useEffect(() => {
     if (!lastError || lastError.at === seenError.current) return
     seenError.current = lastError.at
-    push([{ key: nextKey(), kind: 'error', code: lastError.code }])
+    // 'notFound' is a stale tap (the thing just left: a card answered, a candidate gone): nothing to tell.
+    if (lastError.code === 'notFound') return
+    push([{ key: nextKey(), kind: 'error', code: lastError.code, action: lastError.action, detail: lastError.detail }])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastError])
 
@@ -223,9 +282,22 @@ function useStripQueue(): [Item[], (key: number) => void, number, () => void] {
 
 /**
  * The strip. `mobile`: h36, compact horizon badge. `sheetOpen` (phone sheet up): the resting next step hides,
- * P0–P2 still show. Renders nothing when there is nothing to say (the space stays reserved by BottomStack).
+ * P0–P2 still show. Renders nothing (after a short fade) when there is nothing to read or a blocking modal is up
+ * (stripShellShown; the space stays reserved by BottomStack).
  */
-export function NotificationStrip({ mobile = false, sheetOpen = false, className }: { mobile?: boolean; sheetOpen?: boolean; className?: string }) {
+export function NotificationStrip({
+  mobile = false,
+  sheetOpen = false,
+  island = false,
+  className,
+}: {
+  mobile?: boolean
+  sheetOpen?: boolean
+  /** Desktop "dört köşe" (T05): no resting band. Only P0–P2 messages show, as a content-width pill; the next step
+   *  lives under the stage island (TopBar › GoalChip) and the horizon in the money island (MoneyIsland). */
+  island?: boolean
+  className?: string
+}) {
   const [queue, drop, digest, readAll] = useStripQueue()
   const bankrupt = useGameStore(useShallow((s) => (s.state.finance.payrollMissed && !s.state.gameOver ? { days: Math.max(0, BANKRUPT_DAYS - s.state.finance.negativeCashDays) } : null)))
   const placing = usePlacing()
@@ -248,14 +320,15 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
     canStartRound: step.canStartRound,
     over: step.over,
     sheetOpen,
-  })
+  }) && !island
   const front = queue[0]
   const slot = pickSlot({ bankrupt: !!bankrupt, placing: !!placing, nextStep: showStep, front })
   // A center screen leaves the strip readable (time flows under it); only a blocking modal covers it.
   const overlay = useGameStore((s) => blockingOverlay(s.ui) !== null)
 
   // A strip that unmounts under the cursor gets no mouseleave: drop the stale hover (else later items freeze).
-  const hover = nextHover(hold, slot, sheetOpen)
+  // A blocking modal hides the strip: its hover goes with it.
+  const hover = nextHover(hold, slot, sheetOpen) && !overlay
   useEffect(() => {
     if (hold && !hover) setHold(false)
   }, [hold, hover])
@@ -285,7 +358,9 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, front?.key])
 
-  if (!stripVisible(slot, sheetOpen) && !more) return null
+  // Phones: a message owns the row while it speaks (QA 390px: "Yayınd…" next to a full-width "1g $645K ✓"); the
+  // horizon comes back with the resting next step and stays in the ⌃ popover meanwhile.
+  const horizon = hasHorizon && !island && !(mobile && (slot === 'queue' || slot === 'bankrupt'))
 
   const h = mobile ? STRIP_H_MOBILE : STRIP_H
   let content: ReactNode = null
@@ -332,17 +407,15 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
         {look.body}
       </Row>
     )
-  } else if (slot === 'nextStep') {
+  } else if (slot === 'nextStep' && step.step && !step.over) {
+    // Same guard as the chip's own `return null`: a JSX element that renders nothing must not count as content.
     content = <NextStepChip variant="strip" compact={mobile} />
   }
 
+  // Nothing to read (no message, no horizon, no history) → no shell: never an empty white pill or a bare ⌃ row.
+  const shown = stripShellShown({ visible: stripVisible(slot, sheetOpen), content: content !== null, horizon, more, overlay })
   return (
-    <div
-      className={cx('pointer-events-auto relative w-full', className)}
-      // Mouse only: a tap fires enter without a reliable leave, so touch never holds the clock.
-      onPointerEnter={(e) => e.pointerType === 'mouse' && setHold(true)}
-      onPointerLeave={() => setHold(false)}
-    >
+    <StripShell shown={shown} className={cx(island ? 'w-auto min-w-[320px]' : 'w-full', className)} onHold={setHold}>
       {more && (
         <div className="ui-card ui-scroll absolute bottom-[calc(100%+8px)] right-0 z-10 max-h-[280px] w-[min(360px,100%)] animate-slide-up overflow-y-auto p-1">
           <p className="ui-label px-2 pb-1 pt-1.5">{t('strip.upcoming')}</p>
@@ -356,13 +429,17 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
         role={danger ? 'alert' : 'status'}
         aria-live={live}
         aria-label={t('strip.label')}
-        className={cx('@container ui-card relative flex items-center gap-2 overflow-hidden pl-2 pr-1', danger && 'border-negative/60')}
+        // No @container on the desktop pill: inline-size containment gives it no intrinsic width, so it sat at its
+        // 320px minimum and cut the sentence ("MRR +$…") with room to spare. Only the horizon variants query it.
+        className={cx('ui-card relative flex items-center gap-2 overflow-hidden pl-2', island ? 'pr-3' : '@container pr-1', danger && 'border-negative/60')}
         style={{ height: h }}
       >
-        <div className="relative flex h-full min-w-0 flex-1 items-center">{content}</div>
-        {hasHorizon && (
+        {/* Nothing to say on the left (no step, no message): the horizon takes the row instead of an empty half. */}
+        {/* flex-auto (basis = the text): a content-width desktop pill sizes to its sentence instead of collapsing to min-w. */}
+        {content !== null ? <div className="relative flex h-full min-w-0 flex-auto items-center">{content}</div> : <span className="flex-1" />}
+        {horizon && (
           <>
-            <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
+            {content !== null && <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />}
             <HorizonDue />
             <PaydayCountdown compact={mobile} />
             <HorizonLoan />
@@ -383,23 +460,50 @@ export function NotificationStrip({ mobile = false, sheetOpen = false, className
             </button>
           </>
         )}
-        <button
-          type="button"
-          onClick={() => setMore((o) => !o)}
-          aria-expanded={more}
-          aria-label={t('strip.more')}
-          title={t('strip.more')}
-          className={cx('relative grid shrink-0 place-items-center rounded-md text-ink-2 hover:bg-surface-2 hover:text-ink', mobile ? 'size-11' : 'size-8')}
-        >
-          <Icon name={more ? 'chevronDown' : 'chevronUp'} size={16} />
-          {digest > 0 && !more && (
-            <span aria-hidden="true" className="tabular pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-surface-2 px-1 text-[9px] font-bold leading-[14px] text-ink-2 ring-1 ring-border">
-              {t('strip.digest', { n: digest })}
-            </span>
-          )}
-        </button>
+        {!island && (
+          <button
+            type="button"
+            onClick={() => setMore((o) => !o)}
+            aria-expanded={more}
+            aria-label={t('strip.more')}
+            title={t('strip.more')}
+            className={cx('relative grid shrink-0 place-items-center rounded-md text-ink-2 hover:bg-surface-2 hover:text-ink', mobile ? 'size-11' : 'size-8')}
+          >
+            <Icon name={more ? 'chevronDown' : 'chevronUp'} size={16} />
+            {digest > 0 && !more && (
+              <span aria-hidden="true" className="tabular pointer-events-none absolute -right-0.5 -top-0.5 rounded-full bg-surface-2 px-1 text-[9px] font-bold leading-[14px] text-ink-2 ring-1 ring-border">
+                {t('strip.digest', { n: digest })}
+              </span>
+            )}
+          </button>
+        )}
         {slot === 'queue' && <span ref={bar} aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[2px] origin-left bg-ink/15" />}
       </div>
+    </StripShell>
+  )
+}
+
+/**
+ * The strip's outer box: mounts with a fade-in, and on `shown` → false keeps its last frame for STRIP_EXIT_MS while it
+ * fades out (inert), then unmounts. The frozen frame is the last one that had something to say.
+ */
+function StripShell({ shown, className, onHold, children }: { shown: boolean; className?: string; onHold: (hold: boolean) => void; children: ReactNode }) {
+  const present = useLinger(shown, STRIP_EXIT_MS)
+  const last = useRef<ReactNode>(null)
+  if (shown) last.current = children
+  if (!present) return null
+  return (
+    <div
+      ref={fadeInShell}
+      className={cx('relative', shown ? 'pointer-events-auto' : 'pointer-events-none', className)}
+      style={{ opacity: shown ? 1 : 0, transition: `opacity ${STRIP_EXIT_MS}ms ease-out` }}
+      aria-hidden={shown ? undefined : true}
+      inert={!shown}
+      // Mouse only: a tap fires enter without a reliable leave, so touch never holds the clock.
+      onPointerEnter={(e) => shown && e.pointerType === 'mouse' && onHold(true)}
+      onPointerLeave={() => onHold(false)}
+    >
+      {shown ? children : last.current}
     </div>
   )
 }
@@ -414,9 +518,9 @@ function IconTile({ icon, color }: { icon: IconName; color: string }) {
 
 function Row({ icon, color, title, children, onClick, animate }: { icon: IconName; color: string; title: string; children: ReactNode; onClick?: () => void; animate?: boolean }) {
   return (
-    <button type="button" onClick={onClick} title={title} className={cx('flex h-full min-w-0 flex-1 items-center gap-2 text-left', animate && 'animate-slide-up')}>
+    <button type="button" ref={animate ? riseInRow : undefined} onClick={onClick} title={title} className="flex h-full min-w-0 flex-auto items-center gap-2 text-left">
       <IconTile icon={icon} color={color} />
-      <span className="min-w-0 flex-1 truncate text-[13px] leading-none">{children}</span>
+      <span className="min-w-0 flex-auto truncate text-[13px] leading-none">{children}</span>
     </button>
   )
 }

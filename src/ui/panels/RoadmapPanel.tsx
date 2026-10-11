@@ -10,7 +10,7 @@ import { t } from '../i18n'
 import { money } from '../format'
 import { Bar, cx, Pill } from '../primitives'
 import { openRound } from '../layout/StageSection'
-import { GoalsCard, ValuationParts } from './GoalsCard'
+import { DecisionOutcomes, GoalsCard, ValuationParts } from './GoalsCard'
 
 type Status = 'done' | 'here' | 'next' | 'later'
 
@@ -70,6 +70,8 @@ export function RoadmapPanel() {
       </div>
 
       <GoalsCard />
+      {/* Landed delayed decision effects (moved from Büyüme): what your choices did on the way to the next stage. */}
+      <DecisionOutcomes />
 
       {/* The rail: one node per stage, the line between them filled once passed. */}
       <ol className="ui-scroll -mx-1 flex items-start overflow-x-auto px-1 pb-1" aria-label={t('roadmap.step', { n: s.stage + 1 })}>

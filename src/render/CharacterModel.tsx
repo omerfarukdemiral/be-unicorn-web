@@ -1,11 +1,13 @@
 // Low-poly person: body + head + limbs, department colour, small accessories.
 // World units, feet at y=0, facing +z. Animated by Character/Npc through the `rig` object.
 import { useFrame } from '@react-three/fiber'
-import { memo, useRef } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { EmployeeStatus } from '../engine/types'
 import { GEO, glowMat, mat, torusGeo } from './resources'
 import { STATUS_COLORS } from './palette'
+import { damp } from './constants'
+import { sceneTime } from './sceneRegistry'
 
 export type Accessory = 'none' | 'headphones' | 'glasses' | 'cap' | 'tie' | 'horn' | 'briefcase' | 'notebook' | 'camera'
 
@@ -108,19 +110,50 @@ export const CharacterModel = memo(function CharacterModel({ look, rig }: { look
 /** Amber "…" over a builder with nothing to build (playtest LD1). */
 const IDLE_COLOR = '#f2b544'
 
-/** Floating status icon above the head (PLAN §7.2). */
-export function StatusIcon({ status, y = 1.2 }: { status: EmployeeStatus | 'rest' | 'busy' | 'idle' | 'none'; y?: number }) {
+type IconStatus = EmployeeStatus | 'rest' | 'busy' | 'idle' | 'none'
+
+/** The "…" idle marker waits this long before showing (a builder between tasks is not news). */
+export const IDLE_ICON_DELAY_MS = 1500
+
+/**
+ * Floating status icon above the head (PLAN §7.2). Stays mounted: it grows in (damped, 12/s) when a
+ * status appears and shrinks out before unmounting when it clears, instead of blinking.
+ */
+export function StatusIcon({ status: want, y = 1.2 }: { status: IconStatus; y?: number }) {
   const g = useRef<THREE.Group>(null)
-  useFrame(({ clock }) => {
-    if (!g.current) return
-    const t = clock.elapsedTime
-    g.current.position.y = y + Math.sin(t * 2.4) * 0.03
-    g.current.rotation.y = t * 0.8
+  const on = want !== 'working' && want !== 'none'
+  // What is drawn: the live status, or the last one while it shrinks away.
+  const [shown, setShown] = useState<IconStatus | null>(on ? want : null)
+  if (on && shown !== want) setShown(want)
+  const since = useRef(performance.now())
+  const prev = useRef(want)
+  useEffect(() => {
+    if (prev.current !== want) since.current = performance.now()
+    prev.current = want
+  }, [want])
+  const k = useRef(on && want !== 'idle' ? 1 : 0)
+  const latest = useRef({ on, want, shown })
+  latest.current = { on, want, shown }
+  useFrame((_, rawDt) => {
+    const o = g.current
+    if (!o) return
+    const l = latest.current
+    const target = l.on && (l.want !== 'idle' || performance.now() - since.current > IDLE_ICON_DELAY_MS) ? 1 : 0
+    k.current = damp(k.current, target, 12, Math.min(rawDt, 0.1))
+    o.scale.setScalar(Math.max(0.001, k.current))
+    o.visible = k.current > 0.01
+    if (!l.on && k.current < 0.01 && l.shown !== null) setShown(null)
+    // Bob / spin on scene time: a held world holds the icons too.
+    const t = sceneTime.t
+    o.position.y = y + Math.sin(t * 2.4) * 0.03
+    o.rotation.y = t * 0.8
   })
-  if (status === 'working' || status === 'none') return null
+  if (shown === null || shown === 'working' || shown === 'none') return null
+  const status = shown
   const color = status === 'rest' ? '#9cc9f5' : status === 'busy' ? '#c9a7f5' : status === 'idle' ? IDLE_COLOR : STATUS_COLORS[status]
+  const s0 = Math.max(0.001, k.current)
   return (
-    <group ref={g} position={[0, y, 0]}>
+    <group ref={g} position={[0, y, 0]} scale={s0} visible={k.current > 0.01}>
       {status === 'burnout' && (
         <>
           <mesh geometry={GEO.sphere} material={mat('#8d8a99')} scale={[0.2, 0.14, 0.16]} position={[-0.08, 0.05, 0]} />

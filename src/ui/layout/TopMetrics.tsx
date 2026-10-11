@@ -68,6 +68,7 @@ export function BarChip({
   title,
   ariaValue,
   className,
+  hero = false,
   children,
 }: {
   icon: IconName
@@ -81,16 +82,18 @@ export function BarChip({
   /** Spoken value when `value` is not a plain string (a popped value). */
   ariaValue?: string
   className?: string
+  /** Desktop money island: the value is the screen's hero number (32px, docs/LAYOUT.md §1.2); full density only. */
+  hero?: boolean
   children?: ReactNode
 }) {
   const mobile = density === 'mobile'
   return (
     <div
-      className={cx('relative flex min-w-0 items-center rounded-control', mobile ? 'h-11 gap-1.5 px-1' : density === 'tight' ? 'h-10 gap-1.5 px-1' : 'h-10 gap-2 px-1', className)}
+      className={cx('relative flex min-w-0 items-center rounded-control', mobile ? 'h-11 gap-1 px-0.5' : density === 'tight' ? 'h-10 gap-1.5 px-1' : hero ? 'gap-2.5 px-1' : 'h-10 gap-2 px-1', className)}
       title={title ?? label}
       aria-label={ariaValue !== undefined ? `${label}: ${ariaValue}` : typeof value === 'string' ? `${label}: ${value}` : undefined}
     >
-      <Icon name={icon} tone={color} size={mobile ? 18 : density === 'tight' ? 20 : 22} className="shrink-0" />
+      <Icon name={icon} tone={color} size={hero ? 30 : mobile ? 18 : density === 'tight' ? 20 : 22} className={cx('shrink-0', hero && 'self-start mt-1')} />
       {/* Every cell has the same fixed rows (value / label on desktop, value / sub on compact bars), so the four
           values share one baseline whether or not a cell has a sub line or Moral's bar. */}
       <div className="relative min-w-0 flex-1">
@@ -98,7 +101,12 @@ export function BarChip({
           <>
             {/* The sub (Kasa's daily net) is a small coloured delta after the value: a number, not a phrase.
                 17px below 1440 keeps "$10.2M net −$270/gün" + "+N" inside a 1280 bar (Bricolage tabular digits are ~0.62em at 700). */}
-            <div className="ui-num flex h-[22px] items-baseline gap-1.5 whitespace-nowrap text-[17px] leading-[22px] text-ink min-[1440px]:text-[18px]">
+            <div
+              className={cx(
+                'ui-num flex items-baseline gap-1.5 whitespace-nowrap text-ink',
+                hero ? 'h-9 text-[32px] leading-9 tracking-[-0.01em]' : 'h-[22px] text-[17px] leading-[22px] min-[1440px]:text-[18px]',
+              )}
+            >
               {value}
               {sub && <span className="text-[12px]">{sub}</span>}
             </div>
@@ -139,7 +147,7 @@ const USERS_ACTIONS: readonly FounderActionKind[] = ['findUsers']
  * deltas: the daily net already has its one home in the sub line, and payday's lump is the strip's month receipt.
  * Red only when the usable money is below zero or payroll was missed.
  */
-export function CashChip({ density }: { density: MetricDensity }) {
+export function CashChip({ density, hero = false }: { density: MetricDensity; hero?: boolean }) {
   const f = useGameStore(useShallow((s) => cashFlow(s.state)))
   const { debt, missed, negDays } = useGameStore(
     useShallow((s) => ({
@@ -162,6 +170,7 @@ export function CashChip({ density }: { density: MetricDensity }) {
   return (
     <BarChip
       density={density}
+      hero={hero}
       icon="cash"
       color={WIDGET_COLOR.cash}
       label={t('hud.cash')}

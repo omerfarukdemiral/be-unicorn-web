@@ -105,6 +105,14 @@ describe('text budgets', () => {
   })
 })
 
+describe('effect chip tags', () => {
+  it('every fx.tag.* is one word', () => {
+    const tags = matching(/^fx\.tag\./)
+    expect(tags.length).toBeGreaterThan(20)
+    expect(tags.filter(([, v]) => wordCount(v) !== 1)).toEqual([])
+  })
+})
+
 describe('t() keys', () => {
   it("every literal t('key') in src/ui exists in UI_TEXT", () => {
     const files = import.meta.glob<string>('../../ui/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true })

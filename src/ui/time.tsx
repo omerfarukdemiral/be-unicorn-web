@@ -89,7 +89,7 @@ export function useRecentSlowdown(): boolean {
 
 /** Focus pause (the game holds time while a card is read), as opposed to the player's own pause. */
 export function isFocusHold(hold: TimeHold): hold is PauseReason {
-  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer' || hold === 'payday'
+  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer' || hold === 'payday' || hold === 'bubble'
 }
 
 /**
@@ -218,9 +218,13 @@ export function StartCall() {
   const next = STAGES[s.stage + 1]
   return (
     <div className="pointer-events-none fixed left-0 z-10 grid place-items-center px-4" style={{ top: inset.top, right: inset.right, bottom: inset.bottom }}>
+      {/* data-scene-obstacle: world bubbles step around the call instead of printing over its goal. */}
       <div
+        data-scene-obstacle=""
         className="pointer-events-none flex max-w-[320px] animate-pop-in flex-col items-center gap-3 text-center"
-        style={{ padding: 28, background: 'radial-gradient(closest-side, color-mix(in oklab, var(--color-canvas-bg) 85%, transparent), transparent)' }}
+        // A solid core under the text (to 55%), then the fade: the plain fade left "$3M" on a monitor and the sentence
+        // across a desk (QA). Still a glow, never a plate.
+        style={{ padding: 28, background: 'radial-gradient(closest-side, color-mix(in oklab, var(--color-canvas-bg) 92%, transparent) 55%, transparent)' }}
       >
         {next?.targetValuation ? (
           <div className="flex flex-col items-center gap-0.5">

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { AMBIENT_VISIBLE_MS, AMBIENT_WAIT_MS, applyFrame, BubbleLayoutRegistry, CENTER_ANCHOR, createEntry, measure, resolveAnchor, runLayout, shiftBubble, type AnchorPos, type BubbleEl, type MeasuredEl } from './bubbleDriver'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AMBIENT_VISIBLE_MS, AMBIENT_WAIT_MS, applyFrame, BubbleLayoutRegistry, CENTER_ANCHOR, createEntry, ENTER_SCALE, measure, observeResize, removeEntry, resolveAnchor, runLayout, setExiting, shiftBubble, type AnchorPos, type BubbleEl, type MeasuredEl } from './bubbleDriver'
 import { layoutBubbles, type BubbleBox, type BubbleKind, type Viewport } from './bubbleLayout'
 
 const VP: Viewport = { left: 8, top: 8, right: 1432, bottom: 892 }
@@ -186,6 +186,86 @@ describe('bubble layout driver', () => {
   })
 })
 
+describe('enter / exit motion', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('fades and scales in on the first layout pass', () => {
+    const reg = new BubbleLayoutRegistry()
+    const d = add(reg, 'desk:payday', 'desk', 100, 300, 220, 60)
+    frames(reg, 4, 0)
+    expect(d.el.style).toMatchObject({ opacity: '1', scale: '1', visibility: 'visible' })
+    expect(d.el.style.transition).toContain('scale')
+  })
+
+  it('an exiting bubble fades out, stops taking clicks, and comes back if the exit is cancelled', () => {
+    const reg = new BubbleLayoutRegistry()
+    const d = add(reg, 'staff:e1', 'staff', 100, 300, 220, 60)
+    let t = frames(reg, 4, 0)
+    setExiting(reg, d.e, true)
+    t = frames(reg, 1, t)
+    expect(d.el.style).toMatchObject({ opacity: '0', scale: ENTER_SCALE, visibility: 'hidden', pointerEvents: 'none' })
+    // Still holds its slot while fading (nothing jumps into it mid-fade).
+    expect(measure(reg).map((b) => b.key)).toEqual(['staff:e1'])
+    setExiting(reg, d.e, false)
+    frames(reg, 1, t)
+    expect(d.el.style).toMatchObject({ opacity: '1', visibility: 'visible', pointerEvents: 'auto' })
+  })
+
+  it('lays the open bubble out first', () => {
+    const reg = new BubbleLayoutRegistry()
+    add(reg, 'dec', 'decision', 100, 300, 220, 60)
+    add(reg, 'staff:e1', 'staff', 110, 310, 220, 160)
+    reg.openKey = 'staff:e1'
+    frames(reg, 4, 0)
+    expect(reg.placements.get('staff:e1')).toMatchObject({ dx: 0, dy: 0 })
+    expect(reg.placements.get('dec')!.dy).not.toBe(0)
+  })
+
+  it('a resize marks the layout dirty at once; removing the entry stops observing', () => {
+    let cb: (() => void) | null = null
+    const disconnect = vi.fn()
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(f: () => void) {
+          cb = f
+        }
+        observe() {}
+        disconnect = disconnect
+      },
+    )
+    const reg = new BubbleLayoutRegistry()
+    const d = add(reg, 'desk:payday', 'desk', 100, 300, 220, 60)
+    observeResize(reg, d.e, {} as Element)
+    frames(reg, 4, 0)
+    expect(reg.dirty).toBe(false)
+    cb!()
+    expect(reg.dirty).toBe(true)
+    removeEntry(reg, d.e)
+    expect(disconnect).toHaveBeenCalled()
+    expect(reg.entries.size).toBe(0)
+  })
+
+  it('tilts the stem of a sideways-displaced forced bubble toward the head', () => {
+    const reg = new BubbleLayoutRegistry()
+    const vp: Viewport = { left: 8, top: 100, right: 600, bottom: 360 }
+    add(reg, 'dec', 'decision', 420, 150, 170, 155)
+    add(reg, 'vis', 'visitor', 150, 290, 150, 69)
+    const desk = add(reg, 'desk', 'desk', 344, 300, 140, 50)
+    let t = 0
+    for (let i = 0; i < 80; i++) {
+      t += 16
+      runLayout(reg, () => vp, t)
+      applyFrame(reg, 0.016, t)
+    }
+    // −75: the desk pill's tail (7px) clears the visitor pill by the full gap too.
+    expect(reg.placements.get('desk')).toMatchObject({ dx: -72, dy: -75 })
+    expect(desk.stem.style.display).toBe('block')
+    expect(desk.stem.style.left).toBe('134px')
+    expect(desk.stem.style.transform).toMatch(/^rotate\(-6\.\d+deg\)$/)
+  })
+})
+
 describe('resolveAnchor', () => {
   const at = (x: number, visible = true): AnchorPos => ({ x, y: 1, z: 0, visible })
 
@@ -201,14 +281,59 @@ describe('resolveAnchor', () => {
     const outside = new Map([['v1', at(9, false)], ['founder', founder]])
     for (const kind of ['decision', 'concept', 'conceptIcon'] as const) {
       expect(resolveAnchor('v1', kind, gone)).toEqual({ pos: founder, visible: true, anchorId: 'founder' })
-      expect(resolveAnchor('v1', kind, outside)).toEqual({ pos: founder, visible: true, anchorId: 'founder' })
+      if (kind !== 'decision') expect(resolveAnchor('v1', kind, outside)).toEqual({ pos: founder, visible: true, anchorId: 'founder' })
     }
+  })
+
+  it("keeps a visitor's own ask on that visitor while they wait at the door (never over the desk)", () => {
+    const door = at(9, false)
+    const pos = new Map([['v1', door], ['desk', at(5)], ['founder', at(0)]])
+    for (const kind of ['decision', 'visitor'] as const) expect(resolveAnchor('v1', kind, pos)).toEqual({ pos: door, visible: true, anchorId: 'v1' })
+    // Company business still moves to the desk.
+    expect(resolveAnchor('v1', 'staff', pos).anchorId).toBe('desk')
+  })
+
+  it("waits above a walking visitor's reserved spot (no stem), then hands over to the head once they stand", () => {
+    const walker: AnchorPos = { x: 9, y: 1.05, z: 0, visible: true, walking: true, dest: { x: 2, z: 3 } }
+    const pos = new Map([['v1', walker], ['founder', at(0)]])
+    for (const kind of ['decision', 'visitor'] as const)
+      expect(resolveAnchor('v1', kind, pos)).toEqual({ pos: { x: 2, y: 1.05, z: 3, visible: true }, visible: true, anchorId: 'v1', ahead: true })
+    // Ambient lines and company business never wait ahead.
+    expect(resolveAnchor('v1', 'ambient', pos).pos).toBe(walker)
+    walker.walking = false
+    expect(resolveAnchor('v1', 'decision', pos)).toEqual({ pos: walker, visible: true, anchorId: 'v1' })
+  })
+
+  it('an ahead bubble draws no stem and hides its tail', () => {
+    const reg = new BubbleLayoutRegistry()
+    const a = add(reg, 'decision:x', 'decision', 100, 100, 100, 30)
+    const b = add(reg, 'visitor:pitch:v2', 'visitor', 600, 100, 100, 30)
+    a.e.ahead = true
+    for (const x of [a, b]) x.e.frames = 5
+    reg.placements.set(a.e.key, { dx: 0, dy: -40, hidden: false, stem: 30, stemX: 50 })
+    reg.placements.set(b.e.key, { dx: 0, dy: -40, hidden: false, stem: 30, stemX: 50 })
+    reg.dirty = false
+    reg.lastLayout = 0
+    applyFrame(reg, 1 / 60, 1)
+    expect(b.stem.style.display).toBe('block')
+    expect(a.stem.style.display ?? 'none').toBe('none')
   })
 
   it('falls back to the scene centre (pos null) when the founder is outside too, still visible', () => {
     const pos = new Map([['v1', at(9, false)], ['founder', at(0, false)]])
-    expect(resolveAnchor('v1', 'decision', pos)).toEqual({ pos: null, visible: true, anchorId: CENTER_ANCHOR })
+    expect(resolveAnchor('v1', 'staff', pos)).toEqual({ pos: null, visible: true, anchorId: CENTER_ANCHOR })
+    expect(resolveAnchor('v1', 'decision', new Map([['founder', at(0, false)]]))).toEqual({ pos: null, visible: true, anchorId: CENTER_ANCHOR })
     expect(resolveAnchor('v1', 'concept', new Map())).toEqual({ pos: null, visible: true, anchorId: CENTER_ANCHOR })
+  })
+
+  it('falls back speaker → desk → founder → centre for every non-ambient bubble', () => {
+    const desk = at(5)
+    const founder = at(0)
+    for (const kind of ['decision', 'desk', 'staff', 'visitor', 'reflection'] as const) {
+      expect(resolveAnchor('v1', kind, new Map([['desk', desk], ['founder', founder]]))).toEqual({ pos: desk, visible: true, anchorId: 'desk' })
+      expect(resolveAnchor('desk', kind, new Map([['founder', founder]]))).toEqual({ pos: founder, visible: true, anchorId: 'founder' })
+      expect(resolveAnchor('desk', kind, new Map([['desk', desk]]))).toEqual({ pos: desk, visible: true, anchorId: 'desk' })
+    }
   })
 
   it('still hides ambient lines of a speaker who is outside', () => {
@@ -218,7 +343,7 @@ describe('resolveAnchor', () => {
   })
 
   it("hides the founder's ambient line while a decision moved from an absent visitor sits above the founder", () => {
-    const pos = new Map([['v1', at(9, false)], ['founder', at(0)]])
+    const pos = new Map([['founder', at(0)]])
     const dec = resolveAnchor('v1', 'decision', pos)
     const amb = resolveAnchor('founder', 'ambient', pos)
     expect(dec.anchorId).toBe('founder')

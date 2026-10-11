@@ -2,7 +2,7 @@
 // warm soft lighting + shadows, and all office layers.
 import { OrthographicCamera } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { GameState } from '../engine/types'
 import type { Selection, ZoomLevel } from '../store/types'
@@ -11,11 +11,11 @@ import { CAMERA_DIR, CELL, ZOOM_FACTORS, clamp, damp } from './constants'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
-import type { OfficeLayout } from './layout'
+import { furnishedBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
 import { stagePalette } from './palette'
 import { People } from './People'
-import { speakerPositions, useLayout } from './sceneRegistry'
+import { speakerPositions, useLayout, useOffice } from './sceneRegistry'
 import { SlotsLayer } from './Slot'
 import { useGS, useUi } from './source'
 import { panelSelection } from '../store/gameStore'
@@ -30,6 +30,7 @@ export interface OfficeSceneProps {
 }
 
 const CAM_DIST = 60
+const CAM_FAR = 140
 const dir = new THREE.Vector3(...CAMERA_DIR).normalize()
 
 function focusOf(sel: Selection | null, layout: OfficeLayout): [number, number] | null {
@@ -60,12 +61,17 @@ function frameBox(layout: OfficeLayout, zoomLevel: ZoomLevel): { cx: number; cz:
   return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
 }
 
+/** The furnished box is used only when it is clearly smaller than the default frame. */
+const FURNISHED_MIN_GAIN = 0.85
+
 const camRight = new THREE.Vector3()
 const camUp = new THREE.Vector3()
 
 function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const cam = useRef<THREE.OrthographicCamera>(null)
   const layout = useLayout()
+  const office = useOffice()
+  const furnished = useMemo(() => furnishedBox(layout, office.slots), [layout, office])
   const selection = useUi((u) => panelSelection(u.panel))
   const insetWant = useUi((u) => u.sceneInset)
   const size = useThree((s) => s.size)
@@ -87,11 +93,14 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     }
     const availW = Math.max(size.width - ins.right, size.width * 0.3)
     const availH = Math.max(size.height - ins.top - ins.bottom, Math.min(size.height, 140))
-    const frame = frameBox(layout, zoomLevel)
+    const portrait = availH > availW * 1.2
+    let frame = frameBox(layout, zoomLevel)
+    if (portrait && zoomLevel === 1 && furnished && furnished.r < frame.r * FURNISHED_MIN_GAIN) frame = furnished
     const r = Math.max(frame.r, 3)
     // A tall free area (portrait phone) is width-bound: trim the side margin (the diamond's width is ~2r) so the
-    // office uses more of the room between the bars instead of floating in beige.
-    const sideFit = availH > availW * 1.2 ? 2.05 : 2.35
+    // office uses more of the room between the bars instead of floating in beige. 1.9 < 2r lets the diamond's two
+    // bare side tips run a few px off screen: figures read ~8% larger on a phone.
+    const sideFit = portrait ? 1.9 : 2.35
     const fit = Math.min(availW / (r * sideFit), availH / (r * 1.75 + 2.6))
     const want = clamp(fit * ZOOM_FACTORS[zoomLevel], 12, 400)
 
@@ -130,7 +139,9 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     c.updateProjectionMatrix()
   })
 
-  return <OrthographicCamera ref={cam} makeDefault near={0.1} far={300} position={[CAM_DIST, CAM_DIST, CAM_DIST]} zoom={60} />
+  // Tight depth range (the camera sits CAM_DIST from the office): floor decals stay stable when zoomed out.
+  // far covers the whole ground plane at the widest zoom of the largest office.
+  return <OrthographicCamera ref={cam} makeDefault near={1} far={CAM_FAR} position={[CAM_DIST, CAM_DIST, CAM_DIST]} zoom={60} />
 }
 
 function Lights({ lowPower }: { lowPower: boolean }) {
@@ -176,9 +187,12 @@ function Lights({ lowPower }: { lowPower: boolean }) {
   )
 }
 
-/** Short "moving in" pop when the office changes stage. */
+/** Short "moving in" pop when the office changes stage, scaling about the new office's centre. */
 function StageTransition({ children }: { children: ReactNode }) {
   const stage = useGS((s: GameState) => s.office.stage)
+  const layout = useLayout()
+  const center = useRef(layout.center)
+  center.current = layout.center
   const g = useRef<THREE.Group>(null)
   const since = useRef(-1)
   const prev = useRef(stage)
@@ -192,8 +206,11 @@ function StageTransition({ children }: { children: ReactNode }) {
     if (since.current < 0) return
     const k = Math.min(1, (performance.now() - since.current) / 900)
     const e = 1 - Math.pow(1 - k, 3)
-    grp.scale.setScalar(0.9 + 0.1 * e)
-    grp.position.y = (1 - e) * -0.6
+    const sc = 0.9 + 0.1 * e
+    const [cx, cz] = center.current
+    grp.scale.setScalar(sc)
+    // Pivot on the office centre (not the world origin): position = c·(1 − s).
+    grp.position.set(cx * (1 - sc), (1 - e) * -0.6, cz * (1 - sc))
     if (k >= 1) since.current = -1
   })
   return <group ref={g}>{children}</group>

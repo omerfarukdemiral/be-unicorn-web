@@ -5,6 +5,7 @@
 // - a manual user hunt (founder action): a few figures walk in through the door and "+N" rises over the desk
 //   (playtest 2026-10-06: the result is seen where it happens, not only as a number changing in the top bar).
 // Watches state.events with its own cursor; a new game / loaded save skips the history.
+// Runs on scene time (sceneRegistry.sceneTime): while a bubble holds the world nothing here moves or expires.
 import { Html } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -14,9 +15,12 @@ import { UI_TEXT } from '../content'
 import { CELL } from './constants'
 import { Confetti } from './Effects'
 import { pathFromDoor, type XZ } from './layout'
+import { useHtmlPortal } from './htmlPortal'
 import { CONFETTI_COLORS } from './palette'
-import { celebrate, useLayout } from './sceneRegistry'
-import { useGS, useUi } from './source'
+import { celebrate, sceneTime, useLayout, useSceneTimers } from './sceneRegistry'
+import { useGS, useSceneCovered, useUi } from './source'
+import { useYieldToBubbles } from './yieldToBubbles'
+import { DOOR_FADE } from './walker'
 
 const MAX_FIGURES = 8
 const WALK_SPEED = 2.4 // world units / s
@@ -33,8 +37,12 @@ interface SceneFloat {
   id: number
   text: string
   tone: 'users' | 'cash' | 'ink'
+  /** Scene time (ms). */
   started: number
 }
+
+/** Scene time in ms (the started / expiry clock of every beat here). */
+const sceneMs = () => sceneTime.t * 1000
 
 function text(key: string, params: Record<string, string | number>): string {
   return (UI_TEXT[key] ?? key).replace(/\{(\w+)\}/g, (m, k: string) => (params[k] === undefined ? m : String(params[k])))
@@ -60,6 +68,7 @@ export function JuiceLayer() {
   const [floats, setFloats] = useState<SceneFloat[]>([])
   const [hunt, setHunt] = useState<{ id: number; count: number } | null>(null)
   const pulse = useRef<{ at: number; color: THREE.Color } | null>(null)
+  const later = useSceneTimers()
 
   useEffect(() => {
     const maxId = events[events.length - 1]?.id ?? 0
@@ -73,17 +82,17 @@ export function JuiceLayer() {
       if (e.kind === 'release') {
         const r = releases?.find((x) => x.id === e.refId)
         if (!r) continue
-        setWave({ id: e.id, release: r, started: performance.now() })
+        setWave({ id: e.id, release: r, started: sceneMs() })
         const id = e.id
-        window.setTimeout(() => setWave((w) => (w?.id === id ? null : w)), WAVE_MS)
-        pulse.current = { at: performance.now(), color: new THREE.Color('#ffe7a8') }
+        later(WAVE_MS, () => setWave((w) => (w?.id === id ? null : w)))
+        pulse.current = { at: sceneMs(), color: new THREE.Color('#ffe7a8') }
         if (r.level >= 2) {
           setConfetti((n) => n + 1)
           celebrate(2000)
         }
       } else if (e.kind === 'payday' && (e.value ?? 0) > 0.5) {
-        pulse.current = { at: performance.now(), color: new THREE.Color('#ff9a8a') }
-        addFloat({ id: e.id, text: `−${money(e.value ?? 0)}`, tone: 'ink', started: performance.now() })
+        pulse.current = { at: sceneMs(), color: new THREE.Color('#ff9a8a') }
+        addFloat({ id: e.id, text: `−${money(e.value ?? 0)}`, tone: 'ink', started: sceneMs() })
         // Phones feel payday (a short tick); desktops ignore it.
         try {
           navigator.vibrate?.(30)
@@ -92,18 +101,19 @@ export function JuiceLayer() {
         }
       } else if (e.kind === 'founderActionDone' && e.refId === 'findUsers' && (e.value ?? 0) >= 1) {
         const n = Math.round(e.value ?? 0)
-        addFloat({ id: e.id, text: `+${n}`, tone: 'users', started: performance.now() })
+        addFloat({ id: e.id, text: `+${n}`, tone: 'users', started: sceneMs() })
         const id = e.id
         setHunt({ id, count: Math.min(5, Math.max(1, n)) })
-        window.setTimeout(() => setHunt((h) => (h?.id === id ? null : h)), WAVE_MS)
+        later(WAVE_MS, () => setHunt((h) => (h?.id === id ? null : h)))
       }
     }
     c.id = maxId
-  }, [events, releases, generation])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addFloat only uses stable setters / later
+  }, [events, releases, generation, later])
 
   function addFloat(f: SceneFloat) {
-    setFloats((cur) => [...cur.filter((x) => performance.now() - x.started < FLOAT_MS), f].slice(-MAX_FLOATS))
-    window.setTimeout(() => setFloats((cur) => cur.filter((x) => x.id !== f.id)), FLOAT_MS)
+    setFloats((cur) => [...cur.filter((x) => sceneMs() - x.started < FLOAT_MS), f].slice(-MAX_FLOATS))
+    later(FLOAT_MS, () => setFloats((cur) => cur.filter((x) => x.id !== f.id)))
   }
 
   const desk = useMemo<XZ>(() => layout.itemCenter.get('founder')?.pos ?? layout.slotWorld.get('founder') ?? layout.center, [layout])
@@ -118,7 +128,7 @@ export function JuiceLayer() {
       l.intensity = 0
       return
     }
-    const k = (performance.now() - p.at) / PULSE_MS
+    const k = (sceneMs() - p.at) / PULSE_MS
     if (k >= 1) {
       pulse.current = null
       l.intensity = 0
@@ -128,25 +138,38 @@ export function JuiceLayer() {
     l.intensity = 9 * Math.sin(Math.PI * Math.min(1, k * 1.4)) * (1 - k)
   })
 
+  // A card or the start call owns the screen: the banner and "+N" wait out of sight (they keep their clock).
+  const covered = useSceneCovered()
+
   return (
     <>
       <pointLight ref={light} position={[desk[0], 3.2, desk[1]]} distance={CELL * 7} decay={1.6} intensity={0} />
       <Confetti trigger={confetti} origin={desk} />
-      {wave && <ReleaseBanner key={wave.id} wave={wave} at={desk} />}
+      {wave && <ReleaseBanner key={wave.id} wave={wave} at={desk} hidden={covered} />}
       {wave && <UserWave key={`w${wave.id}`} count={Math.min(MAX_FIGURES, Math.max(2, Math.round(Math.sqrt(wave.release.users))))} target={desk} />}
       {hunt && !wave && <UserWave key={`h${hunt.id}`} count={hunt.count} target={desk} />}
-      {floats.length > 0 && <Floats items={floats} at={desk} />}
+      {floats.length > 0 && <Floats items={floats} at={desk} hidden={covered} />}
     </>
   )
 }
 
 const TONE_COLOR: Record<SceneFloat['tone'], string> = { users: 'var(--color-g-users)', cash: 'var(--color-g-cash)', ink: 'var(--color-ink)' }
 
+/** CSS animations follow the scene clock: paused while a bubble holds the world. */
+function usePlayState(): 'paused' | 'running' {
+  return useUi((u) => u.pauseReasons.length > 0) ? 'paused' : 'running'
+}
+
 /** "+4 👤" / "−$3.2K" rising over the desk; newer ones sit above older ones. */
-function Floats({ items, at }: { items: readonly SceneFloat[]; at: XZ }) {
+function Floats({ items, at, hidden }: { items: readonly SceneFloat[]; at: XZ; hidden: boolean }) {
+  const play = usePlayState()
+  const portal = useHtmlPortal()
+  const box = useRef<HTMLDivElement>(null)
+  // The "+N" floats also clear the release banner above them.
+  useYieldToBubbles(box, '[data-juice-banner]')
   return (
-    <Html position={[at[0], 2.2, at[1]]} center zIndexRange={[14, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
-      <div style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', gap: 4 }}>
+    <Html portal={portal} position={[at[0], 2.2, at[1]]} center zIndexRange={[14, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
+      <div ref={box} data-juice-float="" style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', gap: 4, visibility: hidden ? 'hidden' : undefined }}>
         {items.map((f) => (
           <div
             key={f.id}
@@ -161,6 +184,7 @@ function Floats({ items, at }: { items: readonly SceneFloat[]; at: XZ }) {
               alignItems: 'center',
               gap: 4,
               animation: `rise-float ${FLOAT_MS}ms ease-out both`,
+              animationPlayState: play,
             }}
           >
             {f.tone === 'users' && <UsersGlyph />}
@@ -188,23 +212,29 @@ function money(n: number): string {
   return a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(a / 1e3).toFixed(1)}K` : `$${Math.round(a)}`
 }
 
-function ReleaseBanner({ wave, at }: { wave: Wave; at: XZ }) {
+function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boolean }) {
   const [on, setOn] = useState(true)
-  useEffect(() => {
-    const id = window.setTimeout(() => setOn(false), BANNER_MS)
-    return () => window.clearTimeout(id)
-  }, [])
+  const play = usePlayState()
+  const portal = useHtmlPortal()
+  const box = useRef<HTMLDivElement>(null)
+  useYieldToBubbles(box)
+  const later = useSceneTimers()
+  useEffect(() => later(BANNER_MS, () => setOn(false)), [later])
   if (!on) return null
   const r = wave.release
   const level = UI_TEXT[`release.level.${Math.max(1, Math.min(5, r.level))}`] ?? String(r.level)
   return (
-    <Html position={[at[0], 2.6, at[1]]} center zIndexRange={[15, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
-      <div
-        className="animate-pop-in whitespace-nowrap rounded-[10px] px-3 py-1.5 text-center shadow-pop"
-        style={{ background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)' }}
-      >
-        {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
-        <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>{text('release.banner', { level })}</div>
+    <Html portal={portal} position={[at[0], 3.0, at[1]]} center zIndexRange={[15, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
+      {/* The yield (translate + fade) sits on this wrapper: pop-in's `both` fill owns the inner box's opacity, so a fade
+          written there never showed and the banner stayed under the pill when it had no free height (QA). */}
+      <div ref={box} data-juice-banner="" style={{ visibility: hidden ? 'hidden' : undefined }}>
+        <div
+          className="animate-pop-in whitespace-nowrap rounded-[10px] px-3 py-1.5 text-center shadow-pop"
+          style={{ background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', animationPlayState: play }}
+        >
+          {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>{text('release.banner', { level })}</div>
+        </div>
       </div>
     </Html>
   )
@@ -219,7 +249,7 @@ interface Figure {
 /** Simple user figures (body + head) walking in through the door to the desk area, then fading out. */
 function UserWave({ count, target }: { count: number; target: XZ }) {
   const layout = useLayout()
-  const started = useRef(performance.now())
+  const started = useRef(sceneTime.t)
   const figures = useMemo<Figure[]>(() => {
     const out: Figure[] = []
     for (let i = 0; i < count; i++) {
@@ -227,7 +257,8 @@ function UserWave({ count, target }: { count: number; target: XZ }) {
       const spot: XZ = [target[0] + Math.cos(a) * CELL * 0.9, target[1] + Math.sin(a) * CELL * 0.9]
       out.push({
         path: [layout.door.outside, ...pathFromDoor(spot, layout)],
-        delay: i * 0.22,
+        // 0.4 s apart at WALK_SPEED ≈ 1 u: the figures walk in single file instead of merging in the doorway.
+        delay: i * 0.4,
         color: new THREE.Color(CONFETTI_COLORS[i % CONFETTI_COLORS.length]!),
       })
     }
@@ -249,7 +280,7 @@ function UserWave({ count, target }: { count: number; target: XZ }) {
   )
 
   useFrame(() => {
-    const t = (performance.now() - started.current) / 1000
+    const t = sceneTime.t - started.current
     figures.forEach((f, i) => {
       const g = refs.current[i]
       if (!g) return
@@ -276,7 +307,9 @@ function UserWave({ count, target }: { count: number; target: XZ }) {
       // Linger, then shrink away (they have "joined" the product).
       const after = (walked - total) / WALK_SPEED
       const fade = moving ? 1 : Math.max(0, 1 - Math.max(0, after - FIGURE_LINGER) / 0.5)
-      g.scale.setScalar(fade)
+      // Grow in over the first steps through the door (walker.doorScale's threshold), never blink in on the door tile.
+      const door = Math.min(1, Math.max(0, t - f.delay) * WALK_SPEED / DOOR_FADE)
+      g.scale.setScalar(fade * (0.85 + 0.15 * door) * Math.min(1, door * 2))
       if (fade <= 0) g.visible = false
     })
   })

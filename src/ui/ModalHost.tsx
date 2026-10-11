@@ -4,12 +4,16 @@
 // statistics, Kanun Kitabı, Pazar haritası) render in the CenterFrame and never pause; a blocking modal replaces them.
 // The payday desk (GAMEPLAY V2 §6.1) opens on `paydayShort` (and on a loaded save with a month waiting), takes the place
 // of a center screen, and goes ahead of anything queued while a month waits; it holds time through its own `payday`
-// pause, and "Sonra" closes it like any overlay (the horizon strip reopens it).
+// pause, and "Sonra" closes it like any overlay (the horizon strip reopens it). With world bubbles (scene-first) the
+// month is asked at the founder's desk instead: the desk bubble opens expanded (the `bubble` pause holds the world) and
+// its "Masa" row opens this desk for line-by-line answers.
 // Everything else (Defter cards, decisions, round, settings) opens in the single right panel.
 import { useCallback, useEffect, useRef } from 'react'
 import { useGameStore } from '../store/gameStore'
 import type { GameOverState } from '../engine/types'
 import type { Overlay } from '../store/types'
+import { openBubble } from './bubbles/Expandable'
+import { useIsMobile } from './hooks'
 import { requestOverlay, useModalQueue } from './modalQueue'
 import { PaydayOverlay } from './overlays/PaydayOverlay'
 import { MoveSceneOverlay, PostMortemOverlay, VictoryOverlay } from './overlays/Overlays'
@@ -47,7 +51,10 @@ function takeNext(): Overlay | undefined {
   return useModalQueue.getState().shift()
 }
 
-export function ModalHost() {
+/** Scene-first payday: the founder's desk asks (its bubble opens expanded) instead of the desk overlay. */
+const PAYDAY_BUBBLE = 'desk:payday'
+
+export function ModalHost({ worldBubbles = false }: { worldBubbles?: boolean } = {}) {
   const overlay = useGameStore((s) => s.ui.overlay)
   const closeOverlay = useGameStore((s) => s.closeOverlay)
   const openOverlay = useGameStore((s) => s.openOverlay)
@@ -69,7 +76,7 @@ export function ModalHost() {
     }
   }, [overlay, queueLen, openOverlay])
 
-  useEngineEventOverlays()
+  useEngineEventOverlays(worldBubbles)
 
   if (!overlay) return null
   switch (overlay.kind) {
@@ -90,8 +97,28 @@ export function ModalHost() {
 }
 
 /** Own event cursor over state.events (render/Effects keeps its own). */
-function useEngineEventOverlays() {
+function useEngineEventOverlays(worldBubbles: boolean) {
   const cursor = useRef<number | null>(null)
+  const mobile = useIsMobile()
+  const askDesk = useRef<() => void>(() => {})
+  // Payday asked while another bubble was open: it opens (and pauses) as soon as that one closes.
+  const deferred = useRef(false)
+  askDesk.current = () => {
+    if (!worldBubbles) return requestOverDesk({ kind: 'payday' })
+    // Another bubble the player opened keeps the floor; payday waits for it, not for the engine's 3-day default.
+    if (useGameStore.getState().ui.bubbleOpen === null) openBubble(PAYDAY_BUBBLE, mobile)
+    else deferred.current = true
+  }
+  useEffect(
+    () =>
+      useGameStore.subscribe((s, p) => {
+        if (s.ui.bubbleOpen === PAYDAY_BUBBLE) deferred.current = false
+        if (!deferred.current || p.ui.bubbleOpen === null || s.ui.bubbleOpen !== null) return
+        deferred.current = false
+        if (worldBubbles && deskWaiting()) openBubble(PAYDAY_BUBBLE, mobile)
+      }),
+    [worldBubbles, mobile],
+  )
   const events = useGameStore((s) => s.state.events)
   const gameOver = useGameStore((s) => s.state.gameOver)
   const generation = useGameStore((s) => s.ui.generation)
@@ -100,17 +127,19 @@ function useEngineEventOverlays() {
   useEffect(() => {
     cursor.current = useGameStore.getState().state.events.reduce((m, e) => Math.max(m, e.id), 0)
     // A save loaded with a month on the desk: the desk is the first thing to answer.
-    if (deskWaiting()) requestOverDesk({ kind: 'payday' })
+    if (deskWaiting()) askDesk.current()
   }, [generation])
 
   useEffect(() => {
     if (cursor.current === null) return
     const maxId = events.reduce((m, e) => Math.max(m, e.id), 0)
+    // The Unicorn stage-up is the win: the victory screen says so, not a "Kampüs" move card in front of it (QA).
+    const won = useGameStore.getState().state.gameOver?.kind === 'unicorn' || events.some((e) => e.id > cursor.current! && e.kind === 'victory')
     for (const e of events) {
       if (e.id <= cursor.current) continue
-      if (e.kind === 'stageUp') requestOverDesk({ kind: 'moveScene' })
+      if (e.kind === 'stageUp' && !won) requestOverDesk({ kind: 'moveScene' })
       else if (e.kind === 'victory') requestOverDesk({ kind: 'victory' })
-      else if (e.kind === 'paydayShort' && deskWaiting()) requestOverDesk({ kind: 'payday' })
+      else if (e.kind === 'paydayShort' && deskWaiting()) askDesk.current()
     }
     cursor.current = Math.max(cursor.current, maxId)
   }, [events])

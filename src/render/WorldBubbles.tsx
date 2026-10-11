@@ -1,90 +1,420 @@
-// Decides which world-anchored bubbles exist (ambient lines, decision) and anchors them above their speakers.
+// Decides which world-anchored bubbles exist and anchors them above whoever they concern (spec "scene-first"):
+// the founder's own calls at the central desk ('desk'), people above the employee, visitors' asks above that NPC.
 // Content is drawn by the BubbleRenderer (ui) or DefaultBubble. Concepts have no scene bubble since GAMEPLAY_V2 A2:
 // they go to the Kazanımlar icon, and tapping the visitor who brought one opens its card.
-import { useMemo, useState } from 'react'
+// Pipeline: routeCandidates (pure, from GameState) → BubbleTimeline (real-time delays, linger, reflection, exits)
+// → capBubbles (≤ MAX_ACTIONABLE, one per anchor, priority order) → BubbleAnchor (layout + fade).
+import { useEffect, useMemo, useState } from 'react'
 import { DECISIONS, OFFICE_LINES } from '../content'
-import type { Dept, Employee, GameState, NpcRole, Visitor } from '../engine/types'
+import type { DecisionCardId, GameState, NpcRole } from '../engine/types'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
-import type { BubbleRenderer, WorldBubble } from './bubbles'
+import type { BubbleRenderer, DeskTopic, StaffNeed, VisitorTopic, WorldBubble } from './bubbles'
+import { idleBuilders } from '../engine/loopSelectors'
+import { firstFreeDesk } from '../engine/office'
 import { UI_TONES } from './palette'
-import { useLayout } from './sceneRegistry'
-import { storeApi, useGS } from './source'
+import { speakerWalking, useLayout } from './sceneRegistry'
+import { getGS, storeApi, useGS, useMockState, useSceneCovered, useUi } from './source'
 
-const ROLE_DEPT: Partial<Record<NpcRole, Dept>> = { engineer: 'eng', accountant: 'ops' }
+// ---------------------------------------------------------------------------
+// Routing (pure)
+// ---------------------------------------------------------------------------
 
-/** Who says a concept/decision line: a matching visitor, a matching employee, else the founder. */
-export function resolveSpeaker(role: NpcRole, refId: string | undefined, visitors: readonly Visitor[], employees: readonly Employee[]): string {
-  const byRef = refId ? visitors.find((v) => v.refId === refId) : undefined
-  if (byRef) return byRef.id
-  const byRole = visitors.find((v) => v.role === role)
-  if (byRole) return byRole.id
-  const dept = ROLE_DEPT[role]
-  if (dept) {
-    const e = employees.find((x) => x.dept === dept && x.status !== 'leaving')
-    if (e) return e.id
-  }
-  if (role === 'cofounder' && employees[0]) return employees[0].id
-  return 'founder'
-}
+/** Card speakers who stand in the scene as themselves; every other card is the founder's own call (desk). */
+export const NPC_SPEAKS: ReadonlySet<NpcRole> = new Set<NpcRole>(['investor', 'customer', 'journalist'])
+
+/** At most this many bubbles ask for the player at once, so the office never turns into a notification wall. */
+export const MAX_ACTIONABLE = 3
+
+/** The central desk: the founder's own calls and projects. */
+export const DESK = 'desk'
 
 const decisionRole = (id: string): NpcRole => DECISIONS.find((d) => d.id === id)?.speaker ?? 'mentor'
 
 /**
- * One primitive key for every bubble on screen (kind|id|speaker per line). The store clones state
- * every tick, so selecting arrays would rebuild all drei <Html> nodes 2–8×/s; a string only changes
- * when a bubble or its speaker does. Expired ambient lines are removed by the engine (expireBubbles).
+ * Who asks a decision card: its investor / customer / journalist visitor while that visitor is in the state,
+ * otherwise the desk (cofounder, mentor, accountant, engineer cards are the founder's own call; the visitor stands by).
  */
-function selectBubbleKey(s: GameState): string {
-  const out: string[] = []
-  for (const b of s.bubbles) out.push(`a|${b.id}|${b.speakerId}|${b.lineId}`)
-  const ad = s.decisions.active
-  if (ad) {
-    const visitorOk = ad.visitorId !== undefined && s.visitors.some((v) => v.id === ad.visitorId)
-    out.push(`d|${ad.cardId}|${visitorOk ? ad.visitorId! : resolveSpeaker(decisionRole(ad.cardId), ad.cardId, s.visitors, s.employees)}`)
-  }
-  return out.join('\n')
+export function resolveSpeaker(cardId: DecisionCardId, visitorId: string | undefined, s: Pick<GameState, 'visitors'>): string {
+  if (NPC_SPEAKS.has(decisionRole(cardId)) && visitorId !== undefined && s.visitors.some((v) => v.id === visitorId)) return visitorId
+  return DESK
 }
 
-function buildList(key: string, ambient: boolean): WorldBubble[] {
-  const out: WorldBubble[] = []
-  if (!key) return out
-  for (const line of key.split('\n')) {
-    const [kind, id, speakerId, extra] = line.split('|') as [string, string, string, string | undefined]
-    if (kind === 'a') {
-      if (!ambient) continue
-      const text = OFFICE_LINES.find((l) => l.id === extra)?.text ?? '…'
-      out.push({ kind: 'ambient', key: `amb:${id}`, bubbleId: id, lineId: extra ?? '', speakerId, text })
-    } else if (kind === 'd') {
-      out.push({
-        kind: 'decision',
-        key: `decision:${id}`,
-        cardId: id,
-        role: decisionRole(id),
-        speakerId,
-        text: DECISIONS.find((d) => d.id === id)?.question ?? '…',
-        onOpen: () => storeApi().openPanel({ kind: 'decision', cardId: id }),
-      })
-    }
-  }
+/** One routed bubble, flat so a list of them serialises into the cheap selector string. */
+export interface RoutedLine {
+  kind: 'ambient' | 'decision' | 'staff' | 'desk' | 'visitor' | 'reflection'
+  /** Stable key (also the ui.bubbleOpen value). */
+  key: string
+  speakerId: string
+  /** ambient: bubbleId · decision / reflection: cardId · staff: need · desk / visitor: topic. */
+  ref: string
+  /** ambient: lineId · desk: refId · visitor: visitorId · reflection: optionIndex. */
+  extra?: string
+  /** Changes when the same key starts over (reflection: a new answer). */
+  stamp?: string
+}
+
+/** Who needs the player in the scene: people walking out first, then builders with nothing to build (each by id). */
+export function staffNeeds(s: Pick<GameState, 'employees'>): [string, StaffNeed][] {
+  const byId = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true })
+  const leaving = s.employees.filter((e) => e.status === 'leaving').map((e) => e.id).sort(byId)
+  const idle = [...idleBuilders(s)].sort(byId)
+  return [...leaving.map((id): [string, StaffNeed] => [id, 'leaving']), ...idle.map((id): [string, StaffNeed] => [id, 'idle'])]
+}
+
+const roundVisitor = (s: GameState): string | undefined => s.visitors.find((v) => v.purpose === 'round')?.id
+
+const deskKey = (topic: DeskTopic, refId?: string): string => (refId ? `desk:${topic}:${refId}` : `desk:${topic}`)
+
+/** Every desk topic that applies now, in priority order (the desk asks one at a time via capBubbles; the open one wins). */
+export function deskTopics(s: GameState, bubbleOpen: string | null): { topic: DeskTopic; refId?: string }[] {
+  const out: { topic: DeskTopic; refId?: string }[] = []
+  if (s.finance.pendingPayday) out.push({ topic: 'payday' })
+  // The down round needs no valuation window, only its retry wait: the way out when the numbers fell asks here too.
+  const r = s.derived.round
+  if ((s.derived.canStartRound || (r?.downRound && !r.retryIn)) && !s.round?.active && !s.gameOver) out.push({ topic: 'round' })
+  if (s.round?.active && s.round.pitchDue != null && roundVisitor(s) === undefined) out.push({ topic: 'pitch' })
+  const renewal = s.derived.renewals?.[0]
+  if (renewal) out.push({ topic: 'renewal', refId: renewal.id })
+  // Hiring asks while someone waits and a desk stands free (nextStep never names 'hire' any more; a free desk does).
+  if (s.candidates.length > 0 && firstFreeDesk(s.office) !== undefined) out.push({ topic: 'hire' })
+  if (s.derived.nextStep?.id === 'idea') out.push({ topic: 'project' })
+  if (bubbleOpen === deskKey('actions')) out.push({ topic: 'actions' })
   return out
 }
 
+/**
+ * Every bubble that wants to be in the scene right now, actionable ones in priority order (decision > visitor
+ * > desk > staff leaving > staff idle), then the reflection and ambient lines. No caps and no timing here.
+ */
+export function routeCandidates(s: GameState, opts: { bubbleOpen: string | null }): RoutedLine[] {
+  const out: RoutedLine[] = []
+  const ad = s.decisions.active
+  if (ad) out.push({ kind: 'decision', key: `decision:${ad.cardId}`, speakerId: resolveSpeaker(ad.cardId, ad.visitorId, s), ref: ad.cardId })
+
+  const rv = roundVisitor(s)
+  if (s.round?.active && s.round.pitchDue != null && rv !== undefined) {
+    const topic: VisitorTopic = 'pitch'
+    out.push({ kind: 'visitor', key: `visitor:${topic}:${rv}`, speakerId: rv, ref: topic, extra: rv })
+  }
+
+  // Every topic is a candidate (one per anchor is capBubbles' job): a snoozed round pill lets the next one ask.
+  for (const d of deskTopics(s, opts.bubbleOpen)) out.push({ kind: 'desk', key: deskKey(d.topic, d.refId), speakerId: DESK, ref: d.topic, extra: d.refId })
+
+  for (const [id, need] of staffNeeds(s)) out.push({ kind: 'staff', key: `staff:${id}`, speakerId: id, ref: need })
+
+  // Only a fresh answer reflects (a save loaded days later does not replay it); the 4 s are timed by BubbleTimeline.
+  const la = s.decisions.lastAnswer
+  if (la && ad?.cardId !== la.cardId && s.time.day - la.day <= REFLECTION_FRESH_DAYS) {
+    const v = s.visitors.find((x) => x.purpose === 'decision' && x.refId === la.cardId)
+    out.push({
+      kind: 'reflection',
+      key: `reflection:${la.cardId}`,
+      speakerId: resolveSpeaker(la.cardId, v?.id, s),
+      ref: la.cardId,
+      extra: String(la.optionIndex),
+      stamp: `${la.optionIndex}@${la.day}`,
+    })
+  }
+
+  for (const b of s.bubbles) out.push({ kind: 'ambient', key: `amb:${b.id}`, speakerId: b.speakerId, ref: b.id, extra: b.lineId })
+  return out
+}
+
+/** An answer older than this (game days) gets no reflection; covers 4 s real time at the fastest speed. */
+export const REFLECTION_FRESH_DAYS = 10
+
+/** Counts against MAX_ACTIONABLE (reflections and ambient lines do not). */
+export const isActionable = (l: Pick<RoutedLine, 'kind'>): boolean => l.kind === 'decision' || l.kind === 'visitor' || l.kind === 'desk' || l.kind === 'staff'
+
+const rankOf = (l: RoutedLine): number =>
+  l.kind === 'decision' ? 0 : l.kind === 'visitor' ? 1 : l.kind === 'desk' ? 2 : l.kind === 'staff' ? (l.ref === 'leaving' ? 3 : 4) : 5
+
+/** Idle builders ask one at a time: a late office full of "boşta" pills reads as a notification wall. */
+export const MAX_IDLE = 1
+
+/** ≤ MAX_ACTIONABLE actionable bubbles, one per anchor, ≤ MAX_IDLE idle builders, the open one first, then by priority. Others pass through. */
+export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | null): RoutedLine[] {
+  const act = lines.filter(isActionable)
+  const ranked = act
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => Number(b.l.key === bubbleOpen) - Number(a.l.key === bubbleOpen) || rankOf(a.l) - rankOf(b.l) || a.i - b.i)
+  const anchors = new Set<string>()
+  const out: RoutedLine[] = []
+  let idle = 0
+  for (const { l } of ranked) {
+    if (out.length >= MAX_ACTIONABLE) break
+    if (anchors.has(l.speakerId)) continue
+    const isIdle = l.kind === 'staff' && l.ref === 'idle'
+    if (isIdle && idle >= MAX_IDLE && l.key !== bubbleOpen) continue
+    if (isIdle) idle++
+    anchors.add(l.speakerId)
+    out.push(l)
+  }
+  for (const l of lines) if (!isActionable(l)) out.push(l)
+  return out
+}
+
+/** Which bubbles the scene shows for this state (no real-time delays): routeCandidates → capBubbles. */
+export function routeBubbles(s: GameState, opts: { bubbleOpen: string | null }): RoutedLine[] {
+  return capBubbles(routeCandidates(s, opts), opts.bubbleOpen)
+}
+
+const SEP = '|'
+const lineToString = (l: RoutedLine): string => [l.kind, l.key, l.speakerId, l.ref, l.extra ?? '', l.stamp ?? ''].join(SEP)
+
+function lineFromString(str: string): RoutedLine {
+  const [kind, key, speakerId, ref, extra, stamp] = str.split(SEP) as [RoutedLine['kind'], string, string, string, string, string]
+  return { kind, key, speakerId, ref, extra: extra || undefined, stamp: stamp || undefined }
+}
+
+/**
+ * One primitive key for every candidate bubble (one line each). The store clones state every tick, so selecting
+ * arrays would rebuild all drei <Html> nodes 2–8×/s; a string only changes when a bubble or its speaker does.
+ * Expired ambient lines are removed by the engine (expireBubbles).
+ */
+function selectBubbleKey(s: GameState, bubbleOpen: string | null): string {
+  return routeCandidates(s, { bubbleOpen }).map(lineToString).join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Timeline (real time): nothing pops in or out
+// ---------------------------------------------------------------------------
+
+/** A decision appears this long after its card (its visitor is on the way in), ms. */
+export const DECISION_DELAY_MS = 600
+/** An idle builder must stay idle this long before asking (no flicker between two projects), ms. */
+export const IDLE_DELAY_MS = 800
+/** …and their bubble stays this long after the need clears on its own, ms. */
+export const IDLE_LINGER_MS = 1_500
+/** An idle builder's (or the round window's) pill nobody opens steps back after this long (a "boşta" pill stood for hundreds of days, QA)… */
+export const IDLE_SHOW_MS = 20_000
+/** …and asks again after this long, ms. */
+export const IDLE_SNOOZE_MS = 40_000
+/** "Seçtin: …" stays this long after an answer, ms. */
+export const REFLECTION_MS = 4_000
+/** A removed bubble stays mounted (fading out) this long, ms. */
+export const EXIT_MS = 200
+/** A pill above someone walking in waits for them to stand still (a moving 44px target slides under the thumb), at most this long, ms. */
+export const ARRIVE_MAX_MS = 5_000
+/** How often a pill waiting for its speaker to arrive checks again, ms. */
+const ARRIVE_POLL_MS = 250
+
+export type ShownLine = RoutedLine & { exiting?: boolean }
+
+interface Seen {
+  first: number
+  stamp: string
+  line: RoutedLine
+  /** When the need cleared (idle linger), ms. */
+  clearedAt: number | null
+  /** Was expanded by the player: resolved on purpose, so it leaves without lingering. */
+  wasOpen: boolean
+  /** Passed the arrival gate once: never hidden again because its speaker walks (a visitor leaving, a resigner pacing). */
+  arrived: boolean
+}
+
+/**
+ * Pills that ride a person (not the desk, never ambient / reflection lines): they wait for the speaker to arrive.
+ * A decision never waits: the card is already running, so it asks above its visitor at the door at once
+ * (QA: a decision active > 4.5 s with no bubble while the visitor queued in the doorway, or never under a manual pause).
+ */
+const waitsForArrival = (l: RoutedLine): boolean => (l.kind === 'visitor' || l.kind === 'staff') && l.speakerId !== DESK
+
+/** Pills that may wait for long (a builder with nothing to build, a round window the player sits out) step back unopened. */
+const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && l.ref === 'idle') || (l.kind === 'desk' && l.ref === 'round')
+
+const delayOf = (l: RoutedLine): number => (l.kind === 'decision' ? DECISION_DELAY_MS : l.kind === 'staff' && l.ref === 'idle' ? IDLE_DELAY_MS : 0)
+
+/**
+ * Real-time gate between routing and the scene: delays (decision, idle builder), linger (idle builder), the
+ * reflection's 4 s, the global cap, and a short keep-alive (`exiting`) for removed bubbles so they fade out.
+ * `step` returns the lines to mount and when it needs to run again (nextAt, ms; null = only on change).
+ */
+export class BubbleTimeline {
+  private seen = new Map<string, Seen>()
+  private shown = new Map<string, RoutedLine>()
+  private exits = new Map<string, { line: RoutedLine; until: number }>()
+  private primed = false
+
+  step(
+    cands: readonly RoutedLine[],
+    open: string | null,
+    now: number,
+    isAlive: (speakerId: string) => boolean = () => true,
+    isWalking: (speakerId: string) => boolean = () => false,
+  ): { lines: ShownLine[]; nextAt: number | null } {
+    let nextAt = Infinity
+    const wake = (t: number) => {
+      if (t > now && t < nextAt) nextAt = t
+    }
+    const present = new Set<string>()
+    for (const c of cands) {
+      present.add(c.key)
+      let e = this.seen.get(c.key)
+      if (!e || e.stamp !== (c.stamp ?? '')) {
+        // A reflection already on record when the scene mounts (a loaded save) is old news.
+        e = { first: !this.primed && c.kind === 'reflection' ? -Infinity : now, stamp: c.stamp ?? '', line: c, clearedAt: null, wasOpen: false, arrived: false }
+        this.seen.set(c.key, e)
+      }
+      e.line = c
+      e.clearedAt = null
+      if (c.key === open) e.wasOpen = true
+    }
+    this.primed = true
+
+    const live: RoutedLine[] = []
+    for (const [key, e] of this.seen) {
+      if (!present.has(key)) {
+        const l = e.line
+        const wasShown = now - e.first >= IDLE_DELAY_MS
+        if (l.kind === 'staff' && l.ref === 'idle' && wasShown && !e.wasOpen && isAlive(l.speakerId)) {
+          e.clearedAt ??= now
+          if (now - e.clearedAt < IDLE_LINGER_MS) {
+            live.push(l)
+            wake(e.clearedAt + IDLE_LINGER_MS)
+            continue
+          }
+        }
+        this.seen.delete(key)
+        continue
+      }
+      const delay = delayOf(e.line)
+      if (key !== open && now - e.first < delay) {
+        wake(e.first + delay)
+        continue
+      }
+      if (snoozes(e.line) && key !== open) {
+        const age = now - e.first - delay
+        if (age >= IDLE_SHOW_MS + IDLE_SNOOZE_MS) e.first = now - delay
+        else if (age >= IDLE_SHOW_MS) {
+          wake(e.first + delay + IDLE_SHOW_MS + IDLE_SNOOZE_MS)
+          continue
+        } else wake(e.first + delay + IDLE_SHOW_MS)
+      }
+      if (!e.arrived && key !== open && waitsForArrival(e.line) && isWalking(e.line.speakerId) && now - e.first < ARRIVE_MAX_MS) {
+        wake(Math.min(now + ARRIVE_POLL_MS, e.first + ARRIVE_MAX_MS))
+        continue
+      }
+      e.arrived = true
+      if (e.line.kind === 'reflection') {
+        if (now - e.first >= REFLECTION_MS) continue
+        wake(e.first + REFLECTION_MS)
+      }
+      live.push(e.line)
+    }
+    // Keep candidate order (priority), lingering lines after their peers.
+    const pos = new Map(cands.map((c, i) => [c.key, i]))
+    live.sort((a, b) => (pos.get(a.key) ?? cands.length) - (pos.get(b.key) ?? cands.length))
+
+    const capped = capBubbles(live, open)
+    const next = new Map<string, RoutedLine>()
+    for (const l of capped) if (l.kind !== 'ambient') next.set(l.key, l)
+    // Ambient lines fade by their own 3 s animation; everything else fades out over EXIT_MS.
+    for (const [k, l] of this.shown) if (!next.has(k) && !this.exits.has(k)) this.exits.set(k, { line: l, until: now + EXIT_MS })
+    for (const k of next.keys()) this.exits.delete(k)
+    const out: ShownLine[] = [...capped]
+    for (const [k, x] of this.exits) {
+      if (now >= x.until) {
+        this.exits.delete(k)
+        continue
+      }
+      out.push({ ...x.line, exiting: true })
+      wake(x.until)
+    }
+    this.shown = next
+    return { lines: out, nextAt: nextAt === Infinity ? null : nextAt }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scene
+// ---------------------------------------------------------------------------
+
+function toBubble(l: RoutedLine): WorldBubble | null {
+  switch (l.kind) {
+    case 'ambient':
+      return { kind: 'ambient', key: l.key, bubbleId: l.ref, lineId: l.extra ?? '', speakerId: l.speakerId, text: OFFICE_LINES.find((x) => x.id === l.extra)?.text ?? '…' }
+    case 'decision': {
+      const cardId = l.ref
+      return {
+        kind: 'decision',
+        key: l.key,
+        cardId,
+        role: decisionRole(cardId),
+        speakerId: l.speakerId,
+        text: DECISIONS.find((d) => d.id === cardId)?.question ?? '…',
+        onOpen: () => storeApi().openPanel({ kind: 'decision', cardId }),
+      }
+    }
+    case 'staff':
+      return { kind: 'staff', key: l.key, speakerId: l.speakerId, need: l.ref as StaffNeed }
+    case 'desk':
+      return { kind: 'desk', key: l.key, speakerId: l.speakerId, topic: l.ref as DeskTopic, ...(l.extra ? { refId: l.extra } : null) }
+    case 'visitor':
+      return { kind: 'visitor', key: l.key, speakerId: l.speakerId, topic: l.ref as VisitorTopic, visitorId: l.extra ?? l.speakerId }
+    case 'reflection':
+      return { kind: 'reflection', key: l.key, speakerId: l.speakerId, cardId: l.ref, optionIndex: Number(l.extra ?? 0) }
+  }
+}
+
 export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: BubbleRenderer; ambient?: boolean }) {
-  const key = useGS(selectBubbleKey)
+  const bubbleOpen = useUi((u) => u.bubbleOpen ?? null)
+  // A centred card or screen (stage-up, victory, post-mortem, statistics…) or the start call owns the screen.
+  const covered = useSceneCovered()
+  const key = useGS((s) => selectBubbleKey(s, bubbleOpen))
   const layout = useLayout()
-  const list = useMemo(() => buildList(key, ambient), [key, ambient])
+  const mock = useMockState()
+
+  const [timeline] = useState(() => new BubbleTimeline())
+  const [wakeups, setWakeups] = useState(0)
+  const step = useMemo(() => {
+    const cands = key ? key.split('\n').map(lineFromString).filter((l) => ambient || l.kind !== 'ambient') : []
+    const s = getGS(mock)
+    const alive = (id: string) => s.employees.some((e) => e.id === id) || s.visitors.some((v) => v.id === id)
+    return timeline.step(cands, bubbleOpen, performance.now(), alive, mock ? undefined : speakerWalking)
+    // `wakeups` re-runs the gate when a delay, linger or exit runs out (nothing in the store changed).
+  }, [key, ambient, bubbleOpen, wakeups, timeline])
+  useEffect(() => {
+    if (step.nextAt === null) return
+    const id = window.setTimeout(() => setWakeups((n) => n + 1), Math.max(0, step.nextAt - performance.now()) + 4)
+    return () => window.clearTimeout(id)
+  }, [step])
+
+  // The expanded bubble is gone (speaker left, card defaulted, need resolved): let time run again.
+  useEffect(() => {
+    if (bubbleOpen !== null && !step.lines.some((l) => l.key === bubbleOpen && !l.exiting)) storeApi().setBubbleOpen(null)
+  }, [step, bubbleOpen])
+
+  const list = useMemo(() => step.lines.map((l) => ({ b: toBubble(l), exiting: !!l.exiting })), [step])
 
   // Overlaps (same or different speakers) are resolved in screen space by the layout driver.
   const [registry] = useState(() => new BubbleLayoutRegistry())
+  useEffect(() => {
+    registry.openKey = bubbleOpen
+    registry.covered = covered
+    registry.dirty = true
+  }, [registry, bubbleOpen, covered])
   useBubbleLayoutDriver(registry)
   const render = renderBubble ?? ((b: WorldBubble) => <DefaultBubble bubble={b} />)
   return (
     <group>
-      {list.map((b) => (
-        <BubbleAnchor key={b.key} layoutKey={b.key} kind={b.kind} layout={registry} speakerId={b.speakerId} fallback={layout.center} interactive={b.kind !== 'ambient'}>
-          {render(b)}
-        </BubbleAnchor>
-      ))}
+      {list.map(({ b, exiting }) =>
+        b ? (
+          <BubbleAnchor
+            key={b.key}
+            layoutKey={b.key}
+            kind={b.kind}
+            layout={registry}
+            speakerId={b.speakerId}
+            fallback={layout.center}
+            interactive={b.kind !== 'ambient' && b.kind !== 'reflection'}
+            openKey={bubbleOpen}
+            exiting={exiting}
+          >
+            {render(b)}
+          </BubbleAnchor>
+        ) : null,
+      )}
     </group>
   )
 }
@@ -118,6 +448,8 @@ const TEXT_FONT = 'var(--font-text)'
 const UI_FONT = 'var(--font-ui)'
 
 export function DefaultBubble({ bubble }: { bubble: WorldBubble }) {
+  // Staff, desk, visitor and reflection bubbles need the ui renderer (options, chips); none without it.
+  if (bubble.kind === 'staff' || bubble.kind === 'desk' || bubble.kind === 'visitor' || bubble.kind === 'reflection') return null
   if (bubble.kind === 'conceptIcon') {
     return (
       <button

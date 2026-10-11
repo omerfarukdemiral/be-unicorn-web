@@ -13,6 +13,7 @@ export const TIME_TEXT: Record<string, string> = {
   'time.reason.concept': 'Kavram okunuyor',
   'time.reason.modal': 'Bekliyor',
   'time.reason.payday': 'Maaş masası açık',
+  'time.reason.bubble': 'Sahnede karar',
   'time.resumesAt': 'Kapatınca {v}× devam',
   'time.perDay': '{v}/gün',
   'time.monthProgress': 'Ay {m}: {d}/30 gün',

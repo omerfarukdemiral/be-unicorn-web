@@ -93,13 +93,18 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
 
   return (
     <div className="flex shrink-0 items-center gap-2">
-      {showLabel && label && (
-        <span
-          role="status"
-          title={label.title}
-          className={cx('max-w-[84px] truncate text-[12px] font-bold animate-fade-in', label.tone === 'ink' ? 'text-ink' : 'text-ink-2')}
-        >
-          {label.text}
+      {/* A fixed slot (empty while time runs): a hold label appearing never squeezes the gauges beside it. */}
+      {showLabel && (
+        <span className="flex w-[84px] shrink-0 justify-end">
+          {label && (
+            <span
+              role="status"
+              title={label.title}
+              className={cx('max-w-full truncate text-[12px] font-bold animate-fade-in', label.tone === 'ink' ? 'text-ink' : 'text-ink-2')}
+            >
+              {label.text}
+            </span>
+          )}
         </span>
       )}
       <div

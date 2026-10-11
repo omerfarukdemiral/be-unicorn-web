@@ -19,6 +19,25 @@ if (import.meta.env.DEV) {
   w.__store = useGameStore
   // Seed + actions of this run, for reproducible bug reports (PLAN §8.3).
   w.__replay = () => useGameStore.getState().exportReplay()
+  // ?demo=staff (scene prototype): a run at Pre-seed with one leaver and one idle builder, written as the save so
+  // "Devam et" opens it. Dev server only; never in a build.
+  if (new URLSearchParams(location.search).get('demo') === 'staff') {
+    const [{ runDevPlay }, { writeSave }] = await Promise.all([import('./engine/devPlay'), import('./store/save')])
+    const s = runDevPlay({ targetStage: 1 }).state
+    const [builder, other] = [s.employees.find((e) => e.dept === 'eng'), s.employees.find((e) => e.dept !== 'eng')]
+    if (builder) {
+      for (const p of s.projects) p.assignedIds = p.assignedIds.filter((x) => x !== builder.id)
+      delete builder.projectId
+    }
+    if (other) {
+      other.status = 'leaving'
+      other.statusSinceDay = s.time.day
+      other.leaveDay = s.time.day + 30
+      other.morale = 25
+    }
+    writeSave(s)
+    history.replaceState(null, '', location.pathname)
+  }
 }
 
 initAudio()

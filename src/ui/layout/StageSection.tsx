@@ -180,10 +180,11 @@ function RoundSlot({ variant }: { variant: StageVariant }) {
         onClick={openRound}
         title={t('top.roundStart')}
         aria-label={t('top.roundStart')}
-        className={cx('ui-key ui-key-commit inline-flex shrink-0 items-center gap-1.5 px-3 text-[13px] font-extrabold', variant === 'mobile' ? 'h-11' : 'h-9')}
+        // Phones: a square 44px key (rocket only, the label is its aria-label): the stage name and date keep the row.
+        className={cx('ui-key ui-key-commit inline-flex shrink-0 items-center justify-center gap-1.5 text-[13px] font-extrabold', variant === 'mobile' ? 'size-11' : 'h-9 px-3')}
       >
-        <Icon name="rocket" size={15} />
-        {variant === 'wide' ? t('top.roundStart') : t('top.roundStartShort')}
+        <Icon name="rocket" size={variant === 'mobile' ? 18 : 15} />
+        {variant === 'mobile' ? null : variant === 'wide' ? t('top.roundStart') : t('top.roundStartShort')}
       </button>
     </span>
   )
@@ -200,6 +201,8 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
   const notch = useRivalNotch()
   const name = STAGES[s.stage]?.name ?? '—'
   const next = STAGES[s.stage + 1]
+  const mobile = variant === 'mobile'
+  const roundSlot = !s.gameOver && (s.roundActive || s.canStart)
 
   const nameEl = (
     <button
@@ -212,15 +215,20 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
       )}
     >
       <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-brand shadow-[0_1px_2px_rgb(71_51_191/.35)]" />
-      <span className="relative shrink-0">
-        {name}
+      {/* Phones: the name gives way (ellipsis) before anything overprints the date or the round key. */}
+      {/* Phones: the dot sits inside the name's box (pr-2.5), so it never peeks out from under the round key beside it. */}
+      <span className={cx('relative', mobile ? cx('min-w-0', s.newGoals > 0 && 'pr-2.5') : 'shrink-0')}>
+        <span className={mobile ? 'block truncate' : undefined}>{name}</span>
         {/* A ☆ stage goal reached since Yol haritası was last opened. */}
-        {s.newGoals > 0 && <span aria-hidden="true" className="absolute -right-2 -top-0.5 size-1.5 rounded-full bg-brand" />}
+        {s.newGoals > 0 && <span aria-hidden="true" className={cx('absolute -top-0.5 size-1.5 rounded-full bg-brand', mobile ? 'right-0' : '-right-2')} />}
       </span>
-      {/* Where on the Unicorn yolu: "3/7", always visible (phones too). */}
-      <span className="ui-num shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] leading-4 text-brand-ink">
-        {t('roadmap.step', { n: s.stage + 1 })}
-      </span>
+      {/* Where on the Unicorn yolu: "3/7". Phones never: the segmented progress line under the row shows it, and at
+          390px with the 4× pill the chip cut the stage name to "Pre-se…" (QA). */}
+      {!mobile && (
+        <span className="ui-num shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] leading-4 text-brand-ink">
+          {t('roadmap.step', { n: s.stage + 1 })}
+        </span>
+      )}
       {/* Wide only: below 1280 the gauges need the room. */}
       {variant === 'wide' && s.company && (
         <span title={t('top.companyTitle', { v: s.company })} className="font-text min-w-0 truncate text-[12px] font-medium text-ink-2">
@@ -232,9 +240,15 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
 
   if (variant === 'mobile') {
     return (
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-clip">
         {nameEl}
-        <DayClock compact />
+        {/* While the round key / week chip holds the row the date gives way (QA 390px: "Pre-se…", "S…"): the stage
+            name is what the player must read, and the round chip already counts the time that matters. */}
+        {!roundSlot && (
+          <span className="flex shrink-0">
+            <DayClock compact />
+          </span>
+        )}
         <RoundSlot variant="mobile" />
       </div>
     )

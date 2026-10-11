@@ -2,13 +2,37 @@
 // Pre-seed, "3/4") and the ability slots: 44px squares, icon only, the name in the tooltip; locked actions are grey
 // silhouettes with their stage pill. A finished action's return rises above its slot (FloatingNumber, ≤ 3 at once).
 // Phone / landscape phone: the same slots in a sideways-scrolling row, energy and moves as numbers.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { t } from '../i18n'
 import { cx } from '../primitives'
 import { EnergyMeter, FounderSlot, MovesMeter, PEEK_MS, useFounderActions, type FounderActionView } from '../FounderActions'
 import { FloatingNumbers, useFloatingNumbers } from '../FloatingNumber'
 
-export function FounderBar({ variant, className }: { variant: 'bar' | 'mobile'; className?: string }) {
+/** The phone row scrolls sideways: a soft right-edge fade while more slots sit past the edge (QA 390px: the bed slot was cut with no hint). */
+function useMoreRight(count: number): [RefObject<HTMLDivElement | null>, boolean, () => void] {
+  const ref = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState(false)
+  const check = () => {
+    const el = ref.current
+    if (el) setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 2)
+  }
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    for (const c of el.children) ro.observe(c)
+    check()
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-observe when the slot count changes
+  }, [count])
+  return [ref, more, check]
+}
+
+/** One slot wide (44px): a 28px fade on cream keys read as clipping, not as "the row scrolls" (QA). */
+const FADE_RIGHT = 'linear-gradient(to right, black calc(100% - 44px), transparent)'
+
+export function FounderBar({ variant, trim = false, className }: { variant: 'bar' | 'mobile'; trim?: boolean; className?: string }) {
   const { energy, low, moves, day, actions } = useFounderActions()
   const floats = useFloatingNumbers()
   const mobile = variant === 'mobile'
@@ -18,9 +42,10 @@ export function FounderBar({ variant, className }: { variant: 'bar' | 'mobile'; 
     const id = window.setTimeout(() => setPeek(null), PEEK_MS)
     return () => window.clearTimeout(id)
   }, [peek])
-  // Phones keep the row short: open slots + the next silhouette only.
+  // Phones keep the row short: open slots + the next silhouette only; a narrow desktop (`trim`) the open slots only.
   const firstLocked = actions.findIndex((a) => a.locked)
-  const shown = mobile ? actions.filter((a, i) => !a.locked || i === firstLocked) : actions
+  const shown = trim ? actions.filter((a) => !a.locked) : mobile ? actions.filter((a, i) => !a.locked || i === firstLocked) : actions
+  const [row, moreRight, onScroll] = useMoreRight(shown.length)
   return (
     <div role="group" aria-label={t('bottom.actions')} className={cx('relative flex min-w-0 items-center', mobile ? 'gap-1' : 'gap-2', className)}>
       {/* The phone row scrolls sideways (it would clip a number above a slot): there they rise over the row. */}
@@ -34,7 +59,14 @@ export function FounderBar({ variant, className }: { variant: 'bar' | 'mobile'; 
       <EnergyMeter energy={energy} low={low} compact={mobile || !!moves} />
       {moves && <MovesMeter moves={moves} day={day} compact={mobile} />}
       <span aria-hidden="true" className={cx('h-6 w-px shrink-0 bg-border', mobile && 'mx-0.5')} />
-      <div className={cx('flex min-w-0 items-center gap-1', mobile && 'ui-scroll overflow-x-auto')}>
+      <div
+        ref={mobile ? row : undefined}
+        onScroll={mobile ? onScroll : undefined}
+        // Phones: the scroll row clips both axes, so it keeps 4px inside for the saturation badge that sits on the first
+        // slot's corner ("¼" was cut to a half-moon); -my-1 gives the height back.
+        className={cx('flex min-w-0 items-center gap-1', mobile && 'ui-scroll -my-1 overflow-x-auto py-1 pl-1')}
+        style={mobile && moreRight ? { maskImage: FADE_RIGHT, WebkitMaskImage: FADE_RIGHT } : undefined}
+      >
         {shown.map((a, i) => (
           <FounderSlot
             key={a.kind}

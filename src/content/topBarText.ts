@@ -2,6 +2,7 @@
 // Merged into UI_TEXT by the content barrel (index.ts); keys never collide with strings.ts / timeText / loopText.
 export const TOP_BAR_TEXT: Record<string, string> = {
   'top.label': 'Durum çubuğu',
+  'top.gauges': 'Kasa ve göstergeler',
   'top.progress': '{v} / {target}',
   'top.progressNext': '{v} → {next} {target}',
   'top.nextShort': '→ {next}',

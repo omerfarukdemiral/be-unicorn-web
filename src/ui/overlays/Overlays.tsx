@@ -47,7 +47,8 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
       emblem={{ icon: verb.icon }}
       title={def?.officeName}
       // One line under the ribbon: the new stage and its verb (no second label repeating the same news).
-      kicker={def ? `${def.name} · ${verb.label}` : verb.label}
+      // (Unicorn's verb is its own name: "Unicorn · Unicorn" said nothing twice.)
+      kicker={def && def.name !== verb.label ? `${def.name} · ${verb.label}` : verb.label}
       actions={
         <Button tone="commit" icon="arrowRight" className="w-full" onClick={onClose} autoFocus>
           {t('move.go')}

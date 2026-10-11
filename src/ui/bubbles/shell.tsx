@@ -15,14 +15,14 @@ export function BubbleTail({ className }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cx('pointer-events-none absolute -bottom-[5px] left-1/2 size-2.5 -translate-x-1/2 rotate-45 border-b border-r border-border bg-surface', className)}
+      className={cx('bubble-tail pointer-events-none absolute -bottom-[5px] left-1/2 size-2.5 -translate-x-1/2 rotate-45 border-b border-r border-border bg-surface', className)}
     />
   )
 }
 
-/** Speaker line: kind mark (tiny icon on a light tile of `color`) + speaker name as a .ui-label. */
-export function SpeakerLine({ icon, color, speaker, className }: { icon?: IconName; color?: string; speaker?: string; className?: string }) {
-  if (!icon && !speaker) return null
+/** Speaker line: kind mark (tiny icon on a light tile of `color`) + speaker name as a .ui-label, then an optional topic in ink. */
+export function SpeakerLine({ icon, color, speaker, topic, className }: { icon?: IconName; color?: string; speaker?: string; topic?: string; className?: string }) {
+  if (!icon && !speaker && !topic) return null
   return (
     <span className={cx('ui-label flex min-w-0 items-center gap-1 leading-none', className)}>
       {icon &&
@@ -33,7 +33,13 @@ export function SpeakerLine({ icon, color, speaker, className }: { icon?: IconNa
         ) : (
           <Icon name={icon} size={11} className="shrink-0 text-ink" />
         ))}
-      {speaker && <span className="truncate">{speaker}</span>}
+      {(speaker || topic) && (
+        <span className="min-w-0 truncate">
+          {speaker}
+          {speaker && topic && ' · '}
+          {topic && <span className="text-ink">{topic}</span>}
+        </span>
+      )}
     </span>
   )
 }

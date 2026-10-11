@@ -1,140 +1,116 @@
-// Top bar (docs/LAYOUT.md §1.2–§1.4): ONE full-width strip, h56 on desktop, 2 rows (h96) on phones.
-//   A: stage · date · progress · round      B: Kasa Runway Kullanıcı Moral  pinned ≤ 2      C: speed │ zoom (TR) ⚙
+// Top bar (docs/LAYOUT.md §1.2–§1.4). Desktop ("dört köşe", T03): no strip, two corner islands over the scene:
+//   top-left: stage · date · progress · round                top-right: speed │ zoom (TR) ⚙ (two islands)
+// The gauges live in the bottom-left money island (MoneyIsland, mounted by BottomStack). Phones: portrait = a gauge
+// island + a round ⏸ island in one row (T06), the stage as a tag under it; landscape = ONE full-width bar.
 // Positions itself (absolute, EDGE 8 from the top of its parent, which already carries the safe-area padding
-// like GameUI's root). Root carries `data-scene-top` (sceneInset + BubbleAnchor read it).
-// Contract: `pinned` comes from the caller (Integrate binds ui.pinnedMetrics); this file never reads it.
-import { useSyncExternalStore } from 'react'
-import type { HudWidget } from '../../engine/types'
-import { Icon } from '../icons'
+// like GameUI's root). Root carries `data-scene-top` (sceneInset + BubbleAnchor read it): on desktop it is the
+// pointer-transparent row that holds the islands, so the inset is the islands' height, as before.
+import { useSyncExternalStore, type ReactNode } from 'react'
+import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
-import { BARE_HOVER, cx } from '../primitives'
+import { cx } from '../primitives'
 import { useLayoutMode } from '../hooks'
-import { PIN_VISIBLE } from './tokens'
+import { NextStepChip, useNextStep } from '../NextStepChip'
+import { nextStepShown } from './stripRules'
 import { StageProgressLine, StageSection } from './StageSection'
-import { CashChip, MoraleChip, RunwayChip, UsersChip, type MetricDensity } from './TopMetrics'
-import { PinnedMetric, visiblePins } from '../widgets'
+import { CashChip, MoraleChip, RunwayChip, UsersChip } from './TopMetrics'
 import { SpeedControl } from './SpeedControl'
 import { ViewControls } from './ViewControls'
-
-/** Always-on gauges of the bar: never pinnable, never in Metrikler. */
-const FIXED: readonly HudWidget[] = ['cash', 'runway', 'users', 'morale']
+import { MOBILE_TOP_H } from './tokens'
 
 function subscribeResize(cb: () => void): () => void {
   window.addEventListener('resize', cb)
   return () => window.removeEventListener('resize', cb)
 }
 
-/** Viewport size as "w×h" (one string so the snapshot stays stable between resizes). */
-function useViewport(): { w: number; h: number } {
-  const key = useSyncExternalStore(
-    subscribeResize,
-    () => `${window.innerWidth}x${window.innerHeight}`,
-    () => '1440x900',
+/** Viewport width (one number, re-read on resize). */
+function useViewportWidth(): number {
+  return useSyncExternalStore(subscribeResize, () => window.innerWidth, () => 1440)
+}
+
+/** One corner island: the soft card, h56, content centred. */
+function Island({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={cx('ui-card pointer-events-auto flex h-14 shrink-0 items-center', className)}>{children}</div>
+}
+
+/**
+ * The garage's next step (T05, was the strip's resting row): a small card hanging under the stage island, like a
+ * sim's objective tag. Absolutely placed, so the scene inset stays the islands' height. Same rules as the strip had.
+ */
+function GoalChip() {
+  const step = useNextStep()
+  const shown = nextStepShown({ hasStep: !!step.step, startCall: step.startCall, stepId: step.step?.id, canStartRound: step.canStartRound, over: step.over, sheetOpen: false })
+  if (!shown) return null
+  return (
+    // Absolute, so the header's rect leaves it out: an obstacle of its own for the bubble layout.
+    <div data-scene-obstacle="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex h-10 w-max max-w-[360px] items-center overflow-hidden px-2">
+      <NextStepChip />
+    </div>
   )
-  const [w, h] = key.split('x').map(Number)
-  return { w: w ?? 1440, h: h ?? 900 }
 }
 
-/** The bar's one divider (speed | tools): a faint 1px hairline; every other group is separated by spacing alone. */
-function Rule({ className }: { className?: string }) {
-  return <span aria-hidden="true" className={cx('h-6 w-px shrink-0 rounded-full bg-border', className)} />
-}
-
-export interface TopBarProps {
-  /** Effective pinned metric ids, oldest first (widgets.tsx › usePinnedMetrics). The newest ones win the room. */
-  pinned: HudWidget[]
-  /** Opens Metrikler (the "+N" button when the width shows fewer pins than there are). */
-  onOpenMetrics?: () => void
-}
-
-export function TopBar({ pinned, onOpenMetrics }: TopBarProps) {
+export function TopBar() {
   const mode = useLayoutMode()
-  const { w } = useViewport()
-  // The caller passes the effective pins (usePinnedMetrics: pinned ∩ unlocked); fixed gauges and repeats are skipped.
-  const pins = pinned.filter((id, i) => !FIXED.includes(id) && pinned.indexOf(id) === i).slice(-2)
+  const w = useViewportWidth()
 
   if (mode === 'landscape') return <LandscapeBar />
   if (mode === 'portrait') return <MobileBar />
-
-  const wide = w >= 1280
-  const density: MetricDensity = wide ? 'full' : 'tight'
-  const visible = visiblePins(pins, PIN_VISIBLE(w))
-  const hidden = pins.length - visible.length
 
   return (
     <header
       data-scene-top
       aria-label={t('top.label')}
-      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex h-14 items-center gap-2 px-2 min-[1440px]:gap-2.5 min-[1440px]:px-2.5"
+      className="pointer-events-none absolute inset-x-2 top-2 z-30 flex items-start justify-between gap-2"
     >
-      <StageSection variant={wide ? 'wide' : 'narrow'} />
-      {/* overflow-x-clip (not hidden): Runway's danger-pulse ring and a value's pop-once swell may spill vertically. */}
-      <div className="flex min-w-0 flex-1 items-center justify-center-safe gap-0.5 overflow-x-clip">
-        {/* Cells size to their content (labels and values never cut); min widths keep them from jumping per tick. */}
-        <div className={cx('shrink-0', wide ? 'min-w-32' : 'min-w-28')}>
-          <CashChip density={density} />
-        </div>
-        <div className={cx('shrink-0 empty:hidden', wide && 'min-w-[88px]')}>
-          <RunwayChip density={density} />
-        </div>
-        <div className={cx('shrink-0', wide && 'min-w-[88px]')}>
-          <UsersChip density={density} />
-        </div>
-        <div className="shrink-0">
-          <MoraleChip density={density} />
-        </div>
-        {/* Pins follow the fixed gauges after a wider gap (no rule): the bar reads as one row of numbers. */}
-        {visible.map((id, i) => (
-          <PinnedMetric key={id} id={id} className={cx('h-10 max-w-[136px] shrink-0 overflow-hidden', i === 0 && 'ml-1.5')} />
-        ))}
-        {hidden > 0 && (
-          <button
-            type="button"
-            onClick={onOpenMetrics}
-            title={visible.length > 0 ? t('top.pinnedMore', { n: hidden }) : t('top.pinnedAll', { n: hidden })}
-            aria-label={visible.length > 0 ? t('top.pinnedMore', { n: hidden }) : t('top.pinnedAll', { n: hidden })}
-            className={cx(
-              'ui-num inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-0.5 rounded-full px-2 text-[12px] text-ink-2 transition-colors hover:text-ink',
-              BARE_HOVER,
-              visible.length === 0 && 'ml-1.5',
-            )}
-          >
-            <Icon name="bars" size={16} />
-            {visible.length > 0 ? `+${hidden}` : hidden}
-          </button>
-        )}
+      <div className="relative min-w-0">
+        <Island className="min-w-0 px-3">
+          <StageSection variant={w >= 1280 ? 'wide' : 'narrow'} />
+        </Island>
+        <GoalChip />
       </div>
-      {/* Below 1440 the status label lives in the segments' title (the green-underlined chosen speed + red ⏸ still show it):
-          at 1280 the label would push the pinned metric out. */}
-      <SpeedControl showLabel={w >= 1440} />
-      <Rule />
-      {/* TR (placeholder, opens Settings) needs ≥1536: at 1440 a running round + 2 pins already fill the bar.
-          Below 1280 the zoom keys go (wheel / pinch still zoom): the gauges need those ~80px. */}
-      <ViewControls size={wide ? 36 : 34} showLanguage={w >= 1536} showZoom={wide} />
+      <div className="flex shrink-0 items-start gap-2">
+        <Island className="px-1.5">
+          {/* No hold label: the red ⏸ / green speed segment already say it, and the island keeps one width. */}
+          <SpeedControl showLabel={false} />
+        </Island>
+        {/* TR (placeholder, opens Settings) only on a wide screen: the stage island needs the row below 1536. */}
+        <Island className="px-1.5">
+          <ViewControls size={36} showLanguage={w >= 1536} showZoom />
+        </Island>
+      </div>
     </header>
   )
 }
 
 /**
- * Phone / tablet portrait: row 1 stage · date · round | speed ⚙ (44px targets; zoom is pinch + Settings, which frees
- * the room the stage name and date need at 360–390px); 2px progress; row 2 the four gauges, content-sized cells
- * spread edge to edge (a long value like "$10.2M" or "999.9K" takes the room a short "∞" leaves).
+ * Phone / tablet portrait (T06, "tek sıra"): one row of islands, the gauge island (content-sized cells spread edge to
+ * edge) and the round ⏸ island; the stage (name · date · round · progress) hangs under it as a small tag, absolutely
+ * placed so the scene inset stays the row's 52px. Kazanımlar, İstatistik and ⚙ live behind the tab island's ⋯
+ * (BottomBar › MoreMenu); zoom is pinch + Settings. The full-page sheet covers the tag, so it hides then.
  */
 function MobileBar() {
+  const sheetOpen = useGameStore((s) => s.ui.panel !== null)
   return (
     <header
       data-scene-top
       aria-label={t('top.label')}
-      className="ui-card pointer-events-auto absolute inset-x-2 top-2 z-30 flex flex-col px-1 py-0.5"
+      className="pointer-events-none absolute inset-x-2 top-2 z-30 flex items-start gap-2"
+      style={{ height: MOBILE_TOP_H }}
     >
-      {/* mb-1: air between the 44px row and the progress line (sceneInset measures the bar, so +4px is safe). */}
-      <div className="mb-1 flex h-11 min-w-0 items-center gap-1 pl-1.5">
-        <StageSection variant="mobile" />
-        <SpeedControl compact />
-        <ViewControls size={44} showZoom={false} />
+      <div className="relative min-w-0 flex-1">
+        <div className="ui-card pointer-events-auto flex min-w-0 items-center px-1.5" style={{ height: MOBILE_TOP_H }}>
+          <GaugeRow className="flex-1" />
+        </div>
+        {!sheetOpen && (
+          <div data-scene-obstacle="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col px-2.5 pb-1.5">
+            <StageSection variant="mobile" />
+            <StageProgressLine className="-mt-1" />
+          </div>
+        )}
       </div>
-      <StageProgressLine className="mx-1.5" />
-      <GaugeRow />
+      <div className="ui-card pointer-events-auto grid shrink-0 place-items-center rounded-full" style={{ width: MOBILE_TOP_H, height: MOBILE_TOP_H }}>
+        <SpeedControl compact />
+      </div>
     </header>
   )
 }

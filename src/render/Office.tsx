@@ -12,6 +12,23 @@ import { mood, useLayout } from './sceneRegistry'
 
 type V3 = [number, number, number]
 
+/**
+ * Flat floor decal material: pulled toward the camera in depth (polygonOffset) so it never
+ * z-fights the floor it lies on, whatever the zoom. Cached by colour.
+ */
+const decalCache = new Map<string, THREE.MeshStandardMaterial>()
+function decalMat(color: string): THREE.MeshStandardMaterial {
+  let m = decalCache.get(color)
+  if (!m) {
+    m = mat(color).clone()
+    m.polygonOffset = true
+    m.polygonOffsetFactor = -2
+    m.polygonOffsetUnits = -2
+    decalCache.set(color, m)
+  }
+  return m
+}
+
 function B({ s, p, c, r, shadow = true }: { s: V3; p: V3; c: string; r?: V3; shadow?: boolean }) {
   return <mesh geometry={GEO.box} material={mat(c)} scale={s} position={p} rotation={r} castShadow={shadow} receiveShadow />
 }
@@ -43,7 +60,7 @@ function Stripes({ bounds, color, along, width, pitch }: { bounds: Box; color: s
     }
     m.instanceMatrix.needsUpdate = true
   }, [bounds, count, along, width, pitch, w, d])
-  return <instancedMesh key={count} ref={ref} args={[GEO.plane, mat(color), count]} receiveShadow />
+  return <instancedMesh key={count} ref={ref} args={[GEO.plane, decalMat(color), count]} renderOrder={1} receiveShadow />
 }
 
 function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
@@ -60,13 +77,13 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
           <Stripes bounds={b} color={pal.floorAlt} along="x" width={0.03} pitch={CELL} />
           <Stripes bounds={b} color={pal.floorAlt} along="z" width={0.03} pitch={CELL} />
           {/* oil stain */}
-          <mesh geometry={GEO.disc} material={mat(PROP_COLORS.oilStain)} scale={[0.9, 1, 0.6]} position={[b.minX + w * 0.28, 0.003, b.maxZ - d * 0.22]} />
+          <mesh geometry={GEO.disc} material={decalMat(PROP_COLORS.oilStain)} scale={[0.9, 1, 0.6]} position={[b.minX + w * 0.28, 0.004, b.maxZ - d * 0.22]} renderOrder={1} />
         </>
       ) : (
         <Stripes bounds={b} color={pal.floorAlt} along={stage % 2 === 0 ? 'x' : 'z'} width={0.2} pitch={0.4} />
       )}
       {stage >= 2 && stage <= 5 && (
-        <mesh geometry={GEO.plane} material={mat(stage === 2 ? PASTEL.lilac : stage === 3 ? PASTEL.sky : stage === 4 ? PASTEL.peach : PASTEL.mint)} scale={[CELL * 2.2, 1, CELL * 2.2]} position={[0, 0.004, 0]} receiveShadow />
+        <mesh geometry={GEO.plane} material={decalMat(stage === 2 ? PASTEL.lilac : stage === 3 ? PASTEL.sky : stage === 4 ? PASTEL.peach : PASTEL.mint)} scale={[CELL * 2.2, 1, CELL * 2.2]} position={[0, 0.006, 0]} renderOrder={1} receiveShadow />
       )}
     </group>
   )
@@ -144,7 +161,7 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
         <B s={[0.04, 0.04, 0.08]} p={[door.width * 0.85, 0.65, 0.04]} c={PROP_COLORS.brass} shadow={false} />
       </group>
       {/* doormat outside-in */}
-      <mesh geometry={GEO.plane} material={mat(PROP_COLORS.doormat)} scale={[door.width * 0.9, 1, 0.45]} position={[door.pos[0], 0.005, b.minZ + 0.3]} />
+      <mesh geometry={GEO.plane} material={decalMat(PROP_COLORS.doormat)} scale={[door.width * 0.9, 1, 0.45]} position={[door.pos[0], 0.008, b.minZ + 0.3]} renderOrder={1} />
       {layout.stage >= 1 && layout.stage <= 4 && <Windows from={b.minZ + CELL * 0.4} to={b.maxZ - CELL * 0.4} fixed={leftX} axis="z" pal={pal} />}
       {layout.stage >= 2 && layout.stage <= 4 && <Windows from={b.minX + CELL * 0.4} to={dl - CELL * 0.4} fixed={backZ} axis="x" pal={pal} />}
     </group>
@@ -218,13 +235,15 @@ function CoworkingDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalet
 }
 
 function Columns({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
-  // Columns standing in a locked ring take the locked tone so they recede with it.
+  // Columns standing in a locked ring recede with it: the trim colour pulled toward the locked tone. The locked tone
+  // itself rendered as unlit black boxes beside the blue pillars (QA: read as a missing material, not "locked").
   const open = layout.bands.filter((b) => b.unlocked).at(-1)?.box
   const inOpen = (x: number, z: number) => !!open && x >= open.minX && x <= open.maxX && z >= open.minZ && z <= open.maxZ
+  const lockedPost = useMemo(() => `#${new THREE.Color(pal.wallTrim).lerp(new THREE.Color(pal.locked), 0.4).getHexString()}`, [pal])
   return (
     <group>
       {layout.columns.map(([x, z], i) => (
-        <B key={i} s={[0.22, WALL_HEIGHT, 0.22]} p={[x, WALL_HEIGHT / 2, z]} c={inOpen(x, z) ? pal.wallTrim : pal.locked} />
+        <B key={i} s={[0.22, WALL_HEIGHT, 0.22]} p={[x, WALL_HEIGHT / 2, z]} c={inOpen(x, z) ? pal.wallTrim : lockedPost} />
       ))}
     </group>
   )

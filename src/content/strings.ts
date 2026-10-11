@@ -1,6 +1,7 @@
 // Keyed Turkish UI text. Typed tables for id-based lookups + one flat UI_TEXT dictionary (key → text, {param}).
 // Components never hardcode Turkish strings; they call t('key') over UI_TEXT.
 import type {
+  Action,
   ActionErrorCode,
   Archetype,
   ConceptId,
@@ -114,6 +115,33 @@ export const ACTION_ERROR_TEXT: Record<ActionErrorCode, string> = {
   invalid: 'Olmaz.',
   engineNotConnected: 'Bağlanıyor.',
   noMoves: 'Haftaya.',
+}
+
+/** What a rejected action was about (the strip prints "İşe alım: Masasız."; a bare "Kilitli." names nothing). */
+export const ACTION_SUBJECT_TEXT: Partial<Record<Action['type'], string>> = {
+  hire: 'İşe alım',
+  fire: 'Çıkarma',
+  assignDesk: 'Masa',
+  respondResignation: 'İstifa',
+  refreshCandidates: 'Adaylar',
+  placeItem: 'Eşya',
+  sellItem: 'Satış',
+  moveItem: 'Taşıma',
+  upgradeItem: 'Yükseltme',
+  openRing: 'Yeni alan',
+  startProject: 'Proje',
+  assign: 'Atama',
+  founderAction: 'Kurucu aksiyonu',
+  setAdBudget: 'Reklam',
+  setPrice: 'Fiyat',
+  answerDecision: 'Karar',
+  startRound: 'Tur',
+  roundPitch: 'Sunum',
+  resolvePayday: 'Maaş',
+  adoptPolicy: 'Kanun',
+  openSegment: 'Pazar',
+  acquireRival: 'Satın alma',
+  renewContract: 'Sözleşme',
 }
 
 export const DECISION_CATEGORY_TEXT: Record<DecisionCategory, string> = {
@@ -345,12 +373,12 @@ const BASE_TEXT: Record<string, string> = {
   'projects.maturity': 'Olgunluk',
 
   // Growth
-  'growth.product': 'Ürün',
+  'growth.tabs': 'Büyüme bölümleri',
+  'growth.tab.round': 'Tur',
+  'growth.tab.market': 'Pazarlama',
+  'growth.tab.customers': 'Müşteri',
   'growth.avgMaturity': 'Ortalama olgunluk',
-  'growth.liveProjects': 'Yayındaki projeler',
-  'growth.capacity': 'Kapasite',
   'growth.channels': 'Kanallar',
-  'growth.mrr': 'Aylık gelir (MRR)',
   'growth.mom': 'Aylık büyüme {v}',
   'growth.adBudget': 'Reklam bütçesi',
   'growth.adLocked': 'Reklam bütçesi Series A’da açılır.',
@@ -358,7 +386,6 @@ const BASE_TEXT: Record<string, string> = {
   'growth.cacInfo': 'Kullanıcı edinme maliyeti: reklamla gelen bir kullanıcının bedeli.',
   'growth.ltvInfo': 'Bir kullanıcının getirdiği gelir ÷ onu getirmenin bedeli. 3× altı: reklam para yakıyor.',
   'growth.arpuInfo': 'Kullanıcı başı aylık gelir. Zam bir ay churn’ü artırır.',
-  'growth.paidUsers': 'Reklamdan gelen',
   'growth.price': 'Fiyat',
   'growth.priceMultiplier': 'Fiyat çarpanı',
   'growth.priceLocked': 'Dördü aynı gün tutunca bir müşteri fiyatı sorar.',
@@ -399,6 +426,31 @@ const BASE_TEXT: Record<string, string> = {
 
   // Bubbles & decisions
   'bubble.collapse': 'Küçült',
+  // Scene bubbles (collapsed line / rows): who asks is the anchor, the line says what waits
+  'bubble.payday': 'Maaş günü · {v}',
+  'bubble.round': 'Tur penceresi açık',
+  'bubble.pitch': 'Yatırımcı sunum bekliyor',
+  'bubble.renewal': '{name} sözleşme · {d}g',
+  'bubble.hire': '{n} aday bekliyor',
+  'bubble.moreCandidates': '+{n} aday · Ekip',
+  'bubble.project': 'İlk ürünü seç',
+  'bubble.leaving': '{name} ayrılıyor · {d}g',
+  'bubble.leavingNow': '{name} ayrılıyor',
+  'bubble.idle': '{name} boşta',
+  'bubble.chose': 'Seçtin: {v}',
+  'bubble.payAll': 'Hepsini öde',
+  'bubble.payOrder': 'Sırayla öde',
+  'bubble.payKeep': 'Kasayı koru',
+  'bubble.desk': 'Masa',
+  'bubble.detail': 'Detay',
+  'bubble.close': 'Kapat',
+  'bubble.startProject': 'Proje başlat',
+  'bubble.assign': 'Projeye ata',
+  'bubble.month': 'ay',
+  'bubble.tag.moves': 'Hamle',
+  // Why every row of a bubble is faded (a title tooltip never reaches a thumb)
+  'bubble.noMoves': 'Hamle yok · yeni hafta {d}g',
+  'bubble.noEnergy': 'Enerji yetmiyor',
   'decision.title': 'Karar',
   'decision.gain': 'Kazanç',
   'decision.cost': 'Bedel',
@@ -501,7 +553,7 @@ const BASE_TEXT: Record<string, string> = {
   'victory.kicker': '1 milyar dolar',
   'victory.valuation': 'Değerleme',
   'victory.team': 'Ekip',
-  'victory.learned': 'Öğrenilen ders',
+  'victory.learned': 'Ders',
   'victory.again': 'Yeniden kur',
   'settings.language': 'Dil',
   'settings.sound': 'Ses',
@@ -574,6 +626,7 @@ export const UI_TEXT: Record<string, string> = {
   ...prefixed('status', EMPLOYEE_STATUS_TEXT),
   ...prefixed('milestone', MILESTONE_TEXT),
   ...prefixed('error', ACTION_ERROR_TEXT),
+  ...prefixed('actionSubject', ACTION_SUBJECT_TEXT as Record<string, string>),
   ...prefixed('decisionCategory', DECISION_CATEGORY_TEXT),
   ...prefixed('concept', CONCEPT_TITLE),
   ...prefixed('postMortem', POST_MORTEM_TITLE),

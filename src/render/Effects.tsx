@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { GameEvent, GameEventKind, GameState } from '../engine/types'
 import { CONFETTI_COLORS } from './palette'
-import { celebrate, useLayout } from './sceneRegistry'
+import { celebrate, sceneTime, useLayout } from './sceneRegistry'
 import { useGS } from './source'
 
 const CELEBRATE: ReadonlySet<GameEventKind> = new Set<GameEventKind>(['milestone', 'roundClosed', 'stageUp', 'projectLaunched', 'victory'])
@@ -42,7 +42,7 @@ export function Confetti({ trigger, origin }: { trigger: number; origin: [number
   useEffect(() => {
     if (trigger <= 0) return
     const origin = originRef.current
-    started.current = performance.now()
+    started.current = sceneTime.t
     for (let i = 0; i < COUNT; i++) {
       const a = Math.random() * Math.PI * 2
       const sp = 1.2 + Math.random() * 2.6
@@ -55,14 +55,15 @@ export function Confetti({ trigger, origin }: { trigger: number; origin: [number
   }, [trigger, pieces])
 
   const tmp = useMemo(() => new THREE.Object3D(), [])
-  useFrame((_, rawDt) => {
+  // Scene time: the burst hangs in the air while a bubble holds the world.
+  useFrame(() => {
     const m = ref.current
     if (!m) return
-    const age = (performance.now() - started.current) / 1000
-    const alive = started.current > 0 && age < LIFE
+    const age = sceneTime.t - started.current
+    const alive = started.current >= 0 && age < LIFE
     m.visible = alive
     if (!alive) return
-    const dt = Math.min(rawDt, 0.05)
+    const dt = Math.min(sceneTime.dt, 0.05)
     for (let i = 0; i < COUNT; i++) {
       const q = pieces[i]!
       q.v.y -= 6.5 * dt

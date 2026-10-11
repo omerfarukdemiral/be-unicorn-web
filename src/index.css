@@ -164,6 +164,8 @@
 
   --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   --animate-fade-in: fade-in 200ms ease-out both;
+  /* A scene bubble opening / closing in place: opacity + the separate `scale` property (never fights a hover transform). */
+  --animate-bubble-swap: bubble-swap 180ms ease-out backwards;
   --animate-slide-up: slide-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   /* HUD grammar motion (docs/GAMEPLAY_V2.md §10.1 D6): panel rise, one-shot gauge pop, guidance breath, number tick. */
   --animate-rise: rise 180ms ease-out both;
@@ -182,6 +184,10 @@
   @keyframes pop-in {
     from { opacity: 0; transform: translateY(6px) scale(0.92); }
     to { opacity: 1; transform: none; }
+  }
+  @keyframes bubble-swap {
+    from { opacity: 0; scale: 0.96; }
+    to { opacity: 1; scale: 1; }
   }
   @keyframes fade-in {
     from { opacity: 0; }
@@ -611,4 +617,10 @@ textarea.ui-inset:focus-visible {
 .ui-key-commit:focus-visible {
   outline: 3px solid color-mix(in oklab, var(--color-brand) 55%, var(--color-ink));
   outline-offset: 3px;
+}
+
+/* A scene bubble lifted over another one with no stem back to its head (bubbleLayout `detached`): its tail would
+   point at the bubble below and read as that bubble's, so it goes. */
+[data-detached] .bubble-tail {
+  visibility: hidden;
 }

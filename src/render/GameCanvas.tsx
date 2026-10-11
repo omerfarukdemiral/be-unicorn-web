@@ -79,7 +79,9 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
     <div
       className={className ?? 'absolute inset-0'}
       // isolation keeps world bubbles (drei <Html>) below the UI layer.
-      style={{ isolation: 'isolate', touchAction: 'none' }}
+      // overflow clip (not hidden): a clipped box cannot be scrolled, so focus or scrollIntoView on a bubble button
+      // past the edge never shifts the whole scene sideways (QA 390px: scene + bubbles stuck ~100px left).
+      style={{ isolation: 'isolate', touchAction: 'none', overflow: 'clip' }}
       onPointerDown={gestures.onPointerDown}
       onPointerMove={gestures.onPointerMove}
       onPointerUp={gestures.onPointerUp}
@@ -95,6 +97,8 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
         shadows="percentage"
         dpr={lowPower ? [1, 1.5] : [1, 2]}
         gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
+        // R3F's wrapper is overflow:hidden (scrollable by script); bubbles portal into it (htmlPortal), so clip it too.
+        style={{ overflow: 'clip' }}
         // Neutral (Khronos PBR Neutral) instead of R3F's default ACES: ACES greys out light pastels (the warm
         // ground rendered khaki, pastel walls grey). Neutral keeps hue and saturation of the palette.ts colours.
         onCreated={({ gl }) => {

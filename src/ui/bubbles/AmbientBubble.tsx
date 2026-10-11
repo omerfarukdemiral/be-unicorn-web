@@ -28,12 +28,13 @@ export function officeLineShown(bubbleId: string, lineId: string): boolean {
 }
 
 /** Presentational; fades in and out over 3 s via CSS. `pointer-events-none` by design. */
-export function AmbientBubbleView({ text, speaker, className, tail }: { text: string; speaker?: string; className?: string; tail?: boolean }) {
+export function AmbientBubbleView({ text, speaker, className, tail, large }: { text: string; speaker?: string; className?: string; tail?: boolean; large?: boolean }) {
   return (
     <div
       role="status"
       className={cx(
-        'pointer-events-none relative max-w-[min(280px,80vw)] animate-ambient rounded-card border border-border bg-surface/95 px-2.5 py-1.5 font-text text-xs leading-snug text-ink shadow-card',
+        'pointer-events-none relative max-w-[min(280px,80vw)] animate-ambient rounded-card border border-border bg-surface/95 px-2.5 py-1.5 font-text leading-snug text-ink shadow-card',
+        large ? 'text-[13px] font-medium' : 'text-xs',
         className,
       )}
     >

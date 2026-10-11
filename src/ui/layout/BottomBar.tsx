@@ -1,21 +1,27 @@
 // Bottom bar + the notification strip above it (docs/LAYOUT.md §1.2, §1.4, §3, §6).
-// Desktop: one full-width bar h56 (EDGE 8 from the sides and the bottom): founder energy + moves + 44px ability slots
-// on the left (names only in tooltips, docs/GAMEPLAY_V2.md §10.4), panel tabs on the right (labels only on a ≥1280px
-// screen). The strip (h40, content max 760, centred) sits 8px above it, left of the panel when the panel is open.
-// Phone: the bar has two rows (actions 44 + tabs 48 = h104); with the sheet open only the tab row stays (h56) and the
-// strip floats 8px above the sheet (it then takes no part in the scene inset). Landscape phone: one row h52, 44px
+// Desktop ("dört köşe", T04): no bar. The money island holds the bottom-left corner (MoneyIsland); right of it the
+// founder island (energy + moves + 44px ability slots, names only in tooltips, docs/GAMEPLAY_V2.md §10.4) is centred
+// and the panel tabs sit in the bottom-right corner, icon only. No strip band (T05): a message pill (h40, max 560)
+// floats 8px above the founder island only while it speaks; the next step hangs under the stage island and the
+// horizon (payday clock, upcoming) sits in the money island.
+// Portrait phone (T06): the founder island over the tab island (h56 each, h120); with the full-page sheet open only the
+// tab island stays and the strip floats over the sheet's foot (it then takes no part in the scene inset). Landscape phone: one row h52, 44px
 // tabs, a side panel (no sheet) and the strip overlaying the scene's bottom edge (no reserved slot).
 // The wrapper carries `data-scene-bottom` for useSceneInset; on desktop / portrait the strip's height is reserved
 // even when it is empty so the camera does not jump with each message. The layout mode comes from useLayoutMode.
-import { useSyncExternalStore } from 'react'
-import { useGameStore } from '../../store/gameStore'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { HudWidget } from '../../engine/types'
+import { useGameStore, waitingConcepts } from '../../store/gameStore'
 import { t } from '../i18n'
-import { useLayoutMode } from '../hooks'
+import { useExclusiveExpander, useLayoutMode } from '../hooks'
+import { Icon } from '../icons'
 import { cx } from '../primitives'
 import { DockTabs } from '../Dock'
 import { FounderBar } from './FounderBar'
+import { MoneyIsland } from './MoneyIsland'
 import { NotificationStrip } from './NotificationStrip'
-import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_H, STRIP_H, STRIP_H_MOBILE } from './tokens'
+import { ViewControls } from './ViewControls'
+import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_H, MOBILE_BOTTOM_TABS_H, STRIP_H, STRIP_H_MOBILE } from './tokens'
 import { panelWidth } from './useSceneInset'
 
 function subscribe(cb: () => void): () => void {
@@ -30,12 +36,21 @@ function useVw(): number {
 }
 
 /** The bar alone. `layout`: desktop row / phone two rows / landscape phone one row. `sheetOpen` hides the action row. */
-export function BottomBar({ layout, sheetOpen = false }: { layout: 'desktop' | 'mobile' | 'landscape'; sheetOpen?: boolean }) {
+export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layout: 'desktop' | 'mobile' | 'landscape'; sheetOpen?: boolean; narrow?: boolean }) {
   if (layout === 'mobile') {
+    // Portrait (T06): two islands on a pointer-transparent column, the founder island over the tab island (icon keys + ⋯),
+    // both h56 and centred. The full-page sheet keeps only the tab island.
     return (
-      <nav aria-label={t('bottom.label')} className={cx('ui-card pointer-events-auto flex flex-col gap-0.5 bg-surface/95 backdrop-blur-sm', sheetOpen ? 'px-1 py-[3px]' : 'p-1')}>
-        {!sheetOpen && <FounderBar variant="mobile" className="h-11 px-1" />}
-        <DockTabs variant="mobile" />
+      <nav aria-label={t('bottom.label')} className="pointer-events-none flex flex-col items-center gap-2">
+        {!sheetOpen && (
+          <div className="ui-card pointer-events-auto flex h-14 max-w-full items-center px-2">
+            <FounderBar variant="mobile" className="h-11" />
+          </div>
+        )}
+        <div className="ui-card pointer-events-auto relative flex h-14 items-center gap-1 px-1">
+          <DockTabs variant="mobile" labels={false} />
+          <MoreMenu />
+        </div>
       </nav>
     )
   }
@@ -47,30 +62,83 @@ export function BottomBar({ layout, sheetOpen = false }: { layout: 'desktop' | '
       </nav>
     )
   }
+  // Desktop (T04): two islands on a pointer-transparent row: founder actions centred in the room left of the tabs, the
+  // tabs (icon only, 44px keys) in the bottom-right corner. Both h56 (BAR_H unchanged, so is the scene inset).
   return (
-    <nav
-      aria-label={t('bottom.label')}
-      // 5px top/bottom + the 1px hairline: the 44px slots fit the 56px bar (BAR_H unchanged, so is the scene inset).
-      className="@container ui-card pointer-events-auto flex items-center justify-between gap-4 bg-surface/95 px-2 py-[5px] backdrop-blur-sm"
-      style={{ height: BAR_H }}
-    >
-      <FounderBar variant="bar" className="min-w-0" />
-      <DockTabs variant="bar" />
+    <nav aria-label={t('bottom.label')} className="@container pointer-events-none flex items-end gap-2" style={{ height: BAR_H }}>
+      {/* 5px top/bottom + the 1px hairline: the 44px slots fit the 56px island. */}
+      <div className="ui-card pointer-events-auto mx-auto flex h-full min-w-0 items-center px-2 py-[5px]">
+        <FounderBar variant="bar" trim={narrow} className="min-w-0" />
+      </div>
+      {/* Below 1280 the locked-tool silhouettes go (founder slots keep only the next one): the row fits beside the money island. */}
+      <div data-tabs-island="" className="ui-card pointer-events-auto flex h-full shrink-0 items-center px-1.5">
+        <DockTabs variant="bar" labels={false} locked={!narrow} />
+      </div>
     </nav>
+  )
+}
+
+/**
+ * ⋯ on the portrait tab island: Kazanımlar, İstatistik, Liderlik and ⚙ (the desktop top-right tools) in a small
+ * island above it. A dot on ⋯ while concepts wait to be read (the book's badge). Any pick closes it.
+ */
+function MoreMenu() {
+  const [open, setOpen] = useExclusiveExpander()
+  const waiting = useGameStore((s) => waitingConcepts(s.state).length > 0)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={t('bottom.more')}
+        className={cx('relative grid size-12 shrink-0 place-items-center rounded-control', open ? 'bg-brand-soft text-brand-ink' : 'text-ink-2')}
+      >
+        <Icon name="more" size={22} />
+        {waiting && !open && <span aria-hidden="true" className="absolute right-2.5 top-2.5 size-2 rounded-full bg-brand ring-2 ring-surface" />}
+      </button>
+      {open && (
+        <div className="ui-card pointer-events-auto absolute bottom-[calc(100%+8px)] right-0 flex animate-slide-up p-1" onClickCapture={() => setTimeout(() => setOpen(false))}>
+          <ViewControls size={44} showZoom={false} />
+        </div>
+      )}
+    </>
   )
 }
 
 /**
  * Strip + bottom bar, positioned. Mount once inside GameUI's full-screen layer (z-30; the strip sits at z-40).
  * Reads the panel state itself: with a side panel (desktop, landscape phone) the strip stays left of it; with the
- * portrait sheet the strip goes above the sheet.
+ * portrait full-page sheet the strip floats over its foot.
  */
-export function BottomStack() {
+export function BottomStack({ pinned, onOpenMetrics }: { pinned: HudWidget[]; onOpenMetrics?: () => void }) {
   const mode = useLayoutMode()
   const vw = useVw()
+  // Desktop: the money island holds the bottom-left corner; the founder island and the strip start right of it.
+  const moneyRef = useRef<HTMLDivElement>(null)
+  const [moneyW, setMoneyW] = useState(0)
+  // …and the tabs island the right corner: the message pill centres over the founder island between the two.
+  const [tabsW, setTabsW] = useState(0)
+  useLayoutEffect(() => {
+    const el = moneyRef.current
+    const tabs = document.querySelector<HTMLElement>('[data-tabs-island]')
+    if (!el || !tabs) {
+      setMoneyW(0)
+      setTabsW(0)
+      return
+    }
+    const read = () => {
+      setMoneyW(Math.round(el.offsetWidth))
+      setTabsW(Math.round(tabs.offsetWidth))
+    }
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    ro.observe(tabs)
+    read()
+    return () => ro.disconnect()
+  }, [mode])
+  const left = mode === 'desktop' ? EDGE + moneyW + GAP : EDGE
   const panelOpen = useGameStore((s) => s.ui.panel !== null)
-  // Portrait: the sheet's top edge + GAP, as measured into the scene inset (only used while the sheet is open).
-  const sheetInset = useGameStore((s) => s.ui.sceneInset.bottom)
   const layout = mode === 'portrait' ? 'mobile' : mode
   const compact = mode !== 'desktop'
   const sheetOpen = mode === 'portrait' && panelOpen
@@ -81,28 +149,32 @@ export function BottomStack() {
   const stripRight = mode !== 'portrait' && (panelOpen || deskOpen) ? panelWidth(vw, mode) + GAP : 0
   // Reserved strip slot (the camera does not jump with each message), except on a landscape phone: 44px of a
   // ~390px-tall screen is worth more to the scene, so there the strip overlays the scene's bottom edge.
-  const reserve = mode === 'desktop' || (mode === 'portrait' && !sheetOpen)
+  // Desktop (T05) reserves nothing either: no band, the message pill floats over the scene only while it speaks.
+  const reserve = mode === 'portrait' && !sheetOpen
 
   const barH = mode === 'desktop' ? BAR_H : mode === 'landscape' ? LANDSCAPE_BAR_H : MOBILE_BOTTOM_H
   const bottom = `max(${EDGE}px, env(safe-area-inset-bottom, 0px))`
 
   return (
     <>
-      <div data-scene-bottom="" className="pointer-events-none absolute z-[41] flex flex-col" style={{ left: EDGE, right: EDGE, bottom, gap: GAP }}>
+      {mode === 'desktop' && <MoneyIsland ref={moneyRef} pinned={pinned} onOpenMetrics={onOpenMetrics} vw={vw} />}
+      <div data-scene-bottom="" className="pointer-events-none absolute z-[41] flex flex-col" style={{ left, right: EDGE, bottom, gap: GAP }}>
         {reserve && <div aria-hidden="true" style={{ height: stripH }} />}
-        <BottomBar layout={layout} sheetOpen={sheetOpen} />
+        <BottomBar layout={layout} sheetOpen={sheetOpen} narrow={vw < 1280} />
       </div>
-      {/* One strip instance (its queue survives the sheet opening); only its position changes. */}
+      {/* One strip instance (its queue survives the sheet opening); only its position changes. Floating over the
+          scene (above a sheet, landscape) it is a scene obstacle: world bubbles keep clear of it. */}
       <div
+        data-scene-obstacle={reserve ? undefined : ''}
         className="pointer-events-none absolute z-40 flex justify-center"
         style={{
-          left: EDGE,
-          right: EDGE + stripRight,
+          left,
+          right: EDGE + Math.max(stripRight, mode === 'desktop' ? tabsW + GAP : 0),
           height: stripH,
-          bottom: sheetOpen ? sheetInset : `calc(${bottom} + ${barH + GAP}px)`,
+          bottom: `calc(${bottom} + ${(sheetOpen ? MOBILE_BOTTOM_TABS_H : barH) + GAP}px)`,
         }}
       >
-        <NotificationStrip mobile={compact} sheetOpen={sheetOpen} className="max-w-[760px]" />
+        <NotificationStrip mobile={compact} sheetOpen={sheetOpen} island={mode === 'desktop'} className={mode === 'desktop' ? 'max-w-[560px]' : 'max-w-[760px]'} />
       </div>
     </>
   )

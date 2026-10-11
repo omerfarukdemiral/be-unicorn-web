@@ -1,5 +1,5 @@
 // Desktop keyboard shortcuts: Space pause/resume, 1/2/3 speed, M/E/P/B/G panel tabs (G = Metrikler, 'gösterge') (again = close),
-// K Kazanımlar, L Liderlik, I İstatistik / Y Kanun Kitabı / H Pazar haritası (again = close), Esc closes, +/- zoom. A center screen (statistics…) does not
+// K Kazanımlar, L Liderlik, I İstatistik / Y Kanun Kitabı / H Pazar haritası (again = close), Esc closes (an open scene bubble first), +/- zoom. A center screen (statistics…) does not
 // block the keys: time and the other shortcuts keep working under it (docs/GAMEPLAY_V2.md §14.3).
 import { useEffect, useRef } from 'react'
 import type { GameSpeed } from '../engine/types'
@@ -33,6 +33,14 @@ export function toggleLeaderboard(): void {
   else openPanel({ kind: 'leaderboard' }, { root: true })
 }
 
+/** Esc on an expanded scene bubble closes it (the world resumes) before any other Esc behaviour. true = handled. */
+export function escapeBubble(): boolean {
+  const st = useGameStore.getState()
+  if (!st.ui.bubbleOpen) return false
+  st.setBubbleOpen(null)
+  return true
+}
+
 const SPEED_KEYS: Record<string, GameSpeed> = { '1': 1, '2': 2, '3': 4 }
 
 export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
@@ -45,6 +53,7 @@ export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
       const key = e.key.toLowerCase()
 
       if (key === 'escape') {
+        if (escapeBubble()) return
         if (blocking) return // OverlayFrame handles it (move scene)
         if (st.ui.overlay) st.closeOverlay() // a center screen
         else if (st.ui.placing) st.setPlacing(null)

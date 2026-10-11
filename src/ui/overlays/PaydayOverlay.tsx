@@ -104,7 +104,8 @@ export function PaydayOverlay({ onClose }: { onClose: () => void }) {
   return (
     // "Sonra" on Escape (OverlayFrame): the desk never traps the player. The veil never closes it.
     <OverlayFrame place="dock" mood="desk" labelledBy="payday-title" onClose={onClose} head={head} actions={actions}>
-      <ul className="flex flex-col">
+      {/* pb-3: the last row's segment clears the summary footer on a phone sheet. */}
+      <ul className="flex flex-col pb-3">
         {v.rows.map((r) => (
           <DeskRow key={r.line} row={r} onPick={(x) => pick(r.line, x)} />
         ))}

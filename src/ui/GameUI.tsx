@@ -1,7 +1,8 @@
 // UI root: full-screen HTML layer above the canvas. Root is pointer-events-none; interactive parts opt in with
-// pointer-events-auto. Three fixed surfaces and one strip (docs/LAYOUT.md §1): the top bar (stage · gauges · time),
-// the single right panel (phone: bottom sheet), the bottom bar (founder actions · panel tabs) with the notification
-// strip just above it. The office is framed in the area between them (store.ui.sceneInset, layout/useSceneInset).
+// pointer-events-auto. Desktop: corner islands over the scene (docs/LAYOUT.md §1, "dört köşe"): stage top-left, time
+// top-right, money + gauges bottom-left, founder actions bottom centre, panel tabs bottom-right; the single right panel
+// and the notification strip above the founder island. Phones: a top bar (stage · gauges · time), the bottom sheet
+// and the bottom bar (founder actions · panel tabs) with the strip just above it. The office is framed in the area between them (store.ui.sceneInset, layout/useSceneInset).
 // Only move scene / post-mortem / victory are centered modals (ModalHost); the center screens (statistics…) share the
 // overlay slot but never pause, and the K / I keys reach Kazanımlar and İstatistik (shortcuts.ts).
 import { useEffect, useMemo } from 'react'
@@ -31,7 +32,7 @@ export interface GameUIProps {
   mock?: boolean
 }
 
-/** Top bar "+N" / pinned overflow → Metrikler (again closes it, like the tab). */
+/** Money island "+N" / pinned overflow → Metrikler (again closes it, like the tab). */
 function openMetrics() {
   useGameStore.getState().togglePanel('metrics')
 }
@@ -48,7 +49,7 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
   }, [mock])
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none overflow-hidden safe-top safe-x text-ink">
+    <div className="pointer-events-none absolute inset-0 select-none overflow-clip safe-top safe-x text-ink">
       {/* Still world (paused, decision / Kazanımlar card open): the scene fades a little, under every UI surface. */}
       <PauseVeil />
       <div className="relative h-full w-full">
@@ -58,10 +59,10 @@ export function GameUI({ renderPreview, worldBubbles = false, mock }: GameUIProp
         <ErrorCatch where="panel">
           <RightPanel renderPreview={renderPreview} />
         </ErrorCatch>
-        <TopBar pinned={pinned} onOpenMetrics={openMetrics} />
-        <BottomStack />
+        <TopBar />
+        <BottomStack pinned={pinned} onOpenMetrics={openMetrics} />
       </div>
-      <ModalHost />
+      <ModalHost worldBubbles={worldBubbles} />
       {/* Viewport edge in the time colour (above modals' backdrop, never takes pointer events). */}
       <ScreenFrame />
     </div>

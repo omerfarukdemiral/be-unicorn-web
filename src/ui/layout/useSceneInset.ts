@@ -2,9 +2,9 @@
 // (render/OfficeScene › CameraRig) and the bubble layout (render/BubbleAnchor › sceneViewport) use the free rest.
 // Measured from the DOM markers:
 //   [data-scene-top]    top bar                    → top    = bar bottom + GAP
-//   [data-scene-bottom] strip slot + bottom bar    → bottom = vh − min(stack top, sheet top) + GAP
+//   [data-scene-bottom] strip slot + bottom bar    → bottom = vh − stack top + GAP
 //   [data-scene-right]  side panel <aside>         → right  = vw − panel left + GAP  (desktop + landscape phone)
-//   [data-scene-sheet]  portrait sheet <section>   → (bottom, above; the strip floats at `bottom` on top of it)
+//   [data-scene-sheet]  portrait full-page sheet   → not measured: it covers the scene (T06); BubbleAnchor reads it
 import { useEffect, useSyncExternalStore } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import { useLayoutMode, type LayoutMode } from '../hooks'
@@ -52,8 +52,9 @@ function measure(): void {
   const top = rect('[data-scene-top]')
   const stack = rect('[data-scene-bottom]')
   const side = rect('[data-scene-right]')
-  const sheet = rect('[data-scene-sheet]')
-  const bottomEdge = Math.min(stack?.top ?? vh, sheet?.top ?? vh)
+  // The portrait sheet is a full page (T06): it covers the office instead of sharing the screen, so the camera keeps its
+  // framing under it (and the strip floats over its foot) rather than squeezing the scene into nothing.
+  const bottomEdge = stack?.top ?? vh
   useGameStore.getState().setSceneInset({
     top: top ? Math.round(top.bottom + GAP) : 0,
     right: side ? Math.max(0, Math.round(vw - side.left + GAP)) : 0,

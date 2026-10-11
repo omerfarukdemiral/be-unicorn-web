@@ -40,3 +40,16 @@ export function dispatchAction(action: Action): ActionResult {
 export function storeApi() {
   return useGameStore.getState()
 }
+
+/**
+ * A card or call owns the screen, so scene bubbles and juice (banner, "+N") fade out until it goes: a centred card or
+ * screen (stage-up, victory, statistics…; the payday dock is not one) or the paused start call with its stage goal
+ * and Başlat (ui/time.tsx StartCall), which a pill or a release banner must never print over.
+ */
+export function useSceneCovered(): boolean {
+  const mock = useContext(MockStateContext)
+  const covered = useGameStore(
+    (s) => (!!s.ui.overlay && s.ui.overlay.kind !== 'payday') || (!s.ui.runStarted && s.state.time.speed === 0 && !s.state.gameOver),
+  )
+  return !mock && covered
+}

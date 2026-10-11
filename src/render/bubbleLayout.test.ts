@@ -192,6 +192,31 @@ describe('layoutBubbles', () => {
     expect(layoutBubbles([dec, con], vp).get('con')!.dy).toBeLessThan(0)
   })
 
+  it('a clickable that would stack on another one goes beside it with a stem to its own head', () => {
+    // Two staff pills whose heads are 95px apart: the second one's head is under the first pill, so stacked on top
+    // its tail would rest on that pill ("Mira boşta" on "Ebru ayrılıyor").
+    const a = box('a', 'staff', 300, 400, 200, 36)
+    const b = box('b', 'staff', 395, 405, 200, 36)
+    const res = layoutBubbles([a, b], VP)
+    expect(noOverlap([a, b], res)).toBe(true)
+    const pb = res.get('b')!
+    expect(pb.dx).not.toBe(0)
+    expect(pb.stem).toBeGreaterThan(0)
+    expect(pb.detached).toBeFalsy()
+  })
+
+  it('marks a lifted bubble with no stem as detached (its tail would point at the bubble below)', () => {
+    // A narrow column: no room beside, so the second pill stacks above the first.
+    const vp: Viewport = { left: 290, top: 8, right: 480, bottom: 892 }
+    const a = box('a', 'staff', 300, 400, 170, 36)
+    const b = box('b', 'staff', 300, 405, 170, 36)
+    const res = layoutBubbles([a, b], vp)
+    const pb = res.get('b')!
+    expect(pb.dy).toBeLessThan(0)
+    expect(pb.stem).toBe(0)
+    expect(pb.detached).toBe(true)
+  })
+
   it('draws a stem for a lifted bubble, but not through another bubble', () => {
     const items = [box('con', 'concept', 100, 300, 220, 60), box('ico', 'conceptIcon', 188, 316, 44, 44)]
     const res = layoutBubbles(items, VP)
@@ -225,5 +250,180 @@ describe('layoutBubbles', () => {
       expect(noOverlap(at(e), next)).toBe(true)
       prev = next
     }
+  })
+
+  it('stacks forced bubbles into free gaps from the top when there is no room by the head (never overlapping)', () => {
+    // Short free area, three forced bubbles over the same head.
+    const vp: Viewport = { left: 8, top: 100, right: 382, bottom: 400 }
+    const items = [
+      box('dec', 'decision', 60, 200, 300, 90, 'v1'),
+      box('desk', 'desk', 70, 210, 300, 80, 'desk'),
+      box('s1', 'staff', 80, 220, 300, 80, 'e1'),
+    ]
+    const res = layoutBubbles(items, vp)
+    for (const b of items) {
+      const p = res.get(b.key)!
+      expect(p.hidden).toBe(false)
+      expect(b.top + p.dy).toBeGreaterThanOrEqual(vp.top - 0.5)
+      expect(b.top + p.dy + b.h).toBeLessThanOrEqual(vp.bottom + 0.5)
+    }
+    expect(noOverlap(items, res)).toBe(true)
+  })
+
+  it('places the open bubble first and never hides or moves it for a decision', () => {
+    const items = [box('dec', 'decision', 100, 300, 220, 60, 'v1'), box('staff:e1', 'staff', 110, 310, 300, 160, 'e1')]
+    const res = layoutBubbles(items, VP, undefined, { openKey: 'staff:e1' })
+    expect(res.get('staff:e1')).toMatchObject({ dx: 0, dy: 0, hidden: false })
+    expect(res.get('dec')!.hidden).toBe(false)
+    expect(noOverlap(items, res)).toBe(true)
+    // Without it being open the decision keeps its spot.
+    expect(layoutBubbles(items, VP).get('dec')).toMatchObject({ dx: 0, dy: 0 })
+  })
+
+  it('hides a reflection before a staff bubble when space runs out', () => {
+    const vp: Viewport = { left: 8, top: 100, right: 300, bottom: 260 }
+    const items = [box('st', 'staff', 20, 120, 270, 120, 'e1'), box('ref', 'reflection', 30, 130, 250, 60, 'desk')]
+    const res = layoutBubbles(items, vp)
+    expect(res.get('st')).toMatchObject({ hidden: false, dy: 0 })
+    expect(res.get('ref')!.hidden).toBe(true)
+  })
+
+  it('a sideways-displaced forced bubble keeps a diagonal stem to the head', () => {
+    // Above the desk head: a decision (right) and a visitor (bottom left) leave only a lifted slot to the left.
+    const vp: Viewport = { left: 8, top: 100, right: 600, bottom: 360 }
+    const items = [box('dec', 'decision', 420, 150, 170, 155, 'v1'), box('vis', 'visitor', 150, 290, 150, 69, 'v2'), box('desk', 'desk', 344, 300, 140, 50, 'desk')]
+    const res = layoutBubbles(items, vp)
+    const d = res.get('desk')!
+    // −75: the pill's tail clears the visitor pill by the full gap too.
+    expect(d).toMatchObject({ dx: -72, dy: -75, hidden: false })
+    expect(noOverlap(items, res)).toBe(true)
+    // From the bubble's bottom-right corner (6px in) down to the head at x 414.
+    expect(d.stemX).toBeCloseTo(134)
+    expect(d.stem).toBeCloseTo(Math.hypot(8, 75))
+    expect(d.stemAngle).toBeLessThan(0)
+    // A non-forced bubble in the same spot gets no stem.
+    const ico = layoutBubbles([items[0]!, items[1]!, { ...items[2]!, kind: 'conceptIcon' }], vp).get('desk')!
+    expect(ico.stem).toBe(0)
+  })
+
+  it('while an expanded bubble fills the free area, other forced bubbles wait hidden instead of overlapping it', () => {
+    const vp: Viewport = { left: 8, top: 120, right: 492, bottom: 540 }
+    const items = [box('desk:actions', 'desk', 12, 132, 476, 401, 'desk'), box('staff:e1', 'staff', 119, 138, 177, 38, 'e1')]
+    const res = layoutBubbles(items, vp, undefined, { openKey: 'desk:actions' })
+    expect(res.get('desk:actions')!.hidden).toBe(false)
+    expect(res.get('staff:e1')!.hidden).toBe(true)
+    // Not open: both stay on screen (the staff bubble is forced).
+    expect(layoutBubbles(items, vp).get('staff:e1')!.hidden).toBe(false)
+  })
+
+  it('keeps clear of obstacles (the start call, a strip floating over a sheet)', () => {
+    const vp: Viewport = { left: 8, top: 100, right: 600, bottom: 700, obstacles: [{ left: 150, top: 300, right: 450, bottom: 420 }] }
+    const items = [box('desk', 'desk', 200, 330, 200, 40), box('amb', 'ambient', 220, 380, 160, 30)]
+    const res = layoutBubbles(items, vp)
+    const d = res.get('desk')!
+    expect(d.hidden).toBe(false)
+    expect(hit(rectOf(items[0]!, d), { l: 150, t: 300, r: 450, b: 420 })).toBe(false)
+    // An ambient line has nowhere near its speaker to go: it waits hidden.
+    expect(res.get('amb')!.hidden).toBe(true)
+  })
+
+  // QA round 3: pills touching or stacked with their tail painted on the neighbour, the reflection under an open card,
+  // the release banner and "+N" floats under bubble stems.
+  describe('min gaps, juice and reflections', () => {
+    // BubbleTail hangs ~7px under the box (a 10px square turned 45°).
+    const TAIL = 7
+    /** Free space between two placed bubbles, counting the upper one's tail (negative = overlap). */
+    const gapOf = (a: BubbleBox, pa: Placement, b: BubbleBox, pb: Placement): number => {
+      const ra = rectOf(a, pa)
+      const rb = rectOf(b, pb)
+      const [up, down] = ra.t <= rb.t ? [ra, rb] : [rb, ra]
+      return Math.max(rb.l - ra.r, ra.l - rb.r, down.t - (up.b + TAIL))
+    }
+
+    it('keeps ≥ 6px between two stacked pills measured from the upper tail tip', () => {
+      // Two "ayrılıyor" pills whose heads are 4px apart, no room above: the second is pushed below the first, whose
+      // tail still points down at its head (b0-overlap: 0–1px, tail painted on the lower pill).
+      const vp: Viewport = { left: 290, top: 390, right: 500, bottom: 892 }
+      const a = box('staff:a', 'staff', 300, 400, 186, 38, 'a')
+      const b = box('staff:b', 'staff', 302, 404, 186, 38, 'b')
+      const res = layoutBubbles([a, b], vp)
+      expect(res.get('staff:a')).toMatchObject({ dy: 0, hidden: false })
+      expect(res.get('staff:b')!.dy).toBeGreaterThan(0)
+      expect(gapOf(a, res.get('staff:a')!, b, res.get('staff:b')!)).toBeGreaterThanOrEqual(6)
+      // Lifted instead (room above): the gap holds from the lifted pill's tail too.
+      const up = layoutBubbles([a, b], { ...vp, top: 8 })
+      expect(gapOf(a, up.get('staff:a')!, b, up.get('staff:b')!)).toBeGreaterThanOrEqual(6)
+    })
+
+    it('a decision pill never covers the chevron of the desk pill next to it', () => {
+      // "Kurt · Maaş kaçtı." walking in beside "Sen · 3 aday bekliyor" (d/029): heads 120px apart, same height.
+      const desk = box('desk:hire', 'desk', 485, 305, 183, 36, 'desk')
+      const dec = box('decision:angel-lifeline', 'decision', 600, 312, 165, 36, 'v1')
+      const vis = box('visitor:pitch:v2', 'visitor', 432, 345, 244, 36, 'v2')
+      const items = [desk, dec, vis]
+      let prev: Map<string, Placement> | undefined
+      // The walker drifts left a few px per pass: every pass stays clear.
+      for (let i = 0; i < 12; i++) {
+        const moved = items.map((b) => (b === dec ? { ...b, left: b.left - i * 3 } : b))
+        const res = layoutBubbles(moved, VP, prev)
+        for (let x = 0; x < moved.length; x++)
+          for (let y = x + 1; y < moved.length; y++) expect(gapOf(moved[x]!, res.get(moved[x]!.key)!, moved[y]!, res.get(moved[y]!.key)!)).toBeGreaterThanOrEqual(6)
+        prev = res
+      }
+    })
+
+    it('juice (release banner, floats): read-only bubbles keep off it, an actionable pill keeps its head (the juice yields)', () => {
+      const banner = { left: 637, top: 340, right: 803, bottom: 373 }
+      const vp: Viewport = { ...VP, juice: [banner] }
+      const desk = box('desk:hire', 'desk', 626, 330, 188, 38, 'desk')
+      expect(layoutBubbles([desk], vp).get('desk:hire')).toMatchObject({ hidden: false, dx: 0, dy: 0 })
+      const ref = box('reflection:x', 'reflection', 616, 335, 208, 56, 'desk')
+      const p = layoutBubbles([ref], vp).get('reflection:x')!
+      if (!p.hidden) {
+        const r = rectOf(ref, p)
+        // Clear of the banner by the gap, tail included.
+        expect(Math.max(banner.left - r.r, r.l - banner.right, banner.top - (r.b + TAIL), r.t - banner.bottom)).toBeGreaterThanOrEqual(6)
+      }
+      // A hard obstacle (the start call, a HUD island) still moves the actionable pill.
+      const hard = layoutBubbles([desk], { ...VP, obstacles: [banner] }).get('desk:hire')!
+      expect(hit(rectOf(desk, hard), { l: banner.left, t: banner.top, r: banner.right, b: banner.bottom })).toBe(false)
+    })
+
+    it('a reflection steps out of the way while any bubble is expanded', () => {
+      const open = box('desk:round', 'desk', 500, 200, 340, 260, 'desk')
+      const ref = box('reflection:x', 'reflection', 560, 420, 220, 56, 'desk')
+      const far = box('reflection:y', 'reflection', 100, 600, 220, 56, 'v9')
+      const res = layoutBubbles([open, ref, far], VP, undefined, { openKey: 'desk:round' })
+      expect(res.get('desk:round')).toMatchObject({ hidden: false, dx: 0, dy: 0 })
+      expect(res.get('reflection:x')!.hidden).toBe(true)
+      expect(res.get('reflection:y')!.hidden).toBe(true)
+      // Nothing open: it shows again.
+      expect(layoutBubbles([ref], VP).get('reflection:x')!.hidden).toBe(false)
+    })
+
+    it('an actionable bubble keeps its own spot; the reflection on the same head moves, never the other way', () => {
+      const pay = box('desk:payday', 'desk', 600, 300, 200, 38, 'desk')
+      const ref = box('reflection:x', 'reflection', 590, 290, 220, 56, 'desk')
+      const res = layoutBubbles([ref, pay], VP)
+      expect(res.get('desk:payday')).toMatchObject({ hidden: false, dx: 0, dy: 0 })
+      const r = res.get('reflection:x')!
+      if (!r.hidden) expect(gapOf(pay, res.get('desk:payday')!, ref, r)).toBeGreaterThanOrEqual(6)
+    })
+
+    it('read-only bubbles never sit on the stem of a lifted bubble', () => {
+      // The desk card is lifted over a decision beside its head; its stem runs straight down to the desk head (x 700).
+      const dec = box('dec', 'decision', 470, 380, 200, 40, 'v1')
+      const card = box('desk:hire', 'desk', 560, 300, 280, 120, 'desk')
+      // A reflection of another speaker whose natural spot is right on that stem.
+      const ref = box('reflection:x', 'reflection', 680, 392, 120, 26, 'v2')
+      const res = layoutBubbles([dec, card, ref], VP)
+      const pc = res.get('desk:hire')!
+      expect(pc.dy).toBeLessThan(-8)
+      expect(pc.stem).toBeGreaterThan(0)
+      const stemX = card.left + card.w / 2
+      const stem = { l: stemX - 2, t: card.top + pc.dy + card.h, r: stemX + 2, b: card.top + card.h }
+      const pr = res.get('reflection:x')!
+      if (!pr.hidden) expect(hit(rectOf(ref, pr), stem)).toBe(false)
+    })
   })
 })

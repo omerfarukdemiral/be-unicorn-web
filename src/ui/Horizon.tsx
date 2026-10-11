@@ -246,9 +246,11 @@ export function HorizonMini({ max = 3, compact, className }: { max?: number; com
   const title = list.map((h) => `${whenLabel(h.day - day)} · ${horizonLabel(h, name)}`).join('\n')
   if (compact) {
     return (
-      <span className={cx('tabular inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-ink', className)} title={title}>
+      // Wrapping row clipped to one line: when less than ~6 characters fit beside the tile, the text drops to the hidden
+      // second line and the tile stands alone, never a one-letter "S…" (QA, phone strip with a step and a payday).
+      <span className={cx('tabular inline-flex h-5 min-w-0 flex-wrap content-start items-center gap-x-1 overflow-hidden text-[11px] font-semibold text-ink', className)} title={title}>
         <HorizonTile h={first} size={20} />
-        <span className="truncate">{horizonItemText(first, first.day - day, true)}</span>
+        <span className="min-w-12 flex-[1_1_3rem] truncate leading-5">{horizonItemText(first, first.day - day, true)}</span>
       </span>
     )
   }

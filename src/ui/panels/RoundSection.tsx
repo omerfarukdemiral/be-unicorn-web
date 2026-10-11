@@ -136,7 +136,7 @@ export function RoundSection({ setup = false }: { setup?: boolean }) {
   const summary = !active && s.canStart && !setup
 
   return (
-    <section id="round-section" className="flex scroll-mt-2 flex-col gap-3 border-t border-border-strong pt-3">
+    <section id="round-section" className="flex scroll-mt-2 flex-col gap-3">
       <header className="flex items-center gap-3">
         <IconBadge icon={active ? 'timer' : 'rocket'} size={36} color="var(--color-brand)" />
         <div className="min-w-0">
@@ -177,7 +177,7 @@ export function RoundSection({ setup = false }: { setup?: boolean }) {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className={cx('grid gap-2', outlook?.atCap ? 'grid-cols-3' : 'grid-cols-2')}>
             <Stat
               label={t('round.mult')}
               icon="scale"
@@ -186,7 +186,8 @@ export function RoundSection({ setup = false }: { setup?: boolean }) {
               // Where the offer goes in ~30 days if the player waits (arrow = the valuation's direction).
               sub={outlook ? <span data-outlook={outlook.trend} className="tabular">{TREND_ARROW[outlook.trend]} {fixed(outlook.factorIn30, 2)}×</span> : undefined}
             />
-            {outlook && <MultipleCap outlook={outlook} />}
+            {/* The valuation multiple's cap only when it binds: below it, a second "×" next to Çarpan only confused. */}
+            {outlook?.atCap && <MultipleCap outlook={outlook} />}
             <RoundEndRunway />
           </div>
 
@@ -196,7 +197,8 @@ export function RoundSection({ setup = false }: { setup?: boolean }) {
             </Button>
           )}
 
-          {!summary && view.sizes && (
+          {/* Sizes only once a round can start: the window's open, or the down round needs no window (only its retry wait). */}
+          {!summary && (s.canStart || view.downRound) && view.sizes && (
             <div className="flex flex-col gap-1">
               <div className="ui-label">{t('round.sizeTitle')}</div>
               <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('round.sizeTitle')}>
@@ -232,9 +234,11 @@ export function RoundSection({ setup = false }: { setup?: boolean }) {
             <>
               <Diligence items={view.diligence} />
 
-              <Button tone="commit" icon="rocket" disabled={!s.canStart} onClick={() => dispatch({ type: 'startRound', size })}>
-                {s.canStart ? t('round.startSize', { v: t(`round.size.${size}`) }) : t('round.notReady')}
-              </Button>
+              {s.canStart && (
+                <Button tone="commit" icon="rocket" onClick={() => dispatch({ type: 'startRound', size })}>
+                  {t('round.startSize', { v: t(`round.size.${size}`) })}
+                </Button>
+              )}
               {view.downRound && chosen?.down && <DownRound option={chosen} retryIn={view.retryIn ?? 0} onStart={() => dispatch({ type: 'startRound', size, down: true })} />}
             </>
           )}

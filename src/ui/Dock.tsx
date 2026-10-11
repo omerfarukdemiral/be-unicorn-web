@@ -1,7 +1,8 @@
 // Panel tabs: Mağaza · Ekip · Projeler · Büyüme · Metrikler. They live in the bottom bar (layout/BottomBar.tsx,
 // docs/LAYOUT.md §1); the tab content opens in the single RightPanel (a tab replaces whatever the panel showed, the
 // same tab again closes it). Kazanımlar moved to the top-bar book icon (K, docs/GAMEPLAY_V2.md §12).
-// HUD grammar (§10.4): icon 20 + badge, the label only on a ≥1280px screen (and always in title / aria).
+// HUD grammar (§10.4): icon 20 + badge, the label only on a ≥1280px screen (and always in title / aria); the desktop
+// corner island (`labels={false}`) is icon only, 44px keys, the name in the tooltip.
 // Guidance (§11, D8): the tab the next step needs breathes; a hire that bounced off a missing desk badges Mağaza,
 // which then opens on the empty desk slot (the scene's ghost slot).
 // Badges (§4.1): counters in brand, a leaving employee in warning.
@@ -71,10 +72,10 @@ function useTabPress(): (tab: DockTab) => void {
 
 /**
  * The tab buttons. `bar`: desktop bottom bar, h40, icon 20; the label shows only on a ≥1280px screen.
- * `mobile`: phone row, icon 20 + 10px label, h48. `touch` (landscape phone bar): the `bar` row with 44px targets.
+ * `mobile`: phone row, icon 20 + 10px label, h48; `labels={false}` (portrait tab island, T06): 48px icon keys. `touch` (landscape phone bar): the `bar` row with 44px targets.
  * The row always keeps to the bar's right end. The guided tab breathes unless it is already open.
  */
-export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'; touch?: boolean }) {
+export function DockTabs({ variant, touch = false, labels = true, locked = true }: { variant: 'bar' | 'mobile'; touch?: boolean; labels?: boolean; locked?: boolean }) {
   const active = useGameStore((s) => s.ui.panel?.kind)
   const guided = useGameStore((s) => guidedTab(s.state))
   const press = useTabPress()
@@ -82,7 +83,7 @@ export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'
 
   if (variant === 'mobile') {
     return (
-      <div className="ui-scroll flex h-12 min-w-0 items-stretch gap-1 overflow-x-auto" role="tablist" aria-label={t('bottom.tabs')}>
+      <div className={cx('flex h-12 min-w-0 items-stretch gap-1', labels && 'ui-scroll overflow-x-auto')} role="tablist" aria-label={t('bottom.tabs')}>
         {DOCK_TABS.map((d) => {
           const on = active === d.id
           return (
@@ -91,20 +92,22 @@ export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'
               type="button"
               role="tab"
               aria-selected={on}
+              aria-label={labels ? undefined : t(`dock.${d.id}`)}
               onClick={() => press(d.id)}
               className={cx(
-                'relative flex min-w-[56px] flex-1 flex-col items-center justify-center gap-0.5 rounded-control text-[10px] font-semibold',
+                'relative flex flex-col items-center justify-center gap-0.5 rounded-control text-[10px] font-semibold',
+                labels ? 'min-w-[56px] flex-1' : 'w-12 shrink-0',
                 on ? 'bg-brand-soft text-brand-ink' : 'text-ink-2',
                 guided === d.id && !on && 'animate-breathe text-brand-ink',
               )}
             >
-              <Icon name={d.icon} size={20} />
-              <span className="whitespace-nowrap leading-none">{t(`dock.${d.id}`)}</span>
+              <Icon name={d.icon} size={labels ? 20 : 22} />
+              {labels && <span className="whitespace-nowrap leading-none">{t(`dock.${d.id}`)}</span>}
               <Badge b={badges[d.id]} inset />
             </button>
           )
         })}
-        <LockedTools size={48} />
+        {/* No locked silhouettes on a phone: at 390px they pushed Metrikler aside and cut the row's last tab (QA). */}
       </div>
     )
   }
@@ -124,19 +127,20 @@ export function DockTabs({ variant, touch = false }: { variant: 'bar' | 'mobile'
             aria-label={label}
             title={`${label} (${d.key.toUpperCase()})`}
             className={cx(
-              'relative flex items-center justify-center gap-2 rounded-control px-2.5 text-[13px] font-semibold transition-colors min-[1280px]:px-3',
-              touch ? 'h-11 min-w-11' : 'h-10 min-w-10',
+              'relative flex items-center justify-center gap-2 rounded-control text-[13px] font-semibold transition-colors',
+              labels ? 'px-2.5 min-[1280px]:px-3' : 'px-0',
+              touch ? 'h-11 min-w-11' : labels ? 'h-10 min-w-10' : 'size-11',
               on ? 'bg-brand text-on-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
               guided === d.id && !on && 'animate-breathe bg-brand-soft text-brand-ink',
             )}
           >
             <Icon name={d.icon} size={20} className="shrink-0" />
-            <span className="hidden whitespace-nowrap min-[1280px]:inline">{label}</span>
+            {labels && <span className="hidden whitespace-nowrap min-[1280px]:inline">{label}</span>}
             <Badge b={badges[d.id]} />
           </button>
         )
       })}
-      <LockedTools size={touch ? 44 : 40} />
+      {locked && <LockedTools size={touch || !labels ? 44 : 40} />}
     </div>
   )
 }

@@ -112,7 +112,7 @@ describe('panel sources', () => {
 
   it('the size picker lives in Büyüme › Tur only: the hub shows a summary row that opens it (UI2, the offer pause)', () => {
     expect(src('GrowthPanel')).toMatch(/<RoundSection setup=\{section === 'round'\} \/>/)
-    expect(src('RoundSection')).toMatch(/!summary && view\.sizes/)
+    expect(src('RoundSection')).toMatch(/!summary && \(s\.canStart \|\| view\.downRound\) && view\.sizes/)
     expect(src('RoundSection')).toMatch(/openPanel\(\{ kind: 'growth', section: 'round' \}/)
   })
 
@@ -290,14 +290,25 @@ describe('center screens (H5b)', () => {
     expect(sentences(html)).toBeLessThanOrEqual(1)
   })
 
-  it('Büyüme: one-line rows with real numbers, the Kurul row from Series A', () => {
+  it('Büyüme: one-line rows with real numbers (Pazarlama tab), the Kurul row from Series A (Tur tab)', () => {
     useGameStore.setState({ state: lateState(3), ui: { ...initial.ui } })
     const html = renderToStaticMarkup(createElement(GrowthPanel, {}))
     expect(html).toMatch(/%\d+ · 2 segment/)
     expect(html).toContain('0 politika')
-    expect(html).toContain('data-board-row')
+    expect(html).not.toContain('data-board-row')
+    expect(renderToStaticMarkup(createElement(GrowthPanel, { section: 'round' }))).toContain('data-board-row')
     useGameStore.setState({ state: lateState(2) })
-    expect(renderToStaticMarkup(createElement(GrowthPanel, {}))).not.toContain('data-board-row')
+    expect(renderToStaticMarkup(createElement(GrowthPanel, { section: 'round' }))).not.toContain('data-board-row')
+  })
+
+  it('Büyüme: tabs, nothing that has a home elsewhere (MRR, maturity, capacity, valuation parts)', () => {
+    useGameStore.setState({ state: lateState(3), ui: { ...initial.ui } })
+    const html = renderToStaticMarkup(createElement(GrowthPanel, {}))
+    for (const k of ['round', 'market'] as const) expect(html).toContain(t(`growth.tab.${k}`))
+    // Müşteri waits for Series B's enterprise sales (or a renewal due).
+    expect(html).not.toContain(`>${t('growth.tab.customers')}<`)
+    expect(html).not.toContain(t('growth.avgMaturity'))
+    expect(src('GrowthPanel')).not.toMatch(/ValuationParts|DecisionOutcomes/)
   })
 
   it('Büyüme price lock (LD5): the trigger checks with live numbers; a shelved pricing card becomes the way in', () => {

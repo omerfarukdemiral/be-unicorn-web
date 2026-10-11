@@ -76,6 +76,8 @@ describe('gameStore (engine wired)', () => {
     expect(res.ok).toBe(false)
     expect(store().state).toBe(before)
     expect(store().ui.lastError?.code).toBe(res.error)
+    // The strip names what was refused ("Eşya: Yok."), never a bare error word.
+    expect(store().ui.lastError?.action).toBe('placeItem')
   })
 
   it('tick advances in fixed steps scaled by speed and pauses at 0', () => {
@@ -403,6 +405,67 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().ui.pauseReasons).toEqual([])
     expect(store().ui.slowOnMoments).toBe(false)
     store().setSlowOnMoments(true)
+  })
+
+  it('an open scene bubble pauses without touching time.speed; any non-setSpeed action resumes', () => {
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    store().setBubbleOpen('staff:x')
+    expect(store().ui.pauseReasons).toEqual(['bubble'])
+    expect(effectiveSpeed(store())).toBe(0)
+    expect(store().state.time.speed).toBe(2)
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY * 3)
+    expect(store().state.time.day).toBe(day)
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    expect(store().ui.bubbleOpen).toBe('staff:x')
+    expect(store().dispatch({ type: 'setAdBudget', amount: 0 }).ok).toBe(true)
+    expect(store().ui.bubbleOpen).toBeNull()
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(1)
+  })
+
+  it('a manual pause stays paused after the bubble is resolved', () => {
+    store().dispatch({ type: 'setSpeed', speed: 0 })
+    store().setBubbleOpen('desk:payday')
+    store().dispatch({ type: 'setAdBudget', amount: 0 })
+    expect(store().ui.bubbleOpen).toBeNull()
+    expect(store().state.time.speed).toBe(0)
+    expect(effectiveSpeed(store())).toBe(0)
+  })
+
+  it('bubble + unanswered decision panel gives decision then bubble; select(null), newGame and load clear it', () => {
+    store().dispatch({ type: 'setSpeed', speed: 1 })
+    const cardId = withDecision()
+    store().openPanel({ kind: 'decision', cardId })
+    store().setBubbleOpen('decision:x')
+    expect(store().ui.pauseReasons).toEqual(['decision', 'bubble'])
+    store().closePanel()
+    store().select(null)
+    expect(store().ui.bubbleOpen).toBeNull()
+    store().setBubbleOpen('desk:round')
+    store().newGame({ seed: 8, founderXp: 0, runIndex: 0 })
+    expect(store().ui.bubbleOpen).toBeNull()
+    const mem = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) })
+    store().save()
+    store().setBubbleOpen('desk:round')
+    expect(store().load()).toBe(true)
+    vi.unstubAllGlobals()
+    expect(store().ui.bubbleOpen).toBeNull()
+    expect(store().ui.pauseReasons).toEqual([])
+  })
+
+  it('the 4× restore waits while a bubble is open', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    const card = store().state.decisions.active!
+    store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 })
+    store().setBubbleOpen('staff:y')
+    for (let i = 0; i < 200; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(1)
+    store().setBubbleOpen(null)
+    for (let i = 0; i < 200 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(4)
   })
 
   it('a concept goes straight to the Kazanımlar badge: no scene bubble, no pause; only the open card pauses', () => {

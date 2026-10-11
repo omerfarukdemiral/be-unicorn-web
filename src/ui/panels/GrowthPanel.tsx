@@ -1,21 +1,25 @@
-// Büyüme: funding round, product health, channels (ad budget steps), price steps, enterprise + renewals, and one-line
-// rows to the center screens (Pazar haritası, Kanun Kitabı) with the Kurul row under them. HUD grammar (GAMEPLAY V2 §10.5): no sliders, every step is a
-// button with its CostPreview; the big surfaces open in the middle (CenterFrame), not stacked in this drawer.
+// Büyüme, three tabs (one job each, the panel never scrolls through everything):
+//   Tur        the funding round + the Kurul row (Series A on)
+//   Pazarlama  ad budget steps + CAC / LTV:CAC + channels, price steps, rows to Pazar haritası and Kanun Kitabı
+//   Müşteri    renewals due + key accounts
+// Not here (each has one home elsewhere): MRR (the panel header), maturity / live projects (Projeler), capacity
+// (Kullanıcı's overload mark), the valuation parts and the landed decision effects (Yol haritası).
+// HUD grammar (GAMEPLAY V2 §10.5): no sliders, every step is a button with its CostPreview; the big surfaces open in
+// the middle (CenterFrame), not stacked in this drawer.
 // Stage goals (☆) live in Yol haritası (RoadmapPanel). Explanations sit behind ⓘ, never under a number.
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { adBudgetSteps, nearestPriceStep, PRICE_STEPS } from '../../engine'
 import type { ToolId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
-import { Bar, Chip, CostPreview, cx, Dot, Empty, LockedHint, SectionTitle, Segmented, Stat } from '../primitives'
+import { Chip, CostPreview, cx, Dot, Empty, LockedHint, SectionTitle, Segmented, Stat } from '../primitives'
 import { iconTone, WIDGET_COLOR } from '../theme'
 import { Icon, type IconName } from '../icons'
 import { useSpendPreview } from '../widgets'
 import { centerSummary } from '../center/centerData'
 import { RoundSection } from './RoundSection'
-import { DecisionOutcomes, ValuationParts } from './GoalsCard'
 import { BoardRow } from './BoardRow'
 import { RenewalSection } from './RenewalSection'
 import { priceGate } from '../loopUi'
@@ -26,64 +30,84 @@ function useTool(id: ToolId): boolean {
   return useGameStore((s) => s.state.unlockedTools.includes(id))
 }
 
+type GrowthTab = 'round' | 'market' | 'customers'
+
+/** The tab last shown this session: reopening Büyüme lands where the player left it. */
+let lastTab: GrowthTab | null = null
+
 export function GrowthPanel({ section }: { section?: 'round' }) {
   const showRound = useGameStore((s) => s.state.derived.canStartRound || !!s.state.round?.active || s.state.stage > 0)
-  // Opened from the HUD round button: bring the round block into view.
+  const roundCall = useGameStore((s) => !!s.state.round?.active || s.state.derived.canStartRound)
+  const renewals = useGameStore((s) => s.state.derived.renewals?.length ?? 0)
+  const adOpen = useTool('adBudget')
+  // Müşteri only once there is someone to sell to or renew (before Series B it was one lock line).
+  const customersOpen = useTool('enterpriseSales') || renewals > 0
+  const tabs = (['round', 'market', 'customers'] as const).filter((k) => (k === 'round' ? showRound || section === 'round' : k === 'customers' ? customersOpen : true))
+  const [tab, setTab] = useState<GrowthTab>(() => {
+    if (section === 'round') return 'round'
+    const has = (k: GrowthTab) => (tabs as readonly GrowthTab[]).includes(k)
+    if (lastTab && has(lastTab)) return lastTab
+    if (roundCall && has('round')) return 'round'
+    if (renewals > 0) return 'customers'
+    return adOpen || !has('round') ? 'market' : 'round'
+  })
+  // Opened from the HUD round button: the Tur tab, its block in view.
   useEffect(() => {
-    if (section === 'round') document.getElementById('round-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    if (section !== 'round') return
+    setTab('round')
+    document.getElementById('round-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }, [section])
+  const shown: GrowthTab = (tabs as readonly GrowthTab[]).includes(tab) ? tab : tabs[0]!
+  const pick = (k: GrowthTab) => {
+    lastTab = k
+    setTab(k)
+  }
+  const dot: Partial<Record<GrowthTab, boolean>> = { round: roundCall, customers: renewals > 0 }
   return (
-    <div className="flex flex-col gap-5">
-      {(showRound || section === 'round') && <RoundSection setup={section === 'round'} />}
-      <ProductSection />
-      <CenterRows />
-      <DecisionOutcomes />
-      <ChannelSection />
-      <PriceSection />
-      <EnterpriseSection />
-      <RenewalSection />
+    <div className="flex flex-col gap-4">
+      <Segmented label={t('growth.tabs')} className="w-full [&>button]:flex-1 [&>button]:justify-center">
+        {tabs.map((k) => (
+          <Chip key={k} segment active={k === shown} onClick={() => pick(k)}>
+            {t(`growth.tab.${k}`)}
+            {dot[k] && k !== shown && <Dot color="var(--color-brand)" size={6} />}
+          </Chip>
+        ))}
+      </Segmented>
+      {shown === 'round' && (
+        <>
+          <RoundSection setup={section === 'round'} />
+          <BoardRowList />
+        </>
+      )}
+      {shown === 'market' && (
+        <>
+          <ChannelSection />
+          <PriceSection />
+          <CenterRows />
+        </>
+      )}
+      {shown === 'customers' && (
+        <>
+          <RenewalSection />
+          <EnterpriseSection />
+        </>
+      )}
     </div>
   )
 }
 
-function ProductSection() {
-  const d = useGameStore(
-    useShallow((s) => ({
-      avg: s.state.derived.avgMaturity,
-      capacity: s.state.derived.capacity,
-      overload: s.state.derived.overload,
-      users: s.state.stats.users,
-      live: s.state.projects.filter((p) => p.launched).length,
-      total: s.state.projects.length,
-      growth: s.state.derived.momGrowth,
-      mrr: s.state.finance.mrr,
-      parts: s.state.derived.valuationParts,
-    })),
-  )
+/** Kurul (from Series A) under the round: the quarter's MRR exam belongs with the investors. */
+function BoardRowList() {
   return (
-    <section>
-      <SectionTitle>{t('growth.product')}</SectionTitle>
-      <div className="grid grid-cols-2 gap-2 @lg:grid-cols-4">
-        <Stat label={t('growth.avgMaturity')} icon="rocket" color="var(--color-brand)" value={pct(d.avg)} sub={<Bar value={d.avg} height={4} className="mt-1" />} />
-        <Stat label={t('growth.liveProjects')} icon="flag" color="var(--color-positive)" value={`${d.live}/${d.total}`} />
-        <Stat
-          label={t('growth.capacity')}
-          icon="users"
-          color={WIDGET_COLOR.users}
-          value={`${num(d.users)} / ${num(d.capacity)}`}
-          sub={d.overload > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-ink"><Dot color="var(--color-negative)" size={6} />{t('hud.overload')}</span> : undefined}
-        />
-        <Stat label={t('growth.mrr')} icon="cash" color={WIDGET_COLOR.cash} value={money(d.mrr)} delta={d.growth !== 0 ? { value: d.growth, text: `${d.growth > 0 ? '+' : ''}${pct(d.growth, 1)}` } : undefined} />
-      </div>
-      {/* What builds the valuation (playtest LD2): the same stacked bar as the goals card, count × rate in the legend. */}
-      {d.parts && <ValuationParts parts={d.parts} />}
-    </section>
+    <ul className="flex flex-col gap-1 empty:hidden">
+      <BoardRow />
+    </ul>
   )
 }
 
 /**
  * One line per center screen: icon, name, its numbers ("68% · 2 segment", "3 politika · 12g"), "›" (opens the
- * CenterFrame; time keeps flowing there). The Kurul row follows from Series A.
+ * CenterFrame; time keeps flowing there). The Kurul row lives in the Tur tab.
  */
 function CenterRows() {
   const d = useGameStore(useShallow((s) => centerSummary(s.state.derived.policies, s.state.derived.market, s.state.derived.penetration, s.state.time.day)))
@@ -97,7 +121,6 @@ function CenterRows() {
         value={d.waitDays > 0 ? t('growth.row.policiesWait', { n: d.policies, d: d.waitDays }) : t('growth.row.policiesValue', { n: d.policies })}
         onOpen={() => toggleCenter('lawbook')}
       />
-      <BoardRow />
     </ul>
   )
 }
@@ -137,10 +160,8 @@ function ChannelSection() {
               <AdStep key={st.key} label={t(`growth.adStep.${st.key}`)} amount={st.amount} budget={d.budget} />
             ))}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 @lg:grid-cols-3">
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <Stat label={t('growth.cac')} icon="coin" color={WIDGET_COLOR.burnBreakdown} value={money(d.cac)} info={t('growth.cacInfo')} />
-            {/* The channel row below already has the paid count. */}
-            {!showChannels && <Stat label={t('growth.paidUsers')} icon="magnet" color={WIDGET_COLOR.channelBreakdown} value={`+${num(d.ch.paid)}`} />}
             {showLtv && (
               <Stat
                 label={t('hud.ltvCac')}

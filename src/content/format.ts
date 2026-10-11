@@ -13,7 +13,10 @@ export function formatCompact(value: number): string {
   if (!Number.isFinite(value)) return '∞'
   const sign = value < 0 ? MINUS : ''
   const v = Math.abs(value)
+  // Past a thousand trillion the number means nothing on a HUD (and toFixed turns exponential ≥ 1e21).
+  if (v >= 1e15) return sign + '∞'
   const units: [number, string][] = [
+    [1e12, 'T'],
     [1e9, 'B'],
     [1e6, 'M'],
     [1e3, 'K'],

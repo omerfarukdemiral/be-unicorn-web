@@ -76,9 +76,9 @@ export interface SceneInset {
  * expanded in the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, the round offer
  * (`offer`: Büyüme › Tur `{kind:'growth', section:'round'}`, the only view that draws the size picker, while a size
  * choice or a weekly pitch waits), or the payday desk open while finance.pendingPayday waits (`payday`, GAMEPLAY V2
- * §3 md.6). Shop / team / projects panels and the plain Büyüme hub never pause; a concept arriving never pauses.
+ * §3 md.6), or an actionable scene bubble expanded (`bubble`, ui.bubbleOpen: the world holds while it is read). Shop / team / projects panels and the plain Büyüme hub never pause; a concept arriving never pauses.
  */
-export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday'
+export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday' | 'bubble'
 
 /**
  * Keşif (docs/GAMEPLAY_V2.md §9.2, §12): decision cards ever shown and threads whose last step came, across runs.
@@ -102,7 +102,9 @@ export interface UiState {
   placing: PlacingMode | null
   zoom: ZoomLevel
   /** Last rejected action, for a short inline error. `at` = performance.now(). */
-  lastError: { code: ActionErrorCode; at: number } | null
+  /** `action`: the rejected action's type (the strip names its subject). */
+  /** `detail`: which one (the founder action's kind), so the strip can name it. */
+  lastError: { code: ActionErrorCode; at: number; action?: string; detail?: string } | null
   /**
    * Why the world is held still right now, besides the player's own speed (state.time.speed).
    * Derived from panel/overlay by the store: empty = time flows at state.time.speed.
@@ -117,6 +119,8 @@ export interface UiState {
   sceneInset: SceneInset
   /** The scene decision bubble is expanded (the player is reading the card there): a `decision` focus pause. */
   decisionExpanded: boolean
+  /** Key of the expanded actionable scene bubble (`decision:…`, `staff:…`, `desk:…`): the `bubble` focus pause. */
+  bubbleOpen: string | null
   /** "Önemli anda yavaşla": at 4× an important moment drops the speed to 1× (never pauses), and returns to 4× after the moment. Default on. */
   slowOnMoments: boolean
   /** performance.now() of the last automatic 4× → 1× slowdown (UI shows a short note), null = none yet. */
@@ -183,6 +187,7 @@ export interface GameStore {
   setSceneInset(inset: SceneInset): void
   /** Scene decision bubble expanded / collapsed (focus pause while expanded). */
   setDecisionExpanded(expanded: boolean): void
+  setBubbleOpen(key: string | null): void
   /** Settings: slow 4× down to 1× on important moments. */
   setSlowOnMoments(on: boolean): void
   /** Pins a gauge to the top bar. Already pinned = no-op; with PIN_MAX pinned one locked in this run leaves first, else the OLDEST. Sets pinTouched. */

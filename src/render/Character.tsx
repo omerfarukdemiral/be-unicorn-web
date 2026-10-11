@@ -1,16 +1,19 @@
 // Employees and the founder as walking low-poly characters (PLAN §4.3, §7.2).
 // Movement/animation is local visual state; the engine only provides status & actions.
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { Dept, Employee, FounderActionRun, Slot } from '../engine/types'
-import { CELL, hash01, hashString, pick, rotateXZ, yawOf } from './constants'
+import { CELL, damp, hash01, hashString, pick, rotateXZ, yawOf } from './constants'
 import { CharacterModel, StatusIcon, createRig, type Accessory, type CharacterLook } from './CharacterModel'
-import type { OfficeLayout, XZ } from './layout'
+import { idleSpots, meetingSeats, type OfficeLayout, type XZ } from './layout'
 import { DEPT_COLORS, FOUNDER_COLORS, FOUNDER_LEGS, HAIR_COLORS, HIGHLIGHT, LEG_COLORS, SKIN_TONES } from './palette'
 import { GEO, HIT_MAT, flatMat } from './resources'
-import { clearSpeaker, isCelebrating, setSpeakerPos } from './sceneRegistry'
-import { Mover, overlayYawn, poseCheer, poseSip, poseSit, poseStand, poseWalk } from './walker'
+import { FADE_MS, fadeScale, type GhostMode } from './departing'
+import { clearSpeaker, isCelebrating, sceneTime, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
+import { STAND, hold, release, reserve } from './spots'
+import { spawnCurve } from './useSpawnScale'
+import { Mover, doorScale, overlayYawn, poseCheer, poseSip, poseSit, poseStand, poseWalk, settle, speedMultiplier } from './walker'
 
 const HEAD_Y = 1.05
 
@@ -56,9 +59,61 @@ function randomIn(layout: OfficeLayout, seed: string, n: number): XZ {
   return [b.minX + (b.maxX - b.minX) * hash01(seed, n * 2), b.minZ + (b.maxZ - b.minZ) * hash01(seed, n * 2 + 1)]
 }
 
-function idleSpot(layout: OfficeLayout, id: string): XZ {
-  const i = hashString(id) % 5
-  return [layout.door.inside[0] - CELL * (0.3 + 0.35 * i), layout.door.inside[1] + CELL * (0.2 + 0.25 * (i % 2))]
+/** Where a resigning person waits: either side of the door, leaving the doorway itself clear. */
+const DOOR_OFFSETS: XZ[] = [
+  [-0.55, 0.15],
+  [0.55, 0.15],
+  [-1.1, 0.2],
+  [1.1, 0.2],
+  [-0.55, 0.75],
+  [0.55, 0.75],
+  [-1.1, 0.8],
+  [1.1, 0.8],
+]
+const doorCache = new WeakMap<OfficeLayout, XZ[]>()
+function doorSpots(L: OfficeLayout): XZ[] {
+  let out = doorCache.get(L)
+  if (!out) {
+    const b = L.walkBox
+    const [x, z] = L.door.inside
+    out = DOOR_OFFSETS.map(([dx, dz]): XZ => [x + dx, z + dz]).filter((p) => p[0] > b.minX && p[0] < b.maxX && p[1] > b.minZ && p[1] < b.maxZ)
+    if (out.length === 0) out = [[x, z + 0.15]]
+    doorCache.set(L, out)
+  }
+  return out
+}
+
+/** Lounge spots starting at a per-person one, so a break spreads people over the coffee corners. */
+function loungeFor(L: OfficeLayout, id: string): XZ[] {
+  const n = L.lounge.length
+  const k = hashString(id) % n
+  return n <= 1 ? L.lounge : [...L.lounge.slice(k), ...L.lounge.slice(0, k)]
+}
+
+function loungeYawOf(L: OfficeLayout, p: XZ): number {
+  const i = L.lounge.indexOf(p)
+  return i >= 0 ? (L.loungeYaw[i] ?? Math.PI) : Math.PI
+}
+
+function idleSpotOf(L: OfficeLayout, id: string): XZ {
+  return reserve(STAND, id, idleSpots(L)) ?? L.door.inside
+}
+
+/** Character scale after a stage-move teleport: grows back in instead of blinking into the new office. */
+function useRespawn(): { mark: () => void; scale: () => number } {
+  const at = useRef(-1)
+  return useMemo(
+    () => ({
+      mark: () => void (at.current = performance.now()),
+      scale: () => {
+        if (at.current < 0) return 1
+        const s = spawnCurve(performance.now() - at.current)
+        if (s >= 1) at.current = -1
+        return s
+      },
+    }),
+    [],
+  )
 }
 
 interface HitProps {
@@ -67,6 +122,19 @@ interface HitProps {
 }
 
 function HitAndRing({ onSelect, selected }: HitProps) {
+  // The selection ring is always mounted and grows / shrinks (damped) instead of blinking.
+  const ring = useRef<THREE.Mesh>(null)
+  const k = useRef(selected ? 1 : 0)
+  const want = useRef(selected)
+  want.current = selected
+  useFrame((_, rawDt) => {
+    const m = ring.current
+    if (!m) return
+    k.current = damp(k.current, want.current ? 1 : 0, 12, Math.min(rawDt, 0.1))
+    const s = 0.8 * Math.max(0.001, k.current)
+    m.scale.set(s, 1, s)
+    m.visible = k.current > 0.01
+  })
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     if (e.delta > 10) return
     e.stopPropagation()
@@ -88,7 +156,7 @@ function HitAndRing({ onSelect, selected }: HitProps) {
           document.body.style.cursor = ''
         }}
       />
-      {selected && <mesh geometry={GEO.ring} material={flatMat(HIGHLIGHT.selected, 0.9)} scale={[0.8, 1, 0.8]} position={[0, 0.02, 0]} />}
+      <mesh ref={ring} geometry={GEO.ring} material={flatMat(HIGHLIGHT.selected, 0.9)} scale={selected ? [0.8, 1, 0.8] : [0.001, 1, 0.001]} visible={selected} position={[0, 0.02, 0]} />
     </>
   )
 }
@@ -138,29 +206,39 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  mover.id = employee.id
   const latest = useRef(props)
   latest.current = props
   const stageRef = useRef(layout.stage)
   const wanderN = useRef(0)
+  const respawn = useRespawn()
 
-  useEffect(() => () => clearSpeaker(employee.id), [employee.id])
+  useEffect(
+    () => () => {
+      clearSpeaker(employee.id)
+      release(STAND, employee.id)
+    },
+    [employee.id],
+  )
 
-  useFrame(({ clock }, rawDt) => {
+  useFrame(() => {
     const p = latest.current
     const L = p.layout
     const e = p.employee
-    const now = performance.now()
-    const t = clock.elapsedTime
-    const dt = Math.min(rawDt, 0.1)
-    const speedMul = p.speed === 0 ? 0 : 0.75 + p.speed * 0.25
+    // Scene time: everything (poses, wander timers) stands still while a bubble holds the world.
+    const t = sceneTime.t
+    const now = t * 1000
+    const dt = sceneTime.dt
+    const speedMul = speedMultiplier(p.speed)
     const seat = seatOf(p.deskSlot, L)
 
-    // Office changed (moved to a new stage): teleport to the new seat.
+    // Office changed (moved to a new stage): teleport to the new seat and grow back in.
     if (stageRef.current !== L.stage) {
       stageRef.current = L.stage
       if (seat) mover.teleport(seat.pos, seat.yaw)
-      else mover.teleport(idleSpot(L, e.id))
+      else mover.teleport(idleSpotOf(L, e.id))
       mover.goalKey = ''
+      respawn.mark()
     }
 
     // Decide the goal for the current status.
@@ -172,33 +250,40 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
     else if (status === 'onboarding') mode = seat && hash01(e.id, Math.floor(t / 12)) < 0.3 ? 'seat' : 'wander'
     else if (seat) mode = 'seat'
 
+    // Standing spots are reserved (spots.ts): nobody picks a point someone else already stands on.
+    // A seat is held too, so a visitor never picks the point across a pod where this person sits.
+    if (mode === 'seat' && seat) hold(STAND, e.id, seat.pos)
+    else if (mode === 'seat' || mode === 'wander') release(STAND, e.id)
     if (mode === 'seat' && seat) {
       const key = `seat:${seat.pos[0].toFixed(2)},${seat.pos[1].toFixed(2)}`
       const burnoutYaw = Math.atan2(L.door.pos[0] - seat.pos[0], L.door.pos[1] - seat.pos[1])
       if (mover.goalKey !== key) mover.goTo(seat.pos, L, key, seat.yaw)
       mover.faceYaw = status === 'burnout' ? burnoutYaw : seat.yaw
     } else if (mode === 'lounge') {
-      const spot = L.lounge[hashString(e.id) % L.lounge.length]!
+      const spot = reserve(STAND, e.id, loungeFor(L, e.id))!
       const key = `lounge:${spot[0].toFixed(2)},${spot[1].toFixed(2)}`
-      if (mover.goalKey !== key) mover.goTo([spot[0] + (seed - 0.5) * 0.4, spot[1] + (seed - 0.5) * 0.3], L, key, Math.PI)
+      if (mover.goalKey !== key) mover.goTo(spot, L, key, loungeYawOf(L, spot))
     } else if (mode === 'door') {
-      const spot: XZ = [L.door.inside[0] + (seed - 0.5) * 0.5, L.door.inside[1] + 0.15]
-      if (mover.goalKey !== 'door') mover.goTo(spot, L, 'door', Math.PI)
+      const spot = reserve(STAND, e.id, doorSpots(L))!
+      const key = `door:${spot[0].toFixed(2)},${spot[1].toFixed(2)}`
+      if (mover.goalKey !== key) mover.goTo(spot, L, key, Math.PI)
     } else if (mode === 'wander') {
       if (!mover.moving && (mover.goalKey !== 'wander' || now - mover.arrivedAt > 1800 + seed * 1500)) {
         wanderN.current++
         mover.goTo(randomIn(L, e.id, wanderN.current), L, 'wander', null)
       }
     } else {
-      const spot = idleSpot(L, e.id)
+      const spot = idleSpotOf(L, e.id)
       const key = `idle:${spot[0].toFixed(2)},${spot[1].toFixed(2)}`
       if (mover.goalKey !== key) mover.goTo(spot, L, key, 0.6)
     }
 
     const tiredMul = status === 'tired' || status === 'burnout' ? 0.55 : status === 'onboarding' ? 0.8 : 1
-    const moving = mover.update(dt, speedMul * tiredMul, now)
-    const atSeat = !moving && mode === 'seat' && !!seat && Math.hypot(mover.x - seat.pos[0], mover.z - seat.pos[1]) < 0.05
-    const cheering = isCelebrating(now) && !mover.outside
+    // Seated people are not nudged; everyone else keeps a body's width from the rest.
+    const seated = mode === 'seat' && !mover.moving && !!seat && Math.hypot(mover.x - seat.pos[0], mover.z - seat.pos[1]) < 0.05
+    const moving = mover.update(dt, speedMul * tiredMul, now, seated ? null : speakerPositions)
+    const atSeat = !moving && mode === 'seat' && !!seat && Math.hypot(mover.x - seat.pos[0], mover.z - seat.pos[1]) < 0.05 && mover.yawSettled
+    const cheering = isCelebrating() && !mover.outside
 
     // Pose.
     let lift = 0
@@ -215,31 +300,35 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
       poseStand(rig, t)
       if (status === 'tired') overlayYawn(rig, t, seed)
     }
-    if (rig.cup) rig.cup.visible = mode === 'lounge' && !moving
+    settle(rig, dt, mode === 'lounge' && !moving ? 1 : 0)
 
     const g = root.current
     if (g) {
       g.position.set(mover.x, lift, mover.z)
       g.rotation.y = mover.yaw
       g.visible = !mover.outside
+      g.scale.setScalar(doorScale(mover.fade) * respawn.scale())
     }
-    if (icon.current) icon.current.position.set(mover.x, 0, mover.z)
-    setSpeakerPos(e.id, mover.x, HEAD_Y + lift, mover.z, !mover.outside)
+    if (icon.current) {
+      icon.current.position.set(mover.x, 0, mover.z)
+      icon.current.visible = !mover.outside
+    }
+    setLastPos(e.id, mover.x, mover.z, mover.yaw, mover.outside)
+    setSpeakerPos(e.id, mover.x, HEAD_Y + lift, mover.z, !mover.outside, mover.moving)
   })
 
   const iconKind = employee.status === 'working' && props.idle ? 'idle' : employee.status
-  const showIcon = iconKind !== 'working'
+  // Mount where the mover is (not at the origin for the first frame). The icon stays mounted so it
+  // can shrink away when the status clears.
   return (
     <>
-      <group ref={root}>
+      <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
         <CharacterModel look={look} rig={rig} />
         <HitAndRing selected={props.selected} onSelect={() => props.onSelect(employee.id)} />
       </group>
-      {showIcon && (
-        <group ref={icon}>
-          <StatusIcon status={iconKind} />
-        </group>
-      )}
+      <group ref={icon} position={[mover.x, 0, mover.z]} visible={!mover.outside}>
+        <StatusIcon status={iconKind} />
+      </group>
     </>
   )
 }, sameEmployeeProps)
@@ -283,20 +372,28 @@ export const FounderCharacter = memo(function FounderCharacter(props: FounderCha
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  mover.id = 'founder'
   const latest = useRef(props)
   latest.current = props
   const tourIdx = useRef(0)
   const stageRef = useRef(props.layout.stage)
+  const respawn = useRespawn()
 
-  useEffect(() => () => clearSpeaker('founder'), [])
+  useEffect(
+    () => () => {
+      clearSpeaker('founder')
+      release(STAND, 'founder')
+    },
+    [],
+  )
 
-  useFrame(({ clock }, rawDt) => {
+  useFrame(() => {
     const p = latest.current
     const L = p.layout
-    const now = performance.now()
-    const t = clock.elapsedTime
-    const dt = Math.min(rawDt, 0.1)
-    const speedMul = p.speed === 0 ? 0 : 0.8 + p.speed * 0.3
+    const t = sceneTime.t
+    const now = t * 1000
+    const dt = sceneTime.dt
+    const speedMul = speedMultiplier(p.speed)
     const seat = seatOf(p.founderSlot, L)
     const kind = p.action?.kind
 
@@ -304,6 +401,7 @@ export const FounderCharacter = memo(function FounderCharacter(props: FounderCha
       stageRef.current = L.stage
       if (seat) mover.teleport(seat.pos, seat.yaw)
       mover.goalKey = ''
+      respawn.mark()
     }
 
     let mode: 'seat' | 'exit' | 'meeting' | 'tour' | 'rest' = 'seat'
@@ -312,17 +410,23 @@ export const FounderCharacter = memo(function FounderCharacter(props: FounderCha
     else if (kind === 'motivateTeam') mode = p.deskSlots.length > 0 ? 'tour' : 'seat'
     else if (kind === 'rest') mode = 'rest'
 
+    if (mode === 'seat' && seat) hold(STAND, 'founder', seat.pos)
+    else if (mode !== 'rest') release(STAND, 'founder')
     if (mode === 'seat' && seat) {
       const key = `seat:${seat.pos[0].toFixed(2)},${seat.pos[1].toFixed(2)}`
       if (mover.goalKey !== key) mover.goTo(seat.pos, L, key, seat.yaw)
     } else if (mode === 'exit') {
       if (mover.goalKey !== 'exit') mover.exit(L, 'exit')
-    } else if (mode === 'meeting' && L.meeting) {
-      const target: XZ = [L.meeting[0], L.meeting[1] + CELL * 0.3]
-      if (mover.goalKey !== 'meeting') mover.goTo(target, L, 'meeting', Math.PI)
+    } else if (mode === 'meeting') {
+      // One table end, facing the investor at the other (Npc takes the guest seat).
+      const m = meetingSeats(L)
+      const key = m ? `meeting:${m.founder.pos[0].toFixed(2)},${m.founder.pos[1].toFixed(2)}` : 'meeting'
+      if (m) hold(STAND, 'founder', m.founder.pos)
+      if (m && mover.goalKey !== key) mover.goTo(m.founder.pos, L, key, m.founder.yaw)
     } else if (mode === 'rest') {
-      const spot = L.lounge[0]!
-      if (mover.goalKey !== 'rest') mover.goTo(spot, L, 'rest', Math.PI * 0.75)
+      const spot = reserve(STAND, 'founder', L.lounge)!
+      const key = `rest:${spot[0].toFixed(2)},${spot[1].toFixed(2)}`
+      if (mover.goalKey !== key) mover.goTo(spot, L, key, loungeYawOf(L, spot))
     } else if (mode === 'tour') {
       if (!mover.moving && (mover.goalKey !== 'tour' || now - mover.arrivedAt > 1200)) {
         const desks = p.deskSlots
@@ -335,10 +439,11 @@ export const FounderCharacter = memo(function FounderCharacter(props: FounderCha
       }
     }
 
-    const moving = mover.update(dt, speedMul, now)
-    const atSeat = !moving && mode === 'seat' && !!seat && Math.hypot(mover.x - seat.pos[0], mover.z - seat.pos[1]) < 0.05
+    const seated = mode === 'seat' && !mover.moving && !!seat && Math.hypot(mover.x - seat.pos[0], mover.z - seat.pos[1]) < 0.05
+    const moving = mover.update(dt, speedMul, now, seated ? null : speakerPositions)
+    const atSeat = !moving && mode === 'seat' && !!seat && Math.hypot(mover.x - seat.pos[0], mover.z - seat.pos[1]) < 0.05 && mover.yawSettled
     let lift = 0
-    if (isCelebrating(now) && !moving && !mover.outside) lift = poseCheer(rig, t, 0.5)
+    if (isCelebrating() && !moving && !mover.outside) lift = poseCheer(rig, t, 0.5)
     else if (moving) poseWalk(rig, mover.phase)
     else if (atSeat) poseSit(rig, t, 1)
     else if (mode === 'rest') poseSip(rig, t, 0.3)
@@ -346,31 +451,111 @@ export const FounderCharacter = memo(function FounderCharacter(props: FounderCha
       poseStand(rig, t)
       if (rig.armR) rig.armR.rotation.x = -2.2 + Math.sin(t * 10) * 0.4
     } else poseStand(rig, t)
-    if (rig.cup) rig.cup.visible = mode === 'rest' && !moving
+    settle(rig, dt, mode === 'rest' && !moving ? 1 : 0)
 
     const g = root.current
     if (g) {
       g.position.set(mover.x, lift, mover.z)
       g.rotation.y = mover.yaw
       g.visible = !mover.outside
+      g.scale.setScalar(doorScale(mover.fade) * respawn.scale())
     }
     if (icon.current) {
       icon.current.position.set(mover.x, 0, mover.z)
       icon.current.visible = !mover.outside
     }
+    setLastPos('founder', mover.x, mover.z, mover.yaw, mover.outside)
     setSpeakerPos('founder', mover.x, HEAD_Y * 1.06 + lift, mover.z, !mover.outside)
   })
 
   const iconKind = props.action ? (props.action.kind === 'rest' ? 'rest' : 'busy') : 'none'
   return (
     <>
-      <group ref={root}>
+      <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
         <CharacterModel look={FOUNDER_LOOK} rig={rig} />
         <HitAndRing selected={props.selected} onSelect={props.onSelect} />
       </group>
-      <group ref={icon}>
+      <group ref={icon} position={[mover.x, 0, mover.z]} visible={!mover.outside}>
         <StatusIcon status={iconKind} y={1.3} />
       </group>
     </>
   )
 }, sameFounderProps)
+
+export interface DepartingFigureProps {
+  id: string
+  look: CharacterLook
+  /** Where the person was drawn last (sceneRegistry.lastPos). */
+  from: LastPos
+  mode: GhostMode
+  layout: OfficeLayout
+  speed: number
+  headY: number
+  /** Walked out of the door / finished shrinking: People drops the ghost. */
+  onDone: (id: string) => void
+}
+
+/**
+ * A person who already left GameState (departing.ts): walks from their last spot out of the door
+ * ('walk'), or shrinks away where they stood ('fade', a firing). Not clickable; still a speaker
+ * until outside so a reflection bubble can follow them.
+ */
+export const DepartingFigure = memo(function DepartingFigure(props: DepartingFigureProps) {
+  const rig = useMemo(createRig, [])
+  const root = useRef<THREE.Group>(null)
+  const [mover] = useState(() => {
+    const m = new Mover(props.from.x, props.from.z, props.from.outside)
+    m.yaw = props.from.yaw
+    m.id = props.id
+    return m
+  })
+  const latest = useRef(props)
+  latest.current = props
+  const started = useRef(sceneTime.t)
+  const done = useRef(false)
+
+  useEffect(() => () => clearSpeaker(props.id), [props.id])
+
+  useFrame(() => {
+    const p = latest.current
+    if (done.current) return
+    const g = root.current
+    if (p.mode === 'fade') {
+      poseStand(rig, sceneTime.t)
+      settle(rig, sceneTime.dt)
+      const s = fadeScale((sceneTime.t - started.current) * 1000)
+      if (g) g.scale.setScalar(s)
+      setSpeakerPos(p.id, mover.x, p.headY * s, mover.z, s > 0)
+      if ((sceneTime.t - started.current) * 1000 >= FADE_MS) {
+        done.current = true
+        if (g) g.visible = false
+        clearSpeaker(p.id)
+        p.onDone(p.id)
+      }
+      return
+    }
+    if (mover.goalKey !== 'exit') mover.exit(p.layout, 'exit')
+    const moving = mover.update(sceneTime.dt, speedMultiplier(p.speed), sceneTime.t * 1000, speakerPositions)
+    if (moving) poseWalk(rig, mover.phase)
+    else poseStand(rig, sceneTime.t)
+    settle(rig, sceneTime.dt)
+    if (g) {
+      g.position.set(mover.x, 0, mover.z)
+      g.rotation.y = mover.yaw
+      g.visible = !mover.outside
+      g.scale.setScalar(doorScale(mover.fade))
+    }
+    setSpeakerPos(p.id, mover.x, p.headY, mover.z, !mover.outside)
+    if (mover.outside) {
+      done.current = true
+      clearSpeaker(p.id)
+      p.onDone(p.id)
+    }
+  })
+
+  return (
+    <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
+      <CharacterModel look={props.look} rig={rig} />
+    </group>
+  )
+})

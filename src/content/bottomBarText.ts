@@ -4,6 +4,7 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
   'bottom.label': 'Alt bar',
   'bottom.actions': 'Kurucu aksiyonları',
   'bottom.tabs': 'Paneller',
+  'bottom.more': 'Diğer',
   'dock.metrics': 'Metrikler',
   'founder.energyValue': 'Enerji {v}/100',
   'founder.energyLow': 'Enerji düşük: dinlenme vakti',

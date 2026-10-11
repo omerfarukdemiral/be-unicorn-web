@@ -167,6 +167,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   generation: 0,
   sceneInset: NO_INSET,
   decisionExpanded: false,
+  bubbleOpen: null,
   slowOnMoments: true,
   slowdownAt: null,
   slowdownResumeDay: null,
@@ -238,7 +239,7 @@ export function centerOpen(ui: Pick<UiState, 'overlay'>): boolean {
  * A center screen is not one: it shows, it does not ask for a decision (docs/GAMEPLAY_V2.md §14.1).
  * `concept` holds only while the card itself is open; a concept arriving never pauses.
  */
-export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean }, state?: GameState): PauseReason[] {
+export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean; bubbleOpen?: string | null }, state?: GameState): PauseReason[] {
   const r: PauseReason[] = []
   if (blockingOverlay(ui)) r.push('modal')
   const p = ui.panel
@@ -248,6 +249,7 @@ export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisi
   // size choice or a weekly pitch; the hub, and the running round itself, never pause (§14.1: showing is not deciding).
   if (p?.kind === 'growth' && p.section === 'round' && state && offerWaiting(state)) r.push('offer')
   if (paydayDeskOpen(ui, state)) r.push('payday')
+  if (ui.bubbleOpen != null) r.push('bubble')
   return r
 }
 
@@ -374,7 +376,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const { state } = get()
     const res = applyAction(state, action)
     if (!res.ok) {
-      set((s) => ({ ui: { ...s.ui, lastError: { code: res.error ?? 'invalid', at: performance.now() } } }))
+      set((s) => ({ ui: { ...s.ui, lastError: { code: res.error ?? 'invalid', at: performance.now(), action: action.type, ...(action.type === 'founderAction' ? { detail: action.kind } : null) } } }))
       return res
     }
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
@@ -388,6 +390,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
     if (!res.state.decisions.active && get().ui.decisionExpanded) get().setDecisionExpanded(false)
+    // Any real action answers the open scene bubble (a speed change is not an answer): the world resumes.
+    if (res.ok && action.type !== 'setSpeed' && get().ui.bubbleOpen) get().setBubbleOpen(null)
     return res
   },
 
@@ -464,6 +468,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   select(selection) {
     const { ui, state, openPanel, closePanel, panelGoBack } = get()
     if (!selection) {
+      if (ui.bubbleOpen) get().setBubbleOpen(null)
       // Empty floor: leave a detail / targeted shop the way the back button does (a dock tab stays open).
       if (ui.panel?.kind === 'detail' || (ui.panel?.kind === 'shop' && ui.panel.slotTarget)) {
         if (ui.panelBack) panelGoBack()
@@ -528,6 +533,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       const c = s.ui.sceneInset
       return c.top === inset.top && c.right === inset.right && c.bottom === inset.bottom ? s : { ui: { ...s.ui, sceneInset: inset } }
     }),
+  setBubbleOpen: (key) => set((s) => (s.ui.bubbleOpen === key ? s : { ui: withPause({ ...s.ui, bubbleOpen: key }, s.state) })),
   setDecisionExpanded: (decisionExpanded) =>
     set((s) => (s.ui.decisionExpanded === decisionExpanded ? s : { ui: withPause({ ...s.ui, decisionExpanded }, s.state) })),
   setSlowOnMoments: (slowOnMoments) => set((s) => (s.ui.slowOnMoments === slowOnMoments ? s : { ui: { ...s.ui, slowOnMoments } })),

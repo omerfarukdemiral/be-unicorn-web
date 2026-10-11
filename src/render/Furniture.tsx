@@ -2,7 +2,7 @@
 // origin at the footprint centre on the floor, front (chair side) = +z.
 // Size-2 items span local x ∈ [−1, 1].
 import { useFrame } from '@react-three/fiber'
-import { memo, useMemo, useRef, type ReactNode } from 'react'
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { CONCEPTS } from '../content'
 import type { PrimitiveHint } from '../content'
@@ -12,7 +12,9 @@ import { resolveFurniture, type ResolvedFurniture } from './furnitureCatalog'
 import { BOOK_COLORS } from './palette'
 import { GEO, capsuleGeo, glassMat, glowMat, mat, torusGeo } from './resources'
 import { useGS } from './source'
+import type { XZ } from './layout'
 import { useLayout, useOffice } from './sceneRegistry'
+import { useSpawnScale } from './useSpawnScale'
 
 type V3 = [number, number, number]
 
@@ -493,25 +495,90 @@ export function useBookColors(): string[] {
 /** Look of the founder desk while its slot holds no item. */
 const FOUNDER_DESK_ITEM = 'desk-basic'
 
+interface Placed {
+  key: string
+  pos: XZ
+  yaw: number
+  span: boolean
+  resolved: ResolvedFurniture
+}
+
+/** One placed item. Grows in when bought / moved here (spawn), shrinks out as a ghost when sold / moved away. */
+const PlacedItem = memo(function PlacedItem({
+  item,
+  spawn,
+  exiting = false,
+  onExited,
+  books,
+  overload,
+}: {
+  item: Placed
+  spawn: boolean
+  exiting?: boolean
+  onExited?: (key: string) => void
+  books: string[]
+  overload: boolean
+}) {
+  const ref = useRef<THREE.Group>(null)
+  const scale = useSpawnScale(ref, { spawn, exiting, onExited: onExited && (() => onExited(item.key)) })
+  return (
+    <group ref={ref} position={[item.pos[0], 0, item.pos[1]]} rotation={[0, item.yaw, 0]} scale={scale}>
+      <FurnitureModel resolved={item.resolved} span={item.span} books={books} overload={overload} />
+    </group>
+  )
+})
+
 /** All placed furniture in the office. */
 export function FurnitureLayer() {
   const slots = useOffice().slots
   const layout = useLayout()
   const books = useBookColors()
   const overload = useGS(selectOverload)
-  const anchors = slots.filter((s: Slot) => (s.itemId || s.id === FOUNDER_SLOT_ID) && !s.spanOf)
+  const placed = useMemo(() => {
+    const out: Placed[] = []
+    for (const s of slots as readonly Slot[]) {
+      if ((!s.itemId && s.id !== FOUNDER_SLOT_ID) || s.spanOf) continue
+      const c = layout.itemCenter.get(s.id)
+      if (!c) continue
+      out.push({ key: `${s.id}:${s.itemId}`, pos: c.pos, yaw: c.yaw, span: c.span, resolved: resolveFurniture(s.itemId ?? FOUNDER_DESK_ITEM, s.type) })
+    }
+    return out
+  }, [slots, layout])
+
+  // First mount of the layer (a loaded save) and a stage move do not plop in piece by piece; only
+  // later changes inside one office animate.
+  const mounted = useRef(false)
+  const stage = useRef(layout.stage)
+  const animate = mounted.current && stage.current === layout.stage
+  const prev = useRef<Placed[]>(placed)
+  const [ghosts, setGhosts] = useState<Placed[]>([])
+  useLayoutEffect(() => {
+    const old = prev.current
+    prev.current = placed
+    const stageMoved = stage.current !== layout.stage
+    stage.current = layout.stage
+    if (!mounted.current || stageMoved) {
+      mounted.current = true
+      if (stageMoved) setGhosts((g) => (g.length ? [] : g))
+      return
+    }
+    const keys = new Set(placed.map((p) => p.key))
+    const gone = old.filter((p) => !keys.has(p.key))
+    setGhosts((cur) => {
+      const kept = cur.filter((g) => !keys.has(g.key) && !gone.some((x) => x.key === g.key))
+      return gone.length === 0 && kept.length === cur.length ? cur : [...kept, ...gone]
+    })
+  }, [placed, layout.stage])
+  const ghostDone = useCallback((key: string) => setGhosts((cur) => cur.filter((g) => g.key !== key)), [])
+
   return (
     <group>
-      {anchors.map((s) => {
-        const c = layout.itemCenter.get(s.id)
-        if (!c) return null
-        const resolved = resolveFurniture(s.itemId ?? FOUNDER_DESK_ITEM, s.type)
-        return (
-          <group key={`${s.id}:${s.itemId}`} position={[c.pos[0], 0, c.pos[1]]} rotation={[0, c.yaw, 0]}>
-            <FurnitureModel resolved={resolved} span={c.span} books={books} overload={overload} />
-          </group>
-        )
-      })}
+      {placed.map((p) => (
+        <PlacedItem key={p.key} item={p} spawn={animate} books={books} overload={overload} />
+      ))}
+      {ghosts.map((g) => (
+        <PlacedItem key={`ghost:${g.key}`} item={g} spawn={false} exiting onExited={ghostDone} books={books} overload={overload} />
+      ))}
     </group>
   )
 }

@@ -300,7 +300,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-canvas-bg">
+    <div className="relative h-full w-full overflow-clip bg-canvas-bg">
       <GameCanvas renderBubble={started ? renderWorldBubble : () => null} ambientBubbles={ambient} />
       {started ? <GameUI worldBubbles mock={mock} renderPreview={(target) => <ObjectPreview target={target} />} /> : card}
     </div>

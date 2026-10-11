@@ -6,8 +6,8 @@ import type { Box, OfficeLayout, XZ } from './layout'
 const RES = 0.25
 /** Character body radius; obstacles and walls are inflated by this. */
 const RADIUS = 0.2
-/** A blocked goal this close to free floor (a seat tucked under a desk) is still walked to exactly. */
-const SNAP_REACH = 0.6
+/** A blocked goal this close to free floor (a seat tucked under a desk, inside its own seat box) is still walked to exactly. */
+const SNAP_REACH = 0.75
 
 interface NavGrid {
   x0: number
@@ -41,6 +41,14 @@ function gridOf(layout: OfficeLayout): NavGrid {
   const grid = { x0: b.minX, z0: b.minZ, w, h, blocked }
   cache.set(layout, grid)
   return grid
+}
+
+/** Open floor at `p` (inside the office, clear of furniture by a body's radius). */
+export function isFreeFloor(layout: OfficeLayout, p: XZ): boolean {
+  const g = gridOf(layout)
+  const i = Math.floor((p[0] - g.x0) / RES)
+  const j = Math.floor((p[1] - g.z0) / RES)
+  return i >= 0 && j >= 0 && i < g.w && j < g.h && !g.blocked[j * g.w + i]
 }
 
 function cellOf(g: NavGrid, p: XZ): [number, number] {

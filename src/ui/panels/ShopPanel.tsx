@@ -1,6 +1,9 @@
 // Mağaza: furniture catalog + ring expansion. "Satın al" places at once: on the tapped slot (slotTarget)
 // or the free slot nearest the center (engine findAutoSlot). No separate placing step. HUD grammar (GAMEPLAY V2 §10.5):
 // the price is the big number, "Satın al" is a commit with its CostPreview, the description lives in the tooltip.
+// T12: the catalog is a 2-column grid of game tiles: the item's isometric thumbnail (public/items, T11) on a tint of
+// its colour, name, its first effect, the price and the buy key. Locked = the same picture as a silhouette + lock and
+// stage code, no text.
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 // Pure placement rules shared with the engine (same precedent as FounderActions → founderActionError).
@@ -12,9 +15,9 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
-import { Button, Chip, CostPreview, cx, Dot, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
+import { Button, Chip, CostPreview, cx, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
 import { useSpendPreview } from '../widgets'
-import { SLOT_ICON, slotTypeStage, soft, stageName } from '../theme'
+import { SLOT_ICON, slotTypeStage, soft, stageCode, stageName } from '../theme'
 
 export function effectTags(e: FurnitureEffects): string[] {
   const out: string[] = []
@@ -163,7 +166,7 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
                 onOpen={() => dispatch({ type: 'openRing', ring: ringCta.index })}
               />
             )}
-            <ul className="flex flex-col gap-1">
+            <ul className="grid grid-cols-2 gap-1.5">
               {items.map(({ item, place }) => (
                 <ShopItem key={item.id} item={item} stage={stage} cash={cash} place={place} bought={bought?.itemId === item.id ? bought : undefined} onBuy={buy} />
               ))}
@@ -191,78 +194,68 @@ function ShopItem({
   bought?: Bought
   onBuy: (item: FurnitureItem, place: ShopPlacement) => void
 }) {
-  const locked = item.stageUnlock > stage || slotTypeStage(item.slotType) > stage
+  const slotStage = slotTypeStage(item.slotType)
+  const lockStage = item.stageUnlock > slotStage ? item.stageUnlock : slotStage
+  const locked = lockStage > stage
   const afford = cash >= item.price
   const noRoom = !locked && !place.slot
   // No room: offer the next ring when this office has room for the item in a locked ring (rings open in order).
   const next = noRoom && place.roomRing !== null ? place.nextRing : undefined
   const preview = useSpendPreview(-item.price, item.upkeep ?? 0)
+  const tags = effectTags(item.effects)
+  const tip = [item.name, item.description, ...tags, locked ? stageName(lockStage) : ''].filter(Boolean).join('\n')
   return (
-    <li title={item.description} className={cx('relative flex flex-col gap-1.5 rounded-control bg-surface-2/60 px-2 py-2', locked && 'opacity-55')}>
+    <li title={tip} className="relative flex min-w-0 flex-col overflow-hidden rounded-control bg-surface-2/60">
       {bought && (
-        // Top-right, clear of the bottom-right Buy button; click-through so a repeat buy still lands.
+        // Over the picture, clear of the Buy key; click-through so a repeat buy still lands.
         <div
           role="status"
           key={bought.key}
-          className="pointer-events-none absolute right-1.5 top-1.5 z-10 flex max-w-[75%] animate-pop-in items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-ink shadow-sm"
+          className="pointer-events-none absolute inset-x-1.5 top-1.5 z-10 flex animate-pop-in items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-ink shadow-sm"
         >
           <Icon name="check" size={12} className="shrink-0 text-positive-ink" />
           <span className="truncate">{bought.text}</span>
         </div>
       )}
-      <div className="flex items-start gap-3">
-        <Swatch item={item} locked={locked} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold">{item.name}</span>
-            {item.size === 2 && <Pill className="tabular">2×</Pill>}
-            {item.tier > 1 && <Pill className="tabular text-ink">T{item.tier}</Pill>}
-          </div>
+      <ItemPicture item={item} locked={locked} lockStage={lockStage} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1 px-2 pb-2 pt-1.5">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className={cx('truncate text-[13px] font-semibold', locked ? 'text-ink-2' : 'text-ink')}>{item.name}</span>
           {!locked && place.targetMisfit && (
-            <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-ink">
-              <Icon name="warning" size={12} className="shrink-0 text-energy-ink" />
-              {place.slot ? t('shop.targetMisfit', { ring: place.slot.ring }) : t('shop.targetMisfitNoRoom')}
-            </div>
+            <Icon
+              name="warning"
+              size={12}
+              className="shrink-0 text-energy-ink"
+              aria-label={place.slot ? t('shop.targetMisfit', { ring: place.slot.ring }) : t('shop.targetMisfitNoRoom')}
+            />
           )}
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {effectTags(item.effects).map((tag) => (
-              <Pill key={tag} className="text-ink">
-                {tag}
-              </Pill>
-            ))}
-          </div>
         </div>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        {locked ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-2">
-            <Icon name="lock" size={12} />
-            {stageName(item.stageUnlock > slotTypeStage(item.slotType) ? item.stageUnlock : slotTypeStage(item.slotType))}
-          </span>
-        ) : (
-          <span className="min-w-0">
-            <span className={cx('tabular text-[22px] font-semibold leading-none', afford ? 'text-ink' : 'text-ink-3')}>{money(item.price)}</span>
-            {item.upkeep ? <span className="tabular ml-1.5 text-[10px] text-ink-2">{t('shop.upkeep', { v: money(item.upkeep) })}</span> : null}
-          </span>
+        {!locked && (
+          <>
+            {tags[0] && <span className="truncate text-[11px] font-semibold text-ink-2">{tags[0]}{tags.length > 1 ? ` +${tags.length - 1}` : ''}</span>}
+            <div className="mt-auto flex items-end justify-between gap-1 pt-1">
+              <span className="min-w-0">
+                <span className={cx('tabular block text-[17px] font-semibold leading-5', afford ? 'text-ink' : 'text-ink-3')}>{money(item.price)}</span>
+                {item.upkeep ? <span className="tabular block text-[10px] leading-3 text-ink-2">{t('shop.upkeep', { v: money(item.upkeep) })}</span> : null}
+              </span>
+              {noRoom ? (
+                // Blocked, not an action: one quiet mark (the ring CTA above the list is the way out); the why is the tooltip.
+                <span
+                  title={next ? (place.roomRing !== null && place.roomRing !== next.index ? t('shop.roomInRing', { ring: place.roomRing }) : undefined) : t('shop.noRoomNextStage')}
+                  className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-ink-3"
+                >
+                  <Icon name="building" size={12} />
+                  {t('shop.noRoom')}
+                </span>
+              ) : (
+                <Button size="sm" tone="commit" icon="bag" disabled={!afford} onClick={() => onBuy(item, place)} aria-label={`${t('shop.buyGo')}: ${item.name}`}>
+                  {t('shop.buyGo')}
+                </Button>
+              )}
+            </div>
+            {!noRoom && <CostPreview preview={preview} className="self-start" />}
+          </>
         )}
-        {!locked &&
-          (noRoom ? (
-            // Blocked, not an action: one quiet mark (the ring CTA above the list is the way out); the why is the tooltip.
-            <span
-              title={next ? (place.roomRing !== null && place.roomRing !== next.index ? t('shop.roomInRing', { ring: place.roomRing }) : undefined) : t('shop.noRoomNextStage')}
-              className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-ink-3"
-            >
-              <Icon name="building" size={12} />
-              {t('shop.noRoom')}
-            </span>
-          ) : (
-            <span className="flex shrink-0 items-center gap-1.5">
-              <CostPreview preview={preview} />
-              <Button size="sm" tone="commit" icon="bag" disabled={!afford} onClick={() => onBuy(item, place)}>
-                {t('shop.buyGo')}
-              </Button>
-            </span>
-          ))}
       </div>
     </li>
   )
@@ -300,16 +293,32 @@ function RingCta({
   )
 }
 
-function Swatch({ item, locked }: { item: FurnitureItem; locked: boolean }) {
-  const c = item.visual.colors
+/**
+ * The item's isometric thumbnail (public/items/<id>, T11) on a light tint of its own colour; size / tier as corner
+ * pills. Locked: the same picture as a silhouette, a lock and the unlocking stage's code (no words).
+ */
+function ItemPicture({ item, locked, lockStage }: { item: FurnitureItem; locked: boolean; lockStage: number }) {
+  const src = `/items/${item.id}`
   return (
-    // Light tint of the item's own colour + its slot icon; the solid colour as a small corner mark.
-    <span
-      className={cx('relative grid size-11 shrink-0 place-items-center rounded-control', locked ? 'border border-border bg-surface-2 text-ink-2' : 'text-ink')}
-      style={locked ? undefined : { background: soft(c.primary, 30) }}
-    >
-      <Icon name={locked ? 'lock' : SLOT_ICON[item.slotType]} size={18} />
-      <Dot color={c.primary} size={8} className="absolute right-1 top-1 ring-2 ring-surface" />
+    <span className="relative grid aspect-[4/3] place-items-center" style={{ background: locked ? 'var(--color-surface-2)' : soft(item.visual.colors.primary, 22) }}>
+      <img
+        src={`${src}@1x.png`}
+        srcSet={`${src}@1x.png 1x, ${src}@2x.png 2x`}
+        alt=""
+        draggable={false}
+        className="size-[84%] object-contain"
+        style={locked ? { filter: 'brightness(0) opacity(.3)' } : undefined}
+      />
+      <span className="absolute left-1.5 top-1.5 flex gap-1">
+        {item.size === 2 && <Pill className="tabular bg-surface">2×</Pill>}
+        {item.tier > 1 && <Pill className="tabular bg-surface text-ink">T{item.tier}</Pill>}
+      </span>
+      {locked && (
+        <span className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-full bg-surface px-1.5 py-0.5 text-[10px] font-bold uppercase text-ink-2" aria-label={stageName(lockStage)}>
+          <Icon name="lock" size={11} />
+          {stageCode(stageName(lockStage))}
+        </span>
+      )}
     </span>
   )
 }

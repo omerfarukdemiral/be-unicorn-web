@@ -15,6 +15,8 @@ import { UI_TEXT } from '../content'
 import { CELL } from './constants'
 import { Confetti } from './Effects'
 import { pathFromDoor, type XZ } from './layout'
+import { isFreeFloor } from './nav'
+import { pawnSpots } from './spots'
 import { useHtmlPortal } from './htmlPortal'
 import { CONFETTI_COLORS } from './palette'
 import { celebrate, sceneTime, useLayout, useSceneTimers } from './sceneRegistry'
@@ -252,9 +254,11 @@ function UserWave({ count, target }: { count: number; target: XZ }) {
   const started = useRef(sceneTime.t)
   const figures = useMemo<Figure[]>(() => {
     const out: Figure[] = []
+    // Stops round the desk that miss furniture and everyone standing or seated (spots.pawnSpots), not an even ring
+    // that dropped pawns inside a character (QA).
+    const spots = pawnSpots(target, count, CELL, (p) => isFreeFloor(layout, p))
     for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2
-      const spot: XZ = [target[0] + Math.cos(a) * CELL * 0.9, target[1] + Math.sin(a) * CELL * 0.9]
+      const spot = spots[i]!
       out.push({
         path: [layout.door.outside, ...pathFromDoor(spot, layout)],
         // 0.4 s apart at WALK_SPEED ≈ 1 u: the figures walk in single file instead of merging in the doorway.

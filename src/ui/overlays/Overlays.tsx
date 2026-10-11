@@ -42,7 +42,7 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
     // Dealt low in the scene area, so the new office stays lit above the card; the medallion carries the new verb.
     <OverlayFrame
       onClose={onClose}
-      mood="event"
+      mood="win"
       place="low"
       emblem={{ icon: verb.icon, face: 'investor' }}
       title={def?.officeName}

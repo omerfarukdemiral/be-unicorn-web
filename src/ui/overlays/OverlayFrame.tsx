@@ -159,6 +159,15 @@ export function OverlayFrame({
     <div className="pointer-events-auto fixed inset-0 z-50" data-overlay-mood={mood}>
       {/* Veil is a sibling, not a parent: its fade / backdrop-filter must not fade or contain the card. */}
       <div aria-hidden="true" className={cx('ui-vignette absolute inset-0', VEIL[mood])} />
+      {/* T18: a win is staged: curtains, valance and a spotlight around the card (index.css › ui-stage-*). */}
+      {mood === 'win' && (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="ui-stage-spot" />
+          <div className="ui-stage-curtain ui-stage-curtain-l" />
+          <div className="ui-stage-curtain ui-stage-curtain-r" />
+          <div className="ui-stage-valance" />
+        </div>
+      )}
       <div className={boxClass} style={boxStyle}>
         {/* Overflow stays visible: the medallion and the ribbon tails hang past the card edge; only the body scrolls. */}
         <div

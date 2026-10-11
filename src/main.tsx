@@ -40,10 +40,17 @@ if (import.meta.env.DEV) {
   }
 }
 
-initAudio()
-
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// ?studio=portraits&size=96|192: the portrait photo studio (scripts/shoot-portraits.mjs). Dev server only.
+const studio = import.meta.env.DEV && new URLSearchParams(location.search).get('studio') === 'portraits'
+if (studio) {
+  const { PortraitStudio } = await import('./render/PortraitStudio')
+  document.body.style.background = 'transparent'
+  createRoot(root).render(<PortraitStudio size={Number(new URLSearchParams(location.search).get('size')) || undefined} />)
+} else {
+  initAudio()
+  createRoot(root).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}

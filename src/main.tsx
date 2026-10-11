@@ -40,12 +40,17 @@ if (import.meta.env.DEV) {
   }
 }
 
-// ?studio=portraits&size=96|192: the portrait photo studio (scripts/shoot-portraits.mjs). Dev server only.
-const studio = import.meta.env.DEV && new URLSearchParams(location.search).get('studio') === 'portraits'
-if (studio) {
+// ?studio=portraits|items&size=…&page=…: the photo studios (scripts/shoot-portraits.mjs, shoot-items.mjs). Dev only.
+const params = new URLSearchParams(location.search)
+const studio = import.meta.env.DEV ? params.get('studio') : null
+if (studio === 'portraits') {
   const { PortraitStudio } = await import('./render/PortraitStudio')
   document.body.style.background = 'transparent'
-  createRoot(root).render(<PortraitStudio size={Number(new URLSearchParams(location.search).get('size')) || undefined} />)
+  createRoot(root).render(<PortraitStudio size={Number(params.get('size')) || undefined} />)
+} else if (studio === 'items') {
+  const { ItemStudio } = await import('./render/ItemStudio')
+  document.body.style.background = 'transparent'
+  createRoot(root).render(<ItemStudio size={Number(params.get('size')) || undefined} page={Number(params.get('page')) || 0} />)
 } else {
   initAudio()
   createRoot(root).render(

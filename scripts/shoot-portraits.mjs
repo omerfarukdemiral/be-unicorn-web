@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
 
 const port = process.env.PORT ?? '5173'
-const out = new URL('../public/portraits/', import.meta.url)
+const out = new URL(process.env.OUT ?? '../public/portraits/', import.meta.url)
 mkdirSync(out, { recursive: true })
 const browser = await chromium.launch({
   executablePath: process.env.CHROME || undefined,

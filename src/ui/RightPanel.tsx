@@ -4,7 +4,7 @@
 // the h52 bars (min(360, 46vw) wide, so the sheet never covers the top bar or pushes the strip off-screen); portrait
 // = one full-page sheet between the gauge row and the tab island (T06). The element carries data-scene-right / data-scene-sheet:
 // layout/useSceneInset measures it.
-// Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 13px uppercase title + the panel's labelled primary
+// Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 17px sentence-case Bricolage title (T10: no all-caps heads) + the panel's labelled primary
 // number (KASA $15.1K: the label says which figure, since each panel shows a different one).
 import { type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -105,7 +105,7 @@ function HeadlineNumber({ panel }: { panel: Panel }) {
   const main = headlineText({ value: WHOLE.includes(h.unit) ? Math.round(shown) : shown, unit: h.unit, of: h.of })
   return (
     <span className="tabular flex shrink-0 items-baseline gap-1.5 whitespace-nowrap" title={h.label}>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-2">{h.label}</span>
+      <span className="ui-label text-ink-2">{h.label}</span>
       <span className={cx('text-[17px] font-bold leading-none', h.danger ? 'text-negative-ink' : 'text-ink')}>{main}</span>
       {h.sub && <span className="text-[12px] font-semibold text-ink-2">· {h.sub}</span>}
     </span>
@@ -181,7 +181,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
     head = (
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
         {back}
-        <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-ink">
+        <h2 className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-[17px] font-bold leading-6 tracking-[-0.01em] text-ink">
           <Icon name={meta.icon} size={20} className="shrink-0" style={{ color: iconTone(hue) }} />
           <span className="truncate">{meta.title}</span>
         </h2>

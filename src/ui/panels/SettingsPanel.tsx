@@ -105,7 +105,7 @@ export function SettingsPanel() {
         {note && <p className="text-center text-xs font-semibold text-positive-ink">{note}</p>}
 
         <div className="hidden md:block">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-2">{t('settings.shortcuts')}</h3>
+          <h3 className="mb-2 text-[14px] font-bold text-ink">{t('settings.shortcuts')}</h3>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
             {SHORTCUTS.map(([k, label]) => (
               <div key={k} className="contents">

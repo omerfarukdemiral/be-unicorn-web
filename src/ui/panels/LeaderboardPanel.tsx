@@ -81,7 +81,7 @@ export function LeaderboardPanel() {
       ) : (
         <>
           {/* Which number is which: the big one is the valuation, cash is the small "Kasa" on the second line. */}
-          <div className="-mb-1.5 flex items-center justify-between px-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-3">
+          <div className="-mb-1.5 flex items-center justify-between px-2.5 ui-label text-ink-3">
             <span className="pl-9">{t('lb.colStartup')}</span>
             <span>{t('lb.colValuation')}</span>
           </div>

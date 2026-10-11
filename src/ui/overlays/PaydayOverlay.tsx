@@ -12,7 +12,8 @@ import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
-import { Button, Chip, cx, IconBadge, Segmented, Stat } from '../primitives'
+import { Button, Chip, cx, Segmented, Stat } from '../primitives'
+import { Face } from '../bubbles/face'
 import { OverlayFrame } from './OverlayFrame'
 import { paydayView, type PaydayCost, type PaydayLine, type PaydayRow } from './paydayView'
 
@@ -61,7 +62,8 @@ export function PaydayOverlay({ onClose }: { onClose: () => void }) {
   const head = (
     <div data-payday-desk="" className="flex flex-col gap-1 px-5 pt-4 sm:px-6">
       <div className="flex items-center gap-2">
-        <IconBadge icon="cash" size={28} color="var(--color-g-burn)" />
+        {/* T17: the accountant brings the month (portrait, the cash mark as its badge). */}
+        <Face id="accountant" size={44} color="var(--color-g-burn)" badge="cash" />
         <h2 id="payday-title" className="min-w-0 flex-1 text-[17px] font-extrabold text-ink">
           {t('desk.title')}
         </h2>

@@ -7,7 +7,7 @@
 // active tab names the board). T19: İstatistik and Pazar wear the laptop bezel + app bar (layout/device).
 // The header's tab strip switches between the three screens (İstatistik | Kanun Kitabı | Pazar haritası) without
 // closing the frame; tab switches are static (only the first open is dealt).
-import { useEffect, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import type { CenterKind, StatsTab } from '../../store/types'
 import type { IconName } from '../icons'
@@ -18,6 +18,7 @@ import { MarketScreen } from '../center/MarketScreen'
 import { StatsScreen } from './StatsScreen'
 import { GAP } from '../layout/tokens'
 import { AppBar, DEVICE_SHELL } from '../layout/device'
+import { useMoneyIslandClearance } from '../layout/moneyClearance'
 
 const KIND: Record<CenterKind, { icon: IconName; color: string }> = {
   stats: { icon: 'trend', color: 'var(--color-g-sky)' },
@@ -30,28 +31,6 @@ export const CENTER_TABS: readonly CenterKind[] = ['stats', 'lawbook', 'market']
 
 /** Width cap of the center card (the scene stays visible around it on a wide screen). */
 export const CENTER_MAX_W = 960
-
-/**
- * Desktop: the money island (bottom-left, taller than the founder / tab islands) is outside [data-scene-bottom], so
- * the scene inset's bottom does not clear it; the board keeps above its top edge too. 0 when there is no island.
- */
-function useMoneyIslandClearance(): number {
-  const [h, setH] = useState(0)
-  useEffect(() => {
-    const el = document.querySelector<HTMLElement>('[data-money-island]')
-    if (!el) return
-    const read = () => setH(Math.max(0, Math.round(window.innerHeight - el.getBoundingClientRect().top + GAP)))
-    const ro = new ResizeObserver(read)
-    ro.observe(el)
-    window.addEventListener('resize', read)
-    read()
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', read)
-    }
-  }, [])
-  return h
-}
 
 export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind; tab?: StatsTab; onClose: () => void; children?: ReactNode }) {
   const inset = useGameStore((s) => s.ui.sceneInset)

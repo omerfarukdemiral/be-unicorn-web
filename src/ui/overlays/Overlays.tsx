@@ -44,7 +44,7 @@ export function MoveSceneOverlay({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       mood="event"
       place="low"
-      emblem={{ icon: verb.icon }}
+      emblem={{ icon: verb.icon, face: 'investor' }}
       title={def?.officeName}
       // One line under the ribbon: the new stage and its verb (no second label repeating the same news).
       // (Unicorn's verb is its own name: "Unicorn · Unicorn" said nothing twice.)
@@ -164,7 +164,7 @@ export function PostMortemOverlay() {
     <OverlayFrame
       wide
       mood="loss"
-      emblem={{ icon: s.go.kind === 'teamLost' ? 'users' : 'cash', color: 'var(--color-ink-2)' }}
+      emblem={{ icon: s.go.kind === 'teamLost' ? 'users' : 'cash', color: 'var(--color-ink-2)', face: s.go.kind === 'teamLost' ? 'cofounder' : 'accountant' }}
       title={t(s.go.kind === 'teamLost' ? 'gameOver.teamLostTitle' : 'gameOver.bankruptTitle')}
       kicker={t('pm.sub', { stage: STAGES[s.stage]?.name ?? '', m: Math.floor(s.day / 30) + 1 })}
       actions={
@@ -233,7 +233,7 @@ export function AcquiredOverlay({ day, xp }: { day: number; xp: number }) {
   return (
     <OverlayFrame
       mood="win"
-      emblem={{ icon: 'handshake', color: 'var(--color-g-equity)' }}
+      emblem={{ icon: 'handshake', color: 'var(--color-g-equity)', face: 'buyer' }}
       title={t('gameOver.acquiredTitle')}
       kicker={STAGES[s.stage]?.name}
       actions={
@@ -292,7 +292,7 @@ export function VictoryOverlay() {
     <OverlayFrame
       wide
       mood="win"
-      emblem={{ icon: 'unicorn' }}
+      emblem={{ icon: 'unicorn', face: 'founder' }}
       title={t('victory.title')}
       actions={
         <Button tone="commit" icon="refresh" className="w-full" onClick={restart} autoFocus>

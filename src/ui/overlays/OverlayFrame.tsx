@@ -10,8 +10,10 @@ import { useGameStore } from '../../store/gameStore'
 import { useLayoutMode } from '../hooks'
 import type { IconName } from '../icons'
 import { cx, IconBadge, Label } from '../primitives'
+import { Face, type FaceId } from '../bubbles/face'
 import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_TABS_H } from '../layout/tokens'
 import { usePanelWidth } from '../layout/useSceneInset'
+import { useMoneyIslandClearance } from '../layout/moneyClearance'
 
 export type OverlayMood = 'event' | 'win' | 'loss' | 'desk'
 export type OverlayPlace = 'center' | 'low' | 'dock'
@@ -59,7 +61,7 @@ export function OverlayFrame({
   /** max-w-2xl instead of max-w-md (ignored by dock). */
   wide?: boolean
   /** Medallion over the top edge; color = duotone hue (default brand). Not drawn when docked. */
-  emblem?: { icon: IconName; color?: string }
+  emblem?: { icon: IconName; color?: string; face?: FaceId }
   /** Frame <h2>: ribbon for event / win / desk, stamp for loss. */
   title?: ReactNode
   /** <Label> under the title. */
@@ -107,6 +109,7 @@ export function OverlayFrame({
   }, [])
 
   const inset = useGameStore((s) => s.ui.sceneInset)
+  const money = useMoneyIslandClearance()
   const mode = useLayoutMode()
   const panelW = usePanelWidth(mode)
   const titleId = labelledBy ?? 'overlay-title'
@@ -144,11 +147,14 @@ export function OverlayFrame({
     // landscape phone the leftover scene is too thin for a card, so the card takes the screen width instead.
     const narrow = typeof window !== 'undefined' && window.innerWidth - GAP - inset.right < NARROW_SCENE_W
     boxClass = cx('fixed flex justify-center p-4', place === 'low' ? 'items-end' : 'items-center')
-    boxStyle = { top: inset.top, bottom: inset.bottom, left: safeL(GAP), right: narrow ? safeR(GAP) : Math.max(GAP, inset.right) }
+    boxStyle = { top: inset.top, bottom: inset.bottom > money ? inset.bottom : money, left: safeL(GAP), right: narrow ? safeR(GAP) : Math.max(GAP, inset.right) }
   }
 
   const hue = emblem?.color ?? 'var(--color-brand)'
   const medallion = emblem && !docked
+  // T17: a card with a face (who brings the news) hangs the portrait over the top edge, bigger than the icon medallion
+  // (Anno's captain), the kind icon as its corner badge.
+  const face = medallion ? emblem.face : undefined
   return (
     <div className="pointer-events-auto fixed inset-0 z-50" data-overlay-mood={mood}>
       {/* Veil is a sibling, not a parent: its fade / backdrop-filter must not fade or contain the card. */}
@@ -163,10 +169,15 @@ export function OverlayFrame({
             'ui-card relative flex min-h-0 w-full flex-col',
             docked
               ? cx('shadow-panel', mode === 'portrait' ? 'max-h-full animate-slide-up' : 'h-full animate-slide-in-right')
-              : cx('shadow-pop max-h-full animate-deal', wide ? 'max-w-2xl' : 'max-w-md', medallion && 'mt-7'),
+              : cx('shadow-pop max-h-full animate-deal', wide ? 'max-w-2xl' : 'max-w-md', face ? 'mt-12' : medallion && 'mt-7'),
           )}
         >
-          {medallion && (
+          {face && (
+            <span aria-hidden="true" className="animate-emblem absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[62%] rounded-full bg-surface p-1 shadow-pop">
+              <Face id={face} size={88} color={hue} badge={emblem?.icon} />
+            </span>
+          )}
+          {medallion && !face && (
             <span
               aria-hidden="true"
               className="ui-medallion animate-emblem absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2"
@@ -179,7 +190,7 @@ export function OverlayFrame({
             <div className="shrink-0">{head}</div>
           ) : (
             (title || kicker) && (
-              <header className={cx('flex shrink-0 flex-col items-center gap-1.5 text-center', medallion ? 'pt-9' : 'pt-5')}>
+              <header className={cx('flex shrink-0 flex-col items-center gap-1.5 text-center', face ? 'pt-14' : medallion ? 'pt-9' : 'pt-5')}>
                 {/* The ribbon runs 10px past the card edge on both sides (its notched tails), so the header has no side padding. */}
                 {title && (
                   <h2

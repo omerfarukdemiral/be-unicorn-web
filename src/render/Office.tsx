@@ -70,7 +70,6 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   const stage = layout.stage
   return (
     <group>
-      <mesh geometry={GEO.plane} material={mat(pal.ground)} scale={[200, 1, 200]} position={[0, -0.09, 0]} receiveShadow />
       <B s={[w, 0.08, d]} p={[(b.minX + b.maxX) / 2, -0.04, (b.minZ + b.maxZ) / 2]} c={pal.floor} shadow={false} />
       {stage === 0 ? (
         <>
@@ -275,21 +274,9 @@ function ElevatorDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalett
 
 function CampusDecor({ layout }: { layout: OfficeLayout }) {
   const b = layout.bounds
-  const trees: V3[] = []
-  const r = layout.radius + CELL * 1.2
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 + hash01('tree', i) * 0.3
-    const rr = r + hash01('tree', i + 20) * CELL * 1.5
-    trees.push([Math.cos(a) * rr + layout.center[0], 0, Math.sin(a) * rr + layout.center[1]])
-  }
+  // The trees around the campus are the lot's (Surroundings).
   return (
     <group>
-      {trees.map((p, i) => (
-        <group key={i} position={p} scale={0.8 + hash01('tree', i + 40) * 0.6}>
-          <mesh geometry={GEO.cyl} material={mat(PROP_COLORS.trunk)} scale={[0.16, 0.6, 0.16]} position={[0, 0.3, 0]} castShadow />
-          <mesh geometry={GEO.cone} material={mat(i % 3 ? PROP_COLORS.tree : PROP_COLORS.treeLight)} scale={[0.8, 1.1, 0.8]} position={[0, 1.1, 0]} castShadow />
-        </group>
-      ))}
       {/* unicorn statue */}
       <group position={[b.maxX + CELL * 0.8, 0, b.maxZ + CELL * 0.8]}>
         <B s={[0.8, 0.3, 0.8]} p={[0, 0.15, 0]} c={PROP_COLORS.statueBase} />

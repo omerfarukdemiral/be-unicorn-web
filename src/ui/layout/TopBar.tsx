@@ -30,7 +30,7 @@ function useViewportWidth(): number {
 
 /** One corner island: the soft card, h56, content centred. */
 function Island({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx('ui-card pointer-events-auto flex h-14 shrink-0 items-center', className)}>{children}</div>
+  return <div data-scene-island="" className={cx('ui-card pointer-events-auto flex h-14 shrink-0 items-center', className)}>{children}</div>
 }
 
 /**
@@ -99,17 +99,17 @@ function MobileBar() {
     >
       <div className="relative min-w-0 flex-1">
         {/* Cells keep their natural width (a cut "$216…" reads as a bug); 360px leaves ~4px spare, hence the 48px ⏸. */}
-        <div className="ui-card pointer-events-auto flex min-w-0 items-center px-1" style={{ height: MOBILE_TOP_H }}>
+        <div data-scene-island="" className="ui-card pointer-events-auto flex min-w-0 items-center px-1" style={{ height: MOBILE_TOP_H }}>
           <GaugeRow className="flex-1 [&>*]:shrink-0" />
         </div>
         {!sheetOpen && (
-          <div data-scene-obstacle="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col px-2.5 pb-1.5">
+          <div data-scene-obstacle="" data-scene-island="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col px-2.5 pb-1.5">
             <StageSection variant="mobile" />
             <StageProgressLine className="-mt-1" />
           </div>
         )}
       </div>
-      <div className="ui-card pointer-events-auto grid w-12 shrink-0 place-items-center rounded-full" style={{ height: MOBILE_TOP_H }}>
+      <div data-scene-island="" className="ui-card pointer-events-auto grid w-12 shrink-0 place-items-center rounded-full" style={{ height: MOBILE_TOP_H }}>
         <SpeedControl compact />
       </div>
     </header>
@@ -140,14 +140,14 @@ function LandscapeBar() {
       className="pointer-events-none absolute inset-x-2 top-2 z-30 flex min-w-0 items-start gap-2"
       style={{ height: LANDSCAPE_BAR_H }}
     >
-      <div className="ui-card pointer-events-auto flex h-full min-w-0 max-w-[300px] flex-1 flex-col justify-center px-2.5 pb-1">
+      <div data-scene-island="" className="ui-card pointer-events-auto flex h-full min-w-0 max-w-[300px] flex-1 flex-col justify-center px-2.5 pb-1">
         <StageSection variant="mobile" />
         <StageProgressLine className="-mt-1.5" />
       </div>
-      <div className="ui-card pointer-events-auto ml-auto flex h-full shrink-0 items-center px-1">
+      <div data-scene-island="" className="ui-card pointer-events-auto ml-auto flex h-full shrink-0 items-center px-1">
         <GaugeRow className="gap-2 [&>*]:shrink-0" />
       </div>
-      <div className="ui-card pointer-events-auto grid h-full w-12 shrink-0 place-items-center rounded-full">
+      <div data-scene-island="" className="ui-card pointer-events-auto grid h-full w-12 shrink-0 place-items-center rounded-full">
         <SpeedControl compact />
       </div>
     </header>

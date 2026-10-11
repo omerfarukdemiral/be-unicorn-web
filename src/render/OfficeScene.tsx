@@ -7,16 +7,18 @@ import * as THREE from 'three'
 import type { GameState } from '../engine/types'
 import type { Selection, ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
-import { CAMERA_DIR, CELL, ZOOM_FACTORS, clamp, damp } from './constants'
+import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp } from './constants'
+import { fitOutline, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
-import { furnishedBox, type OfficeLayout } from './layout'
+import { furnishedBox, type FrameBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
 import { stagePalette } from './palette'
 import { People } from './People'
 import { speakerPositions, useLayout, useOffice } from './sceneRegistry'
 import { SlotsLayer } from './Slot'
+import { Surroundings } from './Surroundings'
 import { useGS, useUi } from './source'
 import { panelSelection } from '../store/gameStore'
 import { WorldBubbles } from './WorldBubbles'
@@ -48,24 +50,43 @@ function focusOf(sel: Selection | null, layout: OfficeLayout): [number, number] 
  * so the open ring fills the view. Zoom level 0 still shows the whole office.
  */
 const OPEN_PAD = CELL * 0.6
-function frameBox(layout: OfficeLayout, zoomLevel: ZoomLevel): { cx: number; cz: number; r: number } {
+function frameBox(layout: OfficeLayout, zoomLevel: ZoomLevel): FrameBox {
   const b = layout.bounds
   const w = layout.walkBox
   const areaB = (b.maxX - b.minX) * (b.maxZ - b.minZ)
   const areaW = (w.maxX - w.minX) * (w.maxZ - w.minZ)
-  if (zoomLevel !== 1 || areaB <= 0 || areaW / areaB >= 0.5) return { cx: layout.center[0], cz: layout.center[1], r: layout.radius }
-  const minX = Math.max(b.minX, w.minX - OPEN_PAD)
-  const maxX = Math.min(b.maxX, w.maxX + OPEN_PAD)
-  const minZ = Math.max(b.minZ, w.minZ - OPEN_PAD)
-  const maxZ = Math.min(b.maxZ, w.maxZ + OPEN_PAD)
-  return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
+  const box =
+    zoomLevel !== 1 || areaB <= 0 || areaW / areaB >= 0.5
+      ? { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ }
+      : { minX: Math.max(b.minX, w.minX - OPEN_PAD), maxX: Math.min(b.maxX, w.maxX + OPEN_PAD), minZ: Math.max(b.minZ, w.minZ - OPEN_PAD), maxZ: Math.min(b.maxZ, w.maxZ + OPEN_PAD) }
+  return { ...box, cx: (box.minX + box.maxX) / 2, cz: (box.minZ + box.maxZ) / 2, r: Math.hypot(box.maxX - box.minX, box.maxZ - box.minZ) / 2 }
 }
 
 /** The furnished box is used only when it is clearly smaller than the default frame. */
 const FURNISHED_MIN_GAIN = 0.85
+/** Outline height: the walls (and the heads at the back desks) belong to the frame. */
+const OUTLINE_H = WALL_HEIGHT
+/** Portrait: the diamond's bare side tips may run this share of its width off each edge (figures read larger). */
+const PORTRAIT_SLACK = 0.04
+/** The diamond's bare tips may slip this share under a HUD island (frameFit.islandSlack). */
+const ISLAND_SLACK = 0.1
+/**
+ * The default frame never zooms past this many px per world unit per px of the screen's short side: a small open
+ * ring (Pre-seed's unlocked corner) would otherwise fill a desktop like the close zoom, walls cut off.
+ */
+const MAX_ZOOM_PER_PX = 1 / 12
+/** Islands are re-read this often (ms) in case one changed size without a resize (a wider gauge, a new tab). */
+const ISLAND_POLL_MS = 600
 
 const camRight = new THREE.Vector3()
 const camUp = new THREE.Vector3()
+
+function sameRects(a: readonly Rect[], b: readonly Rect[]): boolean {
+  return a.length === b.length && a.every((r, i) => {
+    const o = b[i]!
+    return Math.abs(r.left - o.left) < 2 && Math.abs(r.top - o.top) < 2 && Math.abs(r.right - o.right) < 2 && Math.abs(r.bottom - o.bottom) < 2
+  })
+}
 
 function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const cam = useRef<THREE.OrthographicCamera>(null)
@@ -73,36 +94,45 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const office = useOffice()
   const furnished = useMemo(() => furnishedBox(layout, office.slots), [layout, office])
   const selection = useUi((u) => panelSelection(u.panel))
-  const insetWant = useUi((u) => u.sceneInset)
+  // Only the side panel still takes a band off the scene; the top and bottom HUD are corner islands (T07).
+  const panelRight = useUi((u) => u.sceneInset.right)
   const size = useThree((s) => s.size)
+  const gl = useThree((s) => s.gl)
   const target = useRef(new THREE.Vector3(layout.center[0], 0, layout.center[1]))
   const first = useRef(true)
-  // Damped screen inset (px) hidden by the ui panel / sheet: the office is framed in the visible rest.
-  const inset = useRef({ top: 0, right: 0, bottom: 0 })
+  // Damped panel band (px) and the damped screen point where the target lands.
+  const band = useRef(0)
+  const anchor = useRef({ x: 0, y: 0 })
+  const islands = useRef<Rect[]>([])
+  const polled = useRef(-Infinity)
+  const fitCache = useRef<{ key: string; fit: Fit } | null>(null)
 
-  useFrame((_, rawDt) => {
+  useFrame((state, rawDt) => {
     const c = cam.current
     if (!c) return
     const dt = Math.min(rawDt, 0.1)
-    const ins = inset.current
-    if (first.current) Object.assign(ins, insetWant)
-    else {
-      ins.top = damp(ins.top, insetWant.top, 7, dt)
-      ins.right = damp(ins.right, insetWant.right, 7, dt)
-      ins.bottom = damp(ins.bottom, insetWant.bottom, 7, dt)
+    const now = state.clock.elapsedTime * 1000
+    if (now - polled.current > ISLAND_POLL_MS) {
+      polled.current = now
+      const next = measureIslands(gl.domElement)
+      if (!sameRects(next, islands.current)) islands.current = next
     }
-    const availW = Math.max(size.width - ins.right, size.width * 0.3)
-    const availH = Math.max(size.height - ins.top - ins.bottom, Math.min(size.height, 140))
-    const portrait = availH > availW * 1.2
+    band.current = first.current ? panelRight : damp(band.current, panelRight, 7, dt)
+    const freeRight = Math.max(size.width - band.current, size.width * 0.3)
+    const portrait = size.height > freeRight * 1.2
     let frame = frameBox(layout, zoomLevel)
     if (portrait && zoomLevel === 1 && furnished && furnished.r < frame.r * FURNISHED_MIN_GAIN) frame = furnished
-    const r = Math.max(frame.r, 3)
-    // A tall free area (portrait phone) is width-bound: trim the side margin (the diamond's width is ~2r) so the
-    // office uses more of the room between the bars instead of floating in beige. 1.9 < 2r lets the diamond's two
-    // bare side tips run a few px off screen: figures read ~8% larger on a phone.
-    const sideFit = portrait ? 1.9 : 2.35
-    const fit = Math.min(availW / (r * sideFit), availH / (r * 1.75 + 2.6))
-    const want = clamp(fit * ZOOM_FACTORS[zoomLevel], 12, 400)
+
+    // The fit only changes with the screen, the panel, the islands or the frame: cached on those.
+    const key = `${size.width}x${size.height}|${Math.round(freeRight)}|${frame.minX},${frame.maxX},${frame.minZ},${frame.maxZ}|${islands.current.map((r) => `${r.left},${r.top},${r.right},${r.bottom}`).join(';')}`
+    let fit = fitCache.current?.key === key ? fitCache.current.fit : null
+    if (!fit) {
+      // Islands under the side panel are hidden by it: only the ones in the free part count.
+      const free = { left: 0, top: 0, right: freeRight, bottom: size.height }
+      fit = fitOutline({ outline: outlineOf(frame, OUTLINE_H), free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: portrait ? PORTRAIT_SLACK : 0, islandSlack: ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * MAX_ZOOM_PER_PX })
+      fitCache.current = { key, fit }
+    }
+    const want = clamp(fit.zoom * ZOOM_FACTORS[zoomLevel], 12, 400)
 
     // Close zoom follows the selection (clamped to the office); otherwise frame the office (frameBox).
     let fx = frame.cx
@@ -114,22 +144,26 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
         fz = clamp(f[1], layout.bounds.minZ, layout.bounds.maxZ)
       }
     }
+    const a = anchor.current
     if (first.current) {
       first.current = false
       c.zoom = want
       target.current.set(fx, 0, fz)
+      a.x = fit.x
+      a.y = fit.y
     } else {
       c.zoom = damp(c.zoom, want, 6, dt)
       target.current.x = damp(target.current.x, fx, 5, dt)
       target.current.z = damp(target.current.z, fz, 5, dt)
+      a.x = damp(a.x, fit.x, 6, dt)
+      a.y = damp(a.y, fit.y, 6, dt)
     }
     c.position.copy(target.current).addScaledVector(dir, CAM_DIST)
-    c.position.y += 0.6
-    c.lookAt(target.current.x, 0.6, target.current.z)
-    // Slide the camera in its own plane so the target sits at the center of the visible area
+    c.lookAt(target.current.x, 0, target.current.z)
+    // Slide the camera in its own plane so the target lands on the fitted screen point
     // (1 px = 1 / zoom world units for the orthographic camera).
-    const shiftX = (size.width - availW) / 2
-    const shiftY = (ins.top - (size.height - availH - ins.top)) / 2
+    const shiftX = size.width / 2 - a.x
+    const shiftY = a.y - size.height / 2
     if (shiftX || shiftY) {
       c.updateMatrixWorld()
       camRight.setFromMatrixColumn(c.matrixWorld, 0)
@@ -229,6 +263,7 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
       <CameraRig zoomLevel={zoom ?? uiZoom} />
       <Lights lowPower={lowPower} />
       <StageTransition>
+        <Surroundings />
         <Office />
         <SlotsLayer />
         <FurnitureLayer />

@@ -392,6 +392,17 @@ export function pathFromDoor(target: XZ, layout: OfficeLayout): XZ[] {
   return [layout.door.inside, ...findPath(layout.door.inside, target, layout)]
 }
 
+/** A framed floor box: its bounds plus centre and half-diagonal. */
+export interface FrameBox {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+  cx: number
+  cz: number
+  r: number
+}
+
 /** Margin around the furnished area when a phone frames it (a desk's width, so people at the edge desks stay in). */
 const FURNISHED_PAD = CELL * 1.2
 
@@ -400,7 +411,7 @@ const FURNISHED_PAD = CELL * 1.2
  * people come in), clamped to the office. From Series A the whole floor fitted into 390 px made the office a third of
  * the screen with 4-5 px people (QA); bare floor around the desks is what gets cropped. Null when it would not help.
  */
-export function furnishedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'id' | 'itemId'>[]): { cx: number; cz: number; r: number } | null {
+export function furnishedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'id' | 'itemId'>[]): FrameBox | null {
   let minX = layout.door.inside[0]
   let maxX = minX
   let minZ = layout.door.inside[1]
@@ -422,5 +433,5 @@ export function furnishedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'i
   maxX = Math.min(b.maxX, maxX + FURNISHED_PAD)
   minZ = Math.max(b.minZ, minZ - FURNISHED_PAD)
   maxZ = Math.min(b.maxZ, maxZ + FURNISHED_PAD)
-  return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
+  return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
 }

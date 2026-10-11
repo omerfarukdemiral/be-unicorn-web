@@ -44,11 +44,11 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
     return (
       <nav aria-label={t('bottom.label')} className="pointer-events-none flex flex-col items-center gap-2">
         {!sheetOpen && (
-          <div className="ui-card pointer-events-auto flex h-14 max-w-full items-center px-2">
+          <div data-scene-island="" className="ui-card pointer-events-auto flex h-14 max-w-full items-center px-2">
             <FounderBar variant="mobile" className="h-11" />
           </div>
         )}
-        <div className="ui-card pointer-events-auto relative flex h-14 items-center gap-1 px-1">
+        <div data-scene-island="" className="ui-card pointer-events-auto relative flex h-14 items-center gap-1 px-1">
           <DockTabs variant="mobile" labels={false} />
           <MoreMenu />
         </div>
@@ -60,10 +60,10 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
       // T23: the portrait islands side by side: founder island left (shrinks, its slots scroll), tab island right (44px
       // keys, no locked silhouettes, ⋯ for the top-right tools).
       <nav aria-label={t('bottom.label')} className="pointer-events-none flex items-center justify-between gap-2" style={{ height: LANDSCAPE_BAR_H }}>
-        <div className="ui-card pointer-events-auto flex h-full min-w-0 shrink items-center px-2">
+        <div data-scene-island="" className="ui-card pointer-events-auto flex h-full min-w-0 shrink items-center px-2">
           <FounderBar variant="mobile" className="min-w-0" />
         </div>
-        <div className="ui-card pointer-events-auto relative flex h-full shrink-0 items-center gap-1 px-1">
+        <div data-scene-island="" className="ui-card pointer-events-auto relative flex h-full shrink-0 items-center gap-1 px-1">
           <DockTabs variant="bar" touch locked={false} />
           <MoreMenu />
         </div>
@@ -75,11 +75,11 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
   return (
     <nav aria-label={t('bottom.label')} className="@container pointer-events-none flex items-end gap-2" style={{ height: BAR_H }}>
       {/* 5px top/bottom + the 1px hairline: the 44px slots fit the 56px island. */}
-      <div className="ui-card pointer-events-auto mx-auto flex h-full min-w-0 items-center px-2 py-[5px]">
+      <div data-scene-island="" className="ui-card pointer-events-auto mx-auto flex h-full min-w-0 items-center px-2 py-[5px]">
         <FounderBar variant="bar" trim={narrow} className="min-w-0" />
       </div>
       {/* Below 1280 the locked-tool silhouettes go (founder slots keep only the next one): the row fits beside the money island. */}
-      <div data-tabs-island="" className="ui-card pointer-events-auto flex h-full shrink-0 items-center px-1.5">
+      <div data-tabs-island="" data-scene-island="" className="ui-card pointer-events-auto flex h-full shrink-0 items-center px-1.5">
         <DockTabs variant="bar" labels={false} locked={!narrow} />
       </div>
     </nav>

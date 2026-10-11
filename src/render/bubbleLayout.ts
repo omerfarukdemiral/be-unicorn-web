@@ -13,13 +13,14 @@
 // A stem (thin line back to the speaker's head) is drawn for lifted bubbles, unless another bubble
 // sits between the bubble and its speaker. A displaced forced bubble's stem may run diagonally.
 
-export type BubbleKind = 'decision' | 'visitor' | 'desk' | 'staff' | 'concept' | 'conceptIcon' | 'reflection' | 'ambient'
+export type BubbleKind = 'decision' | 'visitor' | 'desk' | 'staff' | 'person' | 'concept' | 'conceptIcon' | 'reflection' | 'ambient'
 
 export const BUBBLE_PRIORITY: Record<BubbleKind, number> = {
   decision: 3,
   visitor: 3,
   desk: 2,
   staff: 2,
+  person: 2,
   concept: 2,
   conceptIcon: 1,
   reflection: 1,
@@ -36,7 +37,7 @@ export const isClickable = (k: BubbleKind): boolean => k !== 'ambient' && k !== 
 export const isAnchored = (k: BubbleKind): boolean => k !== 'ambient'
 
 /** Must stay visible no matter what (falls back to the top of the free area). */
-const isForced = (k: BubbleKind): boolean => k === 'decision' || k === 'visitor' || k === 'desk' || k === 'staff' || k === 'concept'
+const isForced = (k: BubbleKind): boolean => k === 'decision' || k === 'visitor' || k === 'desk' || k === 'staff' || k === 'person' || k === 'concept'
 
 export interface BubbleBox {
   key: string

@@ -314,3 +314,19 @@ describe('BubbleTimeline', () => {
     expect(shown(tl.step(fresh, null, 10 + REFLECTION_MS))).toEqual([])
   })
 })
+
+describe('routeBubbles: a tapped employee (T14)', () => {
+  it('their card exists only while open, beside them', () => {
+    const s = game()
+    s.employees = [emp('e1', { projectId: 'p1', deskSlotId: 'd1' })]
+    expect(keys(open(s))).toEqual([])
+    expect(open(s, 'person:e1')).toEqual([expect.objectContaining({ kind: 'person', key: 'person:e1', speakerId: 'e1' })])
+  })
+
+  it('a gone employee has no card, and the open card takes their anchor over a staff pill', () => {
+    const s = game()
+    expect(keys(open(s, 'person:ghost'))).toEqual([])
+    s.employees = [emp('e2', { status: 'leaving', leaveDay: 30 })]
+    expect(keys(open(s, 'person:e2'))).toEqual(['person:e2'])
+  })
+})

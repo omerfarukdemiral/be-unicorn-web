@@ -10,6 +10,8 @@ import { NPC_HEAD_Y, Npc, npcLook, rankVisitors } from './Npc'
 import { clearSpeaker, lastPos, registerDesk, sceneTime, useLayout, useOffice, useSceneClock, type LastPos } from './sceneRegistry'
 import { getGS, storeApi, useGS, useMockState, useUi } from './source'
 import { panelSelection } from '../store/gameStore'
+import { personKey } from './bubbles'
+import { staffNeeds } from './WorldBubbles'
 
 const selectPeople = (s: GameState) => [s.employees, s.visitors, s.founder.currentAction, s.time.speed, s.derived.overload > 0] as const
 
@@ -42,7 +44,15 @@ export function People() {
   const selection = useUi((u) => panelSelection(u.panel))
   const founderOpen = useUi((u) => u.bubbleOpen === DESK_ACTIONS)
 
-  const selectEmployee = useCallback((id: string) => storeApi().select({ kind: 'employee', id }), [])
+  // An employee's tap opens their card beside them (T14), or the bubble they already ask with (leaving / idle);
+  // a second tap closes it. The panel's detail stays one tap further (the card's Detay).
+  const selectEmployee = useCallback((id: string) => {
+    const st = storeApi()
+    const asks = staffNeeds(st.state).some(([x]) => x === id)
+    const key = asks ? `staff:${id}` : personKey(id)
+    st.setBubbleOpen(st.ui.bubbleOpen === key ? null : key)
+  }, [])
+  const openEmployee = useUi((u) => (u.bubbleOpen?.startsWith('person:') || u.bubbleOpen?.startsWith('staff:') ? u.bubbleOpen.slice(u.bubbleOpen.indexOf(':') + 1) : null))
   const selectVisitor = useCallback((id: string) => storeApi().select({ kind: 'visitor', id }), [])
   // Founder decisions come from the desk: the tap toggles the actions bubble (its Detay opens the founder panel).
   const tapFounder = useCallback(() => {
@@ -121,7 +131,7 @@ export function People() {
           speed={speed}
           overload={overload}
           idle={idle.includes(e.id)}
-          selected={selection?.kind === 'employee' && selection.id === e.id}
+          selected={(selection?.kind === 'employee' && selection.id === e.id) || openEmployee === e.id}
           onSelect={selectEmployee}
         />
       ))}

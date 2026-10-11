@@ -41,7 +41,7 @@ export function resolveSpeaker(cardId: DecisionCardId, visitorId: string | undef
 
 /** One routed bubble, flat so a list of them serialises into the cheap selector string. */
 export interface RoutedLine {
-  kind: 'ambient' | 'decision' | 'staff' | 'desk' | 'visitor' | 'reflection'
+  kind: 'ambient' | 'decision' | 'staff' | 'person' | 'desk' | 'visitor' | 'reflection'
   /** Stable key (also the ui.bubbleOpen value). */
   key: string
   speakerId: string
@@ -101,6 +101,9 @@ export function routeCandidates(s: GameState, opts: { bubbleOpen: string | null 
   for (const d of deskTopics(s, opts.bubbleOpen)) out.push({ kind: 'desk', key: deskKey(d.topic, d.refId), speakerId: DESK, ref: d.topic, extra: d.refId })
 
   for (const [id, need] of staffNeeds(s)) out.push({ kind: 'staff', key: `staff:${id}`, speakerId: id, ref: need })
+  // A tapped employee's card (T14): only while open; as the open bubble it takes their anchor (capBubbles).
+  const ob = opts.bubbleOpen
+  if (ob?.startsWith('person:') && s.employees.some((e) => `person:${e.id}` === ob)) out.push({ kind: 'person', key: ob, speakerId: ob.slice(7), ref: '' })
 
   // Only a fresh answer reflects (a save loaded days later does not replay it); the 4 s are timed by BubbleTimeline.
   const la = s.decisions.lastAnswer
@@ -124,7 +127,7 @@ export function routeCandidates(s: GameState, opts: { bubbleOpen: string | null 
 export const REFLECTION_FRESH_DAYS = 10
 
 /** Counts against MAX_ACTIONABLE (reflections and ambient lines do not). */
-export const isActionable = (l: Pick<RoutedLine, 'kind'>): boolean => l.kind === 'decision' || l.kind === 'visitor' || l.kind === 'desk' || l.kind === 'staff'
+export const isActionable = (l: Pick<RoutedLine, 'kind'>): boolean => l.kind === 'decision' || l.kind === 'visitor' || l.kind === 'desk' || l.kind === 'staff' || l.kind === 'person'
 
 const rankOf = (l: RoutedLine): number =>
   l.kind === 'decision' ? 0 : l.kind === 'visitor' ? 1 : l.kind === 'desk' ? 2 : l.kind === 'staff' ? (l.ref === 'leaving' ? 3 : 4) : 5
@@ -348,6 +351,8 @@ function toBubble(l: RoutedLine): WorldBubble | null {
     }
     case 'staff':
       return { kind: 'staff', key: l.key, speakerId: l.speakerId, need: l.ref as StaffNeed }
+    case 'person':
+      return { kind: 'person', key: l.key, speakerId: l.speakerId }
     case 'desk':
       return { kind: 'desk', key: l.key, speakerId: l.speakerId, topic: l.ref as DeskTopic, ...(l.extra ? { refId: l.extra } : null) }
     case 'visitor':
@@ -448,8 +453,8 @@ const TEXT_FONT = 'var(--font-text)'
 const UI_FONT = 'var(--font-ui)'
 
 export function DefaultBubble({ bubble }: { bubble: WorldBubble }) {
-  // Staff, desk, visitor and reflection bubbles need the ui renderer (options, chips); none without it.
-  if (bubble.kind === 'staff' || bubble.kind === 'desk' || bubble.kind === 'visitor' || bubble.kind === 'reflection') return null
+  // Staff, person, desk, visitor and reflection bubbles need the ui renderer (options, chips); none without it.
+  if (bubble.kind === 'staff' || bubble.kind === 'person' || bubble.kind === 'desk' || bubble.kind === 'visitor' || bubble.kind === 'reflection') return null
   if (bubble.kind === 'conceptIcon') {
     return (
       <button

@@ -3,7 +3,7 @@
 // The param type mirrors render/bubbles.ts `WorldBubble` structurally (ui may not import render).
 // Scene-first (spec §0–§2): every prompt that wants an answer is a bubble above whoever it concerns: a decision above
 // its visitor or the founder's desk, people above the employee, the founder's own calls (payday, round, pitch,
-// renewal, hiring, first product, founder actions) at the desk, the weekly pitch above the round's investor. Each one
+// renewal, hiring, first product, founder actions) at the desk, a tapped employee's card beside them (T14), the weekly pitch above the round's investor. Each one
 // starts collapsed; expanding it holds the world (ui.bubbleOpen), acting resumes it. A concept draws nothing in the
 // scene: it lands on the Kazanımlar badge (docs/GAMEPLAY_V2.md §12). Office lines pass the daily budget.
 import type { ReactNode } from 'react'
@@ -12,6 +12,7 @@ import { useGameStore } from '../../store/gameStore'
 import { AmbientBubbleView, officeLineShown } from './AmbientBubble'
 import { DecisionWorldBubble } from './DecisionWorldBubble'
 import { DeskBubble, type DeskTopic } from './DeskBubble'
+import { PersonBubble } from './PersonBubble'
 import { ReflectionBubble } from './ReflectionBubble'
 import { speakerName } from './speaker'
 import { StaffBubble, type StaffNeed } from './StaffBubble'
@@ -28,6 +29,7 @@ export type WorldBubbleLike =
   | (Base & { kind: 'conceptIcon'; conceptId: ConceptId; role: NpcRole; onOpen: () => void })
   | (Base & { kind: 'decision'; cardId: DecisionCardId; role: NpcRole; text: string; onOpen: () => void })
   | (Base & { kind: 'staff'; need: StaffNeed })
+  | (Base & { kind: 'person' })
   | (Base & { kind: 'desk'; topic: DeskTopic; refId?: string })
   | (Base & { kind: 'visitor'; topic: VisitorTopic; visitorId: string })
   | (Base & { kind: 'reflection'; cardId: DecisionCardId; optionIndex: number })
@@ -52,6 +54,8 @@ export function renderWorldBubble(b: WorldBubbleLike): ReactNode {
       return <DecisionWorldBubble bubbleKey={b.key} cardId={b.cardId} role={b.role} />
     case 'staff':
       return <StaffBubble bubbleKey={b.key} employeeId={b.speakerId} need={b.need} />
+    case 'person':
+      return <PersonBubble bubbleKey={b.key} employeeId={b.speakerId} />
     case 'desk':
       return <DeskBubble bubbleKey={b.key} topic={b.topic} refId={b.refId} />
     case 'visitor':

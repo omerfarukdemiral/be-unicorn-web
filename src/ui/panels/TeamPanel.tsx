@@ -39,20 +39,19 @@ export function DeptPill({ dept }: { dept: Dept }) {
   return <Pill dot={DEPT_COLOR[dept].dot} tint={DEPT_COLOR[dept].dot}>{DEPT_TEXT[dept].short}</Pill>
 }
 
-/** Initials on a light tint of the department hue, with a thin ring in the same hue. Text stays ink. */
+/**
+ * The department's portrait (T13: public/portraits/team-<dept>, rendered from the scene's character model, T16) on a
+ * light tint of the department hue with a thin ring in the same hue. One face per department (the scene varies people,
+ * the set does not); the name next to it tells them apart, and is the image's alt.
+ */
 export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; size?: number }) {
-  const initials = name
-    .split(' ')
-    .map((p) => p[0] ?? '')
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
+  const src = `/portraits/team-${dept}`
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-full border text-[11px] font-semibold tracking-wide text-ink"
+      className="block shrink-0 overflow-hidden rounded-full border"
       style={{ width: size, height: size, background: soft(DEPT_COLOR[dept].dot, 18), borderColor: soft(DEPT_COLOR[dept].dot, 45) }}
     >
-      {initials}
+      <img src={`${src}@1x.png`} srcSet={`${src}@1x.png 1x, ${src}@2x.png 2x`} alt={name} width={size} height={size} draggable={false} className="size-full object-cover" />
     </span>
   )
 }
@@ -130,7 +129,7 @@ function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: 
   const left = Math.ceil(c.expiresDay - day)
   return (
     <li className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-1.5 py-1">
-      <Avatar name={c.name} dept={c.dept} size={28} />
+      <Avatar name={c.name} dept={c.dept} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <Dot color={DEPT_COLOR[c.dept].dot} size={6} />
@@ -189,7 +188,7 @@ function TeamList() {
 export function EmployeeRow({ employee: e, idle = false }: { employee: Employee; idle?: boolean }) {
   return (
     <>
-      <Avatar name={e.name} dept={e.dept} size={28} />
+      <Avatar name={e.name} dept={e.dept} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <Dot color={DEPT_COLOR[e.dept].dot} size={6} />

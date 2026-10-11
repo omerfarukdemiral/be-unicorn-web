@@ -170,7 +170,7 @@ function SlotDetail({ id }: { id: string }) {
             <p className="text-xs text-ink-2">{t('detail.founderSeat')}</p>
           ) : occupant ? (
             <button type="button" onClick={() => select({ kind: 'employee', id: occupant.id })} className="flex w-full items-center gap-3 rounded-control border border-border p-2.5 text-left hover:bg-surface-2">
-              <Avatar name={occupant.name} dept={occupant.dept} />
+              <Avatar name={occupant.name} dept={occupant.dept} size={56} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{occupant.name}</span>
               <DeptPill dept={occupant.dept} />
             </button>

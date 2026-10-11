@@ -105,9 +105,11 @@ const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
  */
 
 export const BOTS: Record<Archetype, BotConfig> = {
-  // Low burn, early revenue, late and few rounds, protects equity.
+  // Low burn, early revenue, late and few rounds, protects equity. A second product (api) once the first matures: with
+  // one web product the users plateau near a third of TAM by Series C, MoM falls under 1 % and the growth-scaled
+  // multiple keeps it there (5/8 seeds never left C in 4500 days); a real founder opens the next line.
   bootstrap: {
-    kind: 'bootstrap', firstCategory: 'web', extraCategories: [],
+    kind: 'bootstrap', firstCategory: 'web', extraCategories: ['api'],
     buildMix: { eng: 2, product: 1, marketing: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
     minRunwayToHire: 5, teamCap: [3, 7, 11, 18, 30, 40, 40], adAggression: 0.25, minLtvCac: 2, price: 1.25,
     roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 4, useSalesCalls: true,
@@ -152,8 +154,9 @@ export const BOTS: Record<Archetype, BotConfig> = {
  *   months, heavy ads), frugal hires only on a thick cushion. "Careless burner" = burner with minRunwayToHire 0.
  */
 export const V2_BOTS: Record<V2BotKind, BotConfig> = {
-  coaster: { ...BOTS.bootstrap, kind: 'coaster', afterProfit: 'coast' },
-  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', afterProfit: 'idle' },
+  // The coast probes keep the one-product plan: what they test is stopping, not a second line.
+  coaster: { ...BOTS.bootstrap, kind: 'coaster', extraCategories: [], afterProfit: 'coast' },
+  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', extraCategories: [], afterProfit: 'idle' },
   greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false, loans: 'always', desk: 'halfPay' },
   burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },

@@ -98,8 +98,9 @@ function MobileBar() {
       style={{ height: MOBILE_TOP_H }}
     >
       <div className="relative min-w-0 flex-1">
-        <div className="ui-card pointer-events-auto flex min-w-0 items-center px-1.5" style={{ height: MOBILE_TOP_H }}>
-          <GaugeRow className="flex-1" />
+        {/* Cells keep their natural width (a cut "$216…" reads as a bug); 360px leaves ~4px spare, hence the 48px ⏸. */}
+        <div className="ui-card pointer-events-auto flex min-w-0 items-center px-1" style={{ height: MOBILE_TOP_H }}>
+          <GaugeRow className="flex-1 [&>*]:shrink-0" />
         </div>
         {!sheetOpen && (
           <div data-scene-obstacle="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col px-2.5 pb-1.5">
@@ -108,7 +109,7 @@ function MobileBar() {
           </div>
         )}
       </div>
-      <div className="ui-card pointer-events-auto grid shrink-0 place-items-center rounded-full" style={{ width: MOBILE_TOP_H, height: MOBILE_TOP_H }}>
+      <div className="ui-card pointer-events-auto grid w-12 shrink-0 place-items-center rounded-full" style={{ height: MOBILE_TOP_H }}>
         <SpeedControl compact />
       </div>
     </header>

@@ -41,6 +41,7 @@ export function StaffBubble({ bubbleKey, employeeId, need }: { bubbleKey: string
       <Expandable
         bubbleKey={bubbleKey}
         kind="staff"
+        face={`team-${e.dept}`}
         attention
         mark={{ icon: 'warning', color: 'var(--color-negative)' }}
         line={left !== null ? t('bubble.leaving', { name: e.name, d: left }) : t('bubble.leavingNow', { name: e.name })}
@@ -63,7 +64,7 @@ export function StaffBubble({ bubbleKey, employeeId, need }: { bubbleKey: string
 
   const open = projects.slice(0, MAX_PROJECTS)
   return (
-    <Expandable bubbleKey={bubbleKey} kind="staff" mark={{ icon: 'users', color: 'var(--color-energy)' }} line={t('bubble.idle', { name: e.name })} detail={detail}>
+    <Expandable bubbleKey={bubbleKey} kind="staff" face={`team-${e.dept}`} mark={{ icon: 'users', color: 'var(--color-energy)' }} line={t('bubble.idle', { name: e.name })} detail={detail}>
       {open.length > 0 ? (
         <>
           {/* A bare project name does not say what a tap does: one caption names the move. */}

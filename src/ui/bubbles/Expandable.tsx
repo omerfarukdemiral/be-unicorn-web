@@ -11,7 +11,8 @@ import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx, IconButton } from '../primitives'
 import { iconTone, soft } from '../theme'
-import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, SpeakerLine } from './shell'
+import { Face, type FaceId } from './face'
+import { BUBBLE_HOVER, BUBBLE_SHELL, BubbleTail, SpeakerLine, tintEdge, tintGround } from './shell'
 
 export interface BubbleMark {
   icon: IconName
@@ -42,6 +43,7 @@ export function Expandable({
   bubbleKey,
   kind,
   mark,
+  face,
   speaker,
   line,
   detail,
@@ -53,6 +55,8 @@ export function Expandable({
   /** data-bubble value (QA scripts select on it). */
   kind: string
   mark: BubbleMark
+  /** Who asks, as a portrait (T15); the mark becomes its corner badge. Without one the mark tile stands alone. */
+  face?: FaceId
   speaker?: string
   /** The collapsed line (one line, clamped). */
   line: string
@@ -72,6 +76,7 @@ export function Expandable({
   const swapped = useRef(false)
   if (open !== first.current) swapped.current = true
   const swap = swapped.current && 'animate-bubble-swap'
+  const ground = tintGround(mark.color)
 
   if (!open) {
     // The tail sits outside the pill so the pill itself never overflows (QA: scrollHeight ≤ clientHeight).
@@ -89,16 +94,17 @@ export function Expandable({
             e.stopPropagation()
             openBubble(bubbleKey, mobile)
           }}
+          style={ground}
           className={cx(
             BUBBLE_SHELL,
             BUBBLE_HOVER,
             // 36px with a mouse, 44px under a thumb or on a phone layout (spec §4 pill height vs the touch target).
-            'group flex min-h-9 w-max max-w-full items-center gap-1.5 py-1.5 pl-1.5 pr-2 text-left pointer-coarse:min-h-11',
+            'group flex min-h-9 w-max max-w-full items-center gap-1.5 py-1 pl-1 pr-2 text-left pointer-coarse:min-h-11',
             mobile && 'min-h-11',
             attention && 'animate-attention',
           )}
         >
-          <MarkTile mark={mark} />
+          {face ? <Face id={face} size={28} color={mark.color} badge={mark.icon} className="mr-0.5" /> : <MarkTile mark={mark} />}
           <span className="font-text min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight text-ink">
             {/* Phones: a question pill spends its ~260px on the question; the stem and the mark already say who asks
                 ("Metin · En büyük iki müşterin s…" cut the hook mid-word, QA). The open card names the speaker. */}
@@ -107,7 +113,7 @@ export function Expandable({
           </span>
           <Icon name="chevronDown" size={14} className="shrink-0 text-ink-2 transition-transform group-hover:translate-y-px group-hover:text-ink" />
         </button>
-        <BubbleTail />
+        <BubbleTail style={ground} />
       </div>
     )
   }
@@ -119,18 +125,21 @@ export function Expandable({
         data-open="true"
         role="dialog"
         aria-label={line}
+        style={tintEdge(mark.color)}
         className={cx(BUBBLE_SHELL, 'flex flex-col overflow-hidden', mobile ? 'w-[calc(100vw-24px)]' : 'w-[min(340px,calc(100vw-32px))]')}
       >
-        <div className="flex min-w-0 items-center gap-1 py-1 pl-2.5 pr-1">
+        {/* The header on the kind's ground, the answers on the neutral surface (chips keep their green / red). */}
+        <div className={cx('mb-2 flex min-w-0 items-center gap-1.5 py-1 pr-1', face ? 'pl-1.5' : 'pl-2.5')} style={{ background: ground.background }}>
+          {face && <Face id={face} size={32} color={mark.color} badge={mark.icon} />}
           {/* Open, the pill's line stays as the header topic ("Sen · Tur penceresi açık"): the rows below need that context. */}
-          <SpeakerLine icon={mark.icon} color={mark.color} speaker={speaker} topic={lineInBody && speaker ? undefined : line} className="min-w-0 flex-1" />
+          <SpeakerLine icon={face ? undefined : mark.icon} color={mark.color} speaker={speaker} topic={lineInBody && speaker ? undefined : line} className="min-w-0 flex-1" />
           {/* 44px on touch (a 30px desktop hit area is too small for a thumb), the header stays one row. */}
           {detail && <IconButton icon="info" label={t('bubble.detail')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={() => launch(detail)} />}
           <IconButton icon="close" label={t('bubble.close')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={closeBubble} />
         </div>
         <div className="flex max-h-[min(420px,60vh)] flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5">{children}</div>
       </div>
-      <BubbleTail />
+      <BubbleTail style={tintEdge(mark.color)} />
     </div>
   )
 }

@@ -134,7 +134,7 @@ function PaydayBubble({ bubbleKey }: { bubbleKey: string }) {
     ...(other >= 1 ? [{ icon: 'cash' as const, label: t('fx.tag.other'), text: `−${money(other)}`, good: false, title: t('desk.title') }] : []),
   ]
   return (
-    <Expandable bubbleKey={bubbleKey} kind="desk" mark={{ icon: 'cash', color: 'var(--color-g-burn)' }} speaker={t('founder.you')} line={t('bubble.payday', { v: money(v.total) })} detail={openDesk}>
+    <Expandable bubbleKey={bubbleKey} kind="desk" face="founder" mark={{ icon: 'cash', color: 'var(--color-g-burn)' }} speaker={t('founder.you')} line={t('bubble.payday', { v: money(v.total) })} detail={openDesk}>
       <ChipRow chips={chips} />
       {v.rows.map((r, i) => (
         <ChoiceRow
@@ -161,7 +161,7 @@ function RoundBubble({ bubbleKey }: { bubbleKey: string }) {
   const dispatch = useGameStore((s) => s.dispatch)
   if (!sizes) return null
   return (
-    <Expandable bubbleKey={bubbleKey} kind="desk" mark={{ icon: 'rocket', color: 'var(--color-brand)' }} speaker={t('founder.you')} line={t('bubble.round')} detail={openGrowthRound}>
+    <Expandable bubbleKey={bubbleKey} kind="desk" face="founder" mark={{ icon: 'rocket', color: 'var(--color-brand)' }} speaker={t('founder.you')} line={t('bubble.round')} detail={openGrowthRound}>
       {/* Sizes only while the window's open; the down round alone (window shut) keeps just its row. */}
       {ready && ROUND_SIZES.map((k) => {
         const o = sizes.find((x) => x.size === k)
@@ -223,7 +223,7 @@ export function PitchBubble({ bubbleKey, kind, speaker }: { bubbleKey: string; k
   const blocked = options.some((o) => !o.ok) ? blockedText(movesOut ? 'noMoves' : 'noEnergy', resetIn) : null
   const allBlocked = options.every((o) => !o.ok)
   return (
-    <Expandable bubbleKey={bubbleKey} kind={kind} mark={{ icon: 'chat', color: 'var(--color-g-equity)' }} speaker={speaker} line={t('bubble.pitch')} detail={openGrowthRound}>
+    <Expandable bubbleKey={bubbleKey} kind={kind} mark={{ icon: 'chat', color: 'var(--color-g-equity)' }} face={kind === 'visitor' ? 'investor' : 'founder'} speaker={speaker} line={t('bubble.pitch')} detail={openGrowthRound}>
       {options.map((o) => (
         <ChoiceRow
           key={o.pitch}
@@ -265,6 +265,7 @@ function RenewalBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string
     <Expandable
       bubbleKey={bubbleKey}
       kind="desk"
+      face="founder"
       mark={{ icon: 'handshake', color: 'var(--color-g-morale)' }}
       speaker={t('founder.you')}
       line={t('bubble.renewal', { name: r.name, d: r.days })}
@@ -309,6 +310,7 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
     <Expandable
       bubbleKey={bubbleKey}
       kind="desk"
+      face="founder"
       mark={{ icon: 'users', color: 'var(--color-g-users)' }}
       speaker={t('founder.you')}
       line={t('bubble.hire', { n: candidates.length })}
@@ -356,6 +358,7 @@ function ProjectBubble({ bubbleKey }: { bubbleKey: string }) {
     <Expandable
       bubbleKey={bubbleKey}
       kind="desk"
+      face="founder"
       mark={{ icon: 'rocket', color: 'var(--color-brand)' }}
       speaker={t('founder.you')}
       line={t('bubble.project')}
@@ -395,6 +398,7 @@ function ActionsBubble({ bubbleKey }: { bubbleKey: string }) {
     <Expandable
       bubbleKey={bubbleKey}
       kind="desk"
+      face="founder"
       mark={{ icon: 'bolt', color: 'var(--color-energy)' }}
       speaker={t('founder.you')}
       line={t('founder.actions')}

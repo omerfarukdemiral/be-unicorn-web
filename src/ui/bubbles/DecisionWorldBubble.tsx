@@ -30,6 +30,7 @@ export function DecisionWorldBubble({ bubbleKey, cardId, role }: { bubbleKey: st
       kind="decision"
       attention
       lineInBody
+      face={role}
       mark={crisis ? { icon: 'warning', color: 'var(--color-negative)' } : { icon: 'chat', color: 'var(--color-kind-decision)' }}
       speaker={castName({ cast }, role)}
       line={pillLine(card.question)}

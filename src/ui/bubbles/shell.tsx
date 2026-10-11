@@ -1,7 +1,8 @@
-// Shared speech-bubble chrome (lane C): neutral surface, 1px hairline, light shadow, optional tail.
+// Shared speech-bubble chrome (lane C): surface, 1px hairline, light shadow, optional tail.
 // Bubble kinds are told apart by a small coloured mark next to the speaker (karar = orange, kavram =
-// violet: --color-kind-*); the body stays neutral, never a coloured frame.
-import type { ReactNode } from 'react'
+// violet: --color-kind-*). An actionable bubble's pill and its open header sit on a light ground of that colour (T15,
+// "çizgi yerine renkli zemin"); the answers below stay on the neutral surface so their green / red chips keep reading.
+import type { CSSProperties, ReactNode } from 'react'
 import { Icon, type IconName } from '../icons'
 import { cx } from '../primitives'
 import { iconTone, soft } from '../theme'
@@ -10,11 +11,22 @@ import { iconTone, soft } from '../theme'
 export const BUBBLE_SHELL = 'relative rounded-card border border-border bg-surface shadow-card'
 export const BUBBLE_HOVER = 'transition-[transform,border-color] duration-150 hover:-translate-y-0.5 hover:border-border-strong active:translate-y-0'
 
-/** Small tail pointing at the speaker (centred; the bubble is centred above the head). */
-export function BubbleTail({ className }: { className?: string }) {
+/** The light ground of a kind colour (pill, open header) and its hairline. */
+export function tintGround(color: string): CSSProperties {
+  return { background: `color-mix(in oklab, ${color} 13%, var(--color-surface))`, borderColor: `color-mix(in oklab, ${color} 36%, var(--color-surface))` }
+}
+
+/** Hairline only (an open card: tinted edge, neutral body). */
+export function tintEdge(color: string): CSSProperties {
+  return { borderColor: `color-mix(in oklab, ${color} 36%, var(--color-surface))` }
+}
+
+/** Small tail pointing at the speaker (centred; the bubble is centred above the head). `style` matches its bubble's ground. */
+export function BubbleTail({ className, style }: { className?: string; style?: CSSProperties }) {
   return (
     <span
       aria-hidden="true"
+      style={style}
       className={cx('bubble-tail pointer-events-none absolute -bottom-[5px] left-1/2 size-2.5 -translate-x-1/2 rotate-45 border-b border-r border-border bg-surface', className)}
     />
   )

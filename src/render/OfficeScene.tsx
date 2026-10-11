@@ -9,6 +9,7 @@ import type { Selection, ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
 import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp } from './constants'
 import { fitOutline, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
+import { DeskBadges } from './DeskBadges'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
@@ -268,6 +269,7 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
         <SlotsLayer />
         <FurnitureLayer />
         <People />
+        <DeskBadges />
       </StageTransition>
       <EffectsLayer />
       {/* Core loop beats: release banner + user wave, payday light (docs/CORE_LOOP.md §7). */}

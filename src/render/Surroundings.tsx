@@ -9,6 +9,7 @@ import type { Box, OfficeLayout } from './layout'
 import { PROP_COLORS, SURROUND, stagePalette } from './palette'
 import { GEO, mat } from './resources'
 import { useLayout } from './sceneRegistry'
+import { BUILDING_D, Street } from './Street'
 
 /** Pavement apron around the building. */
 const APRON = CELL * 0.6
@@ -22,6 +23,10 @@ const LOT = CELL * 9
 const FRONT_TREE_CLEAR = CELL * 3
 /** …and low bushes this far. */
 const FRONT_BUSH_CLEAR = CELL * 0.9
+/** How far the shops across the street reach past the far pavement (Street). */
+const SHOP_BAND = BUILDING_D + 0.6
+/** The shop row runs this far past the office on each side. */
+const SHOP_REACH = 26
 const TREE_TRIES = 160
 const BUSH_TRIES = 120
 
@@ -51,7 +56,8 @@ export function surroundingsPlan(layout: Pick<OfficeLayout, 'bounds' | 'stage'>)
   const road = { z0: apron.minZ - ROAD_GAP - ROAD_W, z1: apron.minZ - ROAD_GAP }
   const farWalk = { z0: road.z0 - FAR_WALK, z1: road.z0 }
   const seed = `lot:${layout.stage}`
-  const inStreet = (z: number, pad: number) => z > farWalk.z0 - pad && z < road.z1 + pad
+  // the street plus the row of businesses behind its far pavement (Street)
+  const inStreet = (z: number, pad: number) => z > farWalk.z0 - SHOP_BAND - pad && z < road.z1 + pad
   const inApron = (x: number, z: number, pad: number) => x > apron.minX - pad && x < apron.maxX + pad && z > apron.minZ - pad && z < apron.maxZ + pad
 
   const scatter = (tries: number, salt: number, ok: (x: number, z: number) => boolean, minGap: number, into: Plant[], scale: [number, number]) => {
@@ -171,6 +177,7 @@ export function Surroundings() {
       {/* kerb between the near pavement and the carriageway */}
       <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z1} maxZ={road.z1 + ROAD_GAP} y={-0.1} color={SURROUND.pavement} />
       <instancedMesh ref={dashRef} args={[GEO.box, mat(SURROUND.marking), dashes.length]} />
+      <Street road={road} farWalk={farWalk} nearWalkZ={road.z1 + ROAD_GAP * 0.55} x0={apron.minX - SHOP_REACH} x1={apron.maxX + SHOP_REACH} seed={`street:${layout.stage}`} />
       <Plants items={plan.trees} kind="tree" />
       <Plants items={plan.bushes} kind="bush" />
     </group>

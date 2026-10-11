@@ -1,7 +1,7 @@
 // Office shell: ground, floor, walls, door, rings (locked = dark & dusty, opening = renovation),
 // and stage-specific decor (garage → coworking → … → campus). Parametric on the layout.
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { StageIndex } from '../engine/types'
 import { CELL, WALL_HEIGHT, WALL_THICKNESS, hash01 } from './constants'
@@ -9,6 +9,7 @@ import type { Box, OfficeLayout, RingBand } from './layout'
 import { LOCKED_OPACITY, PASTEL, PROP_COLORS, stagePalette, type StagePalette } from './palette'
 import { GEO, glassMat, glowMat, mat } from './resources'
 import { mood, useLayout } from './sceneRegistry'
+import { FLOOR_TILE, WALL_TILE, floorTexture, wallTexture } from './surfaces'
 
 type V3 = [number, number, number]
 
@@ -37,30 +38,36 @@ function B({ s, p, c, r, shadow = true }: { s: V3; p: V3; c: string; r?: V3; sha
 // Floor
 // ---------------------------------------------------------------------------
 
-/** Plank / slab lines as one instanced mesh: `width` thick, one every `pitch`. */
-function Stripes({ bounds, color, along, width, pitch }: { bounds: Box; color: string; along: 'x' | 'z'; width: number; pitch: number }) {
-  const ref = useRef<THREE.InstancedMesh>(null)
-  const w = bounds.maxX - bounds.minX
-  const d = bounds.maxZ - bounds.minZ
-  const count = Math.max(1, Math.floor((along === 'x' ? d : w) / pitch))
-  useLayoutEffect(() => {
-    const m = ref.current
-    if (!m) return
-    const o = new THREE.Object3D()
-    for (let i = 0; i < count; i++) {
-      if (along === 'x') {
-        o.position.set((bounds.minX + bounds.maxX) / 2, 0.002, bounds.minZ + pitch * (i + 0.5))
-        o.scale.set(w, 1, width)
-      } else {
-        o.position.set(bounds.minX + pitch * (i + 0.5), 0.002, (bounds.minZ + bounds.maxZ) / 2)
-        o.scale.set(width, 1, d)
-      }
-      o.updateMatrix()
-      m.setMatrixAt(i, o.matrix)
-    }
-    m.instanceMatrix.needsUpdate = true
-  }, [bounds, count, along, width, pitch, w, d])
-  return <instancedMesh key={count} ref={ref} args={[GEO.plane, decalMat(color), count]} renderOrder={1} receiveShadow />
+/**
+ * A flat quad from four corners, with UVs in world units / `tile` so a repeat-wrapped texture keeps one scale and
+ * stays continuous across separate pieces (floor, wall segments around the door).
+ */
+function surfaceGeo(corners: readonly V3[], uvs: readonly [number, number][]): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(corners.flat(), 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.flat(), 2))
+  g.setIndex([0, 1, 2, 0, 2, 3])
+  g.computeVertexNormals()
+  return g
+}
+
+const surfaceMatCache = new Map<THREE.Texture, THREE.MeshStandardMaterial>()
+/** Lit material over a painted surface texture, pulled toward the camera like the decals (it lies on a box face). */
+function surfaceMat(tex: THREE.Texture): THREE.MeshStandardMaterial {
+  let m = surfaceMatCache.get(tex)
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+    surfaceMatCache.set(tex, m)
+  }
+  return m
+}
+
+function Surface({ corners, uvs, tex }: { corners: readonly V3[]; uvs: readonly [number, number][]; tex: THREE.Texture }) {
+  const key = JSON.stringify([corners, uvs])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const geo = useMemo(() => surfaceGeo(corners, uvs), [key])
+  useEffect(() => () => geo.dispose(), [geo])
+  return <mesh geometry={geo} material={surfaceMat(tex)} renderOrder={1} receiveShadow />
 }
 
 function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
@@ -68,22 +75,55 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   const w = b.maxX - b.minX
   const d = b.maxZ - b.minZ
   const stage = layout.stage
+  const tex = floorTexture(stage)
+  const T = FLOOR_TILE
+  const y = 0.002
   return (
     <group>
       <B s={[w, 0.08, d]} p={[(b.minX + b.maxX) / 2, -0.04, (b.minZ + b.maxZ) / 2]} c={pal.floor} shadow={false} />
-      {stage === 0 ? (
-        <>
-          <Stripes bounds={b} color={pal.floorAlt} along="x" width={0.03} pitch={CELL} />
-          <Stripes bounds={b} color={pal.floorAlt} along="z" width={0.03} pitch={CELL} />
-          {/* oil stain */}
-          <mesh geometry={GEO.disc} material={decalMat(PROP_COLORS.oilStain)} scale={[0.9, 1, 0.6]} position={[b.minX + w * 0.28, 0.004, b.maxZ - d * 0.22]} renderOrder={1} />
-        </>
-      ) : (
-        <Stripes bounds={b} color={pal.floorAlt} along={stage % 2 === 0 ? 'x' : 'z'} width={0.2} pitch={0.4} />
+      {tex && (
+        <Surface
+          tex={tex}
+          corners={[
+            [b.minX, y, b.maxZ],
+            [b.maxX, y, b.maxZ],
+            [b.maxX, y, b.minZ],
+            [b.minX, y, b.minZ],
+          ]}
+          uvs={[
+            [b.minX / T, -b.maxZ / T],
+            [b.maxX / T, -b.maxZ / T],
+            [b.maxX / T, -b.minZ / T],
+            [b.minX / T, -b.minZ / T],
+          ]}
+        />
       )}
+      {stage === 0 && (
+        // oil stain
+        <mesh geometry={GEO.disc} material={decalMat(PROP_COLORS.oilStain)} scale={[0.9, 1, 0.6]} position={[b.minX + w * 0.28, 0.004, b.maxZ - d * 0.22]} renderOrder={2} />
+      )}
+      {stage === 6 && <BrassInlay b={b} />}
       {stage >= 2 && stage <= 5 && (
-        <mesh geometry={GEO.plane} material={decalMat(stage === 2 ? PASTEL.lilac : stage === 3 ? PASTEL.sky : stage === 4 ? PASTEL.peach : PASTEL.mint)} scale={[CELL * 2.2, 1, CELL * 2.2]} position={[0, 0.006, 0]} renderOrder={1} receiveShadow />
+        <mesh geometry={GEO.plane} material={decalMat(stage === 2 ? PASTEL.lilac : stage === 3 ? PASTEL.sky : stage === 4 ? PASTEL.peach : PASTEL.mint)} scale={[CELL * 2.2, 1, CELL * 2.2]} position={[0, 0.006, 0]} renderOrder={2} receiveShadow />
       )}
+    </group>
+  )
+}
+
+/** Campus: a brass line inset around the walnut floor. */
+function BrassInlay({ b }: { b: Box }) {
+  const i = CELL * 0.4
+  const w = b.maxX - b.minX - i * 2
+  const d = b.maxZ - b.minZ - i * 2
+  const cx = (b.minX + b.maxX) / 2
+  const cz = (b.minZ + b.maxZ) / 2
+  const m = decalMat(PROP_COLORS.brass)
+  return (
+    <group>
+      <mesh geometry={GEO.plane} material={m} scale={[w, 1, 0.07]} position={[cx, 0.005, b.minZ + i]} renderOrder={2} />
+      <mesh geometry={GEO.plane} material={m} scale={[w, 1, 0.07]} position={[cx, 0.005, b.maxZ - i]} renderOrder={2} />
+      <mesh geometry={GEO.plane} material={m} scale={[0.07, 1, d]} position={[b.minX + i, 0.005, cz]} renderOrder={2} />
+      <mesh geometry={GEO.plane} material={m} scale={[0.07, 1, d]} position={[b.maxX - i, 0.005, cz]} renderOrder={2} />
     </group>
   )
 }
@@ -114,6 +154,34 @@ function Windows({ from, to, fixed, axis, pal, tall }: { from: number; to: numbe
   return <>{items}</>
 }
 
+/** The painted inner faces of the back wall (around the door; not on the glass street front) and the left wall. */
+function WallFaces({ layout, pal, H, dl, dr }: { layout: OfficeLayout; pal: StagePalette; H: number; dl: number; dr: number }) {
+  const b = layout.bounds
+  const st = layout.stage
+  const back = wallTexture(st, 'back', pal.wall, pal.accent, pal.wallTrim)
+  const left = wallTexture(st, 'left', pal.wall, pal.accent, pal.wallTrim)
+  const T = WALL_TILE
+  const z = b.minZ + 0.002
+  const x = b.minX + 0.002
+  const backSeg = (x0: number, x1: number, y0: number, y1: number) => ({
+    corners: [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]] as V3[],
+    uvs: [[x0 / T, y0 / H], [x1 / T, y0 / H], [x1 / T, y1 / H], [x0 / T, y1 / H]] as [number, number][],
+  })
+  const segs = st === 5 ? [] : [backSeg(b.minX, dl, 0, H), backSeg(dr, b.maxX, 0, H), backSeg(dl, dr, 1.35, H)]
+  return (
+    <group>
+      {back && segs.map((sg, i) => <Surface key={i} tex={back} corners={sg.corners} uvs={sg.uvs} />)}
+      {left && (
+        <Surface
+          tex={left}
+          corners={[[x, 0, b.maxZ], [x, 0, b.minZ], [x, H, b.minZ], [x, H, b.maxZ]]}
+          uvs={[[-b.maxZ / T, 0], [-b.minZ / T, 0], [-b.minZ / T, 1], [-b.maxZ / T, 1]]}
+        />
+      )}
+    </group>
+  )
+}
+
 function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   const b = layout.bounds
   const t = WALL_THICKNESS
@@ -142,15 +210,12 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
       <B s={[door.width, H - 1.35, t]} p={[door.pos[0], 1.35 + (H - 1.35) / 2, backZ]} c={wallC} />
       <B s={[b.maxX - b.minX + t, 0.08, t + 0.04]} p={[(b.minX + b.maxX - t) / 2, H, backZ]} c={pal.wallTrim} shadow={false} />
       {/* left wall (−x) */}
-      {glassy ? (
-        <mesh geometry={GEO.box} material={glassMat(PROP_COLORS.glassWall, 0.45)} scale={[t, H, b.maxZ - b.minZ]} position={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} />
-      ) : (
-        <B s={[t, H, b.maxZ - b.minZ]} p={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} c={wallC} />
-      )}
+      <B s={[t, H, b.maxZ - b.minZ]} p={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} c={wallC} />
       <B s={[t + 0.04, 0.08, b.maxZ - b.minZ]} p={[leftX, H, (b.minZ + b.maxZ) / 2]} c={pal.wallTrim} shadow={false} />
       {/* skirting on the open front sides */}
       <B s={[b.maxX - b.minX, 0.1, 0.06]} p={[(b.minX + b.maxX) / 2, 0.05, b.maxZ + 0.03]} c={pal.wallTrim} shadow={false} />
       <B s={[0.06, 0.1, b.maxZ - b.minZ]} p={[b.maxX + 0.03, 0.05, (b.minZ + b.maxZ) / 2]} c={pal.wallTrim} shadow={false} />
+      <WallFaces layout={layout} pal={pal} H={H} dl={dl} dr={dr} />
       {/* door frame + open leaf */}
       <B s={[0.07, 1.4, t + 0.06]} p={[dl - 0.035, 0.7, backZ]} c={pal.wallTrim} />
       <B s={[0.07, 1.4, t + 0.06]} p={[dr + 0.035, 0.7, backZ]} c={pal.wallTrim} />

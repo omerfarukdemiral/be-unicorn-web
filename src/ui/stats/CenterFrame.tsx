@@ -4,7 +4,7 @@
 // frame stays visible and the bars stay clickable. Time keeps flowing (§14.1); a click on the scene around the card
 // or Esc (shortcuts.ts) closes it. A board dealt onto the table, not a web dialog: the shared card material (.ui-card +
 // --shadow-panel), the kind as a duotone sticker (identity, never a warning), no header bar and no visible title (the
-// active tab names the board). T19: İstatistik and Pazar wear the laptop bezel + app bar (layout/device).
+// active tab names the board).
 // The header's tab strip switches between the three screens (İstatistik | Kanun Kitabı | Pazar haritası) without
 // closing the frame; tab switches are static (only the first open is dealt).
 import type { ReactNode } from 'react'
@@ -17,7 +17,6 @@ import { LawbookScreen } from '../center/LawbookScreen'
 import { MarketScreen } from '../center/MarketScreen'
 import { StatsScreen } from './StatsScreen'
 import { GAP } from '../layout/tokens'
-import { AppBar, DEVICE_SHELL } from '../layout/device'
 import { useMoneyIslandClearance } from '../layout/moneyClearance'
 
 const KIND: Record<CenterKind, { icon: IconName; color: string }> = {
@@ -38,8 +37,6 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
   const openOverlay = useGameStore((s) => s.openOverlay)
 
   const k = KIND[kind]
-  // T19: İstatistik and Pazar are apps on the founder's laptop; Kanun Kitabı stays a book (card).
-  const device = kind !== 'lawbook'
   return (
     <div
       data-center-frame={kind}
@@ -55,12 +52,11 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
         // scroller takes over. Stats keeps a tall floor so its charts do not jump between tabs.
         className={cx(
           'relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal',
-          device ? DEVICE_SHELL : 'ui-card shadow-panel',
+          'ui-card shadow-panel',
           kind === 'stats' && 'min-h-[70%]',
         )}
         style={{ maxWidth: CENTER_MAX_W }}
       >
-        {device && <AppBar title={t(`center.${kind}`)} />}
         <header className="flex shrink-0 items-center gap-2 px-3 pt-2">
           <IconBadge icon={k.icon} size={24} color={k.color} />
           {/* Named for screen readers only: the active tab already says which board this is. */}

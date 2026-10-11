@@ -21,7 +21,6 @@ import { useIsMobile, useLayoutMode, useTween } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
 import { usePanelWidth } from './layout/useSceneInset'
-import { AppBar, DEVICE_PANELS, DEVICE_SHELL } from './layout/device'
 import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_TABS_H, MOBILE_TOP_H } from './layout/tokens'
 import { ShopPanel } from './panels/ShopPanel'
 import { TeamPanel } from './panels/TeamPanel'
@@ -217,15 +216,13 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
     )
   }
   const barH = mode === 'landscape' ? LANDSCAPE_BAR_H : BAR_H
-  // T19: data panels open as an app on the founder's laptop (desktop).
-  const device = mode === 'desktop' && DEVICE_PANELS.has(panel.kind)
   return (
     <aside
       data-scene-right=""
       aria-label={meta.title || t('panel.label')}
       className={cx(
         'pointer-events-auto absolute z-20 flex max-w-[calc(100vw-16px)] origin-top-right animate-rise flex-col overflow-hidden',
-        device ? DEVICE_SHELL : 'ui-card shadow-[var(--shadow-panel)]',
+        'ui-card shadow-[var(--shadow-panel)]',
       )}
       style={{
         width,
@@ -234,7 +231,6 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
         bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${barH + GAP}px)`,
       }}
     >
-      {device && <AppBar title={meta.title} />}
       {stripe}
       {head}
       {body}

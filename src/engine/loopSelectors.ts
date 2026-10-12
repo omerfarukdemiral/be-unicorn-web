@@ -2,6 +2,7 @@
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
 import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
+import { updateSize } from './modules'
 import { diligenceNow, offerFactor, priceRatio } from './round'
 import { modifierMult } from './util'
 import { rivalOut } from './world'
@@ -189,8 +190,10 @@ export function horizon(s: GameState): HorizonItem[] {
     const rate = rates[p.id] ?? 0
     if (rate <= 0) continue
     if (p.maturity >= 1) {
+      // A module build holds the updates (W2a).
+      if (p.build) continue
       // The next update: its work left at today's speed, but not before the update cool-down ends.
-      const eta = Math.max(now + Math.max(0, B.RELEASE_UPDATE_SIZE - (p.updateProgress ?? 0)) / rate, lastUpdateDay(s, p.id) + B.RELEASE_UPDATE_MIN_DAYS * (s.derived.policies?.mult.releaseGap ?? 1))
+      const eta = Math.max(now + Math.max(0, updateSize(p, now) - (p.updateProgress ?? 0)) / rate, lastUpdateDay(s, p.id) + B.RELEASE_UPDATE_MIN_DAYS * (s.derived.policies?.mult.releaseGap ?? 1))
       if (eta <= end) out.push({ kind: 'release', day: eta, projectId: p.id, level: B.RELEASE_THRESHOLDS.length, update: (p.updates ?? 0) + 1 })
       continue
     }

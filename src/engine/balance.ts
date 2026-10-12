@@ -1,6 +1,6 @@
 // All tunable numbers. Every value is a [DENGE] starting point, tuned by sim/.
 // Values that differ from the PLAN §5 starting points are listed, with the sim result, in docs/DECISIONS.md (#12).
-import type { Dept, FounderActionKind, ProjectCategory, RoundSize, StageIndex, ToolId } from './types'
+import type { Dept, FounderActionKind, ModuleEffectKind, ProjectCategory, RoundSize, StageIndex, ToolId } from './types'
 
 // ---------------------------------------------------------------------------
 // Start (PLAN §5.10)
@@ -474,7 +474,7 @@ export const MOVES_PER_WEEK: readonly number[] = [0, 3, 3, 4, 4, 5, 5]
  * talkResignation: the talk that keeps a leaver costs no energy on the budget, so it takes a move (else it is free and
  * the raise never wins).
  */
-export const MOVE_COST = { roundPitch: 1, refactorSprint: 2, talkResignation: 1, renewContract: 1, acquireRival: 2, adoptPolicy: 1, openSegment: 1 } as const
+export const MOVE_COST = { roundPitch: 1, refactorSprint: 2, talkResignation: 1, renewContract: 1, acquireRival: 2, adoptPolicy: 1, openSegment: 1, buildModule: 1, refreshModule: 1 } as const
 export type MoveVerb = keyof typeof MOVE_COST
 
 /**
@@ -657,6 +657,33 @@ export const RELEASE_UPDATE_SIZE = 0.2
 export const RELEASE_UPDATE_MIN_DAYS = 20
 export const RELEASE_UPDATE_USERS = 15
 export const RELEASE_UPDATE_USER_SHARE = 0.003
+
+// ---------------------------------------------------------------------------
+// Project modules (W2a; catalogue in engine/modules.ts)
+// ---------------------------------------------------------------------------
+/** A module costs cashBase × MODULE_COST_GROWTH^stage (feedback $600 in the garage, aiAssistant $240K at Series B). */
+export const MODULE_COST_GROWTH = 2
+/** Modules a project can hold at each stage: 4 of 9 at most, so every product picks an identity. */
+export const MODULE_SLOTS_BY_STAGE: readonly number[] = [1, 1, 2, 3, 3, 4, 4]
+/** The garage has no move budget: a build costs this much founder energy there instead (MOVE_COST from Pre-seed). */
+export const MODULE_ENERGY = 10
+/** A delivered module's wave: × the update wave (more than an update, less than a version); a refresh brings none. */
+export const MODULE_WAVE_MULT = 1.3
+/**
+ * Per project and kind, the product of its modules is held here (churn and cac are floors, the rest ceilings). The
+ * company mix is a weighted mean of the projects, so it never passes the best project's cap.
+ */
+export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.78, arpu: 1.25, organic: 1.35, cac: 0.85, tam: 1.3, wave: 1.5 }
+/** Kinds whose cap is a floor (lower is better). */
+export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac']
+/**
+ * Staleness (anti-coast): a module's gains hold full for MODULE_FRESH_DAYS, then fade linearly to MODULE_STALE_FLOOR at
+ * MODULE_STALE_DAYS; its minuses and upkeep stay. A refresh (MODULE_REFRESH_SHARE of the cash and work) starts it over.
+ */
+export const MODULE_FRESH_DAYS = 360
+export const MODULE_STALE_DAYS = 720
+export const MODULE_STALE_FLOOR = 0.5
+export const MODULE_REFRESH_SHARE = 0.4
 /** Landed delayed decision effects kept for "Kararın → sonucu". */
 export const OUTCOMES_MAX = 20
 /** Horizon strip looks this many days ahead (6 weeks). */

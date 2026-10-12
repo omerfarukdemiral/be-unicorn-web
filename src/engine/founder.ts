@@ -2,6 +2,7 @@
 import { ENTERPRISE_NAMES } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
+import { moduleMult, updateSize } from './modules'
 import type { Rng } from './rng'
 import { DAYS_PER_WEEK, type ActionErrorCode, type EnterpriseCustomer, type FindUsersPreview, type FounderActionKind, type FounderMoves, type GameState, type MovesView, type RenewalView, type RenewOffer, type SalesCallPreview } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
@@ -321,8 +322,10 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
     }
     case 'talkToUsers': {
       const p = s.projects.find((x) => x.id === run.targetId)
-      if (p && p.maturity < 1) p.maturity = clamp(0, 1, p.maturity + B.TALK_MATURITY)
-      else if (p) p.updateProgress = Math.min(B.RELEASE_UPDATE_SIZE, (p.updateProgress ?? 0) + B.TALK_MATURITY)
+      // W2a feedback module: talks land harder on its project.
+      const talk = p ? B.TALK_MATURITY * moduleMult(p, 'talk', s.time.day) : 0
+      if (p && p.maturity < 1) p.maturity = clamp(0, 1, p.maturity + talk)
+      else if (p) p.updateProgress = Math.min(updateSize(p, s.time.day), (p.updateProgress ?? 0) + talk)
       incCounter(s, 'userTalks')
       params.project = p?.name ?? ''
       break

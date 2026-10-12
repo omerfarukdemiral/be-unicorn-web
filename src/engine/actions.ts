@@ -8,6 +8,7 @@ import { actionEnergy, movesError, renewContract, renewError, spendMoves, startF
 import { checkSale } from './endgame'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
+import { isModuleId, moduleCost, moduleDef, moduleError } from './modules'
 import { checkName, nameKey } from './names'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
@@ -327,6 +328,38 @@ const assign: Handler<'assign'> = ({ s }, a) => {
   return null
 }
 
+/**
+ * Starts a module (W2a) on a live, finished project: its cash now and one move (MODULE_ENERGY in the garage); the
+ * project's builders then fill the build instead of the next update (tick.progressProjects), one build at a time.
+ */
+const buildModule: Handler<'buildModule'> = ({ s }, a) => startModule(s, a.projectId, a.moduleId, false)
+
+/** Rebuilds an installed module for MODULE_REFRESH_SHARE of its cash and work: its staleness starts over; no slot needed. */
+const refreshModule: Handler<'refreshModule'> = ({ s }, a) => startModule(s, a.projectId, a.moduleId, true)
+
+function startModule(s: GameState, projectId: string, moduleId: string, refresh: boolean): ActionErrorCode | null {
+  const p = s.projects.find((x) => x.id === projectId)
+  if (!p) return 'notFound'
+  if (!isModuleId(moduleId)) return refresh ? 'notFound' : 'invalid'
+  const err = moduleError(s, p, moduleId, refresh)
+  if (err) return err
+  const def = moduleDef(moduleId)!
+  s.stats.cash -= moduleCost(s, def, refresh)
+  s.founder.energy -= actionEnergy(s, B.MODULE_ENERGY)
+  spendMoves(s, refresh ? B.MOVE_COST.refreshModule : B.MOVE_COST.buildModule)
+  p.build = { id: moduleId, progress: 0, startDay: s.time.day, ...(refresh ? { refresh: true as const } : {}) }
+  pushActivity(s, 'moduleStarted', { project: p.name, id: p.id, module: moduleId, refresh: refresh ? 1 : 0 })
+  return null
+}
+
+/** Drops the running build: its progress is lost, nothing comes back (cash or move). */
+const cancelModule: Handler<'cancelModule'> = ({ s }, a) => {
+  const p = s.projects.find((x) => x.id === a.projectId)
+  if (!p?.build) return 'notFound'
+  delete p.build
+  return null
+}
+
 // ---------------------------------------------------------------------------
 // Founder, controls, growth
 // ---------------------------------------------------------------------------
@@ -497,6 +530,9 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   openRing,
   startProject,
   assign,
+  buildModule,
+  refreshModule,
+  cancelModule,
   founderAction,
   setSpeed,
   setAdBudget,

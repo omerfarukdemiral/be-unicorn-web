@@ -13,6 +13,7 @@ import {
   type Slot,
 } from '../engine/types'
 import { PROJECT_NAME_MAX } from '../engine/balance'
+import { moduleCost, moduleDef } from '../engine/modules'
 import { CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES } from '../content'
 import { useGameStore } from '../store/gameStore'
 
@@ -227,6 +228,28 @@ export function mockReduce(prev: GameState, a: Action): ActionResult {
       const p = s.projects.find((x) => x.id === a.projectId)
       if (!p) return { state: prev, ok: false, error: 'notFound' }
       p.name = a.name.trim().slice(0, PROJECT_NAME_MAX)
+      return ok(s)
+    }
+    // No clock in the mock: a module is installed at once (a refresh restamps it); cancel drops a build left by a real save.
+    case 'buildModule':
+    case 'refreshModule': {
+      const p = s.projects.find((x) => x.id === a.projectId)
+      const def = moduleDef(a.moduleId)
+      if (!p || !def) return { state: prev, ok: false, error: 'notFound' }
+      const mods = (p.modules ??= [])
+      const have = mods.find((m) => m.id === a.moduleId)
+      if (a.type === 'refreshModule' ? !have : have) return { state: prev, ok: false, error: 'invalid' }
+      const cost = moduleCost(s, def, a.type === 'refreshModule')
+      if (s.stats.cash < cost) return { state: prev, ok: false, error: 'insufficientCash' }
+      s.stats.cash -= cost
+      if (have) have.day = s.time.day
+      else mods.push({ id: a.moduleId, day: s.time.day })
+      return ok(s)
+    }
+    case 'cancelModule': {
+      const p = s.projects.find((x) => x.id === a.projectId)
+      if (!p?.build) return { state: prev, ok: false, error: 'notFound' }
+      delete p.build
       return ok(s)
     }
     case 'startRound':

@@ -6,7 +6,8 @@ import { clamp, ledgerCosts } from './economy'
 import { applyMorale, loanOf, syncDebt } from './effects'
 import { lastUpdateDay, owedTotal } from './loopSelectors'
 import { yearlyRaises } from './people'
-import { DAYS_PER_MONTH, type GameState, type MonthLedger, type MonthReceipt, type PaydayChoice, type PendingPayday, type Project, type ReleaseEntry } from './types'
+import { moduleDef, moduleMult, moduleWork, updateSize } from './modules'
+import { DAYS_PER_MONTH, type GameState, type ModuleBuild, type MonthLedger, type MonthReceipt, type PaydayChoice, type PendingPayday, type Project, type ProjectModuleId, type ReleaseEntry } from './types'
 import { newId, policiesOf, policyMult, policySum, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 import { directorOf, graceAfterMissedPayroll } from './world'
 
@@ -457,26 +458,47 @@ export function releaseWave(s: GameState, level: number): number {
   return Math.max(1, Math.round(w))
 }
 
-/** Users an update (after 1.0) brings: a smaller wave than a version, plus word of mouth. */
-export function updateWave(s: GameState): number {
-  const w = B.RELEASE_UPDATE_USERS * B.RELEASE_WAVE_STAGE_GROWTH ** s.stage * (0.5 + s.stats.reputation / 100) + s.stats.users * B.RELEASE_UPDATE_USER_SHARE
+/** Users an update (after 1.0) brings: a smaller wave than a version, plus word of mouth; × the project's 'wave' modules. */
+export function updateWave(s: GameState, p?: Project): number {
+  const w = (B.RELEASE_UPDATE_USERS * B.RELEASE_WAVE_STAGE_GROWTH ** s.stage * (0.5 + s.stats.reputation / 100) + s.stats.users * B.RELEASE_UPDATE_USER_SHARE) * (p ? moduleMult(p, 'wave', s.time.day) : 1)
   return Math.max(1, Math.round(w))
 }
 
-function ship(s: GameState, content: EngineContent, p: Project, level: number, users: number, update?: number): void {
+function ship(s: GameState, content: EngineContent, p: Project, level: number, users: number, update?: number, extra?: { module: ProjectModuleId }): void {
   const mrrBefore = s.finance.mrr
   s.stats.users += users
   recomputeDerived(s, content)
   const entry: ReleaseEntry = { id: newId(s, 'rel'), day: s.time.day, projectId: p.id, projectName: p.name, level, users, mrr: Math.max(0, s.finance.mrr - mrrBefore) }
   if (update !== undefined) entry.update = update
+  if (extra) entry.module = extra.module
   const list = (s.releases ??= [])
   list.push(entry)
   if (list.length > B.RELEASES_MAX) list.splice(0, list.length - B.RELEASES_MAX)
   s.releaseCount = (s.releaseCount ?? 0) + 1
   // GAMEPLAY V2 §4.2: from Series A every shipped update leaves a little debt behind (versions before 1.0 do not).
   if (update !== undefined && s.stage >= B.TECH_DEBT_MIN_STAGE) s.techDebt = (s.techDebt ?? 0) + B.TECH_DEBT_PER_UPDATE
-  pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0 })
+  if (extra) pushActivity(s, 'moduleShipped', { project: p.name, id: p.id, module: extra.module, users, mrr: Math.round(entry.mrr) })
+  else pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0 })
   pushEvent(s, { kind: 'release', refId: entry.id, value: level })
+}
+
+/**
+ * A module build done (W2a): installed (a refresh only restamps its day), the build cleared; a new one widens the scope
+ * (p.size) and leaves its debt. Its release ships after this (checkReleases).
+ */
+export function finishModule(s: GameState, p: Project, build: ModuleBuild): void {
+  delete p.build
+  const mods = (p.modules ??= [])
+  const have = mods.find((m) => m.id === build.id)
+  if (have) {
+    have.day = s.time.day
+    return
+  }
+  mods.push({ id: build.id, day: s.time.day })
+  const def = moduleDef(build.id)
+  if (!def) return
+  p.size += def.sizeAdd
+  if (def.debt > 0) s.techDebt = (s.techDebt ?? 0) + def.debt
 }
 
 /**
@@ -489,6 +511,15 @@ export function checkReleases(s: GameState, content: EngineContent): void {
   // quality-gate (§7.2): updates come further apart.
   const gap = B.RELEASE_UPDATE_MIN_DAYS * policyMult(s, content, 'releaseGap')
   for (const p of s.projects) {
+    // W2a: a finished module build ships first, as its own release; no update the same day.
+    const build = p.build
+    const def = build && moduleDef(build.id)
+    if (build && def && build.progress >= moduleWork(p, def, build.refresh === true) - 1e-9) {
+      const users = build.refresh ? 0 : Math.round(updateWave(s, p) * B.MODULE_WAVE_MULT)
+      finishModule(s, p, build)
+      ship(s, content, p, B.RELEASE_THRESHOLDS.length, users, undefined, { module: build.id })
+      continue
+    }
     const lvl = releaseLevel(p.maturity)
     if (p.releaseLevel === undefined) {
       p.releaseLevel = lvl
@@ -499,11 +530,11 @@ export function checkReleases(s: GameState, content: EngineContent): void {
       ship(s, content, p, lvl, releaseWave(s, lvl))
       continue
     }
-    if (p.maturity < 1 || (p.updateProgress ?? 0) < B.RELEASE_UPDATE_SIZE - 1e-9) continue
+    if (p.maturity < 1 || (p.updateProgress ?? 0) < updateSize(p, s.time.day) - 1e-9) continue
     if (s.time.day - lastUpdateDay(s, p.id) < gap) continue
     p.updateProgress = 0
     p.updates = (p.updates ?? 0) + 1
-    ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s), p.updates)
+    ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s, p), p.updates)
   }
 }
 

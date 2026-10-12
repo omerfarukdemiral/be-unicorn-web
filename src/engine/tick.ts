@@ -9,6 +9,7 @@ import { maturityRates, recomputeDerived, type Outputs } from './derive'
 import { accrueMonth, amortizeTechDebt, checkGoals, checkPaydayDesk, checkReleases, payday } from './loop'
 import { dailyEndgame } from './endgame'
 import { completeFounderAction, dailyContracts, dailyFounder, regenEnergy } from './founder'
+import { updateSize } from './modules'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
 import { checkRoundWindow, progressRound } from './round'
@@ -72,15 +73,20 @@ function advance(s: GameState, content: EngineContent, rng: Rng, dt: number): vo
 
 /**
  * §5.3: assigned builders (+ idle founder) raise maturity; parallel projects & tech debt slow it. A finished project
- * (1.0) keeps its builders shipping updates: the same work fills updateProgress (checkReleases ships it).
+ * (1.0) keeps its builders shipping updates: the same work fills updateProgress (checkReleases ships it). While it
+ * builds a module (W2a) that work goes to the build instead: no update in the meantime.
  */
 export function progressProjects(s: GameState, o: Outputs, dt: number): void {
   if (!s.projects.length) return
   const rates = maturityRates(s, o)
   for (const p of s.projects) {
     if (p.maturity >= 1) {
+      if (p.build) {
+        p.build.progress += (rates[p.id] ?? 0) * dt
+        continue
+      }
       // Waiting for the update cool-down: the progress holds at one update's worth.
-      p.updateProgress = Math.min(B.RELEASE_UPDATE_SIZE, (p.updateProgress ?? 0) + (rates[p.id] ?? 0) * dt)
+      p.updateProgress = Math.min(updateSize(p, s.time.day), (p.updateProgress ?? 0) + (rates[p.id] ?? 0) * dt)
       continue
     }
     p.maturity = Math.min(1, p.maturity + (rates[p.id] ?? 0) * dt)

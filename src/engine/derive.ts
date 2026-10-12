@@ -6,6 +6,7 @@ import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './f
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
+import { moduleMult, projectMix, projectWeights, wMean } from './modules'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
@@ -179,7 +180,11 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
   const rivalShare = E.rivalShareTotal(s.rivals)
-  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu') * categoryMix(s, B.CATEGORY_ARPU)
+  // W2a: the category mix carries each project's modules (wMean over the launched ones; with no modules, categoryMix).
+  const day = s.time.day
+  const ws = projectWeights(s)
+  const mix = (kind: 'churn' | 'cac' | 'tam') => wMean(ws, (p) => moduleMult(p, kind, day))
+  const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu') * wMean(ws, (p) => (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day))
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
   const anyLaunched = s.projects.some((p) => p.launched)
@@ -187,10 +192,11 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   // GAMEPLAY V2 §4.3, §8.1: a finite market (Σ open segments, each ramping in) saturates both channels and lifts
   // churn; ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
-  const tam = E.marketTam(marketOf(s).segments, s.time.day)
+  const tam = E.marketTam(marketOf(s).segments, s.time.day) * mix('tam')
   const pen = E.penetration(s.stats.users, tam)
-  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac')
-  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic') * categoryMix(s, B.CATEGORY_ORGANIC)
+  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac') * mix('cac')
+  const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic') * wMean(ws, (p) => (B.CATEGORY_ORGANIC[p.category] ?? 1) * moduleMult(p, 'organic', day))
+  // One paid channel: its saturation reads the TOTAL ad budget, whatever the modules do to the CAC.
   const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)
   const manualNow = Number(s.flags['manualThisMonth'] ?? 0)
   const manualLast = Number(s.flags['manualLastMonth'] ?? 0)
@@ -200,13 +206,18 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
     E.churnPerMonth(o.deptOutput.ops, over, avgMat, pen, s.techDebt) *
     E.priceChurnFactor(s.finance.priceMultiplier, daysSincePrice) *
     modifierMult(s, 'churn') *
-    policyMult(s, content, 'churn')
+    policyMult(s, content, 'churn') *
+    mix('churn')
 
   // GAMEPLAY V2 §7.2: the policies scale payroll, rent, infra and the founder's pay; the ledger accrues what is left.
   const pay = payroll(s, content)
   const salaries = pay.paid
   const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent') * policyMult(s, content, 'rent')
-  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep
+  // W2a: the modules' upkeep is infra too (a payday 'infra: defer' defers it with the servers).
+  const mixView = projectMix(s, mrr, ws)
+  let modulesUpkeep = 0
+  for (const v of Object.values(mixView)) modulesUpkeep += v.upkeep
+  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep + modulesUpkeep
   const living = E.founderLiving(s.stage) * policyMult(s, content, 'founderPay')
   const expansion = marketUpkeep(s)
   const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living, expansion)
@@ -322,5 +333,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   if (crisis) s.derived.nextCrisis = crisis
   const moves = movesView(s)
   if (moves) s.derived.moves = moves
+  // Only once a project has a module: without, the mix is equal weights and no multipliers (and saves stay as small).
+  if (ws.some((x) => x.p.modules?.length)) s.derived.projectMix = mixView
   return o
 }

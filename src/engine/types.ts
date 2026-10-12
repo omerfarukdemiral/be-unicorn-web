@@ -35,6 +35,12 @@ export type Dept = (typeof DEPTS)[number]
 export const PROJECT_CATEGORIES = ['mobile', 'web', 'ai', 'api', 'game', 'marketplace'] as const
 export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number]
 
+/** What a finished (1.0) product grows into (engine/modules.ts MODULES; balance MODULE_*). */
+export const PROJECT_MODULE_IDS = ['feedback', 'referral', 'paywall', 'onboarding', 'analytics', 'freemium', 'openApi', 'localization', 'aiAssistant'] as const
+export type ProjectModuleId = (typeof PROJECT_MODULE_IDS)[number]
+/** What a module multiplies: company mix (churn…tam, weighted over the projects) or its own project (wave, updateWork, talk). */
+export type ModuleEffectKind = 'churn' | 'arpu' | 'organic' | 'cac' | 'tam' | 'wave' | 'updateWork' | 'talk'
+
 export const SLOT_TYPES = ['desk', 'common', 'room', 'special'] as const
 export type SlotType = (typeof SLOT_TYPES)[number]
 
@@ -323,6 +329,23 @@ export interface Project {
   updates?: number
   createdDay: number
   assignedIds: EmployeeId[]
+  /** Installed modules and the day each was built or last refreshed (staleness). Missing = none. */
+  modules?: ProjectModule[]
+  /** The module being built (or refreshed): the project's builders fill `progress` instead of the next update. */
+  build?: ModuleBuild
+}
+
+export interface ProjectModule {
+  id: ProjectModuleId
+  day: number
+}
+
+export interface ModuleBuild {
+  id: ProjectModuleId
+  /** Maturity-equivalent work done; delivered at work × p.size / PROJECT_SIZE (× MODULE_REFRESH_SHARE on a refresh). */
+  progress: number
+  startDay: number
+  refresh?: true
 }
 
 export interface EnterpriseCustomer {
@@ -884,6 +907,17 @@ export interface DerivedMetrics {
   board?: BoardView
   /** Contracts up for renewal (GAMEPLAY V2 §8.4), the soonest first, with both offers priced. */
   renewals?: RenewalView[]
+  /**
+   * Each launched project's weight in the company mix, its capped module multipliers (≠ 1 only) and monthly upkeep.
+   * Absent while no project has a module (equal weights, nothing multiplied).
+   */
+  projectMix?: Record<ProjectId, ProjectMixView>
+}
+
+export interface ProjectMixView {
+  weight: number
+  mult: Partial<Record<ModuleEffectKind, number>>
+  upkeep: number
 }
 
 /**
@@ -1141,6 +1175,8 @@ export interface ReleaseEntry {
   level: number
   /** Update number after 1.0 (level stays 5). */
   update?: number
+  /** A module delivery (level stays 5; a refresh brings no users). */
+  module?: ProjectModuleId
   users: number
   mrr: number
 }
@@ -1245,7 +1281,7 @@ export interface AmbientBubble {
 export type ActivityKind =
   | 'hired' | 'fired' | 'resigned' | 'resignWarning' | 'retained'
   | 'itemPlaced' | 'itemSold' | 'itemMoved' | 'ringOpened'
-  | 'projectStarted' | 'projectLaunched' | 'projectRenamed'
+  | 'projectStarted' | 'projectLaunched' | 'projectRenamed' | 'moduleStarted' | 'moduleShipped'
   | 'founderActionStarted' | 'founderActionDone'
   | 'roundStarted' | 'roundProgress' | 'roundClosed' | 'roundShrunk'
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'
@@ -1469,6 +1505,12 @@ export type Action =
   // Projects
   | { type: 'startProject'; category: ProjectCategory; name?: string }
   | { type: 'assign'; employeeId: EmployeeId; projectId: ProjectId | null }
+  /** Starts a module on a finished, launched project: its cash now and one move (10 energy in the garage); one build at a time. */
+  | { type: 'buildModule'; projectId: ProjectId; moduleId: ProjectModuleId }
+  /** Rebuilds an installed module (MODULE_REFRESH_SHARE of its cash and work): its staleness starts over. No slot needed. */
+  | { type: 'refreshModule'; projectId: ProjectId; moduleId: ProjectModuleId }
+  /** Drops the running build: no refund, no move. */
+  | { type: 'cancelModule'; projectId: ProjectId }
   // Founder
   | { type: 'founderAction'; kind: FounderActionKind; targetId?: string }
   // Controls & growth

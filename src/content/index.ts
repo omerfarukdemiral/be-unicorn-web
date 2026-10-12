@@ -58,6 +58,7 @@ export {
 export * from './format'
 export { suggestCompanyName, checkCompanyName, COMPANY_NAME_ISSUE_TEXT, type CompanyNameCheck, type CompanyNameIssue } from './companyName'
 export { ROADMAP_STEPS, type RoadmapStep } from './roadmap'
+export { MODULE_TEXT, moduleName, type ModuleText } from './modules'
 
 export const CONTENT: ContentBundle = {
   stages: STAGES,

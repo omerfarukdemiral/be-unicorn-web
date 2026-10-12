@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { computeLayout, furnishedBox } from './layout'
+import { createMockState } from './mockState'
 import { fitOutline, gapCenterY, hull, outlineOf, polyHitsRect, type Pt } from './frameFit'
 
 const box = { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }
@@ -101,6 +103,21 @@ describe('portrait ring framing', () => {
     const fit = fitOutline({ outline, free: { left: 0, top: 0, right: 390, bottom: 844 }, islands, sideSlack: 0.04, islandSlack: 0.1, focusY: gapCenterY(islands, 844) ?? undefined })
     const w = extent(outline).w * fit.zoom
     expect(w).toBeGreaterThanOrEqual(390 * 0.7)
+    expect(fit.y).toBeGreaterThan(64)
+    expect(fit.y).toBeLessThan(716)
+  })
+
+  it('390x844 stage 3: the real furnished box fills the free width and is centred in the gap', () => {
+    const st = createMockState(3)
+    const L = computeLayout(st.office.slots, st.office.rings, st.office.stage)
+    const fb = furnishedBox(L, st.office.slots)!
+    const islands = [
+      { left: 8, top: 8, right: 330, bottom: 64 },
+      { left: 8, top: 716, right: 382, bottom: 836 },
+    ]
+    const outline = outlineOf({ minX: fb.minX, maxX: fb.maxX, minZ: fb.minZ, maxZ: fb.maxZ }, 2.2)
+    const fit = fitOutline({ outline, free: { left: 0, top: 0, right: 390, bottom: 844 }, islands, sideSlack: 0.04, islandSlack: 0.1, focusY: gapCenterY(islands, 844) ?? undefined })
+    expect(extent(outline).w * fit.zoom).toBeGreaterThanOrEqual(390 * 0.7)
     expect(fit.y).toBeGreaterThan(64)
     expect(fit.y).toBeLessThan(716)
   })

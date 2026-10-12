@@ -145,7 +145,7 @@ function Slab({ minX, maxX, minZ, maxZ, y, color }: Box & { y: number; color: st
 const STREET_HALF = 90
 const DASH = CELL * 0.7
 
-export function Surroundings() {
+export function Surroundings({ lowPower = false }: { lowPower?: boolean }) {
   const layout = useLayout()
   const plan = useMemo(() => surroundingsPlan(layout), [layout])
   const pal = stagePalette(layout.stage)
@@ -177,7 +177,7 @@ export function Surroundings() {
       {/* kerb between the near pavement and the carriageway */}
       <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z1} maxZ={road.z1 + ROAD_GAP} y={-0.1} color={SURROUND.pavement} />
       <instancedMesh ref={dashRef} args={[GEO.box, mat(SURROUND.marking), dashes.length]} />
-      <Street road={road} farWalk={farWalk} nearWalkZ={road.z1 + ROAD_GAP * 0.55} x0={apron.minX - SHOP_REACH} x1={apron.maxX + SHOP_REACH} seed={`street:${layout.stage}`} />
+      <Street road={road} farWalk={farWalk} nearWalkZ={road.z1 + ROAD_GAP * 0.55} x0={apron.minX - SHOP_REACH} x1={apron.maxX + SHOP_REACH} seed={`street:${layout.stage}`} thin={lowPower && layout.stage >= 4} />
       <Plants items={plan.trees} kind="tree" />
       <Plants items={plan.bushes} kind="bush" />
     </group>

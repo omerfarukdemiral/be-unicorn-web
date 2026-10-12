@@ -94,7 +94,7 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
       }}
     >
       <Canvas
-        shadows="percentage"
+        shadows={lowPower ? 'basic' : 'percentage'}
         dpr={lowPower ? [1, 1.5] : [1, 2]}
         gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
         // R3F's wrapper is overflow:hidden (scrollable by script); bubbles portal into it (htmlPortal), so clip it too.

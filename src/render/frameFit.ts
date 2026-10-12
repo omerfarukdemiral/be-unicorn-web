@@ -124,6 +124,8 @@ export interface FitInput {
    * a third of the screen.
    */
   islandSlack?: number
+  /** Screen y (px) the office is centred on when zoom ties; defaults to the middle of `free` (portrait: the middle of the gap between the HUD islands). */
+  focusY?: number
   minZoom?: number
   maxZoom?: number
 }
@@ -142,7 +144,7 @@ const ROWS = 13
  * area (centred horizontally). Ties go to the anchor nearest the free area's centre, so the office never drifts for
  * a pixel of gain.
  */
-export function fitOutline({ outline, free, islands, sideSlack = 0, islandSlack = 0, minZoom = 12, maxZoom = 400 }: FitInput): Fit {
+export function fitOutline({ outline, free, islands, sideSlack = 0, islandSlack = 0, focusY, minZoom = 12, maxZoom = 400 }: FitInput): Fit {
   const m = FIT_MARGIN
   const area: Rect = { left: free.left + m, top: free.top + m, right: free.right - m, bottom: free.bottom - m }
   const blocks = islands.map((r) => ({ left: r.left - m, top: r.top - m, right: r.right + m, bottom: r.bottom + m }))
@@ -158,7 +160,7 @@ export function fitOutline({ outline, free, islands, sideSlack = 0, islandSlack 
   }
   const slack = (oMaxX - oMinX) * sideSlack
   const x = (area.left + area.right) / 2
-  const midY = (area.top + area.bottom) / 2
+  const midY = focusY === undefined ? (area.top + area.bottom) / 2 : clamp(focusY, area.top, area.bottom)
 
   const fits = (z: number, y: number): boolean => {
     if (x + (oMinX + slack) * z < area.left || x + (oMaxX - slack) * z > area.right) return false
@@ -193,6 +195,25 @@ export function fitOutline({ outline, free, islands, sideSlack = 0, islandSlack 
     }
   }
   return best
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v
+}
+
+/**
+ * Portrait: the vertical middle of the open gap between the top HUD islands and the bottom ones (the scene the player
+ * actually sees), not of the whole canvas. Null when no island sits in either band.
+ */
+export function gapCenterY(islands: readonly Rect[], height: number): number | null {
+  let top = -Infinity
+  let bottom = Infinity
+  for (const r of islands) {
+    if (r.bottom < height * 0.4) top = Math.max(top, r.bottom)
+    else if (r.top > height * 0.6) bottom = Math.min(bottom, r.top)
+  }
+  if (top === -Infinity || bottom === Infinity) return null
+  return (top + bottom) / 2
 }
 
 /** Viewport rects of the HUD islands (`data-scene-island`), relative to the canvas. Layout boxes: transforms ignored. */

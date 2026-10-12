@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitOutline, hull, outlineOf, polyHitsRect, type Pt } from './frameFit'
+import { fitOutline, gapCenterY, hull, outlineOf, polyHitsRect, type Pt } from './frameFit'
 
 const box = { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }
 const screen = { left: 0, top: 0, right: 1440, bottom: 900 }
@@ -68,5 +68,48 @@ describe('frameFit', () => {
     expect(f.zoom).toBe(30)
     expect(f.x).toBe(720)
     expect(f.y).toBe(450)
+  })
+})
+
+describe('gapCenterY', () => {
+  it('centres between the top and bottom islands, null without both', () => {
+    const top = { left: 8, top: 8, right: 380, bottom: 64 }
+    const bottom = { left: 8, top: 716, right: 380, bottom: 836 }
+    expect(gapCenterY([top, bottom], 844)).toBe(390)
+    expect(gapCenterY([top], 844)).toBeNull()
+  })
+
+  it('focusY moves the office towards the gap; unset keeps the centred fit', () => {
+    const outline = outlineOf(box, 2.2)
+    const free = { left: 0, top: 0, right: 390, bottom: 844 }
+    const base = fitOutline({ outline, free, islands: [] })
+    expect(base.y).toBeCloseTo(422, 0)
+    const biased = fitOutline({ outline, free, islands: [], focusY: 520 })
+    expect(biased.y).toBeGreaterThan(base.y)
+    expect(biased.zoom).toBeCloseTo(base.zoom, 0)
+  })
+})
+
+describe('portrait ring framing', () => {
+  const ring = { minX: -5, maxX: 5, minZ: -4, maxZ: 4 }
+  it('390x844: the ring fills at least 70% of the free width and its centre sits in the gap between the islands', () => {
+    const islands = [
+      { left: 8, top: 8, right: 330, bottom: 64 },
+      { left: 8, top: 716, right: 382, bottom: 836 },
+    ]
+    const outline = outlineOf(ring, 2.2)
+    const fit = fitOutline({ outline, free: { left: 0, top: 0, right: 390, bottom: 844 }, islands, sideSlack: 0.04, islandSlack: 0.1, focusY: gapCenterY(islands, 844) ?? undefined })
+    const w = extent(outline).w * fit.zoom
+    expect(w).toBeGreaterThanOrEqual(390 * 0.7)
+    expect(fit.y).toBeGreaterThan(64)
+    expect(fit.y).toBeLessThan(716)
+  })
+
+  it('desktop 1440x900 without focusY is unchanged', () => {
+    const fit = fitOutline({ outline: outlineOf(box, 2.2), free: screen, islands: [], islandSlack: 0.1 })
+    // Values the fit produced before focusY existed.
+    expect(fit.x).toBe(720)
+    expect(fit.y).toBeCloseTo(523.3333, 3)
+    expect(fit.zoom).toBeCloseTo(72.4829, 3)
   })
 })

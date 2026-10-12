@@ -8,7 +8,7 @@ import type { GameState } from '../engine/types'
 import type { Selection, ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
 import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp } from './constants'
-import { fitOutline, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
+import { fitOutline, gapCenterY, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
 import { DeskBadges } from './DeskBadges'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
@@ -65,6 +65,8 @@ function frameBox(layout: OfficeLayout, zoomLevel: ZoomLevel): FrameBox {
 
 /** The furnished box is used only when it is clearly smaller than the default frame. */
 const FURNISHED_MIN_GAIN = 0.85
+/** Portrait framing of the unlocked ring (and a camera biased into the gap between the HUD islands) starts at this stage. */
+const RING_FRAME_STAGE = 3
 /** Outline height: the walls (and the heads at the back desks) belong to the frame. */
 const OUTLINE_H = WALL_HEIGHT
 /** Portrait: the diamond's bare side tips may run this share of its width off each edge (figures read larger). */
@@ -122,15 +124,20 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     const freeRight = Math.max(size.width - band.current, size.width * 0.3)
     const portrait = size.height > freeRight * 1.2
     let frame = frameBox(layout, zoomLevel)
-    if (portrait && zoomLevel === 1 && furnished && furnished.r < frame.r * FURNISHED_MIN_GAIN) frame = furnished
+    // Portrait from Series A the open ring is the frame whatever its size (the office is tiny, a third of the free
+    // area bare ground); before that only when it is clearly smaller than the default frame.
+    const ringStage = layout.stage >= RING_FRAME_STAGE
+    if (portrait && zoomLevel === 1 && furnished && (ringStage || furnished.r < frame.r * FURNISHED_MIN_GAIN)) frame = furnished
 
     // The fit only changes with the screen, the panel, the islands or the frame: cached on those.
-    const key = `${size.width}x${size.height}|${Math.round(freeRight)}|${frame.minX},${frame.maxX},${frame.minZ},${frame.maxZ}|${islands.current.map((r) => `${r.left},${r.top},${r.right},${r.bottom}`).join(';')}`
+    const biasDown = portrait && zoomLevel === 1 && ringStage
+    const key = `${size.width}x${size.height}|${Math.round(freeRight)}|${frame.minX},${frame.maxX},${frame.minZ},${frame.maxZ}|${biasDown ? 1 : 0}|${islands.current.map((r) => `${r.left},${r.top},${r.right},${r.bottom}`).join(';')}`
     let fit = fitCache.current?.key === key ? fitCache.current.fit : null
     if (!fit) {
       // Islands under the side panel are hidden by it: only the ones in the free part count.
       const free = { left: 0, top: 0, right: freeRight, bottom: size.height }
-      fit = fitOutline({ outline: outlineOf(frame, OUTLINE_H), free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: portrait ? PORTRAIT_SLACK : 0, islandSlack: ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * MAX_ZOOM_PER_PX })
+      const focusY = biasDown ? gapCenterY(islands.current.filter((r) => r.left < freeRight), size.height) ?? undefined : undefined
+      fit = fitOutline({ focusY, outline: outlineOf(frame, OUTLINE_H), free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: portrait ? PORTRAIT_SLACK : 0, islandSlack: ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * MAX_ZOOM_PER_PX })
       fitCache.current = { key, fit }
     }
     const want = clamp(fit.zoom * ZOOM_FACTORS[zoomLevel], 12, 400)
@@ -264,7 +271,7 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
       <CameraRig zoomLevel={zoom ?? uiZoom} />
       <Lights lowPower={lowPower} />
       <StageTransition>
-        <Surroundings />
+        <Surroundings lowPower={lowPower} />
         <Office />
         <SlotsLayer />
         <FurnitureLayer />

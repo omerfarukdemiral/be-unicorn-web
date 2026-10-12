@@ -67,10 +67,26 @@ export function damp(current: number, target: number, lambda: number, dt: number
   return current + (target - current) * (1 - Math.exp(-lambda * dt))
 }
 
-/** True on touch-first or small devices; used to pick cheaper shadows. */
+export interface PowerEnv {
+  /** matchMedia('(pointer: coarse)'). */
+  coarse: boolean
+  /** navigator.hardwareConcurrency (undefined: unknown). */
+  cores?: number
+  /** navigator.deviceMemory in GB (Chromium only; undefined: unknown). */
+  memory?: number
+}
+
+/**
+ * Cheaper rendering (DPR clamp, no antialias, basic shadows, thinner street traffic from stage 4). Few cores always;
+ * a touch device only when it also reports little memory or few cores: a recent 6-core phone keeps the full look and
+ * PerformanceMonitor drops it to lowPower if the frame rate says otherwise.
+ */
+export function lowPowerFrom({ coarse, cores = 8, memory = 8 }: PowerEnv): boolean {
+  return cores <= 4 || (coarse && memory <= 4)
+}
+
 export function detectLowPower(): boolean {
   if (typeof window === 'undefined') return false
-  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false
-  const cores = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? 8) : 8
-  return coarse || cores <= 4
+  const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined
+  return lowPowerFrom({ coarse: window.matchMedia?.('(pointer: coarse)').matches ?? false, cores: nav?.hardwareConcurrency, memory: nav?.deviceMemory })
 }

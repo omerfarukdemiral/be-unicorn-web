@@ -109,6 +109,9 @@ const CARS: readonly Mover[] = [
   { lane: 1, speed: 2.1, offset: 66, color: '#6b4ef0' },
 ]
 
+/** lowPower from stage 4: every other car and walker (the street is backdrop at that point). */
+const THIN_CARS = CARS.filter((_, i) => i % 2 === 0)
+
 function Vehicle({ m }: { m: Mover }) {
   const len = m.bus ? 3.2 : 1.5
   const h = m.bus ? 1.0 : 0.4
@@ -140,6 +143,8 @@ const WALKERS: readonly { side: 0 | 1; speed: number; offset: number; color: str
   { side: 0, speed: 0.5, offset: 45, color: '#86bdf7' },
 ]
 
+const THIN_WALKERS = WALKERS.filter((_, i) => i % 2 === 0)
+
 function Walker({ color }: { color: string }) {
   return (
     <group>
@@ -152,20 +157,22 @@ function Walker({ color }: { color: string }) {
 
 /** Moving traffic and pedestrians over a span of the street; positions wrap so the flow never ends. The street keeps
  *  the office's clock: paused (speed 0 or a focus hold) it stands still, at 2×/3× it runs faster like the staff. */
-function Flow({ lanes, walks, x0, x1 }: { lanes: [number, number]; walks: [number, number]; x0: number; x1: number }) {
+function Flow({ lanes, walks, x0, x1, thin }: { lanes: [number, number]; walks: [number, number]; x0: number; x1: number; thin: boolean }) {
+  const cars = thin ? THIN_CARS : CARS
+  const walkers = thin ? THIN_WALKERS : WALKERS
   const span = x1 - x0
-  const cars = useRef<(THREE.Group | null)[]>([])
+  const carRefs = useRef<(THREE.Group | null)[]>([])
   const people = useRef<(THREE.Group | null)[]>([])
   const place = (t: number) => {
     const wrap = (v: number) => x0 + (((v % span) + span) % span)
-    CARS.forEach((m, i) => {
-      const g = cars.current[i]
+    cars.forEach((m, i) => {
+      const g = carRefs.current[i]
       if (!g) return
       const d = m.lane === 0 ? 1 : -1
       g.position.set(wrap(d * t * m.speed + m.offset), 0, lanes[m.lane])
       g.rotation.y = d > 0 ? 0 : Math.PI
     })
-    WALKERS.forEach((w, i) => {
+    walkers.forEach((w, i) => {
       const g = people.current[i]
       if (!g) return
       g.position.set(wrap(t * w.speed + w.offset), Math.abs(Math.sin(t * 6 + i)) * 0.04, walks[w.side])
@@ -184,12 +191,12 @@ function Flow({ lanes, walks, x0, x1 }: { lanes: [number, number]; walks: [numbe
   })
   return (
     <group>
-      {CARS.map((m, i) => (
-        <group key={i} ref={(g) => void (cars.current[i] = g)}>
+      {cars.map((m, i) => (
+        <group key={i} ref={(g) => void (carRefs.current[i] = g)}>
           <Vehicle m={m} />
         </group>
       ))}
-      {WALKERS.map((w, i) => (
+      {walkers.map((w, i) => (
         <group key={i} ref={(g) => void (people.current[i] = g)}>
           <Walker color={w.color} />
         </group>
@@ -209,9 +216,11 @@ export interface StreetProps {
   x0: number
   x1: number
   seed: string
+  /** Halve cars and walkers (lowPower at stage >= 4). */
+  thin?: boolean
 }
 
-export function Street({ road, farWalk, nearWalkZ, x0, x1, seed }: StreetProps) {
+export function Street({ road, farWalk, nearWalkZ, x0, x1, seed, thin = false }: StreetProps) {
   const row = useMemo(() => streetRow(x0, x1, seed), [x0, x1, seed])
   const lamps = useMemo(() => {
     const out: number[] = []
@@ -228,7 +237,7 @@ export function Street({ road, farWalk, nearWalkZ, x0, x1, seed }: StreetProps) 
       {lamps.map((x) => (
         <Lamp key={x} x={x} z={road.z1 + 0.25} />
       ))}
-      <Flow lanes={[road.z1 - laneW, road.z0 + laneW]} walks={[(farWalk.z0 + farWalk.z1) / 2, nearWalkZ]} x0={x0} x1={x1} />
+      <Flow lanes={[road.z1 - laneW, road.z0 + laneW]} walks={[(farWalk.z0 + farWalk.z1) / 2, nearWalkZ]} x0={x0} x1={x1} thin={thin} />
     </group>
   )
 }

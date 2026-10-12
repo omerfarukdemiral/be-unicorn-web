@@ -736,3 +736,33 @@ Araştırma önceki oturumlarda yapıldı; aşağıdaki bağlantılar planda ad�
 - Politikalar keskin ve iz bırakan (`deferred-pay` ×0.6, `layoff-round`, `crunch-culture` borç + burnout, survival imzası hisse bedeli); yenilemede `hold` 0.5+0.5×mat ve başarıda ×1.1, `discount` iz bırakır (§7.2, §8.4).
 
 Kabul edilmeyen tek öneri: `acquired` bitişini oyunu bitirmeyen nakit+hisse etkisine indirmek — alt-bitiş korunuyor, liderlik gönderimi kapatılarak çözüldü.
+
+## Efor yönetimi - ön ölçüm (taslak)
+
+Yük = talep / max(0.5, arz), [0,2] kırpılı. Talep = PROJECT_SIZE x 0.3 x (1 + 0.25 x aşama) (bitmiş x 0.6). Arz = çalışan 1 / onboarding 0.5 + kurucu 0.5.
+Komut: `npx tsx sim/effortProbe.ts [tür...]`
+
+### Ulaşılan aşama (tohum sayısı)
+vcRocket: 6 -> 24/24. bootstrap: 5 -> 5, 6 -> 19. careless: 3 -> 24/24.
+Önceki kirli ağaçtaki "Seed'de takılma" iş turundan geliyordu; temiz ağaçta botlar normal ilerliyor (careless aşama 3'te duruyor, beklenen).
+
+### Aktif (bitmemiş) projeler - n / p10 / p50 / p90 / pay<0.7 / pay>1.5
+Aşama 0 vcRocket 1489 / 0.86 / 0.86 / 1.20 / 0.00 / 0.03
+Aşama 2 vcRocket  786 / 0.84 / 1.15 / 1.80 / 0.00 / 0.23
+Aşama 0 bootstrap 1609 / 0.96 / 0.96 / 1.20 / 0.00 / 0.03
+Aşama 2 bootstrap  749 / 0.54 / 0.62 / 1.35 / 0.58 / 0.09
+Aşama 0 careless  1454 / 0.69 / 0.69 / 0.96 / 0.65 / 0.04
+Aşama 2 careless   746 / 0.48 / 0.58 / 0.90 / 0.75 / 0.00
+Aşama 1 ve 3+ için aktif proje yok: botlar aşama 2'den sonra yeni proje başlatmıyor, yalnız güncelleme (bitmiş) var. Series A+ aktif verisi yok.
+
+### Bitmiş projeler - p10 / p50 / p90 / pay<0.7 / pay>1.5
+vcRocket   a0 0.51/0.51/0.72  a1 0.64/0.90/0.90  a2 0.63/1.08/2.00 (0.16/0.50)  a3 0.73/1.10/2.00 (0/0.50)  a4 0.84/1.26/2.00  a5 0.95/1.89/2.00 (0/0.51)  a6 1.26/2.00/2.00
+bootstrap  a2 0.35/0.61/2.00 (0.51/0.49)  a3 0.40/0.71  a4 0.46/0.81  a5 0.61/0.91 (0.20/0.49)
+careless   a2 0.30/0.49/2.00 (0.53/0.47)  a3 0.35/0.57/2.00 (0.50/0.47)
+Bitmiş projelerin ~%50'si >1.5: ekipsiz, yalnız kurucu (arz 0.5) kalan projeler 2'ye kırpılıyor -> iki modlu dağılım.
+
+### Karar kuralı
+- İyi bot aktif medyan 0.9-1.1: aşama 0'da vcRocket 0.86 (hafif düşük), bootstrap 0.96 (tamam); aşama 2'de vcRocket 1.15 (hafif yüksek), bootstrap 0.62 (düşük, ama bu bot o aşamada az işe alıyor). Genel olarak 0.86-1.15 bandı = kural kabaca sağlanıyor.
+- careless < 0.7: 0.69 / 0.58 -> sağlanıyor.
+=> DEMAND_PER_SIZE = 0.3 ONAYLANDI (değişiklik yok).
+=> DEMAND_STAGE_GROWTH = 0.25 TUTULUYOR ama Series A+ aktif verisi yok; bitmiş proje p50'si vcRocket'te 1.08 -> 1.10 -> 1.26 -> 1.89 (a2-a5), yani arz talebi geç aşamada yakalayamıyor. E1, geç aşama yükünü sınırlarken 0.25'i kullansın; E1 testlerinde a4+ için sabit değil bot ölçümü esas alınmalı. Ayar gerekirse 0.20'ye düşürmek a5 vcRocket medyanını ~1.89 -> ~1.7 yapar (tahmin, ölçülmedi).

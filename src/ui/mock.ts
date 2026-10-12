@@ -12,6 +12,7 @@ import {
   type GameState,
   type Slot,
 } from '../engine/types'
+import { PROJECT_NAME_MAX } from '../engine/balance'
 import { CONCEPTS, DECISIONS, FURNITURE, OFFICE_LINES } from '../content'
 import { useGameStore } from '../store/gameStore'
 
@@ -225,7 +226,7 @@ export function mockReduce(prev: GameState, a: Action): ActionResult {
     case 'renameProject': {
       const p = s.projects.find((x) => x.id === a.projectId)
       if (!p) return { state: prev, ok: false, error: 'notFound' }
-      p.name = a.name.trim().slice(0, 24)
+      p.name = a.name.trim().slice(0, PROJECT_NAME_MAX)
       return ok(s)
     }
     case 'startRound':

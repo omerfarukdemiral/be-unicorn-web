@@ -174,7 +174,7 @@ function TeamList() {
             <button
               type="button"
               onClick={() => select({ kind: 'employee', id: e.id })}
-              className="flex min-h-9 w-full items-center gap-2 rounded-control bg-surface-2/60 px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
+              className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-2 rounded-control bg-surface-2/60 px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
             >
               <EmployeeRow employee={e} idle={idle.includes(e.id)} />
             </button>

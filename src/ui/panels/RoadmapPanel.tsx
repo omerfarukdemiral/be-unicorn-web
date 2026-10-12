@@ -62,7 +62,7 @@ export function RoadmapPanel() {
         {next && s.parts && <ValuationParts parts={s.parts} />}
         <p className="font-text mt-1.5 text-xs text-ink-2">{line}</p>
         {next && s.canStart && (
-          <button type="button" onClick={openRound} className="mt-2 inline-flex h-8 items-center gap-1 rounded-control bg-brand px-2.5 text-xs font-semibold text-on-ink transition-colors hover:bg-brand-hover">
+          <button type="button" onClick={openRound} className="mt-2 inline-flex h-8 pointer-coarse:h-11 items-center gap-1 rounded-control bg-brand px-2.5 text-xs font-semibold text-on-ink transition-colors hover:bg-brand-hover">
             <Icon name="rocket" size={14} />
             {t('top.roundStart')}
           </button>
@@ -105,7 +105,7 @@ function StageNode({ def, status, last, active, onPick }: { def: StageDef; statu
           aria-pressed={active}
           aria-label={hidden ? t('roadmap.silhouette') : def.name}
           className={cx(
-            'grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors',
+            'relative grid size-9 shrink-0 place-items-center rounded-full border-2 transition-colors pointer-coarse:before:absolute pointer-coarse:before:-inset-1 pointer-coarse:before:content-[""]',
             status === 'done' && 'border-brand bg-brand text-on-ink',
             status === 'here' && 'border-brand bg-brand-soft text-brand-ink ring-4 ring-brand/15',
             status === 'next' && 'border-brand/50 bg-surface text-brand-ink',

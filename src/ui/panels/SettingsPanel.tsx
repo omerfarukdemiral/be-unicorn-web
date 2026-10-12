@@ -61,7 +61,7 @@ export function SettingsPanel() {
                 type="button"
                 onClick={() => setZoom(z)}
                 aria-pressed={zoom === z}
-                className={cx('min-h-8 min-w-11 rounded-[8px] px-2 text-xs font-semibold transition-colors max-md:min-h-11', zoom === z ? SEG_ON : SEG_OFF)}
+                className={cx('min-h-8 min-w-11 rounded-[8px] px-2 text-xs font-semibold transition-colors pointer-coarse:min-h-11', zoom === z ? SEG_ON : SEG_OFF)}
               >
                 {t(`zoom.${z}`)}
               </button>

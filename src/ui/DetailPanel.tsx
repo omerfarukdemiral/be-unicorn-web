@@ -252,7 +252,7 @@ function EmployeeDetail({ id }: { id: string }) {
                   type="button"
                   aria-pressed={on}
                   onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: on ? null : p.id })}
-                  className={cx('inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold max-md:min-h-11', on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink')}
+                  className={cx('inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold pointer-coarse:min-h-11', on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink')}
                 >
                   <Icon name={CATEGORY_ICON[p.category]} size={13} />
                   {p.name}

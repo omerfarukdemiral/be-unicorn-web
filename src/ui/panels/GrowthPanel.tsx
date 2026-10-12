@@ -128,7 +128,7 @@ function CenterRows() {
 function CenterRow({ icon, label, value, onOpen }: { icon: IconName; label: string; value: string; onOpen: () => void }) {
   return (
     <li>
-      <button type="button" onClick={onOpen} className="flex min-h-9 w-full items-center gap-2 rounded-control bg-surface-2/60 px-2 py-1 text-left transition-colors hover:bg-surface-2">
+      <button type="button" onClick={onOpen} className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-2 rounded-control bg-surface-2/60 px-2 py-1 text-left transition-colors hover:bg-surface-2">
         <Icon name={icon} size={16} className="shrink-0 text-ink-2" />
         <span className="ui-label min-w-0 flex-1 truncate">{label}</span>
         <span className="tabular shrink-0 text-[15px] font-semibold text-ink">{value}</span>
@@ -286,7 +286,7 @@ function PriceLock() {
       <button
         type="button"
         onClick={() => openConceptCard('pricing')}
-        className="ui-key ui-key-sm ui-key-soft flex min-h-9 w-full items-center gap-2 rounded-control px-3 py-2 text-left"
+        className="ui-key ui-key-sm ui-key-soft flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-2 rounded-control px-3 py-2 text-left"
       >
         <Icon name="coin" size={16} className="shrink-0 animate-breathe" />
         <span className="min-w-0 flex-1 text-xs font-semibold">{t('growth.priceWaiting')}</span>

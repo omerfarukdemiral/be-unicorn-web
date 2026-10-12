@@ -126,7 +126,7 @@ export function InfoTip({
         className={cx(
           'relative inline-grid shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:text-ink focus-visible:text-ink',
           // Bigger hit area than the glyph, without moving the layout.
-          'before:absolute before:-inset-2 before:content-[""]',
+          'before:absolute before:-inset-2 before:content-[""] pointer-coarse:before:-inset-4',
           open && 'text-ink',
           className,
         )}

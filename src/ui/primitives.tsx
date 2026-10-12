@@ -71,7 +71,7 @@ export function Button({
       data-cue={tone === 'commit' ? 'confirm' : undefined}
       className={cx(
         'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-ui font-bold disabled:cursor-not-allowed',
-        sz === 'md' ? 'min-h-11 px-4 text-[15px]' : 'ui-key-sm min-h-9 px-3 text-[13px] max-md:min-h-11',
+        sz === 'md' ? 'min-h-11 px-4 text-[15px]' : 'ui-key-sm min-h-9 px-3 text-[13px] pointer-coarse:min-h-11',
         TONE[tone],
         className,
       )}
@@ -209,9 +209,9 @@ export function Chip({
       className={cx(
         'inline-flex shrink-0 items-center gap-1 text-[12px] font-bold transition-colors',
         segment
-          ? cx('min-h-8 rounded-[9px] px-2.5 max-md:min-h-11', active ? cx('bg-surface text-ink', SOFT_LIFT) : 'text-ink-2 hover:text-ink')
+          ? cx('min-h-8 rounded-[9px] px-2.5 pointer-coarse:min-h-11', active ? cx('bg-surface text-ink', SOFT_LIFT) : 'text-ink-2 hover:text-ink')
           : cx(
-              'min-h-9 rounded-full px-3 transition-[background,color,box-shadow] max-md:min-h-11',
+              'min-h-9 rounded-full px-3 transition-[background,color,box-shadow] pointer-coarse:min-h-11',
               'shadow-[inset_0_1px_0_#fff,0_1px_2px_rgb(74_52_28/.12),0_3px_6px_-3px_rgb(74_52_28/.26)]',
               active
                 ? 'bg-brand-soft text-brand-ink'

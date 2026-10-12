@@ -164,7 +164,7 @@ function ProjectCard({ project: p }: { project: Project }) {
     <li className="px-1 py-3">
       <div className="flex items-center gap-2">
         <IconBadge icon={CATEGORY_ICON[p.category]} size={28} color={CATEGORY_COLOR[p.category]} />
-        <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-semibold hover:underline max-md:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
+        <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-semibold hover:underline pointer-coarse:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
           {p.name}
         </button>
         {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}

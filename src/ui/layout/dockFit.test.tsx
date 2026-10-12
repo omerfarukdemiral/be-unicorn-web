@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { FounderSlot, SLOT } from '../FounderActions'
 import { t } from '../i18n'
 import { ViewControls } from './ViewControls'
-import { dockFits, NARROW_PHONE_W, slotSizeFor, SLOT_NARROW } from './dockFit'
+import { dockFits, keepsMenuOpen, NARROW_PHONE_W, slotSizeFor, SLOT_NARROW } from './dockFit'
 import bottomBar from './BottomBar.tsx?raw'
 
 describe('founder dock on narrow phones', () => {
@@ -42,6 +42,15 @@ describe('phone More menu zoom', () => {
     expect(on).toContain(t('view.zoomOut'))
     expect(on).toContain(t('view.zoomIn'))
     expect(renderToStaticMarkup(createElement(ViewControls, { size: 44, showZoom: false }))).not.toContain(t('view.zoomIn'))
+  })
+
+  it('zoom steppers keep the More menu open, other picks close it', () => {
+    const labels = [t('view.zoomOut'), t('view.zoomIn')]
+    const mk = (l: string) => ({ closest: () => ({ getAttribute: () => l }) }) as unknown as EventTarget
+    expect(keepsMenuOpen(mk(t('view.zoomIn')), labels)).toBe(true)
+    expect(keepsMenuOpen(mk(t('view.zoomOut')), labels)).toBe(true)
+    expect(keepsMenuOpen(mk(t('settings.title')), labels)).toBe(false)
+    expect(keepsMenuOpen(null, labels)).toBe(false)
   })
 
   it('the phone MoreMenu uses the same ViewControls with zoom on', () => {

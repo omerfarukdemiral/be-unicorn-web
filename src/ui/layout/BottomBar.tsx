@@ -21,6 +21,7 @@ import { DockTabs } from '../Dock'
 import { FounderBar } from './FounderBar'
 import { MoneyIsland } from './MoneyIsland'
 import { NotificationStrip } from './NotificationStrip'
+import { keepsMenuOpen } from './dockFit'
 import { ViewControls } from './ViewControls'
 import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_H, MOBILE_BOTTOM_TABS_H, STRIP_H, STRIP_H_MOBILE } from './tokens'
 import { panelWidth } from './useSceneInset'
@@ -91,8 +92,10 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
 
 /**
  * ⋯ on the portrait tab island: Kazanımlar, İstatistik, Liderlik and ⚙ (the desktop top-right tools) in a small
- * island above it. A dot on ⋯ while concepts wait to be read (the book's badge). Any pick closes it.
+ * island above it. A dot on ⋯ while concepts wait to be read (the book's badge). Any pick closes it, except the zoom steppers.
  */
+const ZOOM_LABELS = [t('view.zoomOut'), t('view.zoomIn')]
+
 function MoreMenu() {
   const [open, setOpen] = useExclusiveExpander()
   const waiting = useGameStore((s) => waitingConcepts(s.state).length > 0)
@@ -109,7 +112,7 @@ function MoreMenu() {
         {waiting && !open && <span aria-hidden="true" className="absolute right-2.5 top-2.5 size-2 rounded-full bg-brand ring-2 ring-surface" />}
       </button>
       {open && (
-        <div className="ui-card pointer-events-auto absolute bottom-[calc(100%+8px)] right-0 flex animate-slide-up p-1" onClickCapture={() => setTimeout(() => setOpen(false))}>
+        <div className="ui-card pointer-events-auto absolute bottom-[calc(100%+8px)] right-0 flex animate-slide-up p-1" onClickCapture={(e) => { if (!keepsMenuOpen(e.target, ZOOM_LABELS)) setTimeout(() => setOpen(false)) }}>
           <ViewControls size={44} showZoom />
         </div>
       )}

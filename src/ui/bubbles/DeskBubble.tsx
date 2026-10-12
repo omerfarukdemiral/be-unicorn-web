@@ -385,7 +385,10 @@ function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string 
             </span>
           </span>
         }
-        onClick={() => dispatch({ type: stale ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: offer.id })}
+        onClick={() => {
+          // A build that no longer passes (energy or moves moved since the check) opens the project, where the reason shows.
+          if (!dispatch({ type: stale ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: offer.id }).ok) launch(openProject)
+        }}
       />
       <ChoiceRow label={t('module.others')} onClick={() => launch(openProject)} />
     </Expandable>

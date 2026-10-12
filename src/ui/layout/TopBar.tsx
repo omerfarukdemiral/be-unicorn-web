@@ -87,7 +87,7 @@ export function TopBar() {
  * Phone / tablet portrait (T06, "tek sıra"): one row of islands, the gauge island (content-sized cells spread edge to
  * edge) and the round ⏸ island; the stage (name · date · round · progress) hangs under it as a small tag, absolutely
  * placed so the scene inset stays the row's 52px. Kazanımlar, İstatistik and ⚙ live behind the tab island's ⋯
- * (BottomBar › MoreMenu); zoom is pinch + Settings. The full-page sheet covers the tag, so it hides then.
+ * (BottomBar › MoreMenu); zoom is pinch + the ⋯ menu. The full-page sheet covers the tag, so it hides then.
  */
 function MobileBar() {
   const sheetOpen = useGameStore((s) => s.ui.panel !== null)

@@ -110,7 +110,7 @@ function MoreMenu() {
       </button>
       {open && (
         <div className="ui-card pointer-events-auto absolute bottom-[calc(100%+8px)] right-0 flex animate-slide-up p-1" onClickCapture={() => setTimeout(() => setOpen(false))}>
-          <ViewControls size={44} showZoom={false} />
+          <ViewControls size={44} showZoom />
         </div>
       )}
     </>

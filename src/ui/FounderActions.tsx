@@ -206,12 +206,15 @@ export function FounderSlot({
   tipAlign = 'center',
   floats,
   onPeek,
+  size = SLOT,
 }: {
   a: FounderActionView
   tipAlign?: 'left' | 'center'
   floats?: ReactNode
   /** Phones: the row scrolls (it would clip the tip), so the bar shows a tapped locked slot's tip itself. */
   onPeek?: (a: FounderActionView) => void
+  /** Narrow phones draw a 40px key; a pseudo-element keeps the 44px hit area. */
+  size?: number
 }) {
   const hue = FOUNDER_COLOR[a.kind]
   const idle = a.disabled && !a.running
@@ -229,7 +232,7 @@ export function FounderSlot({
     if (!a.disabled) a.run()
   }
   return (
-    <span className="relative inline-flex shrink-0">
+    <span className="relative inline-flex shrink-0 snap-start">
       {floats}
       <button
         type="button"
@@ -242,6 +245,7 @@ export function FounderSlot({
           // one is a faint ghost tile. Guided = the breathing key with a soft brand glow (outline, so the key's own
           // shadow stack is kept).
           'group relative grid shrink-0 place-items-center rounded-control',
+          size < SLOT && 'before:absolute before:-inset-0.5 before:content-[""]',
           a.locked
             ? 'bg-surface-2/50'
             : !a.disabled && !a.running
@@ -249,7 +253,7 @@ export function FounderSlot({
               : cx('ui-inset transition-colors', idle && 'opacity-80'),
           a.guided && !a.disabled && 'animate-breathe outline-3 outline-[color-mix(in_oklab,var(--color-brand)_28%,transparent)]',
         )}
-        style={{ width: SLOT, height: SLOT }}
+        style={{ width: size, height: size }}
       >
         <Icon
           name={FOUNDER_ICON[a.kind]}

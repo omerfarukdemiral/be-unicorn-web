@@ -17,6 +17,7 @@ import { moraleTone, STATUS_DOT, STATUS_TONE } from './theme'
 import { useIsMobile } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
+import { ModulesSection } from './panels/ModulesSection'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
 
 export type RenderPreview = (target: Selection) => ReactNode
@@ -359,20 +360,32 @@ function ProjectDetail({ id }: { id: string }) {
   const dispatch = useGameStore((s) => s.dispatch)
   if (!p) return <p className="text-xs text-ink-2">{t('detail.gone')}</p>
   const team = employees.filter((e) => p.assignedIds.includes(e.id))
+  // Modules open on a live product at 1.0 (engine moduleError).
+  const finished = p.launched && p.maturity >= 1
   return (
     <div className="flex flex-col gap-4">
-      <section>
-        <div className="mb-5 flex items-baseline justify-between">
-          <SectionTitle>{t('detail.maturity')}</SectionTitle>
-          <span className="tabular text-sm font-semibold">{pct(p.maturity)}</span>
-        </div>
-        <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
-        <p className="font-text mt-2 text-[11px] text-ink-2">{p.launched ? t('detail.launched') : t('detail.mvpHint', { v: pct(0.2) })}</p>
-      </section>
+      {finished ? (
+        // 1.0: nothing left to fill, so the bar shrinks to a thin "Yayında" strip and the modules take the room.
+        <section className="flex items-center gap-2">
+          <Dot color="var(--color-positive)" size={7} />
+          <span className="text-xs font-semibold text-ink-2">{t('detail.live')}</span>
+          <Bar value={1} color={CATEGORY_COLOR[p.category]} height={3} className="flex-1" />
+        </section>
+      ) : (
+        <section>
+          <div className="mb-5 flex items-baseline justify-between">
+            <SectionTitle>{t('detail.maturity')}</SectionTitle>
+            <span className="tabular text-sm font-semibold">{pct(p.maturity)}</span>
+          </div>
+          <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
+          <p className="font-text mt-2 text-[11px] text-ink-2">{p.launched ? t('detail.launched') : t('detail.mvpHint', { v: pct(0.2) })}</p>
+        </section>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <Stat label={t('detail.team')} value={team.length} sub={teamSummary(team)} />
-        <Stat label={t('detail.size')} value={fixed(p.size, 1)} />
+        <Stat label={t('detail.scope')} value={fixed(p.size, 1)} />
       </div>
+      {finished && <ModulesSection project={p as Project} />}
       <Button icon="chat" onClick={() => dispatch({ type: 'founderAction', kind: 'talkToUsers', targetId: p.id })}>
         {t('founder.talkToUsers')}
       </Button>

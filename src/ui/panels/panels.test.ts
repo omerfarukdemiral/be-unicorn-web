@@ -19,7 +19,12 @@ import { CenterFrame } from '../stats/CenterFrame'
 import { WIDGETS } from '../widgets'
 import { GrowthPanel } from './GrowthPanel'
 import { MultipleCap } from './RoundSection'
-import { launchGain, priceGate, releaseGain } from '../loopUi'
+import { launchGain, priceGate, releaseGain, releaseName } from '../loopUi'
+import { DetailBody } from '../DetailPanel'
+import { ProjectsPanel } from './ProjectsPanel'
+import { Suggestions } from './ModulesSection'
+import { momentText } from '../Moments'
+import { company } from '../../engine/__tests__/moduleFixtures'
 import { openConceptCard } from '../uiActions'
 import { t } from '../i18n'
 import { CONCEPTS } from '../../content'
@@ -372,3 +377,96 @@ describe('project rename input (W1)', () => {
     expect(src.match(/min-h-11/g)!.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('project modules (W2c)', () => {
+  beforeEach(() => {
+    vi.spyOn(React, 'useSyncExternalStore').mockImplementation((_subscribe, getSnapshot) => getSnapshot())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    useGameStore.setState({ state: initial.state, ui: initial.ui })
+  })
+  const detail = (s: GameState) => {
+    useGameStore.setState({ state: s })
+    return renderToStaticMarkup(createElement(DetailBody, { selection: { kind: 'project', id: s.projects[0]!.id } }))
+  }
+
+  it('a finished product: "Modüller" with n/max, slots as 56px squares, the percent text gone, "Kapsam" for the old "Büyüklük"', () => {
+    const s = company(['web'], 2)
+    s.projects[0]!.modules = [{ id: 'feedback', day: s.time.day }]
+    const html = detail(s)
+    expect(html).toContain('Modüller')
+    expect(html).toContain('1/2')
+    expect(html).toContain('Yayında')
+    expect(html).toContain('Kapsam')
+    expect(html).not.toContain('Büyüklük')
+    expect(html).not.toContain('%100')
+    expect(html).not.toContain('MVP')
+    // Two slots: the installed icon and one "+" (≥ 56px squares).
+    expect((html.match(/size-14/g) ?? []).length).toBe(2)
+    expect(html).toContain('aria-label="Modül ekle"')
+  })
+
+  it('the "+" list: 3 suggested rows (≤ 3 chips, one Kur each), the rest folded behind "Tüm modüller", locked ones not in the three', () => {
+    const s = company(['web'], 2)
+    useGameStore.setState({ state: s })
+    const html = renderToStaticMarkup(createElement(Suggestions, { project: s.projects[0]!, onDone: () => {} }))
+    const rows = html.split('<li').slice(1)
+    expect(rows).toHaveLength(3)
+    for (const r of rows) {
+      expect((r.match(/data-chip=""/g) ?? []).length).toBeLessThanOrEqual(3)
+      expect(r).toContain('>Kur<')
+    }
+    expect(html).toContain('Tüm modüller')
+    expect(html).toContain('aria-expanded="false"')
+    expect(html).not.toContain('Açık API')
+  })
+
+  it('a poor company still lists the rows, disabled, with the engine reason', () => {
+    const s = company(['web'], 2)
+    s.stats.cash = 5
+    useGameStore.setState({ state: s })
+    const html = renderToStaticMarkup(createElement(Suggestions, { project: s.projects[0]!, onDone: () => {} }))
+    expect(html).toContain('Parasız.')
+    expect((html.match(/disabled=""/g) ?? []).length).toBe(3)
+  })
+
+  it('before 1.0 the bar and the percent stay and there is no module section', () => {
+    const s = company(['web'], 2)
+    s.projects[0]!.maturity = 0.6
+    const html = detail(s)
+    expect(html).toContain('%60')
+    expect(html).toContain('MVP')
+    expect(html).not.toContain('Modüller')
+  })
+
+  it('a running build shows its ring and days in the slot (a slot is spent), no "+" for it', () => {
+    const s = company(['web'], 2)
+    const r = applyAction(s, { type: 'buildModule', projectId: s.projects[0]!.id, moduleId: 'feedback' })
+    if (!r.ok) throw new Error('build')
+    const html = detail(r.state)
+    expect(html).toContain('1/2')
+    expect(html).toContain('aria-label="Kuruluyor"')
+    expect(html).toMatch(/≈\d+g/)
+    expect((html.match(/aria-label="Modül ekle"/g) ?? []).length).toBe(1)
+  })
+
+  it('the card: modules replace the percent bar at 1.0', () => {
+    const s = company(['web'], 2)
+    s.projects[0]!.modules = [{ id: 'feedback', day: s.time.day }]
+    useGameStore.setState({ state: s })
+    const html = renderToStaticMarkup(createElement(ProjectsPanel))
+    expect(html).toContain('aria-label="Modüller"')
+    expect(html).not.toContain('MVP')
+    expect(html).not.toContain('%100')
+  })
+
+  it('the release moment of a module reads "{project}: {module} yayında", with a wave chip only when users came', () => {
+    expect(releaseName(5, undefined, 'Davet programı')).toBe('Davet programı yayında')
+    const m = { key: 1, kind: 'release' as const, project: 'Foo', level: 5, module: 'Davet programı', users: 120, mrr: 900 }
+    expect(momentText(m)).toContain('Foo: Davet programı yayında')
+    expect(momentText(m)).toContain('+120')
+    expect(momentText({ ...m, users: 0 })).toBe('Foo: Davet programı yayında')
+  })
+})
+

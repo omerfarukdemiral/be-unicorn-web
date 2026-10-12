@@ -13,6 +13,7 @@ import { launchGain } from '../loopUi'
 import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
 import { InfoTip } from '../InfoTip'
+import { ModuleStrip } from './ModulesSection'
 
 /** Turkish project name from content, unique within the run. */
 function nextProjectName(): string {
@@ -160,6 +161,7 @@ export function MaturityBar({ value, color = 'var(--color-brand)' }: { value: nu
 function ProjectCard({ project: p }: { project: Project }) {
   const [open, setOpen] = useState(false)
   const select = useGameStore((s) => s.select)
+  const finished = p.launched && p.maturity >= 1
   return (
     <li className="px-1 py-3">
       <div className="flex items-center gap-2">
@@ -168,11 +170,18 @@ function ProjectCard({ project: p }: { project: Project }) {
           {p.name}
         </button>
         {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
-        <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>
+        {!finished && <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>}
       </div>
-      <div className="mt-4">
-        <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
-      </div>
+      {/* At 1.0 the bar has nothing left to say: the card shows what the product grew into (modules, GAMEPLAY V2). */}
+      {finished ? (
+        <div className="mt-2">
+          <ModuleStrip project={p} />
+        </div>
+      ) : (
+        <div className="mt-4">
+          <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>
         <Button size="sm" tone="ghost" icon={open ? 'chevronUp' : 'users'} onClick={() => setOpen((o) => !o)}>

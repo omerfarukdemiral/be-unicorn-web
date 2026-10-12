@@ -5,6 +5,7 @@
 // `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
 // The receipt ends on one teaser: the next storm on the horizon, "→ 12g · Yatırımcı kışı" ("?" until revealed, §5.1).
 import type { GameState, MonthReceipt } from '../engine/types'
+import { moduleName } from '../content'
 import type { Panel } from '../store/types'
 import type { IconName } from './icons'
 import { t } from './i18n'
@@ -15,7 +16,7 @@ import { momentPanel } from './momentRules'
 
 export type Moment =
   | { key: number; kind: 'receipt'; receipt: MonthReceipt; next?: ReceiptTeaser }
-  | { key: number; kind: 'release'; project: string; level: number; update?: number; users: number; mrr: number }
+  | { key: number; kind: 'release'; project: string; level: number; update?: number; module?: string; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
 
 /** The receipt's teaser: days to the next crisis on the horizon and its name ("?" while hidden). */
@@ -44,7 +45,8 @@ export function useMomentSource(onMoments: (add: Moment[]) => void): void {
         add.push({ key: e.id, kind: 'receipt', receipt: s.finance.lastReceipt, ...(next ? { next } : {}) })
       } else if (e.kind === 'release') {
         const r = s.releases?.find((x) => x.id === e.refId)
-        if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), users: r.users, mrr: r.mrr })
+        const mod = r?.module ? moduleName(r.module, s.projects.find((p) => p.id === r.projectId)?.category) : undefined
+        if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), ...(mod ? { module: mod } : {}), users: r.users, mrr: r.mrr })
       } else if (e.kind === 'delayedEffect') {
         const o = [...(s.decisions.outcomes ?? [])].reverse().find((x) => x.cardId === e.refId)
         if (o) add.push({ key: e.id, kind: 'outcome', option: optionLabel(o.cardId, o.optionIndex) ?? '', effects: effectSummary(o.effects) })
@@ -89,6 +91,8 @@ export function momentText(m: Moment): string {
       return m.next ? `${line} · ${teaserText(m.next)}` : line
     }
     case 'release':
+      // A module delivery: "Proje: Modül yayında" (a refresh brings no users, so no wave).
+      if (m.module) return `${m.project}: ${releaseName(m.level, m.update, m.module)}${m.users > 0 ? ` · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}` : ''}`
       return t('strip.release', { project: m.project, level: releaseName(m.level, m.update), u: Math.round(m.users), m: money(m.mrr) })
     case 'outcome':
       return t('outcome.line', { option: m.option, effects: m.effects })
@@ -119,8 +123,8 @@ export function MomentLine({ m }: { m: Moment }) {
     case 'release':
       return (
         <span className="tabular">
-          <span className={main}>{t('release.title', { project: m.project, level: releaseName(m.level, m.update) })}</span>
-          <span className="font-medium text-positive-ink"> · {t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}</span>
+          <span className={main}>{m.module ? `${m.project}: ${releaseName(m.level, m.update, m.module)}` : t('release.title', { project: m.project, level: releaseName(m.level, m.update) })}</span>
+          {(!m.module || m.users > 0) && <span className="font-medium text-positive-ink"> · {t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}</span>}
         </span>
       )
     case 'outcome':

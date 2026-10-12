@@ -312,7 +312,21 @@ Pay: doğuşta `share = RIVAL_BORN_SHARE(0.10)`; haftalık `share += 0.03 × (st
 | Series C | **Rule of 40 sıkışması**, boşta nakit cezası, tüm segmentler dolar | `openSegment('global')`, M&A, ikinci ürün (`c-full`) | $8M global | `market-correction`, kurul |
 | Unicorn | Bitiş; kurucu karnesi | — | — | — |
 
+**Her aşamada (Pre-seed'den hamle, Garaj'da 10 enerji):** `buildModule` / `refreshModule` (1 hamle) ve `cancelModule` (bedelsiz); bitmiş (1.0) ve yayındaki ürüne modül kurar, kasa bedeli `cashBase × 2^aşama`. Ayrıntı §8.6.
+
 `content/stages.ts unlockTools` += `'segments'`, `'refactor'`, `'renewal'`, `'mna'` (`TOOL_IDS`; `strings.ts TOOL_TEXT` aynı dalgada, §3 md.9); `roadmap.ts` satırları ≤6 kelime. Kilitli fiiller alt barda gri siluet (§9.4); kilitli **Dock araç sekmesi** siluetleri (`segments`/`mna`) E dalgalarından sonra H5'te yapılır, H3'te değil (H3 E'ye bağlı değildir).
+
+### 8.6 Proje modülleri ve reklam odağı
+
+MVP sonrası büyümenin oyuncu kolu: bitmiş (1.0) ve yayındaki ürünün **yuvaları** (`MODULE_SLOTS_BY_STAGE = [1, 1, 2, 3, 3, 4, 4]`) ve içlerine kurulan 9 modül (`engine/modules.ts MODULES`, adları ve tek cümlesi `content/modules.ts`). Her modülün bir eksisi vardır (çarpan, bakım gideri, teknik borç ya da ağırlaşan güncellemeler); kazançlar 360 günde eskimeye başlar, 720 günde yarıya iner, **yenileme** (`refreshModule`, bedelin ve işin %40'ı) tazeler (anti-coast: durup duran şirket eskir). Kullanıcı payı yok: her kazanç şirketin mevcut kanallarına (churn, ARPU, organik, CAC, TAM) projelerin ağırlığıyla çarpan olarak biner. Reklam odağı (W3) aynı karışıma eğim verir.
+
+**UI (W2c, sahne öncelikli):**
+- *Proje detayı:* 1.0'da olgunluk çubuğu ince bir "Yayında" şeridine iner, "%100" yazısı kalkar, "Büyüklük" → "Kapsam". "Modüller" bölümü, sağda `{dolu}/{yuva}`; yuvalar tek satırda 56 px kare (4 × 56 + boşluk 360 px'e sığar): dolu = ikon (eskiyorsa altında sarı/kırmızı güç çubuğu), kuruluyor = ilerleme halkası + `≈{g}g` (dokununca "Bırak" satırı), boş = "+".
+- *"+" listesi:* önerilen 3 modül (`suggestModules`, `suggestModule` skoruna göre) satır satır: ikon, ad, tek cümle (≤ 10 kelime), en çok 3 çip (ana kazanç yeşil, ana eksi kırmızı ya da bakım gideri, kasa + gün), tek "Kur" düğmesi (hamle ya da Garaj'da enerji çipiyle). Motorun hata kodu satır altında sebep olarak görünür (Parasız., Haftaya. …). Altında katlı "Tüm modüller"; aşama kilidi gri satır + "Seed'de açılır" çipi. Eskiyen modüle dokununca "Yenile" satırı: `%maliyet`, `≈g`, güç `%62 → %100`.
+- *Proje kartı:* 1.0'da yüzde çubuğu yerine modül ikon satırı (boş yuva silik nokta, yapım halkası); kart dokunuşu proje detayını açar.
+- *Masa balonu:* `desk:module:{projectId}` (`moduleAsk`, saf): yayındaki 1.0'lık ürün, boş yuva, yapım yok, karşılanabilir öneri ve `flags['modulePrompt:'+id] < aşama` (her kurulum bayrağı bu aşamaya çeker, yani aşama başına bir kez); ya da gücü < %0.75 olan modül ve `flags['moduleStale:'+id+':'+modül] ≠ modülün günü` (yenileme başlayınca eski günü yazar, yeni eskimede yine sorar). Aynı anda tek modül balonu, en eski proje önce, eskiyen yeniden kurmadan önce. Cümle "{proje} için sıradaki modül: {modül}?" / "{modül} eskidi, yenileyelim mi?"; açılınca oyun durur (mevcut `Expandable`), tek karo (ikon + ad + cümle + 2-3 çip), "Kur" tek dokunuş, "Diğerleri" proje detayını açar. Kimse açmazsa pill 20 sn sonra 40 sn çekilir (`snoozes`).
+- *Sürüm anı:* modül teslimi "{proje}: {modül} yayında" + dalga çipi (yenilemede kullanıcı gelmez, dalga yok); bildirim bütçesi aynı.
+- Mobil: her hedef ≥ 44 px (`pointer-coarse`), satırda ≤ 3 çip, çipler en çok 2 satıra sarar.
 
 ## 9. Merak senaryosu: kadro, iplikler, siluetler
 

@@ -10,6 +10,7 @@ import type { DecisionCardId, GameState, NpcRole } from '../engine/types'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, DeskTopic, StaffNeed, VisitorTopic, WorldBubble } from './bubbles'
 import { idleBuilders } from '../engine/loopSelectors'
+import { moduleAsk } from '../engine/modules'
 import { firstFreeDesk } from '../engine/office'
 import { UI_TONES } from './palette'
 import { speakerWalking, useLayout } from './sceneRegistry'
@@ -77,6 +78,9 @@ export function deskTopics(s: GameState, bubbleOpen: string | null): { topic: De
   if (renewal) out.push({ topic: 'renewal', refId: renewal.id })
   // Hiring asks while someone waits and a desk stands free (nextStep never names 'hire' any more; a free desk does).
   if (s.candidates.length > 0 && firstFreeDesk(s.office) !== undefined) out.push({ topic: 'hire' })
+  // A finished product with room for a module (or a stale one): the desk asks about ONE project at a time, oldest first.
+  const ask = moduleAsk(s)
+  if (ask) out.push({ topic: 'module', refId: ask.projectId })
   if (s.derived.nextStep?.id === 'idea') out.push({ topic: 'project' })
   if (bubbleOpen === deskKey('actions')) out.push({ topic: 'actions' })
   return out
@@ -223,8 +227,8 @@ interface Seen {
  */
 const waitsForArrival = (l: RoutedLine): boolean => (l.kind === 'visitor' || l.kind === 'staff') && l.speakerId !== DESK
 
-/** Pills that may wait for long (a builder with nothing to build, a round window the player sits out) step back unopened. */
-const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && l.ref === 'idle') || (l.kind === 'desk' && l.ref === 'round')
+/** Pills that may wait for long (a builder with nothing to build, a round window or a module question the player sits out) step back unopened. */
+const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && l.ref === 'idle') || (l.kind === 'desk' && (l.ref === 'round' || l.ref === 'module'))
 
 const delayOf = (l: RoutedLine): number => (l.kind === 'decision' ? DECISION_DELAY_MS : l.kind === 'staff' && l.ref === 'idle' ? IDLE_DELAY_MS : 0)
 

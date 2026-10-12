@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import type { ConceptId, DecisionCardId, NpcRole } from '../engine/types'
 
 interface BubbleBase {
-  /** Stable React key (decision:{cardId}, staff:{id}, person:{id}, desk:{topic}, desk:renewal:{id}, visitor:pitch:{id}, reflection:{cardId}, amb:{id}). */
+  /** Stable React key (decision:{cardId}, staff:{id}, person:{id}, desk:{topic}, desk:renewal:{id}, desk:module:{projectId}, visitor:pitch:{id}, reflection:{cardId}, amb:{id}). */
   key: string
   /** Employee id, visitor id, 'founder' or 'desk' the bubble floats above. */
   speakerId: string
@@ -20,7 +20,7 @@ export type StaffNeed = 'leaving' | 'idle'
 export const personKey = (employeeId: string): string => `person:${employeeId}`
 
 /** What the founder's desk asks about (one at a time, in this priority order; 'actions' only while open). */
-export type DeskTopic = 'payday' | 'round' | 'pitch' | 'renewal' | 'hire' | 'project' | 'actions'
+export type DeskTopic = 'payday' | 'round' | 'pitch' | 'renewal' | 'hire' | 'module' | 'project' | 'actions'
 
 /** What a visitor NPC asks about (the weekly pitch to the round investor). */
 export type VisitorTopic = 'pitch'
@@ -38,7 +38,7 @@ export type WorldBubble =
   | (BubbleBase & { kind: 'staff'; need: StaffNeed })
   /** The card of an employee the player tapped in the scene (T14), beside them; only while open (ui.bubbleOpen = key). */
   | (BubbleBase & { kind: 'person' })
-  /** The founder's own call, asked at the central desk; speakerId = 'desk'. `refId`: the renewal's contract id. */
+  /** The founder's own call, asked at the central desk; speakerId = 'desk'. `refId`: the renewal's contract id, or the project a module question is about. */
   | (BubbleBase & { kind: 'desk'; topic: DeskTopic; refId?: string })
   /** A visitor waiting for an answer (round investor's pitch); speakerId = visitorId. */
   | (BubbleBase & { kind: 'visitor'; topic: VisitorTopic; visitorId: string })

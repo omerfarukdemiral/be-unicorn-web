@@ -12,6 +12,9 @@ import { closeBubble, launch, openBubble } from './Expandable'
 import { ReflectionBubble } from './ReflectionBubble'
 import { StaffBubble } from './StaffBubble'
 import { renderWorldBubble } from './worldBubble'
+import { company } from '../../engine/__tests__/moduleFixtures'
+import { moduleAsk } from '../../engine/modules'
+import { MODULE_TEXT, moduleName } from '../../content'
 
 const store = () => useGameStore.getState()
 const CARD = 'remote-vs-office'
@@ -249,3 +252,61 @@ describe('routed bubbles', () => {
     expect(pillLine('Tek cümle')).toBe('Tek cümle')
   })
 })
+
+describe('module question at the desk (W2c)', () => {
+  function withCompany(): string {
+    const c = company(['web'], 2)
+    useGameStore.setState({ state: c })
+    return c.projects[0]!.id
+  }
+
+  it('collapsed: one sentence naming the project and the module; open: one tile with icon, name, 2+ chips, Kur and Diğerleri', () => {
+    const id = withCompany()
+    const key = `desk:module:${id}`
+    const st = store().state
+    const ask = moduleAsk(st)!
+    const name = moduleName(ask.moduleId, 'web')
+    const pill = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
+    expect(pill).toContain('data-open="false"')
+    expect(pill).toContain(`${st.projects[0]!.name} için sıradaki modül: ${name}?`)
+    expect(pill).not.toContain('Diğerleri')
+    openBubble(key)
+    const out = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
+    expect(out).toContain(MODULE_TEXT[ask.moduleId].line)
+    expect(out).toContain('>Kur<')
+    expect(out).toContain('Diğerleri')
+    // gain + (minus or upkeep) + cost: three chips at most, one move on the button.
+    const chips = (out.match(/data-chip=""/g) ?? []).length
+    expect(chips).toBeGreaterThanOrEqual(2)
+    expect(chips).toBeLessThanOrEqual(3)
+  })
+
+  it('opening it holds the world; Kur starts the build, closes the bubble and silences the question', () => {
+    const id = withCompany()
+    const key = `desk:module:${id}`
+    openBubble(key)
+    expect(store().ui.pauseReasons).toContain('bubble')
+    expect(effectiveSpeed(store())).toBe(0)
+    const ask = moduleAsk(store().state)!
+    const r = store().dispatch({ type: 'buildModule', projectId: id, moduleId: ask.moduleId })
+    expect(r.ok).toBe(true)
+    expect(store().ui.bubbleOpen).toBeNull()
+    expect(moduleAsk(store().state)).toBeNull()
+    expect(html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))).toBe('')
+  })
+
+  it('the stale variant: "eskidi, yenileyelim mi?" with Yenile, then never twice for the same age', () => {
+    const c = company(['web'], 2)
+    c.projects[0]!.modules = [{ id: 'feedback', day: c.time.day - 600 }]
+    useGameStore.setState({ state: c })
+    const id = c.projects[0]!.id
+    const key = `desk:module:${id}`
+    openBubble(key)
+    const out = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
+    expect(out).toContain(`${moduleName('feedback', 'web')} eskidi, yenileyelim mi?`)
+    expect(out).toContain('>Yenile<')
+    expect(store().dispatch({ type: 'refreshModule', projectId: id, moduleId: 'feedback' }).ok).toBe(true)
+    expect(moduleAsk(store().state)).toBeNull()
+  })
+})
+

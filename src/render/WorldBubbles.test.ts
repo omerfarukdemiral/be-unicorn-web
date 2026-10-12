@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { DECISIONS } from '../content'
 import { createGame } from '../engine'
+import { company } from '../engine/__tests__/moduleFixtures'
+import { modulePromptFlag } from '../engine/modules'
 import type { Employee, GameState, PendingPayday, RenewalView, RoundState } from '../engine/types'
 import {
   BubbleTimeline,
@@ -328,5 +330,45 @@ describe('routeBubbles: a tapped employee (T14)', () => {
     expect(keys(open(s, 'person:ghost'))).toEqual([])
     s.employees = [emp('e2', { status: 'leaving', leaveDay: 30 })]
     expect(keys(open(s, 'person:e2'))).toEqual(['person:e2'])
+  })
+})
+
+describe('routeBubbles: the module question (W2c)', () => {
+  const quiet = (s: GameState): GameState => {
+    s.bubbles = []
+    s.visitors = []
+    s.decisions.active = undefined
+    s.decisions.lastAnswer = undefined
+    s.finance.pendingPayday = undefined
+    s.round = undefined
+    s.candidates = []
+    s.derived = { ...s.derived, canStartRound: false, renewals: [], nextStep: undefined }
+    return s
+  }
+
+  it('a finished product with a free slot and an affordable module asks at the desk, with its project as refId', () => {
+    const s = quiet(company(['web']))
+    const lines = open(s).filter((l) => l.kind === 'desk')
+    expect(lines).toEqual([expect.objectContaining({ key: `desk:module:${s.projects[0]!.id}`, speakerId: 'desk', ref: 'module', extra: s.projects[0]!.id })])
+  })
+
+  it('only ONE module bubble at a time, oldest project first, and a build / a young product / an asked stage silences it', () => {
+    const s = quiet(company(['web', 'mobile']))
+    expect(open(s).filter((l) => l.ref === 'module')).toHaveLength(1)
+    expect(open(s).find((l) => l.ref === 'module')!.extra).toBe(s.projects[0]!.id)
+    s.flags[modulePromptFlag(s.projects[0]!.id)] = s.stage
+    expect(open(s).find((l) => l.ref === 'module')!.extra).toBe(s.projects[1]!.id)
+    s.projects[1]!.maturity = 0.9
+    expect(open(s).some((l) => l.ref === 'module')).toBe(false)
+  })
+
+  it('it yields to the payday (one desk bubble at a time) and keeps its place while open', () => {
+    const s = quiet(company(['web']))
+    s.finance.pendingPayday = { day: 30, deferredBefore: 0, ledger: {} } as unknown as PendingPayday
+    const shown = open(s)
+    expect(shown.filter((l) => l.kind === 'desk')).toHaveLength(1)
+    expect(shown.find((l) => l.kind === 'desk')!.ref).toBe('payday')
+    const key = `desk:module:${s.projects[0]!.id}`
+    expect(keys(open(s, key))).toContain(key)
   })
 })

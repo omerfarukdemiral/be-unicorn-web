@@ -5,21 +5,24 @@
 // with labelled chips. The deeper views stay one tap away: Detay / Masa / Ekip close the bubble, then open the panel.
 import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { PROJECT_NAMES } from '../../content'
+import { MODULE_TEXT, moduleName, PROJECT_NAMES } from '../../content'
 import * as B from '../../engine/balance'
 import { ledgerCosts } from '../../engine/economy'
 import { autoPaydayChoice } from '../../engine'
 import { actionEnergy } from '../../engine/founder'
+import { moduleAsk, moduleOffers } from '../../engine/modules'
 import { FOUNDER_ACTIONS, PROJECT_CATEGORIES, ROUND_SIZES, type ActionErrorCode, type PaydayChoice, type PitchOption } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { renewalRows, type RenewalRow } from '../center/centerData'
 import { ChipRow, type Chip } from '../EffectChips'
+import { Icon } from '../icons'
 import { FOUNDER_COLOR, FOUNDER_ICON } from '../theme'
 import { useFounderActions } from '../FounderActions'
 import { money, pct } from '../format'
 import { t } from '../i18n'
 import { requestOverlay } from '../modalQueue'
 import { PAYDAY_LINES, paydayView, type PaydayDesk } from '../overlays/paydayView'
+import { buildChips, MODULE_ICON, useBuildCost } from '../panels/ModulesSection'
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
 import { cx, IconBadge } from '../primitives'
 import { BlockedLine, ChoiceRow, closeBubble, Expandable, launch, type BubbleMark } from './Expandable'
@@ -27,7 +30,7 @@ import { castName } from './speaker'
 import { investorLabel, meetingLine, PITCH_ICON, pitchChips } from '../pitch'
 
 /** Mirrors render/bubbles.ts DeskTopic (ui may not import render). */
-export type DeskTopic = 'payday' | 'round' | 'pitch' | 'renewal' | 'hire' | 'project' | 'actions'
+export type DeskTopic = 'payday' | 'round' | 'pitch' | 'renewal' | 'hire' | 'module' | 'project' | 'actions'
 
 /** "Hepsini öde": every line of the month paid in full. */
 export const PAY_ALL: PaydayChoice = { salaries: 'full', rent: 'pay', infra: 'pay', ads: 'pay', founder: 'pay' }
@@ -73,6 +76,8 @@ export function DeskBubble({ bubbleKey, topic, refId }: { bubbleKey: string; top
       return <RenewalBubble bubbleKey={bubbleKey} refId={refId} />
     case 'hire':
       return <HireBubble bubbleKey={bubbleKey} />
+    case 'module':
+      return <ModuleBubble bubbleKey={bubbleKey} refId={refId} />
     case 'project':
       return <ProjectBubble bubbleKey={bubbleKey} />
     case 'actions':
@@ -316,6 +321,73 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
         <ChoiceRow label={t('bubble.moreCandidates', { n: candidates.length - MAX_CANDIDATES })} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'team' }))} />
       )}
       {err && <span className="font-text text-[12px] font-semibold text-negative-ink">{err}</span>}
+    </Expandable>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Project module (W2c): a finished product has room to grow, or a module has slipped
+// ---------------------------------------------------------------------------
+
+/** One question about one project: the next module to build ("Kur" is one tap) or a stale one to refresh; "Diğerleri" opens the project. */
+function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string }) {
+  const dispatch = useGameStore((s) => s.dispatch)
+  const cost = useBuildCost()
+  // Re-render only when the question or its numbers change (the store clones state every tick).
+  const key = useGameStore((s) => {
+    const a = moduleAsk(s.state)
+    if (!a || a.projectId !== refId) return ''
+    const o = moduleOffers(s.state, s.state.projects.find((p) => p.id === refId)!).find((x) => x.id === a.moduleId && x.refresh === a.stale)
+    return `${a.moduleId}|${a.stale ? 1 : 0}|${o?.cost}|${o?.days}`
+  })
+  const view = useMemo(() => {
+    const st = useGameStore.getState().state
+    const a = moduleAsk(st)
+    const p = st.projects.find((x) => x.id === refId)
+    if (!key || !a || !p) return null
+    const offer = moduleOffers(st, p).find((x) => x.id === a.moduleId && x.refresh === a.stale)
+    return offer ? { p, offer, stale: a.stale, chips: buildChips(st, p, offer) } : null
+  }, [key, refId])
+  if (!view) return null
+  const { p, offer, stale } = view
+  const name = moduleName(offer.id, p.category)
+  const openProject = () => useGameStore.getState().openPanel({ kind: 'detail', selection: { kind: 'project', id: p.id } })
+  // A refresh shows its price and days only (the gain is already installed); a new module shows gain, minus and cost.
+  const chips = stale ? view.chips.filter((c) => c.icon === 'cash') : view.chips
+  return (
+    <Expandable
+      bubbleKey={bubbleKey}
+      kind="desk"
+      face="founder"
+      mark={{ icon: MODULE_ICON[offer.id], color: CATEGORY_COLOR[p.category] }}
+      speaker={t('founder.you')}
+      line={t(stale ? 'module.stale' : 'bubble.module', { project: p.name, module: name })}
+      detail={openProject}
+    >
+      <div className="flex flex-col gap-1.5 rounded-control bg-surface-2/60 px-2.5 py-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon name={MODULE_ICON[offer.id]} size={20} tone={CATEGORY_COLOR[p.category]} className="shrink-0" />
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold leading-tight text-ink">{name}</span>
+            <span className="font-text block text-[12px] leading-snug text-ink-2">{MODULE_TEXT[offer.id].line}</span>
+          </span>
+        </span>
+        <ChipRow chips={chips} />
+      </div>
+      <ChoiceRow
+        primary
+        label={
+          <span className="inline-flex items-center gap-1.5">
+            {t(stale ? 'module.refresh' : 'module.build')}
+            <span className="tabular inline-flex items-center gap-0.5 text-[12px] opacity-80">
+              <Icon name={cost.icon} size={12} />
+              {cost.text}
+            </span>
+          </span>
+        }
+        onClick={() => dispatch({ type: stale ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: offer.id })}
+      />
+      <ChoiceRow label={t('module.others')} onClick={() => launch(openProject)} />
     </Expandable>
   )
 }

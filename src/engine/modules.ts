@@ -225,12 +225,8 @@ export function moduleOffers(s: GameState, p: Project): ModuleOffer[] {
   })
 }
 
-/**
- * The one module the desk suggests for a project (a hint, not a rule): among those it can build now, the best
- * weight × [(arpu − 1) + 1.5 (1 − churn) + 0.5 (organic − 1) + ads (1 − cac) + pen (tam − 1)] per month of MRR it costs,
- * each term the change it makes to the project's capped multiplier. null when none helps.
- */
-export function suggestModule(s: GameState, p: Project): ProjectModuleId | null {
+/** Gain terms of the suggestion score: the change one module makes to the project's capped multipliers, weighted. */
+function moduleScore(s: GameState, p: Project, id: ProjectModuleId, cost: number): number {
   const ws = projectWeights(s)
   const total = ws.reduce((a, x) => a + x.w, 0)
   const weight = total > 0 ? (ws.find((x) => x.p.id === p.id)?.w ?? 0) / total : 0
@@ -239,18 +235,127 @@ export function suggestModule(s: GameState, p: Project): ProjectModuleId | null 
   const ads = Math.min(1, Math.max(0, s.finance.adBudget / Math.max(mrr, floor)))
   const pen = s.derived.penetration ?? 0
   const day = s.time.day
+  const after = [...(p.modules ?? []), { id, day }]
+  const d = (kind: ModuleEffectKind) => moduleMult(p, kind, day, after) / moduleMult(p, kind, day)
+  const gain = (d('arpu') - 1) + 1.5 * (1 - d('churn')) + 0.5 * (d('organic') - 1) + ads * (1 - d('cac')) + pen * (d('tam') - 1)
+  return (weight * gain) / (cost / Math.max(mrr, 1))
+}
+
+/**
+ * The one module the desk suggests for a project (a hint, not a rule): among those it can build now, the best
+ * weight × [(arpu − 1) + 1.5 (1 − churn) + 0.5 (organic − 1) + ads (1 − cac) + pen (tam − 1)] per month of MRR it costs,
+ * each term the change it makes to the project's capped multiplier. null when none helps.
+ */
+export function suggestModule(s: GameState, p: Project): ProjectModuleId | null {
   let best: ProjectModuleId | null = null
   let bestScore = 0
   for (const offer of moduleOffers(s, p)) {
     if (offer.refresh || offer.error) continue
-    const after = [...(p.modules ?? []), { id: offer.id, day }]
-    const d = (kind: ModuleEffectKind) => moduleMult(p, kind, day, after) / moduleMult(p, kind, day)
-    const gain = (d('arpu') - 1) + 1.5 * (1 - d('churn')) + 0.5 * (d('organic') - 1) + ads * (1 - d('cac')) + pen * (d('tam') - 1)
-    const score = (weight * gain) / (offer.cost / Math.max(mrr, 1))
+    const score = moduleScore(s, p, offer.id, offer.cost)
     if (score > bestScore) {
       bestScore = score
       best = offer.id
     }
   }
   return best
+}
+
+/** Why a build can wait without leaving the list: the player can fix these (cash, energy, moves, a running build). */
+const SOFT_ERRORS: readonly ActionErrorCode[] = ['insufficientCash', 'noEnergy', 'noMoves', 'slotOccupied']
+
+/**
+ * The project panel's rows (W2c): up to `n` modules the project can take, best suggestion score first. Unlike
+ * suggestModule it keeps the ones a fixable reason blocks (their `error` says why); stage-locked, wrong-category and
+ * excluded ones stay out (the folded "Tüm modüller" list shows those).
+ */
+export function suggestModules(s: GameState, p: Project, n = 3): ModuleOffer[] {
+  return moduleOffers(s, p)
+    .filter((o) => !o.refresh && (!o.error || SOFT_ERRORS.includes(o.error)))
+    .map((o) => ({ o, score: moduleScore(s, p, o.id, o.cost) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map((x) => x.o)
+}
+
+/** A module's two headline numbers for the chips: the biggest gain and the biggest minus, as multipliers on one kind. */
+export interface ModuleHeadline {
+  kind: ModuleEffectKind
+  /** The multiplier on `kind` (0.94 = −6%). */
+  mult: number
+  /** true = good for the player (a lower churn, a higher arpu); updateWork above 1 is bad. */
+  good: boolean
+}
+
+const LOWER_IS_BETTER: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork']
+
+function headline(entries: [ModuleEffectKind, number][]): ModuleHeadline | undefined {
+  let best: ModuleHeadline | undefined
+  let size = 0
+  for (const [kind, mult] of entries) {
+    const d = Math.abs(mult - 1)
+    if (d > size + 1e-9) {
+      size = d
+      best = { kind, mult, good: LOWER_IS_BETTER.includes(kind) ? mult < 1 : mult > 1 }
+    }
+  }
+  return best
+}
+
+/** The biggest gain (boosted on the project's category) and the biggest minus of a module. Either can be missing. */
+export function moduleHeadlines(id: ProjectModuleId, category: ProjectCategory): { gain?: ModuleHeadline; minus?: ModuleHeadline } {
+  const def = moduleDef(id)
+  if (!def) return {}
+  const gains = MODULE_KINDS.flatMap((k): [ModuleEffectKind, number][] => (def.gains[k] !== undefined ? [[k, moduleGain(def, k, category)]] : []))
+  const minuses = MODULE_KINDS.flatMap((k): [ModuleEffectKind, number][] => (def.minus?.[k] !== undefined ? [[k, def.minus[k]!]] : []))
+  const gain = headline(gains)
+  const minus = headline(minuses)
+  return { ...(gain ? { gain } : {}), ...(minus ? { minus } : {}) }
+}
+
+/** One module question for the desk: which project, which module, and whether it is a refresh of a stale one. */
+export interface ModuleAsk {
+  projectId: string
+  moduleId: ProjectModuleId
+  stale: boolean
+}
+
+/** Below this strength an installed module is stale enough for the desk to ask for a refresh. */
+export const MODULE_ASK_STRENGTH = 0.75
+
+/**
+ * The one module question the desk asks now (oldest project first; a stale module before a new one): a launched
+ * product at 1.0 with a free slot, no build running and a module the till affords, not asked yet this stage
+ * (flags modulePrompt:{id} < stage), or an installed module under MODULE_ASK_STRENGTH not asked about at this build
+ * (flags moduleStale:{id}:{module} ≠ its day). Pure: the world bubble and its content both read it.
+ */
+export function moduleAsk(s: GameState): ModuleAsk | null {
+  for (const p of s.projects) {
+    if (!p.launched || p.maturity < 1 || p.build) continue
+    for (const m of p.modules ?? []) {
+      if (moduleStrength(m, s.time.day) >= MODULE_ASK_STRENGTH || s.flags[moduleStaleFlag(p.id, m.id)] === m.day) continue
+      if (!moduleError(s, p, m.id, true)) return { projectId: p.id, moduleId: m.id, stale: true }
+    }
+    if (Number(s.flags[modulePromptFlag(p.id)] ?? -1) >= s.stage) continue
+    if ((p.modules?.length ?? 0) >= projectSlots(s, p).total) continue
+    const id = suggestModule(s, p)
+    if (id) return { projectId: p.id, moduleId: id, stale: false }
+  }
+  return null
+}
+
+/** The running build as the UI shows it: how far along (0–1) and the days left at today's build speed (null when nobody builds). */
+export function buildStatus(s: GameState, p: Project): { id: ProjectModuleId; refresh: boolean; fraction: number; days: number | null } | null {
+  const b = p.build
+  const def = b && moduleDef(b.id)
+  if (!b || !def) return null
+  const work = moduleWork(p, def, b.refresh === true)
+  const rate = s.derived.maturityPerDay?.[p.id] ?? 0
+  return { id: b.id, refresh: b.refresh === true, fraction: Math.min(1, b.progress / work), days: rate > 0 ? Math.ceil(Math.max(0, work - b.progress) / rate) : null }
+}
+
+/** A module's monthly upkeep if it were built on this project now (0 for modules with none). */
+export function moduleUpkeepHint(s: GameState, p: Project, id: ProjectModuleId): number {
+  const ws = projectWeights(s)
+  const weight = ws.length > 0 ? (ws.some((x) => x.p.id === p.id) ? 1 : 0) / ws.length : 0
+  return Math.round(moduleDef(id)?.upkeep?.(s, weight, s.finance.mrr) ?? 0)
 }

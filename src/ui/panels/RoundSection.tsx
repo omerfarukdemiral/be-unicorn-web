@@ -9,19 +9,20 @@
 // `offer` focus pause. The hub never pauses (§14.1).
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ROUND_SIZES, type DiligenceItem, type PitchOption, type RoundPitch, type RoundSize, type RoundSizeOption } from '../../engine/types'
+import { ROUND_MEETINGS, ROUND_SIZES, type DiligenceItem, type PitchOption, type RoundMeeting, type RoundPitch, type RoundSize, type RoundSizeOption } from '../../engine/types'
 import { BURN_MULTIPLE_MAX, DILIGENCE_MET, DILIGENCE_UNMET, ROUND_FAIL_STRIKES } from '../../engine/balance'
 import { roundEndRunway, roundOutlook, type RoundOutlook } from '../../engine/loopSelectors'
 import { STAGES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
-import { Icon, type IconName } from '../icons'
+import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
 import { Bar, Button, CostPreview, cx, Dot, IconBadge, Pill, Stat } from '../primitives'
 import { RUNWAY_DANGER_MONTHS } from '../theme'
 import { useSpendPreview } from '../widgets'
+import { ChipRow } from '../EffectChips'
+import { investorLabel, meetingLine, PITCH_ICON, pitchChips } from '../pitch'
 
-const PITCH_ICON: Record<RoundPitch, IconName> = { metrics: 'bars', story: 'chat', coinvestor: 'handshake' }
 
 function ddValue(d: DiligenceItem): string {
   if (d.id === 'runway') return t('unit.months', { v: fixed(d.value, 1) })
@@ -159,6 +160,9 @@ export function RoundSection({ setup = false }: { setup?: boolean }) {
           pitchDue={active.pitchDue}
           pitches={active.pitches ?? []}
           options={view?.pitchOptions ?? []}
+          meeting={view?.meeting}
+          meetingIndex={view?.meetingIndex ?? 0}
+          line={`${investorLabel(view, active.targetStage)} · ${meetingLine(view)}`}
           strikes={view?.strikes ?? 0}
           risk={view?.risk ?? 0}
           onPitch={(pitch) => dispatch({ type: 'roundPitch', pitch })}
@@ -269,31 +273,6 @@ function DownRound({ option, retryIn, onStart }: { option: RoundSizeOption; retr
   )
 }
 
-/** A pitch as numbers: offer change (a range for the story), weeks off and equity for the co-investor, energy. */
-function PitchNumbers({ o }: { o: PitchOption }) {
-  return (
-    <span className="tabular flex flex-wrap items-center gap-x-2 text-[12px] font-semibold text-ink-2">
-      {o.pitch === 'coinvestor' ? (
-        <>
-          <span className="inline-flex items-center gap-0.5">
-            <Icon name="timer" size={12} />−{o.weeks}
-          </span>
-          <span className="inline-flex items-center gap-0.5">
-            <Icon name="pie" size={12} />+{pct(o.equity, 0)}
-          </span>
-        </>
-      ) : (
-        <span>{o.pitch === 'story' ? `${signed(o.min ?? o.delta)}…${signed(o.max ?? o.delta)}` : signed(o.delta)}</span>
-      )}
-      {o.energy > 0 && (
-        <span className="inline-flex items-center gap-0.5">
-          <Icon name="bolt" size={12} />−{o.energy}
-        </span>
-      )}
-    </span>
-  )
-}
-
 function ActiveRound(p: {
   weeksTotal: number
   weeksLeft: number
@@ -307,6 +286,9 @@ function ActiveRound(p: {
   pitchDue?: number
   pitches: readonly { week: number; pitch: RoundPitch; delta: number }[]
   options: readonly PitchOption[]
+  meeting?: RoundMeeting
+  meetingIndex: number
+  line: string
   strikes: number
   risk: number
   onPitch: (pitch: RoundPitch) => void
@@ -349,34 +331,37 @@ function ActiveRound(p: {
 
       {p.pitchDue !== undefined ? (
         <div className="flex flex-col gap-1">
-          <div className="ui-label text-brand-ink">{t('round.pitchTitle')}</div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="ui-label text-brand-ink">{t('round.pitchTitle', { i: p.meetingIndex, n: ROUND_MEETINGS.length, m: t(`meeting.${p.meeting ?? 'intro'}.name`) })}</div>
+          <div className="font-text text-xs text-ink-2">{p.line}</div>
+          <div className="flex flex-col gap-1.5">
             {p.options.map((o) => (
               <button
                 key={o.pitch}
                 type="button"
                 disabled={!o.ok}
                 onClick={() => p.onPitch(o.pitch)}
-                title={t(`pitch.${o.pitch}`)}
-                className="flex min-w-0 flex-col items-start gap-1 rounded-control border border-brand/40 bg-surface px-2 py-1.5 text-left transition-[border-color,transform] duration-[120ms] hover:border-brand active:scale-[0.96] disabled:opacity-50"
+                className="flex min-w-0 flex-col items-start gap-1 rounded-control border border-brand/40 bg-surface px-2.5 py-2 text-left transition-[border-color,transform] duration-[120ms] hover:border-brand active:scale-[0.98] disabled:opacity-50"
               >
-                <span className="flex min-w-0 items-center gap-1">
+                <span className="flex min-w-0 items-center gap-1.5">
                   <Icon name={PITCH_ICON[o.pitch]} size={15} className="shrink-0 text-brand-ink" />
-                  <span className="truncate text-[12px] font-semibold text-ink">{t(`pitch.${o.pitch}`)}</span>
+                  <span className="truncate text-[13px] font-semibold text-ink">{t(`pitch.${o.pitch}`)}</span>
                 </span>
-                <PitchNumbers o={o} />
+                <ChipRow chips={pitchChips(o)} />
               </button>
             ))}
           </div>
         </div>
       ) : (
-        lastPitch && (
-          <div className="flex items-center gap-1.5 text-xs text-ink-2">
-            <Icon name={PITCH_ICON[lastPitch.pitch]} size={14} className="shrink-0" />
-            <span className="font-semibold text-ink">{t(`pitch.${lastPitch.pitch}`)}</span>
-            <span className="tabular font-semibold">{lastPitch.delta === 0 ? '±0' : signed(lastPitch.delta)}</span>
-          </div>
-        )
+        <div className="flex flex-col gap-1 text-xs text-ink-2">
+          {lastPitch && (
+            <div className="flex items-center gap-1.5">
+              <Icon name={PITCH_ICON[lastPitch.pitch]} size={14} className="shrink-0" />
+              <span className="font-semibold text-ink">{t(`pitch.${lastPitch.pitch}`)}</span>
+              <span className="tabular font-semibold">{lastPitch.delta === 0 ? '±0' : signed(lastPitch.delta)}</span>
+            </div>
+          )}
+          {p.meetingIndex < ROUND_MEETINGS.length && <div>{t('round.pitchWait', { m: t(`meeting.${ROUND_MEETINGS[p.meetingIndex]}.name`) })}</div>}
+        </div>
       )}
 
       <Diligence items={p.diligence} />

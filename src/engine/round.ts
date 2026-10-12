@@ -1,8 +1,9 @@
 // Fundraising rounds (PLAN §5.9, docs/CORE_LOOP.md §4.3 "Tur penceresi"):
 // - the window opens early, at ROUND_EARLY_RATIO of the target valuation ("şimdi mi, biraz daha mı?");
 // - the player picks a size: 8 / 12 / 16 months (ROUND_RUNWAY_MONTHS) of runway on the NEW burn ↔ less / more equity;
-// - the round runs ROUND_WEEKS_MIN–MAX weeks; every week the live offer moves with the metrics and a pitch is due
-//   (show metrics / tell the story / bring a second investor) until the pitches reach their cap;
+// - the round runs ROUND_WEEKS_MIN–MAX weeks; every week the live offer moves with the metrics, and four meetings fall
+//   across it (first meeting, deep dive, partners, term sheet), each with its own three answers; the round's investor
+//   has a style (numbers / vision / network) that favours one answer per meeting;
 // - offer = amount × (clamp(price × due diligence, floor, ceiling) + pitch bonus), where half the price is locked
 //   when the round starts (an early start is safe but cheap) and the amount follows the burn you actually run;
 // - close → cash, dilution, move. The bridge loan card still comes when cash runs out mid-round (tick.ts).
@@ -15,8 +16,8 @@ import { applyMorale, loanOf, syncDebt, unlockTool, unlockWidget } from './effec
 import { actionEnergy, enterMoveBudget, movesError, spendMoves } from './founder'
 import { relocateOffice } from './office'
 import type { Rng } from './rng'
-import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
-import { ROUND_PITCHES, ROUND_SIZES } from './types'
+import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, InvestorStyle, MeetingTopic, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
+import { INVESTOR_STYLES, MEETING_PITCHES, ROUND_MEETINGS, ROUND_SIZES } from './types'
 import { incCounter, modifierMult, newId, pushActivity, pushEvent, stageBaseline, type EngineContent } from './util'
 import { boardOf, ensureRivals, markRivalAnchor, openAutoSegments, rivalOut } from './world'
 
@@ -99,25 +100,86 @@ export function investorGrowth(s: GameState): number {
   return s.derived.momAvg ?? s.derived.momGrowth
 }
 
+/** The answer each investor style favours in each meeting (+PITCH_FIT). */
+const STYLE_FIT: Record<InvestorStyle, ReadonlySet<RoundPitch>> = {
+  numbers: new Set(['deck', 'honest', 'rehearse', 'sign']),
+  visionary: new Set(['demo', 'spin', 'team', 'push']),
+  network: new Set(['coinvestor', 'fix', 'rival', 'keep']),
+}
+
+/** Weeks the four meetings fall on: spread over the round, the first after week 1, the last ≥ 2 weeks before the end. */
+export function meetingWeeksFor(weeksTotal: number): number[] {
+  const last = Math.max(1, weeksTotal - 2)
+  const out: number[] = []
+  for (const at of B.MEETING_AT) {
+    const w = Math.min(last, Math.max(1, Math.round(1 + at * (last - 1))))
+    out.push(Math.max(w, (out[out.length - 1] ?? 0) + 1))
+  }
+  return out.map((w) => Math.min(w, weeksTotal - 1))
+}
+
+/** The deep dive's question: the first broken due-diligence item, else heavy tech debt, else the company's edge. */
+export function meetingTopic(s: GameState): MeetingTopic {
+  const weak = diligenceNow(s).find((d) => d.asked !== false && !d.met)
+  if (weak) return weak.id
+  if (s.techDebt >= B.MEETING_DEBT_TOPIC) return 'techDebt'
+  return 'edge'
+}
+
 /**
- * What a pitch would do right now (the action applies exactly this; 'story' draws inside [min, max]). GAMEPLAY V2 §7.1:
- * from Pre-seed on every pitch takes a move (the round week is a week the founder cannot sell) and no energy.
+ * What an answer would do right now (the action applies exactly this; a gamble draws inside [min, max]). GAMEPLAY V2
+ * §7.1: from Pre-seed on every meeting takes a move. `style` adds PITCH_FIT to the answer it favours.
  */
-export function pitchOption(s: GameState, pitch: RoundPitch): PitchOption {
+export function pitchOption(s: GameState, pitch: RoundPitch, style: InvestorStyle = s.round?.investorStyle ?? 'numbers'): PitchOption {
   const movesOk = movesError(s, B.MOVE_COST.roundPitch) === null
+  const fit = STYLE_FIT[style].has(pitch)
+  const f = fit ? B.PITCH_FIT : 0
+  const rep = (clamp(0, 100, s.stats.reputation) / 100) * B.PITCH_STORY_PER_REP
+  const base = { pitch, weeks: 0, equity: 0, energy: 0, ok: movesOk, ...(fit ? { fit } : {}) }
+  const gamble = (min: number, max: number, energy = 0): PitchOption => {
+    const e = energy ? actionEnergy(s, energy) : 0
+    return { ...base, min: min + f, max: max + f, delta: (min + max) / 2 + f, energy: e, ok: movesOk && s.founder.energy >= e }
+  }
+  const sure = (delta: number, energy = 0): PitchOption => {
+    const e = energy ? actionEnergy(s, energy) : 0
+    return { ...base, delta: delta + f, energy: e, ok: movesOk && s.founder.energy >= e }
+  }
   switch (pitch) {
+    case 'deck':
     case 'metrics':
-      return { pitch, delta: investorGrowth(s) >= growthAsk(s) ? B.PITCH_METRICS_GOOD : B.PITCH_METRICS_BAD, weeks: 0, equity: 0, energy: 0, ok: movesOk }
+      return sure(investorGrowth(s) >= growthAsk(s) ? B.PITCH_METRICS_GOOD : B.PITCH_METRICS_BAD)
+    case 'demo':
     case 'story': {
-      const rep = (clamp(0, 100, s.stats.reputation) / 100) * B.PITCH_STORY_PER_REP
-      const min = B.PITCH_STORY_MIN + rep
-      const max = B.PITCH_STORY_MAX + rep
-      const energy = actionEnergy(s, B.PITCH_STORY_ENERGY)
-      return { pitch, delta: (min + max) / 2, min, max, weeks: 0, equity: 0, energy, ok: movesOk && s.founder.energy >= energy }
+      const debt = s.techDebt * B.PITCH_DEMO_PER_DEBT
+      return gamble(B.PITCH_STORY_MIN + rep - debt, B.PITCH_STORY_MAX + rep - debt, B.PITCH_STORY_ENERGY)
     }
     case 'coinvestor':
-      return { pitch, delta: 0, weeks: B.PITCH_COINVESTOR_WEEKS, equity: B.PITCH_COINVESTOR_EQUITY, energy: 0, ok: movesOk }
+      return { ...sure(0), weeks: B.PITCH_COINVESTOR_WEEKS, equity: B.PITCH_COINVESTOR_EQUITY }
+    case 'honest':
+      return sure((s.round?.topic ?? meetingTopic(s)) === 'edge' ? B.PITCH_HONEST_CLEAN : B.PITCH_HONEST)
+    case 'spin':
+      return gamble(B.PITCH_SPIN_MIN + rep, B.PITCH_SPIN_MAX + rep, B.PITCH_STORY_ENERGY)
+    case 'fix':
+      return { ...sure(B.PITCH_FIX), weeks: -B.PITCH_FIX_WEEKS }
+    case 'rehearse':
+      return sure(B.PITCH_REHEARSE, B.PITCH_REHEARSE_ENERGY)
+    case 'team':
+      return sure(s.stats.morale >= B.PITCH_TEAM_MORALE ? B.PITCH_TEAM_GOOD : B.PITCH_TEAM_BAD)
+    case 'rival':
+      return gamble(B.PITCH_RIVAL_MIN, B.PITCH_RIVAL_MAX)
+    case 'sign':
+      return { ...sure(B.PITCH_SIGN), weeks: Math.max(0, (s.round?.weeksLeft ?? 1) - 1) }
+    case 'push':
+      return { ...sure(B.PITCH_PUSH), strike: 1 }
+    case 'keep':
+      return { ...sure(B.PITCH_KEEP), equity: -B.PITCH_KEEP_EQUITY }
   }
+}
+
+/** The answers of the meeting open now (none: no meeting open). */
+export function meetingOptions(s: GameState): PitchOption[] {
+  const m = s.round?.active && s.round.pitchDue !== undefined ? (s.round.meeting ?? 'intro') : undefined
+  return m ? MEETING_PITCHES[m].map((p) => pitchOption(s, p)) : []
 }
 
 /** Burn multiple the investor accepts at the current stage (99 before Seed: not asked), + profit-share's tolerance (§7.2). */
@@ -203,6 +265,14 @@ function live(r: RoundState): Required<Pick<RoundState, 'baseAmount' | 'targetVa
   r.targetValuation ??= targetValuationOf(r.targetStage) ?? r.baseValuation
   r.pitchBonus ??= clamp(-B.PITCH_BONUS_CAP, B.PITCH_BONUS_CAP, (r.pitchFactor ?? 1) - 1)
   r.priceAtStart ??= priceRatio(r.baseValuation, r.targetValuation)
+  // Older saves ran a weekly pitch: their round gets a style and a meeting calendar; an open pitch becomes a meeting.
+  r.investorStyle ??= 'numbers'
+  r.meetingWeeks ??= meetingWeeksFor(r.weeksTotal)
+  if (r.meetingsOpened === undefined) {
+    const week = r.weeksTotal - r.weeksLeft
+    r.meetingsOpened = r.meetingWeeks.filter((w) => w <= week).length
+  }
+  if (r.pitchDue !== undefined) r.meeting ??= ROUND_MEETINGS[Math.max(0, Math.min(ROUND_MEETINGS.length, r.meetingsOpened) - 1)]
   return { baseAmount: r.baseAmount, targetValuation: r.targetValuation, pitchBonus: r.pitchBonus, priceAtStart: r.priceAtStart }
 }
 
@@ -228,7 +298,7 @@ function liveOffer(s: GameState, r: RoundState, diligence: readonly DiligenceIte
   return Math.round(liveBase(s, r) * liveFactor(s, r, diligence))
 }
 
-/** Average pitch result over the weeks a pitch was due (skipped weeks count as 0), within ±PITCH_BONUS_CAP. */
+/** Average answer over the meetings held so far (a missed meeting counts as 0), within ±PITCH_BONUS_CAP. */
 export function pitchAverage(r: RoundState): number {
   const list = r.pitches ?? []
   const n = Math.max(1, r.pitchWeeks ?? list.length)
@@ -265,7 +335,14 @@ export function roundView(s: GameState, stars: number): RoundView | undefined {
   if (r) {
     view.priceAtStart = live(r).priceAtStart
     view.projected = liveOffer(s, r, diligence)
-    if (r.pitchDue !== undefined) view.pitchOptions = ROUND_PITCHES.map((p) => pitchOption(s, p))
+    view.investorStyle = r.investorStyle
+    view.meetingIndex = r.meetingsOpened ?? 0
+    view.meetingsTotal = ROUND_MEETINGS.length
+    if (r.pitchDue !== undefined) {
+      view.pitchOptions = meetingOptions(s)
+      view.meeting = r.meeting
+      if (r.topic) view.topic = r.topic
+    }
     view.strikes = r.strikes ?? 0
     view.risk = Math.min(1, view.strikes / B.ROUND_FAIL_STRIKES)
     if (r.down) view.downRound = true
@@ -321,6 +398,7 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
   const normal = roundEquityFor(target, size, stars, policyEquity(s), boardEquity(s))
   const equity = down ? downEquity(normal) : normal
   const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
+  const investorStyle = rng.pick(INVESTOR_STYLES)
   const diligence = diligenceNow(s)
   const r: RoundState = {
     active: true,
@@ -337,6 +415,9 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
     pitchBonus: 0,
     priceAtStart: priceRatio(s.finance.valuation, targetValuation),
     pitches: [],
+    investorStyle,
+    meetingWeeks: meetingWeeksFor(weeks),
+    meetingsOpened: 0,
     diligence,
     strikes: 0,
     ddStart: metIds(diligence),
@@ -428,24 +509,34 @@ function weekPassed(s: GameState, r: RoundState): boolean {
   const to = liveOffer(s, r, r.diligence)
   setOfferAmount(r, to)
   r.lastMove = { week, from, to }
-  // A pitch not made last week is gone; it counts as a quiet week (0) in the investor's average impression.
-  if (r.weeksLeft > 0) {
+  // The next meeting falls due on its week. One left unanswered stays open until then, and is gone (a 0 in the
+  // investor's average) once the next one opens or the round closes.
+  const opened = r.meetingsOpened ?? 0
+  const at = (r.meetingWeeks ?? meetingWeeksFor(r.weeksTotal))[opened]
+  if (r.weeksLeft <= 0) delete r.pitchDue
+  else if (at !== undefined && week >= at) {
+    const meeting = ROUND_MEETINGS[opened]!
+    r.meetingsOpened = opened + 1
+    r.meeting = meeting
     r.pitchDue = week
+    if (meeting === 'diligence') r.topic = meetingTopic(s)
     r.pitchWeeks = (r.pitchWeeks ?? (r.pitches ?? []).length) + 1
     r.pitchBonus = pitchAverage(r)
-  } else delete r.pitchDue
+    pushEvent(s, { kind: 'roundMeeting', refId: meeting })
+  }
   pushActivity(s, 'roundOffer', { done: week, total: r.weeksTotal, from: Math.round(from), amount: Math.round(to) })
   pushEvent(s, { kind: 'roundWeek', value: to })
   return true
 }
 
-/** The week's pitch (docs/CORE_LOOP.md §4.3): changes the offer factor or the round length. */
+/** The open meeting's answer (docs/CORE_LOOP.md §4.3): moves the investor's impression, the round length or the equity. */
 export function roundPitch(s: GameState, pitch: RoundPitch, rng?: Rng): ActionErrorCode | null {
   const r = s.round
   if (!r?.active) return 'roundNotReady'
   if (r.pitchDue === undefined) return 'cooldown'
-  if (!(ROUND_PITCHES as readonly string[]).includes(pitch)) return 'invalid'
   live(r)
+  const meeting = r.meeting ?? 'intro'
+  if (!(MEETING_PITCHES[meeting] as readonly string[]).includes(pitch)) return 'invalid'
   const moves = movesError(s, B.MOVE_COST.roundPitch)
   if (moves) return moves
   const o = pitchOption(s, pitch)
@@ -453,13 +544,21 @@ export function roundPitch(s: GameState, pitch: RoundPitch, rng?: Rng): ActionEr
   s.founder.energy -= o.energy
   spendMoves(s, B.MOVE_COST.roundPitch)
   if (o.weeks > 0) r.weeksLeft = Math.max(1, r.weeksLeft - o.weeks)
-  if (o.equity > 0) r.offer.equity = Math.min(B.ROUND_EQUITY_MAX, r.offer.equity + o.equity)
-  // "Hikâye anlat" is a gamble between min and max (reputation lifts both); the others are known in advance.
+  if (o.weeks < 0) {
+    // A longer round: the calendar keeps its weeks, the investor stays on.
+    r.weeksLeft -= o.weeks
+    r.weeksTotal -= o.weeks
+    for (const v of s.visitors) if (v.purpose === 'round') v.leaveDay -= o.weeks * 7
+  }
+  if (o.equity !== 0) r.offer.equity = clamp(0.01, B.ROUND_EQUITY_MAX, r.offer.equity + o.equity)
+  if (o.strike) r.strikes = (r.strikes ?? 0) + o.strike
+  // The gambles (demo, spin, the rival bluff) draw between min and max; the others are known in advance.
   const delta = o.min !== undefined && o.max !== undefined && rng ? rng.range(o.min, o.max) : o.delta
   ;(r.pitches ??= []).push({ week: r.pitchDue, pitch, delta })
   r.pitchWeeks = Math.max(r.pitchWeeks ?? 0, r.pitches.length)
   r.pitchBonus = pitchAverage(r)
   delete r.pitchDue
+  delete r.meeting
   r.diligence = diligenceNow(s)
   setOfferAmount(r, liveOffer(s, r, r.diligence))
   pushActivity(s, 'roundPitch', { pitch, amount: Math.round(r.offer.amount) })

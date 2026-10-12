@@ -657,8 +657,8 @@ describe('core loop phase 2: round offer / weekly pitch (store side)', () => {
     store().openPanel({ kind: 'growth', section: 'round' }, { root: true })
     expect(store().ui.pauseReasons).toEqual(['offer'])
     expect(effectiveSpeed(store())).toBe(0)
-    // Picking the pitch ends the pause: back to the player's 2×.
-    const r = store().dispatch({ type: 'roundPitch', pitch: 'coinvestor' })
+    // Answering the meeting (week 2 of 6: the deep dive) ends the pause: back to the player's 2×.
+    const r = store().dispatch({ type: 'roundPitch', pitch: 'honest' })
     expect(r.ok).toBe(true)
     expect(store().ui.pauseReasons).toEqual([])
     expect(effectiveSpeed(store())).toBe(2)

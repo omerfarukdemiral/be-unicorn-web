@@ -458,8 +458,18 @@ export interface RoundState {
   priceAtStart?: number
   /** What decided the amount at the last weekly re-size: the table floor, the burn × months, or the table ceiling. */
   amountBy?: 'floor' | 'burn' | 'ceiling'
-  /** Week (1-based, weeks done) whose pitch waits for the player's choice; undefined = none due. */
+  /** Week (1-based, weeks done) whose meeting waits for the player's choice; undefined = none open. */
   pitchDue?: number
+  /** The investor's style (drawn at the start; older saves: 'numbers'). */
+  investorStyle?: InvestorStyle
+  /** Round weeks the four meetings fall on (ROUND_MEETINGS order). Older saves: computed from weeksTotal. */
+  meetingWeeks?: number[]
+  /** Meetings opened so far (index of the next one). */
+  meetingsOpened?: number
+  /** The meeting open now (with pitchDue). */
+  meeting?: RoundMeeting
+  /** The deep dive's question, fixed when that meeting opens. */
+  topic?: MeetingTopic
   /** Pitches made, oldest first. `delta`: offer factor change (fraction). */
   pitches?: RoundPitchEntry[]
   /** Due-diligence list brought by the investor; values refresh every week. */
@@ -481,9 +491,31 @@ export interface RoundState {
 export const ROUND_SIZES = ['small', 'target', 'large'] as const
 export type RoundSize = (typeof ROUND_SIZES)[number]
 
-/** Weekly pitch: show metrics / tell the story / bring a second investor. */
-export const ROUND_PITCHES = ['metrics', 'story', 'coinvestor'] as const
-export type RoundPitch = (typeof ROUND_PITCHES)[number]
+/**
+ * A round is four meetings, not a weekly pitch (the same three buttons ~60 times a run read as a loop): the first
+ * meeting, the deep dive on the company's weak spot, the partners' meeting, the term sheet. Each has its own three
+ * answers; the round's investor has a style that favours one of them.
+ */
+export const ROUND_MEETINGS = ['intro', 'diligence', 'partners', 'terms'] as const
+export type RoundMeeting = (typeof ROUND_MEETINGS)[number]
+
+/** The investor's style, drawn per round: reads the numbers / buys the vision / works the network. */
+export const INVESTOR_STYLES = ['numbers', 'visionary', 'network'] as const
+export type InvestorStyle = (typeof INVESTOR_STYLES)[number]
+
+/** What the deep-dive meeting asks about: the weakest due-diligence item, tech debt, or (all fine) the edge. */
+export type MeetingTopic = DiligenceId | 'techDebt' | 'edge'
+
+export const MEETING_PITCHES = {
+  intro: ['deck', 'demo', 'coinvestor'],
+  diligence: ['honest', 'spin', 'fix'],
+  partners: ['rehearse', 'team', 'rival'],
+  terms: ['sign', 'push', 'keep'],
+} as const satisfies Record<RoundMeeting, readonly string[]>
+
+/** Every meeting answer. 'metrics' / 'story' only live on in older saves' pitch history. */
+export const ROUND_PITCHES = ['deck', 'demo', 'coinvestor', 'honest', 'spin', 'fix', 'rehearse', 'team', 'rival', 'sign', 'push', 'keep'] as const
+export type RoundPitch = (typeof ROUND_PITCHES)[number] | 'metrics' | 'story'
 
 export interface RoundPitchEntry {
   week: number
@@ -545,8 +577,14 @@ export interface RoundView {
   diligence: DiligenceItem[]
   /** Running round: the offer if it closed at today's numbers. */
   projected?: number
-  /** Running round: what each pitch would do right now. */
+  /** Running round: what each answer of the open meeting would do right now. */
   pitchOptions?: PitchOption[]
+  /** Running round: the open meeting, the investor's style, the deep dive's question, meetings done / total. */
+  meeting?: RoundMeeting
+  investorStyle?: InvestorStyle
+  topic?: MeetingTopic
+  meetingIndex?: number
+  meetingsTotal?: number
   /** MoM growth the investor asks for at this stage (diligence + "Metrik göster"). */
   growthAsk: number
   /** Running round: strikes / ROUND_FAIL_STRIKES (0–1, the round chip's colour; GAMEPLAY V2 §6.3). */
@@ -559,7 +597,7 @@ export interface RoundView {
   retryIn?: number
 }
 
-/** Preview of one weekly pitch (engine computed). */
+/** Preview of one meeting answer (engine computed). */
 export interface PitchOption {
   pitch: RoundPitch
   /** Offer factor change, fraction (the expected value for 'story'). */
@@ -567,8 +605,12 @@ export interface PitchOption {
   /** 'story' is a gamble: the change lands between min and max (reputation moves both up). */
   min?: number
   max?: number
-  /** Weeks taken off the round. */
+  /** Weeks taken off the round (negative: the round runs longer). */
   weeks: number
+  /** The investor's style favours this answer (its bonus is already in delta / min / max). */
+  fit?: boolean
+  /** Strikes it adds (pushing the investor: GAMEPLAY V2 §6.3). */
+  strike?: number
   /** Extra equity sold, fraction. */
   equity: number
   /** Founder energy it costs. */
@@ -1230,9 +1272,11 @@ export type GameEventKind =
   | 'payday' | 'release' | 'goalDone' | 'delayedEffect'
   /** The early round window opened (valuation ≥ 60% of target). */
   | 'roundWindow'
-  /** A round week passed: the live offer moved (value = new amount) and a pitch is due. */
+  /** A round week passed: the live offer moved (value = new amount). */
   | 'roundWeek'
-  /** The player pitched (refId = RoundPitch, value = offer factor change). */
+  /** A round meeting opened (refId = RoundMeeting). */
+  | 'roundMeeting'
+  /** The player answered a meeting (refId = RoundPitch, value = offer factor change). */
   | 'roundPitched'
   /** Payday left cash < 0 (value = shortfall): the bankruptcy clock starts, the rescue card comes. */
   | 'payrollMissed'

@@ -152,20 +152,20 @@ describe('sales calls saturate and contracts end (review #20)', () => {
   })
 })
 
-describe('weekly pitch: an average impression that never saturates (review #4, #17)', () => {
-  it('a pitch still moves the offer when price × diligence is at its ceiling; a skipped week counts as zero', () => {
+describe('round meetings: an average impression that never saturates (review #4, #17)', () => {
+  it('a meeting still moves the offer when price × diligence is at its ceiling; a missed meeting counts as zero', () => {
     let s = withProject(0.3)
     const target = B.STAGE_TARGET_VALUATION[1]!
     s = refresh({ ...s, stats: { ...s.stats, users: Math.ceil((target * 1.2) / B.VAL_PER_USER), morale: 80 } })
     s = api.applyAction(s, { type: 'startRound' }).state
-    s = { ...s, round: { ...s.round!, weeksTotal: 12, weeksLeft: 12 } }
+    s = { ...s, round: { ...s.round!, weeksTotal: 6, weeksLeft: 6, meetingWeeks: [1, 2, 3, 4], investorStyle: 'visionary' } }
     s = api.step(s, 7)
     expect(s.round!.pitchDue).toBe(1)
     const before = s.derived.round!
-    const good = api.applyAction(refresh({ ...s, finance: { ...s.finance, mrrHistory: [1_000, 1_300, 1_700, 2_200] } }), { type: 'roundPitch', pitch: 'metrics' }).state
+    const good = api.applyAction(refresh({ ...s, finance: { ...s.finance, mrrHistory: [1_000, 1_300, 1_700, 2_200] } }), { type: 'roundPitch', pitch: 'deck' }).state
     expect(good.round!.pitchBonus).toBeCloseTo(B.PITCH_METRICS_GOOD, 9)
     expect(good.derived.round!.factor).toBeGreaterThan(before.factor)
-    // Next week: nothing pitched yet → the average halves (the waiting week counts as 0 until a pitch is made).
+    // Next week the deep dive opens: nothing answered yet → the average halves (it counts as 0 until answered).
     const next = api.step(good, 7)
     expect(next.round!.pitchDue).toBe(2)
     expect(next.round!.pitchBonus).toBeCloseTo(B.PITCH_METRICS_GOOD / 2, 9)

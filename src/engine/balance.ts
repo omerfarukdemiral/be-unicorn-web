@@ -360,17 +360,53 @@ export const DILIGENCE_MOM: readonly number[] = [0.04, 0.06, 0.06, 0.05, 0.04, 0
 export const DILIGENCE_MORALE = 50
 /** [GAMEPLAY V2 §4.1] Burn multiple the investor accepts, by stage (99 = not asked before Seed). */
 export const DILIGENCE_BM: readonly number[] = [99, 99, 3, 2.5, 2, 1.5, 1.5]
-/** Pitch "Metrik göster": + when the 3-month MoM meets the diligence ask, − when it does not (the numbers speak). */
+/**
+ * Round meetings (types.ts ROUND_MEETINGS): four per round, each answer moves the investor's impression (the average
+ * over the meetings, ±PITCH_BONUS_CAP). The investor's style adds PITCH_FIT to the answer it favours.
+ */
+export const PITCH_FIT = 0.03
+/** Tech debt from which the deep dive asks about it (when no due-diligence item is broken). */
+export const MEETING_DEBT_TOPIC = 10
+/** Where in the round the meetings fall (share of its weeks); the last one always ≥ 2 weeks before the close. */
+export const MEETING_AT: readonly number[] = [0, 0.35, 0.6, 1]
+/** Tanışma · "Deck'i sun": the numbers speak (+ when the 3-month MoM meets the ask, − when not). */
 export const PITCH_METRICS_GOOD = 0.05
 export const PITCH_METRICS_BAD = -0.03
-/** Pitch "Hikâye anlat": a gamble in [MIN, MAX] + reputation/100 × per-rep (both ends), costs founder energy. */
+/** Tanışma · "Canlı demo": a gamble in [MIN, MAX] + reputation/100 × per-rep; tech debt pulls both ends down. */
 export const PITCH_STORY_MIN = -0.04
 export const PITCH_STORY_MAX = 0.06
 export const PITCH_STORY_PER_REP = 0.04
 export const PITCH_STORY_ENERGY = 10
-/** Pitch "İkinci yatırımcı getir": one week shorter, but the co-investor takes this much extra equity. */
+export const PITCH_DEMO_PER_DEBT = 0.004
+/** Tanışma · "İkinci yatırımcı getir": one week shorter, but the co-investor takes this much extra equity. */
 export const PITCH_COINVESTOR_WEEKS = 1
 export const PITCH_COINVESTOR_EQUITY = 0.01
+/** Derin inceleme · "Açık konuş": a small plus on a weak spot, a real one when nothing is weak. */
+export const PITCH_HONEST = 0.01
+export const PITCH_HONEST_CLEAN = 0.05
+/** Derin inceleme · "Olumlu çerçevele": a gamble, wider than the demo. */
+export const PITCH_SPIN_MIN = -0.07
+export const PITCH_SPIN_MAX = 0.06
+/** Derin inceleme · "Süre iste, düzelt": the round runs a week longer, a little goodwill. */
+export const PITCH_FIX = 0.02
+export const PITCH_FIX_WEEKS = 1
+/** Ortaklar · "Prova et": a sure plus for founder energy. */
+export const PITCH_REHEARSE = 0.04
+export const PITCH_REHEARSE_ENERGY = 15
+/** Ortaklar · "Ekibi sahneye çıkar": pays with morale ≥ PITCH_TEAM_MORALE, backfires under it. */
+export const PITCH_TEAM_GOOD = 0.05
+export const PITCH_TEAM_BAD = -0.03
+export const PITCH_TEAM_MORALE = 60
+/** Ortaklar · "Rakip teklifini masaya koy": the bluff, the widest gamble. */
+export const PITCH_RIVAL_MIN = -0.08
+export const PITCH_RIVAL_MAX = 0.1
+/** Term sheet · "Olduğu gibi imzala": closes next week, a little goodwill. */
+export const PITCH_SIGN = 0.02
+/** Term sheet · "Değerlemeyi zorla": more money, one strike. */
+export const PITCH_PUSH = 0.07
+/** Term sheet · "Hisseyi koru": sells this much less equity for a smaller offer. */
+export const PITCH_KEEP = -0.04
+export const PITCH_KEEP_EQUITY = 0.02
 
 // GAMEPLAY V2 §6.3: a round can fail ---------------------------------------
 /** Strikes that fail a round (a week where ≥ ROUND_STRIKE_BROKEN checks met at the start broke: +1, else −1). */

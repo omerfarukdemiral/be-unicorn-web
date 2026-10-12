@@ -101,7 +101,8 @@ export function rivalRow(r: Rival, t: number): RivalRow | null {
     runIndex = 0
     inRun = active
   }
-  const day = holds && inRun > active ? runGameDays + (inRun - active) * r.pace * HOLD_PACE : Math.min(runGameDays, inRun * r.pace)
+  // A finished run sits exactly on its last day: active × pace can land a hair under it (1893 / 150 × 150).
+  const day = holds && inRun > active ? runGameDays + (inRun - active) * r.pace * HOLD_PACE : inRun >= active ? runGameDays : Math.min(runGameDays, inRun * r.pace)
   if (day < 1) return null
   const done = !holds && inRun >= active
 

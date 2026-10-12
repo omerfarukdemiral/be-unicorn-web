@@ -24,6 +24,7 @@ import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
 import { cx, IconBadge } from '../primitives'
 import { BlockedLine, ChoiceRow, closeBubble, Expandable, launch, type BubbleMark } from './Expandable'
 import { castName } from './speaker'
+import { investorLabel, meetingLine, PITCH_ICON, pitchChips } from '../pitch'
 
 /** Mirrors render/bubbles.ts DeskTopic (ui may not import render). */
 export type DeskTopic = 'payday' | 'round' | 'pitch' | 'renewal' | 'hire' | 'project' | 'actions'
@@ -186,35 +187,17 @@ function RoundBubble({ bubbleKey }: { bubbleKey: string }) {
   )
 }
 
-const signedPct = (v: number, digits = 1) => (v >= 0 ? `+${pct(v, digits)}` : `−${pct(-v, digits)}`)
 
-/** A pitch as labelled chips: offer change (the story's gamble as its upside + its risk), weeks off, equity, energy. */
-export function pitchChips(o: PitchOption): Chip[] {
-  const out: Chip[] = []
-  if (o.pitch === 'story' && o.min !== undefined && o.max !== undefined) {
-    // "Teklif −%3.4…+%6.6" read as noise (QA): whole percents, the best case and the worst case as two chips.
-    const title = t(`pitch.${o.pitch}`)
-    if (Math.round(o.max * 100) > 0) out.push({ icon: 'scale', label: t('fx.tag.offer'), text: signedPct(o.max, 0), good: true, title })
-    if (Math.round(o.min * 100) < 0) out.push({ icon: 'warning', label: t('fx.tag.risk'), text: signedPct(o.min, 0), good: false, title })
-  } else if (o.delta !== 0) {
-    out.push({ icon: 'scale', label: t('fx.tag.offer'), text: signedPct(o.delta), good: o.delta > 0, title: t(`pitch.${o.pitch}`) })
-  }
-  if (o.weeks > 0) out.push({ icon: 'timer', label: t('fx.tag.roundWeeks'), text: `−${t('fx.weeksShort', { v: o.weeks })}`, good: true, title: t('fx.roundLabel') })
-  // Extra equity sold is the founder's stake going down: the same sign as the round size rows.
-  if (o.equity > 0) out.push({ icon: 'key', label: t('fx.tag.equity'), text: `−${pct(o.equity, 0)}`, good: false, title: t('hud.founderStake') })
-  if (o.energy > 0) out.push({ icon: 'bolt', label: t('fx.tag.energy'), text: `−${o.energy}`, good: false, title: t('fx.energyLabel') })
-  return out
-}
+const pitchMark = (p: PitchOption['pitch'], fit?: boolean): BubbleMark => ({ icon: PITCH_ICON[p], color: fit ? 'var(--color-g-equity)' : 'var(--color-brand)' })
 
-const PITCH_ICON: Record<PitchOption['pitch'], BubbleMark> = {
-  metrics: { icon: 'bars', color: 'var(--color-brand)' },
-  story: { icon: 'chat', color: 'var(--color-brand)' },
-  coinvestor: { icon: 'handshake', color: 'var(--color-brand)' },
-}
-
-/** The weekly pitch: at the desk, or above the round's investor (VisitorBubble passes its cast name). */
+/** The open round meeting: at the desk, or above the round's investor (VisitorBubble passes its cast name). */
 export function PitchBubble({ bubbleKey, kind, speaker }: { bubbleKey: string; kind: string; speaker: string }) {
   const options = useGameStore((s) => s.state.derived.round?.pitchOptions)
+  const line = useGameStore((s) => meetingLine(s.state.derived.round))
+  const who = useGameStore((s) => {
+    const r = s.state.derived.round
+    return s.state.round && r?.meeting ? `${investorLabel(r, s.state.round.targetStage)} · ${t('round.meetingOf', { i: r.meetingIndex ?? 1, n: r.meetingsTotal ?? 4, m: t(`meeting.${r.meeting}.name`) })}` : null
+  })
   const dispatch = useGameStore((s) => s.dispatch)
   const movesOut = useGameStore((s) => (s.state.derived.moves?.left ?? 1) <= 0)
   const resetIn = useMovesResetIn()
@@ -223,11 +206,12 @@ export function PitchBubble({ bubbleKey, kind, speaker }: { bubbleKey: string; k
   const blocked = options.some((o) => !o.ok) ? blockedText(movesOut ? 'noMoves' : 'noEnergy', resetIn) : null
   const allBlocked = options.every((o) => !o.ok)
   return (
-    <Expandable bubbleKey={bubbleKey} kind={kind} mark={{ icon: 'chat', color: 'var(--color-g-equity)' }} face={kind === 'visitor' ? 'investor' : 'founder'} speaker={speaker} line={t('bubble.pitch')} detail={openGrowthRound}>
+    <Expandable bubbleKey={bubbleKey} kind={kind} mark={{ icon: 'chat', color: 'var(--color-g-equity)' }} face={kind === 'visitor' ? 'investor' : 'founder'} speaker={speaker} line={line} detail={openGrowthRound}>
+      {who && <div className="px-1 text-[11px] font-medium text-ink-2">{who}</div>}
       {options.map((o) => (
         <ChoiceRow
           key={o.pitch}
-          icon={PITCH_ICON[o.pitch]}
+          icon={pitchMark(o.pitch, o.fit)}
           label={t(`pitch.${o.pitch}`)}
           disabled={!o.ok}
           chips={pitchChips(o)}

@@ -109,21 +109,21 @@ describe('the weekly move budget (GAMEPLAY V2 §7.1)', () => {
     expect(s.flags[FOUNDER_EXHAUSTED_FLAG]).toBeUndefined()
   })
 
-  it('roundPitch takes 1 move: the round week is a week the founder cannot sell', () => {
+  it('a round meeting takes 1 move: the meeting week is a week the founder cannot sell', () => {
     let s = at(1)
     s = {
       ...s,
       round: { active: true, targetStage: 2, startedDay: 0, weeksTotal: 8, weeksLeft: 6, offer: { amount: 100_000, equity: 0.15, preMoney: 500_000 }, baseValuation: 500_000, pitchDue: 1 },
     }
-    const r = plain.applyAction(s, { type: 'roundPitch', pitch: 'metrics' })
+    const r = plain.applyAction(s, { type: 'roundPitch', pitch: 'deck' })
     expect(r.ok).toBe(true)
     expect(r.state.founder.moves?.left).toBe(B.MOVES_PER_WEEK[1]! - B.MOVE_COST.roundPitch)
     // With the week spent the pitch waits for the next one.
     const spent = { ...s, founder: { ...s.founder, moves: { left: 0, weekStart: 0 } } }
-    expect(plain.applyAction(spent, { type: 'roundPitch', pitch: 'metrics' }).error).toBe('noMoves')
+    expect(plain.applyAction(spent, { type: 'roundPitch', pitch: 'deck' }).error).toBe('noMoves')
     // A garage round (to Pre-seed) is not on the budget.
     const garage = { ...spent, stage: 0 as const, round: { ...s.round!, targetStage: 1 as const } }
-    expect(plain.applyAction(garage, { type: 'roundPitch', pitch: 'metrics' }).ok).toBe(true)
+    expect(plain.applyAction(garage, { type: 'roundPitch', pitch: 'deck' }).ok).toBe(true)
   })
 
   it('the resignation talk takes a move on the budget (else it would be free next to the raise)', () => {

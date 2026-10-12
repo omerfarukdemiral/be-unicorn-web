@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { findUsersPreview } from '../founder'
 import { createEngine } from '../index'
-import { closeRound, diligenceFactor, diligenceNow, lockedPrice, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { closeRound, diligenceFactor, diligenceNow, lockedPrice, meetingWeeksFor, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
 import { Rng, createRngState } from '../rng'
 import type { DiligenceItem, GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
@@ -195,13 +195,13 @@ describe('live offer: clamp and due diligence', () => {
   })
 })
 
-describe('round weeks: live offer + weekly pitch', () => {
-  function running(users = usersFor(450_000)): GameState {
+describe('round weeks: live offer + four meetings', () => {
+  function running(users = usersFor(450_000), weeks = 6): GameState {
     const s = api.applyAction(launched(users), { type: 'startRound' }).state
-    return { ...s, round: { ...s.round!, weeksTotal: 6, weeksLeft: 6 } }
+    return { ...s, round: { ...s.round!, weeksTotal: weeks, weeksLeft: weeks, meetingWeeks: meetingWeeksFor(weeks) } }
   }
 
-  it('every week the offer follows the metrics, and a pitch falls due', () => {
+  it('every week the offer follows the metrics; the first meeting falls due after week 1', () => {
     let s = running()
     expect(s.round!.pitchDue).toBeUndefined()
     s = api.step(s, 7)
@@ -216,36 +216,85 @@ describe('round weeks: live offer + weekly pitch', () => {
     expect(s.round!.offer.amount).toBeGreaterThan(before)
   })
 
-  it('pitches: metrics pays only with growth, story costs energy, a co-investor is faster but takes equity', () => {
-    let s = api.step(running(), 7)
-    expect(s.round!.pitchDue).toBe(1)
-    // Pre-revenue: MoM 0 < ask → "Metrik göster" backfires.
-    const m = api.applyAction(s, { type: 'roundPitch', pitch: 'metrics' })
-    expect(m.ok).toBe(true)
-    expect(m.state.round!.pitches![0]!.delta).toBe(B.PITCH_METRICS_BAD)
-    expect(m.state.round!.pitchDue).toBeUndefined()
-    expect(api.applyAction(m.state, { type: 'roundPitch', pitch: 'story' }).error).toBe('cooldown')
-    const good = refresh({ ...s, finance: { ...s.finance, mrrHistory: [1_000, 1_200] } })
-    expect(good.derived.round!.pitchOptions!.find((o) => o.pitch === 'metrics')!.delta).toBe(B.PITCH_METRICS_GOOD)
+  it('the calendar: four meetings spread over the round, the last two weeks before the end', () => {
+    expect(meetingWeeksFor(6)).toEqual([1, 2, 3, 4])
+    expect(meetingWeeksFor(8)).toEqual([1, 3, 4, 6])
+    expect(meetingWeeksFor(12)).toEqual([1, 4, 6, 10])
+    const s = api.applyAction(launched(usersFor(450_000)), { type: 'startRound' }).state
+    expect(B.ROUND_WEEKS_MIN).toBeLessThanOrEqual(s.round!.weeksTotal)
+    expect(s.round!.meetingWeeks).toEqual(meetingWeeksFor(s.round!.weeksTotal))
+    expect(['numbers', 'visionary', 'network']).toContain(s.round!.investorStyle)
+  })
 
-    const st = api.applyAction(s, { type: 'roundPitch', pitch: 'story' })
-    expect(st.state.founder.energy).toBeCloseTo(s.founder.energy - B.PITCH_STORY_ENERGY, 6)
-    // "Hikâye anlat" is a gamble inside the previewed range.
-    const so = s.derived.round!.pitchOptions!.find((o) => o.pitch === 'story')!
+  it('each meeting has its own three answers; another meeting\'s answer is refused', () => {
+    let s = api.step({ ...running(), round: { ...running().round!, investorStyle: 'numbers' } }, 7)
+    expect(s.round!.pitchDue).toBe(1)
+    expect(s.round!.meeting).toBe('intro')
+    expect(s.derived.round!.pitchOptions!.map((o) => o.pitch)).toEqual(['deck', 'demo', 'coinvestor'])
+    expect(api.applyAction(s, { type: 'roundPitch', pitch: 'push' }).error).toBe('invalid')
+    // Pre-revenue: MoM 0 < ask → the deck backfires (the numbers investor's fit still lifts it).
+    const d = api.applyAction(s, { type: 'roundPitch', pitch: 'deck' })
+    expect(d.state.round!.pitches![0]!.delta).toBeCloseTo(B.PITCH_METRICS_BAD + B.PITCH_FIT, 9)
+    expect(d.state.round!.pitchDue).toBeUndefined()
+    expect(api.applyAction(d.state, { type: 'roundPitch', pitch: 'demo' }).error).toBe('cooldown')
+    // The demo is a gamble in its previewed range, for founder energy.
+    const st = api.applyAction(s, { type: 'roundPitch', pitch: 'demo' })
+    const so = s.derived.round!.pitchOptions!.find((o) => o.pitch === 'demo')!
+    expect(st.state.founder.energy).toBeCloseTo(s.founder.energy - so.energy, 6)
     expect(st.state.round!.pitchBonus!).toBeGreaterThanOrEqual(so.min! - 1e-9)
     expect(st.state.round!.pitchBonus!).toBeLessThanOrEqual(so.max! + 1e-9)
-    expect(api.applyAction({ ...s, founder: { ...s.founder, energy: 1 } }, { type: 'roundPitch', pitch: 'story' }).error).toBe('noEnergy')
-
+    expect(api.applyAction({ ...s, founder: { ...s.founder, energy: 1 } }, { type: 'roundPitch', pitch: 'demo' }).error).toBe('noEnergy')
     const co = api.applyAction(s, { type: 'roundPitch', pitch: 'coinvestor' })
     expect(co.state.round!.weeksLeft).toBe(s.round!.weeksLeft - B.PITCH_COINVESTOR_WEEKS)
     expect(co.state.round!.offer.equity).toBeCloseTo(s.round!.offer.equity + B.PITCH_COINVESTOR_EQUITY, 9)
 
+    // Week 2: the deep dive, on the company's weak spot (pre-revenue: growth).
+    s = api.step(d.state, 7)
+    expect(s.round!.meeting).toBe('diligence')
+    expect(s.round!.topic).toBe('growth')
+    expect(s.derived.round!.pitchOptions!.map((o) => o.pitch)).toEqual(['honest', 'spin', 'fix'])
+    const fix = api.applyAction(s, { type: 'roundPitch', pitch: 'fix' }).state
+    expect(fix.round!.weeksLeft).toBe(s.round!.weeksLeft + B.PITCH_FIX_WEEKS)
+    expect(fix.round!.weeksTotal).toBe(s.round!.weeksTotal + B.PITCH_FIX_WEEKS)
+
+    // Left unanswered, the deep dive is gone when the partners' meeting opens: a 0 in the average.
     s = api.step(s, 7)
-    expect(s.round!.pitchDue).toBe(2)
+    expect(s.round!.meeting).toBe('partners')
+    expect(s.round!.pitchWeeks).toBe(3)
+    expect(s.round!.pitches!.length).toBe(1)
+    s = api.applyAction(s, { type: 'roundPitch', pitch: 'rehearse' }).state
+
+    // The term sheet: push (more, one strike), keep (less equity), sign (closes next week).
+    s = api.step(s, 7)
+    expect(s.round!.meeting).toBe('terms')
+    const push = api.applyAction(s, { type: 'roundPitch', pitch: 'push' }).state
+    expect(push.round!.strikes).toBe((s.round!.strikes ?? 0) + 1)
+    const keep = api.applyAction(s, { type: 'roundPitch', pitch: 'keep' }).state
+    expect(keep.round!.offer.equity).toBeCloseTo(s.round!.offer.equity - B.PITCH_KEEP_EQUITY, 9)
+    const sign = api.applyAction(s, { type: 'roundPitch', pitch: 'sign' }).state
+    expect(sign.round!.weeksLeft).toBe(1)
+  })
+
+  it('the investor\'s style favours one answer per meeting (+PITCH_FIT)', () => {
+    const s = api.step(running(), 7)
+    const opt = (style: 'numbers' | 'visionary' | 'network', pitch: string) =>
+      refresh({ ...s, round: { ...s.round!, investorStyle: style } }).derived.round!.pitchOptions!.find((o) => o.pitch === pitch)!
+    expect(opt('visionary', 'demo').fit).toBe(true)
+    expect(opt('visionary', 'demo').delta).toBeCloseTo(opt('numbers', 'demo').delta + B.PITCH_FIT, 9)
+    expect(opt('network', 'coinvestor').fit).toBe(true)
+    expect(opt('network', 'deck').fit).toBeUndefined()
+  })
+
+  it('an unanswered meeting stays open until the next one is due', () => {
+    let s = api.step(running(usersFor(450_000), 12), 7)
+    expect(s.round!.pitchDue).toBe(1)
+    s = api.step(s, 7)
+    expect(s.round!.pitchDue).toBe(1)
+    expect(s.round!.meeting).toBe('intro')
   })
 
   it('no pitch outside a round; the close pays the live offer and moves on', () => {
-    expect(api.applyAction(launched(10), { type: 'roundPitch', pitch: 'metrics' }).error).toBe('roundNotReady')
+    expect(api.applyAction(launched(10), { type: 'roundPitch', pitch: 'deck' }).error).toBe('roundNotReady')
     const s = running()
     const cash0 = s.stats.cash
     const end = api.step(s, 6 * 7 + 1)

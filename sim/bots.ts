@@ -25,6 +25,7 @@ import {
   type PaydayChoice,
   type PolicyId,
   type ProjectCategory,
+  type PitchOption,
   type RoundPitch,
   type RoundSize,
 } from '../src/engine/index'
@@ -60,8 +61,11 @@ export interface BotConfig {
   roundEagerness: number
   /** Round size (8 / 12 / 16 months of runway ↔ equity). */
   roundSize: RoundSize
-  /** Weekly pitch when the numbers are weak ('metrics' is always picked when MoM meets the diligence ask). */
-  weakPitch: RoundPitch
+  /**
+   * How the bot answers a round meeting: 'safe' weighs a gamble at its worst case, 'bold' at its average, 'fast' at
+   * its average and also values a shorter round.
+   */
+  pitchStyle: 'safe' | 'bold' | 'fast'
   /** Spend on morale furniture / desk upgrades only above this many months of burn in the bank. */
   furnishReserveMonths: number
   useSalesCalls: boolean
@@ -112,7 +116,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'bootstrap', firstCategory: 'web', extraCategories: ['api'],
     buildMix: { eng: 2, product: 1, marketing: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
     minRunwayToHire: 5, teamCap: [3, 7, 11, 18, 30, 40, 40], adAggression: 0.25, minLtvCac: 2, price: 1.25,
-    roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 4, useSalesCalls: true,
+    roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
     policyPlan: ['remote-first', 'quality-gate', 'profit-share'],
   },
@@ -121,7 +125,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'vcRocket', firstCategory: 'mobile', extraCategories: ['ai'],
     buildMix: { eng: 3, product: 1, marketing: 2 }, growMix: { eng: 3, product: 1, marketing: 4, sales: 2, ops: 2 },
     minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1.5, price: 1,
-    roundEagerness: 1, roundSize: 'large', weakPitch: 'coinvestor', furnishReserveMonths: 3, useSalesCalls: false,
+    roundEagerness: 1, roundSize: 'large', pitchStyle: 'fast', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
     policyPlan: ['hire-fast', 'crunch-culture', 'ads-first'],
   },
@@ -130,7 +134,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'niche', firstCategory: 'api', extraCategories: [],
     buildMix: { eng: 2, marketing: 1, sales: 1 }, growMix: { eng: 2, product: 1, marketing: 3, sales: 2, ops: 1 },
     minRunwayToHire: 4, teamCap: [4, 8, 11, 18, 28, 36, 36], adAggression: 0.2, minLtvCac: 2, price: 1.5,
-    roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: true,
+    roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
     policyPlan: ['remote-first', 'profit-share', 'quality-gate'],
   },
@@ -139,7 +143,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     kind: 'platform', firstCategory: 'marketplace', extraCategories: ['api', 'web'],
     buildMix: { eng: 3, product: 1, marketing: 1 }, growMix: { eng: 3, product: 1, marketing: 3, sales: 2, ops: 2 },
     minRunwayToHire: 4, teamCap: ALL_CAP, adAggression: 0.45, minLtvCac: 1.5, price: 1.1,
-    roundEagerness: 1, roundSize: 'target', weakPitch: 'story', furnishReserveMonths: 3, useSalesCalls: false,
+    roundEagerness: 1, roundSize: 'target', pitchStyle: 'bold', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
     policyPlan: ['hire-fast', 'remote-first', 'ads-first'],
   },
@@ -871,6 +875,28 @@ function repairDiligence(c: Ctx): void {
   if ((broken('runway') || broken('burn')) && c.s.finance.adBudget > 0) c.act({ type: 'setAdBudget', amount: Math.round(c.s.finance.adBudget * 0.5) })
 }
 
+/**
+ * The meeting answer a sensible founder picks: the offer change (a gamble at its worst case when 'safe'), equity sold
+ * at 2× its share, a shorter round worth something to 'fast' and to anyone already struck, and no push past a strike.
+ */
+export function bestPitch(options: readonly PitchOption[], style: BotConfig['pitchStyle'], strikes: number): RoundPitch | undefined {
+  let best: RoundPitch | undefined
+  let score = -Infinity
+  for (const o of options) {
+    if (!o.ok || (o.strike && strikes >= 1)) continue
+    let v = style === 'safe' ? (o.min ?? o.delta) : o.delta
+    v -= o.equity * 2
+    if (o.weeks > 0 && (style === 'fast' || strikes >= 1)) v += 0.02 * o.weeks
+    if (o.weeks < 0 && strikes >= 1) v += 0.02
+    if (o.strike) v -= 0.02
+    if (v > score) {
+      score = v
+      best = o.pitch
+    }
+  }
+  return best
+}
+
 function fundraise(c: Ctx, cfg: BotConfig, careless = false): void {
   const { act } = c
   const r = c.s.round
@@ -879,9 +905,8 @@ function fundraise(c: Ctx, cfg: BotConfig, careless = false): void {
     const struck = !careless && (r.strikes ?? 0) >= 1
     if (struck) repairDiligence(c)
     if (r.pitchDue === undefined) return
-    const good = (c.s.derived.round?.pitchOptions?.find((o) => o.pitch === 'metrics')?.delta ?? 0) > 0
-    const pitch: RoundPitch = struck ? 'coinvestor' : good ? 'metrics' : cfg.weakPitch
-    if (!act({ type: 'roundPitch', pitch }) && pitch === 'story') act({ type: 'roundPitch', pitch: 'metrics' })
+    const best = bestPitch(c.s.derived.round?.pitchOptions ?? [], cfg.pitchStyle, r.strikes ?? 0)
+    if (best) act({ type: 'roundPitch', pitch: best })
     return
   }
   // Track the best progress of this stage: a valuation that stopped climbing (the multiple follows 3-month growth)
@@ -932,7 +957,7 @@ function randomTurn(c: Ctx, rng: Rng): void {
     case 3: act({ type: 'founderAction', kind: rng.pick(FOUNDER_ACTIONS) }); break
     case 4: act({ type: 'setAdBudget', amount: rng.int(0, 5_000) }); break
     case 5: act({ type: 'setPrice', multiplier: rng.range(0.7, 1.6) }); break
-    case 6: act({ type: 'startRound', size: rng.pick(['small', 'target', 'large'] as const) }) || act({ type: 'roundPitch', pitch: rng.pick(['metrics', 'story', 'coinvestor'] as const) }); break
+    case 6: act({ type: 'startRound', size: rng.pick(['small', 'target', 'large'] as const) }) || act({ type: 'roundPitch', pitch: rng.pick(c.s.derived.round?.pitchOptions?.map((o) => o.pitch) ?? ['deck']) }); break
     case 7: { const r = nextLockedRing(c.s.office); if (r !== null) act({ type: 'openRing', ring: r }); break }
   }
 }

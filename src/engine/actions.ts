@@ -8,6 +8,7 @@ import { actionEnergy, movesError, renewContract, renewError, spendMoves, startF
 import { checkSale } from './endgame'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
+import { checkName, nameKey } from './names'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
 import { idleBuilders } from './loopSelectors'
@@ -468,9 +469,24 @@ const renewContractH: Handler<'renewContract'> = ({ s, rng }, a) => {
   return null
 }
 
+/** Renames a project: free and any time, no moves. Cleaned (spaces, URL/profanity rules of the company name), capped, unique. */
+const renameProject: Handler<'renameProject'> = ({ s }, a) => {
+  const p = s.projects.find((x) => x.id === a.projectId)
+  if (!p) return 'notFound'
+  if (typeof a.name !== 'string') return 'invalid'
+  const name = Array.from(a.name.replace(/\s+/g, ' ').trim()).slice(0, B.PROJECT_NAME_MAX).join('').trim()
+  if (!checkName(name, B.PROJECT_NAME_MIN, B.PROJECT_NAME_MAX).ok) return 'invalid'
+  if (s.projects.some((x) => x.id !== p.id && nameKey(x.name) === nameKey(name))) return 'invalid'
+  if (name === p.name) return null
+  pushActivity(s, 'projectRenamed', { from: p.name, to: name })
+  p.name = name
+  return null
+}
+
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
   fire,
+  renameProject,
   assignDesk,
   respondResignation,
   refreshCandidates,

@@ -107,6 +107,10 @@ export const REFACTOR_PRODUCTION = 0.7
 export const REFACTOR_DAYS = 30
 export const REFACTOR_COOLDOWN_DAYS = 90
 /** Maturity per month = output / size; size per category. */
+/** Project rename: cleaned length limits (the name rule itself is engine/names.ts). */
+export const PROJECT_NAME_MIN = 2
+export const PROJECT_NAME_MAX = 24
+
 export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile: 10, web: 8, ai: 14, api: 9, game: 12, marketplace: 12 }
 /**
  * [Playtest 2026-10-06] The category is a real trade-off, not just a build time: per-user revenue and word of mouth

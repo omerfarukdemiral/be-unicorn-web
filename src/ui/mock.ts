@@ -222,6 +222,12 @@ export function mockReduce(prev: GameState, a: Action): ActionResult {
       s.founder.cooldowns[a.kind] = s.time.day + 3
       s.founder.energy = Math.max(0, s.founder.energy - 10)
       return ok(s)
+    case 'renameProject': {
+      const p = s.projects.find((x) => x.id === a.projectId)
+      if (!p) return { state: prev, ok: false, error: 'notFound' }
+      p.name = a.name.trim().slice(0, 24)
+      return ok(s)
+    }
     case 'startRound':
       s.round = { active: true, targetStage: 2, startedDay: s.time.day, weeksTotal: 6, weeksLeft: 6, offer: { amount: 150_000, equity: 0.1, preMoney: 1_350_000 }, baseValuation: s.finance.valuation }
       s.derived.canStartRound = false

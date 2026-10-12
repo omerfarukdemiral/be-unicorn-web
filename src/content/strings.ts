@@ -370,6 +370,9 @@ const BASE_TEXT: Record<string, string> = {
   'projects.assigned': '{n} kişi',
   'projects.building': 'Geliştiriliyor',
   'projects.live': 'Yayında',
+  'project.nameTaken': 'Bu ad kullanılıyor',
+  'project.nameBad': 'Bu ad olmaz',
+  'project.rename': 'Adı değiştir',
   'projects.maturity': 'Olgunluk',
 
   // Growth

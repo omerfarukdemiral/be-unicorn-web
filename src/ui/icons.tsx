@@ -80,6 +80,7 @@ const PATHS = {
   trophy: <><path d="M8 4h8v5a4 4 0 0 1-8 0Z" /><path d="M8 5.5H4.5v1.5A3 3 0 0 0 8 10M16 5.5h3.5v1.5A3 3 0 0 1 16 10M12 13v3.5M8.5 20h7M9.5 20l.5-3.5h4l.5 3.5" /></>,
   mail: <><rect x="3.5" y="5.5" width="17" height="13" rx="2" /><path d="m4 7 8 6 8-6" /></>,
   logout: <><path d="M14 4.5H6.5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1H14" /><path d="M10 12h10M16.5 8.5 20 12l-3.5 3.5" /></>,
+  pencil: <><path d="M4.5 19.5l.8-4L16 4.8a1.8 1.8 0 0 1 2.5 0l.7.7a1.8 1.8 0 0 1 0 2.5L8.5 18.7Z" /><path d="m14.5 6.5 3 3" /></>,
   cloud: <path d="M7 18.5a4 4 0 0 1-.6-7.95A5.5 5.5 0 0 1 17 9a4.75 4.75 0 0 1 .5 9.5Z" />,
 } satisfies Record<string, ReactNode>
 

@@ -28,6 +28,7 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   payday: 'Maaş günü: {amount} ödendi.',
   release: '{project} {level} yayında: +{users} kullanıcı.',
   goalDone: 'Aşama hedefi tamam: {goal}.',
+  projectRenamed: '{from} artık {to}',
   roundWindow: '{stage} turu için pencere açıldı: şimdi mi, biraz daha mı?',
   roundOffer: 'Tur haftası {done}/{total}: teklif {from} → {amount}.',
   roundPitch: 'Pitch: {pitch}. Teklif {amount}.',

@@ -2,6 +2,8 @@
 // right panel (RightPanel). Header + close-up preview + metrics + actions.
 import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { PROJECT_NAME_MAX } from '../engine/balance'
+import { nameKey } from '../engine/names'
 import { FOUNDER_SLOT_ID, type Employee, type Project, type Slot } from '../engine/types'
 import { DEPT_TEXT, FURNITURE, NPC_TEXT, PROJECT_CATEGORY_TEXT } from '../content'
 import { useGameStore } from '../store/gameStore'
@@ -79,9 +81,70 @@ export function DetailHeader({ selection }: { selection: Selection }) {
   )
   return (
     <div className="min-w-0">
-      <h2 className="truncate text-lg font-semibold leading-tight tracking-wide text-ink">{info.title}</h2>
+      {selection.kind === 'project' && info.title !== '—' ? (
+        <ProjectTitle id={selection.id} title={info.title} />
+      ) : (
+        <h2 className="truncate text-lg font-semibold leading-tight tracking-wide text-ink">{info.title}</h2>
+      )}
       <p className="truncate text-xs text-ink-2">{info.sub}</p>
       {info.pill && <Pill className={cx('mt-1', info.pillTone)} dot={info.pillDot}>{info.pill}</Pill>}
+    </div>
+  )
+}
+
+/** Project name with a pencil: a tap swaps it for an input in place (Enter/blur saves, Esc cancels). */
+function ProjectTitle({ id, title }: { id: string; title: string }) {
+  const dispatch = useGameStore((s) => s.dispatch)
+  const names = useGameStore(useShallow((s) => s.state.projects.filter((x) => x.id !== id).map((x) => x.name)))
+  const [draft, setDraft] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const done = () => {
+    setDraft(null)
+    setErr(null)
+  }
+  const save = () => {
+    if (draft === null) return
+    const clean = draft.replace(/\s+/g, ' ').trim()
+    if (clean === title) return done()
+    if (names.some((n) => nameKey(n) === nameKey(clean))) return setErr(t('project.nameTaken'))
+    const res = dispatch({ type: 'renameProject', projectId: id, name: clean })
+    if (res.ok) done()
+    else setErr(t('project.nameBad'))
+  }
+  if (draft === null)
+    return (
+      <button
+        type="button"
+        aria-label={t('project.rename')}
+        onClick={() => setDraft(title)}
+        className="-ml-1 flex min-h-11 max-w-full items-center gap-1.5 rounded-control px-1 text-left hover:bg-surface-2"
+      >
+        <span className="truncate text-lg font-semibold leading-tight tracking-wide text-ink">{title}</span>
+        <Icon name="pencil" size={16} className="shrink-0 text-ink-3" />
+      </button>
+    )
+  return (
+    <div>
+      <input
+        autoFocus
+        value={draft}
+        maxLength={PROJECT_NAME_MAX}
+        aria-label={t('project.rename')}
+        aria-invalid={err !== null}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          setErr(null)
+        }}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          else if (e.key === 'Escape') done()
+        }}
+        style={{ fontSize: 16 }}
+        className={cx('min-h-11 w-full rounded-control border bg-surface px-2 font-semibold text-ink outline-none focus:border-brand', err ? 'border-negative' : 'border-border')}
+      />
+      {err && <p className="text-xs text-negative-ink">{err}</p>}
     </div>
   )
 }

@@ -1245,7 +1245,7 @@ export interface AmbientBubble {
 export type ActivityKind =
   | 'hired' | 'fired' | 'resigned' | 'resignWarning' | 'retained'
   | 'itemPlaced' | 'itemSold' | 'itemMoved' | 'ringOpened'
-  | 'projectStarted' | 'projectLaunched'
+  | 'projectStarted' | 'projectLaunched' | 'projectRenamed'
   | 'founderActionStarted' | 'founderActionDone'
   | 'roundStarted' | 'roundProgress' | 'roundClosed' | 'roundShrunk'
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'
@@ -1455,6 +1455,7 @@ export type Action =
   // Team
   | { type: 'hire'; candidateId: string; deskSlotId?: SlotId }
   | { type: 'fire'; employeeId: EmployeeId }
+  | { type: 'renameProject'; projectId: string; name: string }
   | { type: 'assignDesk'; employeeId: EmployeeId; slotId: SlotId | null }
   | { type: 'respondResignation'; employeeId: EmployeeId; response: 'raise' | 'talk' | 'letGo' }
   | { type: 'refreshCandidates' }

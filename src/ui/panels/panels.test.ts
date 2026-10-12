@@ -363,3 +363,12 @@ describe('center screens (H5b)', () => {
     expect(sentences(html)).toBe(0)
   })
 })
+
+describe('project rename input (W1)', () => {
+  it('is capped at the engine limit, 16px (no iOS zoom) and a 44px target', () => {
+    const src = Object.entries(UI_SOURCES).find(([k]) => k.endsWith('/DetailPanel.tsx'))![1]
+    expect(src).toContain('maxLength={PROJECT_NAME_MAX}')
+    expect(src).toContain('fontSize: 16')
+    expect(src.match(/min-h-11/g)!.length).toBeGreaterThanOrEqual(2)
+  })
+})

@@ -69,9 +69,8 @@ export interface StagePalette {
 // white and the rendered pixel lands at ~#ece0ce, close to --color-canvas-bg (#f3ebdf): UI cards and the
 // scene share one warm light ground.
 const GROUND = '#fdfcf8'
-/** The lot outside (T07): a soft sage lawn for the garage → seed and the campus, warm plaza paving for the city towers. */
+/** The lot outside (T07): a soft sage lawn at every stage (a sand plaza from Series A on read as "the green is gone"). */
 const LAWN = '#d2eaa6'
-const PLAZA = '#efe6d6'
 export const STAGE_PALETTES: readonly StagePalette[] = [
   // 0 Garaj — warm concrete, beige-grey walls, coral garage door
   { background: UI_TONES.canvasBg, floor: '#cec4b4', floorAlt: '#c2b7a6', wall: '#f2e8d7', wallTrim: '#c9aa8a', accent: '#f08a6c', locked: '#3a3530', ground: LAWN },
@@ -80,11 +79,11 @@ export const STAGE_PALETTES: readonly StagePalette[] = [
   // 2 Seed — small office, pale oak, lilac walls
   { background: UI_TONES.canvasBg, floor: '#e2bf8c', floorAlt: '#d6b07b', wall: '#dccffc', wallTrim: '#a58cf0', accent: '#7c5cf2', locked: '#36324a', ground: LAWN },
   // 3 Series A — open floor, oak, sky walls
-  { background: UI_TONES.canvasBg, floor: '#ddb682', floorAlt: '#d0a672', wall: '#cadffb', wallTrim: '#7aaef0', accent: '#3f84e5', locked: '#31384a', ground: PLAZA },
+  { background: UI_TONES.canvasBg, floor: '#ddb682', floorAlt: '#d0a672', wall: '#cadffb', wallTrim: '#7aaef0', accent: '#3f84e5', locked: '#31384a', ground: LAWN },
   // 4 Series B — two floors, honey wood, peach walls
-  { background: UI_TONES.canvasBg, floor: '#d9ab76', floorAlt: '#cc9c67', wall: '#fdd5bf', wallTrim: '#f3c4a8', accent: '#ef7446', locked: '#43342e', ground: PLAZA },
+  { background: UI_TONES.canvasBg, floor: '#d9ab76', floorAlt: '#cc9c67', wall: '#fdd5bf', wallTrim: '#f3c4a8', accent: '#ef7446', locked: '#43342e', ground: LAWN },
   // 5 Series C — building, walnut + glass, seafoam walls
-  { background: UI_TONES.canvasBg, floor: '#cc9d6e', floorAlt: '#bf8f60', wall: '#c6eee4', wallTrim: '#5fc3b1', accent: '#1ea893', locked: '#2f3c3a', ground: PLAZA },
+  { background: UI_TONES.canvasBg, floor: '#cc9d6e', floorAlt: '#bf8f60', wall: '#c6eee4', wallTrim: '#5fc3b1', accent: '#1ea893', locked: '#2f3c3a', ground: LAWN },
   // 6 Unicorn — campus, warm wood on a lawn, rose accents
   { background: UI_TONES.canvasBg, floor: '#d6a26e', floorAlt: '#c9945f', wall: '#fbd3e1', wallTrim: '#f29ab4', accent: '#e8649a', locked: '#40313a', ground: LAWN },
 ]

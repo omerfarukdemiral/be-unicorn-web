@@ -8,7 +8,9 @@ import * as THREE from 'three'
 import { hash01 } from './constants'
 import { PASTEL } from './palette'
 import { GEO, glowMat, mat } from './resources'
+import { useGS, useMockState, useUi } from './source'
 import { facadeTexture, type FacadeSpec } from './surfaces'
+import { speedMultiplier } from './walker'
 
 /** Height of one storey across the street (the office wall is 2.2). */
 const STOREY = 1.15
@@ -148,7 +150,8 @@ function Walker({ color }: { color: string }) {
   )
 }
 
-/** Moving traffic and pedestrians over a span of the street; positions wrap so the flow never ends. */
+/** Moving traffic and pedestrians over a span of the street; positions wrap so the flow never ends. The street keeps
+ *  the office's clock: paused (speed 0 or a focus hold) it stands still, at 2×/3× it runs faster like the staff. */
 function Flow({ lanes, walks, x0, x1 }: { lanes: [number, number]; walks: [number, number]; x0: number; x1: number }) {
   const span = x1 - x0
   const cars = useRef<(THREE.Group | null)[]>([])
@@ -169,7 +172,16 @@ function Flow({ lanes, walks, x0, x1 }: { lanes: [number, number]; walks: [numbe
       g.rotation.y = w.speed > 0 ? Math.PI / 2 : -Math.PI / 2
     })
   }
-  useFrame(({ clock }) => place(REDUCED ? 8 : clock.elapsedTime + 8))
+  const speed = useGS((s) => s.time.speed)
+  const held = useUi((u) => u.pauseReasons.length > 0)
+  const mock = useMockState()
+  const rate = mock ? 1 : held ? 0 : speedMultiplier(speed)
+  const t = useRef(8)
+  useFrame((_, dt) => {
+    if (REDUCED) return place(8)
+    t.current += Math.min(dt, 0.1) * rate
+    place(t.current)
+  })
   return (
     <group>
       {CARS.map((m, i) => (

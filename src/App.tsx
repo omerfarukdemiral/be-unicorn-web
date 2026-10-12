@@ -68,22 +68,27 @@ function StartShell({ children, strip }: { children: ReactNode; strip?: ReactNod
     >
       {/* mt-auto / my-auto instead of items-end / items-center: an auto margin never pushes a tall column (register
           mode on a short phone) past the scroller's reachable top. */}
-      <div className="flex min-h-full flex-col p-4 sm:p-10">
-        <div className="mt-auto flex w-full max-w-sm animate-deal flex-col gap-4 max-sm:mx-auto sm:my-auto">
-          <span className="ui-medallion">
-            <IconBadge icon="unicorn" size={36} color="var(--color-brand)" />
-          </span>
-          <div>
-            {/* Title: the UI face (Bricolage), uppercase, tight; the second word carries the weight. */}
-            <h1 lang="en" aria-label={t('start.title')} className="text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink sm:text-[48px]">
-              {title.head && <span className="block text-ink-2">{title.head}</span>}
-              <span className="block font-extrabold text-brand-ink">{title.tail}</span>
-            </h1>
-            <p className="font-text mt-2 text-sm font-medium leading-snug text-ink">{t('start.tagline')}</p>
+      {/* A phone held sideways (short): logo + title left, the menu plate right, so "Garajı aç" sits above the fold. */}
+      <div className="flex min-h-full flex-col p-4 sm:p-10 short:justify-center short:p-4">
+        <div className="mt-auto flex w-full max-w-sm animate-deal flex-col gap-4 max-sm:mx-auto sm:my-auto short:m-0 short:grid short:max-w-none short:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] short:items-center short:gap-x-6">
+          <div className="flex flex-col gap-4 short:gap-2">
+            <span className="ui-medallion short:size-10">
+              <IconBadge icon="unicorn" size={36} color="var(--color-brand)" className="short:scale-75" />
+            </span>
+            <div>
+              {/* Title: the UI face (Bricolage), uppercase, tight; the second word carries the weight. */}
+              <h1 lang="en" aria-label={t('start.title')} className="text-[40px] font-medium uppercase leading-[0.9] tracking-[-0.02em] text-ink sm:text-[48px] short:text-[34px]">
+                {title.head && <span className="block text-ink-2">{title.head}</span>}
+                <span className="block font-extrabold text-brand-ink">{title.tail}</span>
+              </h1>
+              <p className="font-text mt-2 text-sm font-medium leading-snug text-ink">{t('start.tagline')}</p>
+            </div>
           </div>
           {/* The one surface: the phase's menu plate. */}
-          <div className="ui-card p-4 shadow-pop">{children}</div>
-          {strip}
+          <div className="flex flex-col gap-4 short:gap-2">
+            <div className="ui-card p-4 shadow-pop short:p-3">{children}</div>
+            {strip}
+          </div>
         </div>
       </div>
     </div>

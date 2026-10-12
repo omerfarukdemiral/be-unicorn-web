@@ -16,7 +16,8 @@ import { StageProgressLine, StageSection } from './StageSection'
 import { CashChip, MoraleChip, RunwayChip, UsersChip } from './TopMetrics'
 import { SpeedControl } from './SpeedControl'
 import { ViewControls } from './ViewControls'
-import { LANDSCAPE_BAR_H, MOBILE_TOP_H } from './tokens'
+import { EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_TOP_H } from './tokens'
+import { usePanelWidth } from './useSceneInset'
 
 function subscribeResize(cb: () => void): () => void {
   window.addEventListener('resize', cb)
@@ -130,24 +131,30 @@ function GaugeRow({ className }: { className?: string }) {
 
 /**
  * Phone landscape (T23): one row of islands, h52, like the portrait row: stage | gauges | round ⏸. Kazanımlar,
- * İstatistik and ⚙ live behind the tab island's ⋯ (BottomBar › MoreMenu), as in portrait.
+ * İstatistik and ⚙ live behind the tab island's ⋯ (BottomBar › MoreMenu), as in portrait. With the side panel open
+ * (M2: it runs from the top edge) the row ends left of it and the gauge island steps out: the panel's head carries
+ * its own headline number.
  */
 function LandscapeBar() {
+  const panelOpen = useGameStore((s) => s.ui.panel !== null)
+  const panelW = usePanelWidth('landscape')
   return (
     <header
       data-scene-top
       aria-label={t('top.label')}
-      className="pointer-events-none absolute inset-x-2 top-2 z-30 flex min-w-0 items-start gap-2"
-      style={{ height: LANDSCAPE_BAR_H }}
+      className="pointer-events-none absolute left-2 top-2 z-30 flex min-w-0 items-start gap-2"
+      style={{ height: LANDSCAPE_BAR_H, right: panelOpen ? EDGE + panelW + GAP : EDGE }}
     >
       <div data-scene-island="" className="ui-card pointer-events-auto flex h-full min-w-0 max-w-[300px] flex-1 flex-col justify-center px-2.5 pb-1">
         <StageSection variant="mobile" />
         <StageProgressLine className="-mt-1.5" />
       </div>
-      <div data-scene-island="" className="ui-card pointer-events-auto ml-auto flex h-full shrink-0 items-center px-1">
-        <GaugeRow className="gap-2 [&>*]:shrink-0" />
-      </div>
-      <div data-scene-island="" className="ui-card pointer-events-auto grid h-full w-12 shrink-0 place-items-center rounded-full">
+      {!panelOpen && (
+        <div data-scene-island="" className="ui-card pointer-events-auto ml-auto flex h-full shrink-0 items-center px-1">
+          <GaugeRow className="gap-2 [&>*]:shrink-0" />
+        </div>
+      )}
+      <div data-scene-island="" className={cx('ui-card pointer-events-auto grid h-full w-12 shrink-0 place-items-center rounded-full', panelOpen && 'ml-auto')}>
         <SpeedControl compact />
       </div>
     </header>

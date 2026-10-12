@@ -3,10 +3,11 @@
 // the world holds while it is open (store ui.bubbleOpen → the `bubble` pause). Acting dispatches an engine action
 // (the store clears bubbleOpen and time resumes); × / Esc / a floor tap close it. "Detay" opens the deeper panel.
 // The open key lives in the store, so at most one bubble is expanded at a time.
-import { useRef, type ReactNode } from 'react'
+import { useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import { ChipRow, type Chip } from '../EffectChips'
-import { useIsMobile } from '../hooks'
+import { useIsMobile, useLayoutMode } from '../hooks'
+import { expandableLimits } from '../layout/panelFit'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx, IconButton } from '../primitives'
@@ -34,6 +35,21 @@ export function closeBubble(): void {
 export function launch(open: () => void): void {
   closeBubble()
   open()
+}
+
+function subscribeResize(cb: () => void): () => void {
+  window.addEventListener('resize', cb)
+  return () => window.removeEventListener('resize', cb)
+}
+const viewportKey = () => `${window.innerWidth}x${window.innerHeight}`
+
+/** The open card's limits from the free scene area (see expandableLimits); re-read on resize and when the HUD insets move. */
+function useCardLimits(): { maxH: number; maxW: number; landscape: boolean } {
+  const key = useSyncExternalStore(subscribeResize, viewportKey, () => '1440x900')
+  const inset = useGameStore((s) => s.ui.sceneInset)
+  const mode = useLayoutMode()
+  const [w, h] = key.split('x').map(Number) as [number, number]
+  return { ...expandableLimits({ w, h }, inset, mode), landscape: mode === 'landscape' }
 }
 
 /** Pointer events stay in the bubble: a tap on it is never a floor tap (which clears the selection and the bubble). */
@@ -70,6 +86,7 @@ export function Expandable({
 }) {
   const open = useGameStore((s) => s.ui.bubbleOpen === bubbleKey)
   const mobile = useIsMobile()
+  const limits = useCardLimits()
   // Opening / closing swaps the pill for the card: from the first swap on, each new face fades + scales in
   // (the very first face is faded in by the scene's BubbleAnchor).
   const first = useRef(open)
@@ -125,8 +142,8 @@ export function Expandable({
         data-open="true"
         role="dialog"
         aria-label={line}
-        style={tintEdge(mark.color)}
-        className={cx(BUBBLE_SHELL, 'flex flex-col overflow-hidden', mobile ? 'w-[calc(100vw-24px)]' : 'w-[min(340px,calc(100vw-32px))]')}
+        style={{ ...tintEdge(mark.color), ...(limits.landscape ? { width: limits.maxW } : null) }}
+        className={cx(BUBBLE_SHELL, 'flex flex-col overflow-hidden', !limits.landscape && (mobile ? 'w-[calc(100vw-24px)]' : 'w-[min(340px,calc(100vw-32px))]'))}
       >
         {/* The header on the kind's ground, the answers on the neutral surface (chips keep their green / red). */}
         <div className={cx('mb-2 flex min-w-0 items-center gap-1.5 py-1 pr-1', face ? 'pl-1.5' : 'pl-2.5')} style={{ background: ground.background }}>
@@ -137,7 +154,7 @@ export function Expandable({
           {detail && <IconButton icon="info" label={t('bubble.detail')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={() => launch(detail)} />}
           <IconButton icon="close" label={t('bubble.close')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={closeBubble} />
         </div>
-        <div className="flex max-h-[min(420px,60vh)] flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5">{children}</div>
+        <div className="flex flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5" style={{ maxHeight: limits.maxH }}>{children}</div>
       </div>
       <BubbleTail style={tintEdge(mark.color)} />
     </div>

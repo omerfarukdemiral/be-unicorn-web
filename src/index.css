@@ -67,6 +67,9 @@
 }
 @import "tailwindcss";
 
+/* A phone held sideways: short and wider than tall (hooks › LANDSCAPE_MAX_H is 500; the start card needs 480). */
+@custom-variant short (@media (max-height: 480px) and (min-aspect-ratio: 1/1));
+
 /* Design tokens: "toy UI + coloured accents" (docs/DESIGN.md). Owned by the foundation lane.
    Warm paper surfaces tied to the garage scene (canvas #F3EBDF, walls #F2E8D7, trim #C9AA8A) and warm ink text;
    hue lives on the brand commit key / active state / progress, on each HUD gauge's duotone icon + bar, on

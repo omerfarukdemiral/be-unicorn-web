@@ -58,12 +58,15 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
   if (layout === 'landscape') {
     return (
       // T23: the portrait islands side by side: founder island left (shrinks, its slots scroll), tab island right (44px
-      // keys, no locked silhouettes, ⋯ for the top-right tools).
+      // keys, no locked silhouettes, ⋯ for the top-right tools). With the side panel open (`sheetOpen`, M2: the panel
+      // runs to the bottom edge, the row ends left of it) the founder island steps out and the tabs stay in reach.
       <nav aria-label={t('bottom.label')} className="pointer-events-none flex items-center justify-between gap-2" style={{ height: LANDSCAPE_BAR_H }}>
-        <div data-scene-island="" className="ui-card pointer-events-auto flex h-full min-w-0 shrink items-center px-2">
-          <FounderBar variant="mobile" className="min-w-0" />
-        </div>
-        <div data-scene-island="" className="ui-card pointer-events-auto relative flex h-full shrink-0 items-center gap-1 px-1">
+        {!sheetOpen && (
+          <div data-scene-island="" className="ui-card pointer-events-auto flex h-full min-w-0 shrink items-center px-2">
+            <FounderBar variant="mobile" className="min-w-0" />
+          </div>
+        )}
+        <div data-scene-island="" className={cx('ui-card pointer-events-auto relative flex h-full shrink-0 items-center gap-1 px-1', sheetOpen && 'ml-auto')}>
           <DockTabs variant="bar" touch locked={false} />
           <MoreMenu />
         </div>
@@ -150,6 +153,8 @@ export function BottomStack({ pinned, onOpenMetrics }: { pinned: HudWidget[]; on
   const layout = mode === 'portrait' ? 'mobile' : mode
   const compact = mode !== 'desktop'
   const sheetOpen = mode === 'portrait' && panelOpen
+  // Landscape phone: the panel runs to the bottom edge, so the bar row ends left of it.
+  const sideOpen = mode === 'landscape' && panelOpen
   const stripH = compact ? STRIP_H_MOBILE : STRIP_H
   // The payday desk docks into the panel's slot (OverlayFrame place="dock"): the strip re-centres in the scene left of
   // it as it does for the panel, instead of running under the desk's edge.
@@ -166,9 +171,9 @@ export function BottomStack({ pinned, onOpenMetrics }: { pinned: HudWidget[]; on
   return (
     <>
       {mode === 'desktop' && <MoneyIsland ref={moneyRef} pinned={pinned} onOpenMetrics={onOpenMetrics} vw={vw} />}
-      <div data-scene-bottom="" className="pointer-events-none absolute z-[41] flex flex-col" style={{ left, right: EDGE, bottom, gap: GAP }}>
+      <div data-scene-bottom="" className="pointer-events-none absolute z-[41] flex flex-col" style={{ left, right: sideOpen ? EDGE + stripRight : EDGE, bottom, gap: GAP }}>
         {reserve && <div aria-hidden="true" style={{ height: stripH }} />}
-        <BottomBar layout={layout} sheetOpen={sheetOpen} narrow={vw < 1280} />
+        <BottomBar layout={layout} sheetOpen={sheetOpen || sideOpen} narrow={vw < 1280} />
       </div>
       {/* One strip instance (its queue survives the sheet opening); only its position changes. Floating over the
           scene (above a sheet, landscape) it is a scene obstacle: world bubbles keep clear of it. */}

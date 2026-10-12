@@ -16,6 +16,7 @@ import { Icon } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, pct } from '../format'
 import { Button, Chip, CostPreview, cx, Empty, IconBadge, Pill, SectionTitle } from '../primitives'
+import { useLayoutMode } from '../hooks'
 import { useSpendPreview } from '../widgets'
 import { SLOT_ICON, slotTypeStage, soft, stageCode, stageName } from '../theme'
 
@@ -51,6 +52,7 @@ type AboveList = { strip?: { ring: number; type: SlotType }; ring?: RingState }
 const aboveKey = (a: AboveList) => `${a.strip ? `${a.strip.ring}:${a.strip.type}` : '-'}|${a.ring ? `${a.ring.index}:${a.ring.openCost}` : '-'}`
 
 export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
+  const layoutMode = useLayoutMode()
   const { stage, cash, office } = useGameStore(useShallow((s) => ({ stage: s.state.stage, cash: s.state.stats.cash, office: s.state.office })))
   const dispatch = useGameStore((s) => s.dispatch)
   const openPanel = useGameStore((s) => s.openPanel)
@@ -130,7 +132,8 @@ export function ShopPanel({ slotTarget }: { slotTarget?: SlotId }) {
         </div>
       )}
       <div onPointerEnter={() => setHovering(true)} onPointerLeave={() => setHovering(false)}>
-        <SectionTitle>{t('shop.catalog')}</SectionTitle>
+        {/* Landscape phone: the panel head already says Mağaza; the 28px goes to the cards. */}
+        {layoutMode !== 'landscape' && <SectionTitle>{t('shop.catalog')}</SectionTitle>}
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2">
           <Chip active={filter === 'all'} onClick={() => setFilter('all')}>
             {t('shop.all')}

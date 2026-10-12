@@ -1,7 +1,7 @@
 // The single panel: Mağaza, Ekip, Projeler, Büyüme, Metrikler, Kazanımlar, scene details, decisions and settings all
 // open here and replace each other (store.ui.panel). Desktop = right column between the top bar and the bottom bar
-// (top 72, bottom 72, 400px / 360px below 1280: docs/LAYOUT.md §1.2); landscape phones = the same side column between
-// the h52 bars (min(360, 46vw) wide, so the sheet never covers the top bar or pushes the strip off-screen); portrait
+// (top 72, bottom 72, 400px / 360px below 1280: docs/LAYOUT.md §1.2); landscape phones = the same side column from the top
+// edge to the bottom edge (min(360, 46vw) wide; the top bar and the tab island shrink to its left while it is open, M2); portrait
 // = one full-page sheet between the gauge row and the tab island (T06). The element carries data-scene-right / data-scene-sheet:
 // layout/useSceneInset measures it.
 // Head (docs/GAMEPLAY_V2.md §10.3): 3px kind stripe + 20px icon + 17px sentence-case Bricolage title (T10: no all-caps heads) + the panel's labelled primary
@@ -21,7 +21,8 @@ import { useIsMobile, useLayoutMode, useTween } from './hooks'
 import { DetailBody, DetailHeader, DetailPreview, type RenderPreview } from './DetailPanel'
 import { DOCK_TABS } from './Dock'
 import { usePanelWidth } from './layout/useSceneInset'
-import { BAR_H, EDGE, GAP, LANDSCAPE_BAR_H, MOBILE_BOTTOM_TABS_H, MOBILE_TOP_H } from './layout/tokens'
+import { EDGE, GAP, MOBILE_BOTTOM_TABS_H, MOBILE_TOP_H } from './layout/tokens'
+import { sidePanelOffsets } from './layout/panelFit'
 import { ShopPanel } from './panels/ShopPanel'
 import { TeamPanel } from './panels/TeamPanel'
 import { ProjectsPanel } from './panels/ProjectsPanel'
@@ -215,7 +216,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
       </section>
     )
   }
-  const barH = mode === 'landscape' ? LANDSCAPE_BAR_H : BAR_H
+  const off = sidePanelOffsets(mode)
   return (
     <aside
       data-scene-right=""
@@ -227,8 +228,8 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
       style={{
         width,
         right: EDGE,
-        top: EDGE + barH + GAP,
-        bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${barH + GAP}px)`,
+        top: off.top,
+        bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${off.bottom}px)`,
       }}
     >
       {stripe}

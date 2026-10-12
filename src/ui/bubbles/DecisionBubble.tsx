@@ -131,7 +131,7 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
           }}
           title={t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
           aria-label={t('decision.notebookLink', { v: conceptTitle(opt.conceptId) })}
-          className="grid size-9 shrink-0 place-items-center rounded-control text-kind-concept transition-colors hover:bg-surface-2 max-md:size-11"
+          className="grid size-9 shrink-0 place-items-center rounded-control text-kind-concept transition-colors hover:bg-surface-2 pointer-coarse:size-11"
         >
           <Icon name="book" size={18} />
         </button>

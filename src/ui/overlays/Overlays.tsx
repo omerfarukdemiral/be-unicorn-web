@@ -210,7 +210,7 @@ export function PostMortemOverlay() {
                   title={t('decision.notebookLink', { v: conceptTitle(cid) })}
                   aria-label={t('decision.notebookLink', { v: conceptTitle(cid) })}
                   aria-expanded={open === cid}
-                  className="grid size-9 shrink-0 place-items-center rounded-control text-kind-concept transition-colors hover:bg-surface-2 max-md:size-11"
+                  className="grid size-9 shrink-0 place-items-center rounded-control text-kind-concept transition-colors hover:bg-surface-2 pointer-coarse:size-11"
                 >
                   <Icon name="book" size={18} />
                 </button>

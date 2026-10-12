@@ -11,7 +11,7 @@ const files = import.meta.glob(['./**/*.tsx', '!./**/*.test.tsx'], { query: '?ra
 
 describe('touch targets', () => {
   it('no viewport-keyed 44px rule is left in src/ui', () => {
-    const bad = Object.keys(files).filter((f) => /max-md:min-[hw]-11/.test(files[f]!))
+    const bad = Object.keys(files).filter((f) => /max-md:(min-[hw]|size|h|w)-11/.test(files[f]!))
     expect(bad).toEqual([])
   })
 

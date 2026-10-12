@@ -229,7 +229,8 @@ describe('named rivals (GAMEPLAY V2 §8.2)', () => {
       expect(lastDay - seedDay!).toBeGreaterThanOrEqual(RIVAL_EARLY_DAYS)
       expect(run.rivalPassedSeedEarly).toBe(0)
     }
-  })
+    // Two 420-day bot runs: ~1 s alone, past the 5 s default when the pool is busy.
+  }, 30_000)
 
   it('share is not one-way: a mature, well-known product wins share back; a raw one loses it', () => {
     let strong = seedCompany(80, 1)

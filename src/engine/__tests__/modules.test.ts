@@ -296,6 +296,17 @@ describe('build and delivery', () => {
     expect(s.projects[0]!.build).toBeDefined()
   })
 
+  it('a build with an unknown id is dropped, so updates are not blocked forever', () => {
+    const s = build(company(['web'], 2), 0, 'paywall').state
+    const p = s.projects[0]!
+    p.build = { ...p.build!, id: 'teleport' as ProjectModuleId, progress: 99 }
+    const n = s.releases?.length ?? 0
+    checkReleases(s, content)
+    expect(p.build).toBeUndefined()
+    expect((p.modules ?? []).map((m) => m.id)).not.toContain('teleport')
+    expect(s.releases?.length ?? 0).toBe(n)
+  })
+
   it('end to end: the clock builds it and ships it', () => {
     let s = build(company(['web'], 2), 0, 'paywall').state
     for (let d = 0; d < 200 && s.projects[0]!.build; d++) s = api.step(s, 1)

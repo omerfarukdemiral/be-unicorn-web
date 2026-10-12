@@ -514,6 +514,8 @@ export function checkReleases(s: GameState, content: EngineContent): void {
     // W2a: a finished module build ships first, as its own release; no update the same day.
     const build = p.build
     const def = build && moduleDef(build.id)
+    // A build with an id we don't know (corrupt or newer save) would soak up the work forever: drop it.
+    if (build && !def) delete p.build
     if (build && def && build.progress >= moduleWork(p, def, build.refresh === true) - 1e-9) {
       const users = build.refresh ? 0 : Math.round(updateWave(s, p) * B.MODULE_WAVE_MULT)
       finishModule(s, p, build)

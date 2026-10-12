@@ -247,7 +247,8 @@ describe('auth', () => {
     expect((await call(login, 'POST', { ip: '5.6.7.8', body: { email: 'u@x.co', pin: '1234' } })).status).toBe(404)
     t += 11 * 60 * 1000
     expect((await call(login, 'POST', { ip: '1.2.3.4', body: { email: 'u@x.co', pin: '1234' } })).status).toBe(404)
-  })
+    // 61 hashed logins in a row: past the 5 s default when the pool is busy.
+  }, 20_000)
 
   it('sessions slide: used within 90 days they stay alive', async () => {
     const token = await signUp()

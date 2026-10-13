@@ -480,6 +480,28 @@ describe('a round-2 save (§1.6)', () => {
     expect(later.releases!.some((r) => r.module === 'aiAssistant')).toBe(true)
   })
 
+  it('3 modules and a running 4th build (legal at stage 5–6 before MV2a) read as v2, so the build fits once it lands', () => {
+    const s0 = withModules(company(['web'], 5), 0, ['feedback', 'referral', 'analytics'], 10)
+    const raw = JSON.parse(serialize(s0)) as { version: number; state: GameState }
+    const rp = raw.state.projects[0]!
+    delete rp.version
+    delete rp.lineUpdates
+    rp.updateProgress = 0
+    rp.build = { id: 'onboarding', progress: 0, startDay: 5 }
+    const s = deserialize(JSON.stringify(raw))!
+    const p = s.projects[0]!
+    expect(projectVersion(p)).toBe(2)
+    expect(projectSlots(s, p)).toEqual({ used: 4, total: 6 })
+    let later = api.step(s, 1)
+    expect(later.projects[0]!.version).toBe(2)
+    later.projects[0]!.build!.progress = moduleWork(later.projects[0]!, moduleDef('onboarding')!)
+    later = api.step(later, 2)
+    const q = later.projects[0]!
+    expect(q.build).toBeUndefined()
+    expect(q.modules!.map((m) => m.id)).toEqual(['feedback', 'referral', 'analytics', 'onboarding'])
+    expect(projectSlots(later, q)).toEqual({ used: 4, total: 6 })
+  })
+
   it('serialize round-trips the new fields', () => {
     const s = roundTwo()
     s.projects[0]!.version = 3

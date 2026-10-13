@@ -1,7 +1,7 @@
 // The desk's module question (W2c): when it asks, once per stage / per age, oldest project first; the panel's rows.
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
-import { buildStatus, moduleAsk, projectSlots, moduleHeadlines, moduleOffers, modulePromptFlag, moduleStaleFlag, suggestModule, suggestModules } from '../modules'
+import { buildStatus, moduleAsk, projectSlots, moduleHeadlines, moduleOffers, modulePromptFlag, moduleStaleFlag, projectVersion, suggestModule, suggestModules } from '../modules'
 import { clone } from '../util'
 import { api, build, company, withModules } from './moduleFixtures'
 
@@ -59,7 +59,7 @@ describe('moduleAsk: new module', () => {
     const s = company(['web', 'mobile'])
     const first = s.projects[0]!.id
     expect(moduleAsk(s)?.projectId).toBe(first)
-    s.flags[modulePromptFlag(first)] = s.stage
+    s.flags[modulePromptFlag(first)] = projectVersion(s.projects[0]!)
     expect(moduleAsk(s)?.projectId).toBe(s.projects[1]!.id)
   })
 })
@@ -79,14 +79,14 @@ describe('moduleAsk: stale module', () => {
     // A cancelled refresh is an answer too: the same age is not asked about again.
     const cancelled = clone(r.state)
     delete cancelled.projects[0]!.build
-    cancelled.flags[modulePromptFlag(s.projects[0]!.id)] = cancelled.stage
+    cancelled.flags[modulePromptFlag(s.projects[0]!.id)] = projectVersion(cancelled.projects[0]!)
     expect(moduleAsk(cancelled)).toBeNull()
   })
 
   it('a fresh-enough module does not ask', () => {
     let s = company(['web'], 2)
     s = withModules(s, 0, ['feedback'], s.time.day - 100)
-    s.flags[modulePromptFlag(s.projects[0]!.id)] = s.stage
+    s.flags[modulePromptFlag(s.projects[0]!.id)] = projectVersion(s.projects[0]!)
     expect(moduleAsk(s)).toBeNull()
   })
 })

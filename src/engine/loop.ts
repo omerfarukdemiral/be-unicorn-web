@@ -584,7 +584,8 @@ export function checkReleases(s: GameState, content: EngineContent): void {
       ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s, p), p.updates, { version: v, minor: line })
       continue
     }
-    // The line is full: this update is the next version.
+    // The line is full: this update is the next version. Its entry carries `update` too (and its debt), so a reader that
+    // means "a minor update" must check `version` without `minor` (MV2c: Juice banner, the important-moment slowdown).
     p.version = v + 1
     p.lineUpdates = 0
     const users = Math.round(updateWave(s, p) * B.VERSION_WAVE_MULT)

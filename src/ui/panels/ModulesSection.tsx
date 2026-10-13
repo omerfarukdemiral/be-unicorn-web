@@ -380,7 +380,7 @@ export function ModuleStrip({ project: p }: { project: Project }) {
   const mods = p.modules ?? []
   const free = Math.max(0, total - mods.length - (build && !build.refresh ? 1 : 0))
   return (
-    <button type="button" aria-label={t('detail.modules')} onClick={() => select({ kind: 'project', id: p.id })} className="flex min-h-11 w-full items-center gap-2 rounded-control px-1 text-left hover:bg-surface-2">
+    <button type="button" aria-label={t('detail.modules')} onClick={() => select({ kind: 'project', id: p.id })} className="flex min-h-11 w-full flex-wrap items-center gap-2 rounded-control px-1 text-left hover:bg-surface-2">
       {mods.map((m) => (
         <span key={m.id} title={moduleName(m.id, p.category)} className="relative grid size-8 shrink-0 place-items-center rounded-control bg-surface-2">
           <Icon name={MODULE_ICON[m.id]} size={18} tone={CATEGORY_COLOR[p.category]} className={cx(build?.refresh && build.id === m.id && 'opacity-50')} />

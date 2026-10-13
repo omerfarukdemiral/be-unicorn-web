@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DECISIONS } from '../content'
 import { createGame } from '../engine'
 import { company } from '../engine/__tests__/moduleFixtures'
-import { modulePromptFlag } from '../engine/modules'
+import { modulePromptFlag, projectVersion } from '../engine/modules'
 import type { Employee, GameState, PendingPayday, RenewalView, RoundState } from '../engine/types'
 import {
   BubbleTimeline,
@@ -359,7 +359,7 @@ describe('routeBubbles: the module question (W2c)', () => {
     const s = quiet(company(['web', 'mobile']))
     expect(open(s).filter((l) => l.ref === 'module')).toHaveLength(1)
     expect(open(s).find((l) => l.ref === 'module')!.extra).toBe(s.projects[0]!.id)
-    s.flags[modulePromptFlag(s.projects[0]!.id)] = s.stage
+    s.flags[modulePromptFlag(s.projects[0]!.id)] = projectVersion(s.projects[0]!)
     expect(open(s).find((l) => l.ref === 'module')!.extra).toBe(s.projects[1]!.id)
     s.projects[1]!.maturity = 0.9
     expect(open(s).some((l) => l.ref === 'module')).toBe(false)

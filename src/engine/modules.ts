@@ -491,12 +491,14 @@ export function projectMix(s: GameState, mrr = s.finance.mrr, ws = projectWeight
 
 /**
  * The project's version: 0 before its first 1.0, then 1, 2 … (checkReleases writes p.version). An old save at 1.0
- * without the field reads as max(1, ceil(modules / MODULE_SLOTS_PER_VERSION)), so its modules always fit.
+ * without the field reads as max(1, ceil((modules + a running new build) / MODULE_SLOTS_PER_VERSION)), so its modules
+ * and the build it was allowed under the old stage table (3 installed + a 4th at stage 5–6) always fit.
  */
 export function projectVersion(p: Project): number {
   if (p.version !== undefined) return p.version
   if (!p.launched || p.maturity < 1) return 0
-  return Math.max(1, Math.ceil((p.modules?.length ?? 0) / B.MODULE_SLOTS_PER_VERSION))
+  const used = (p.modules?.length ?? 0) + (p.build && !p.build.refresh ? 1 : 0)
+  return Math.max(1, Math.ceil(used / B.MODULE_SLOTS_PER_VERSION))
 }
 
 /** Updates the line after version v needs: min(VERSION_UPDATES_MAX, VERSION_UPDATES_BASE^v) (v1 → v2: 2). */
@@ -774,7 +776,11 @@ interface EstimateBase {
   memo: Map<string, ModuleEstimate>
 }
 
-/** Per state object: the recomputed base clone and the estimates already made (the key carries what they read). */
+/**
+ * Per state object: the recomputed base clone and the estimates already made (the key carries what they read). The key
+ * leaves out cash, techDebt, the team mix and modifiers: the store hands a new state object every tick, so it only goes
+ * stale if a caller mutates one state in place within a day and asks again.
+ */
 const ESTIMATES = new WeakMap<GameState, { key: string; base: EstimateBase }>()
 
 function estimateKey(s: GameState): string {

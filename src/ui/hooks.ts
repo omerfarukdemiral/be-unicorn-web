@@ -172,3 +172,26 @@ export function useExclusiveExpander(): [boolean, (next: boolean | ((open: boole
   }
   return [open, setOpen]
 }
+
+/**
+ * A two-step tap: the first tap arms a key (shows "Onayla"), the second on the same key commits; the arm lapses after
+ * `ms` (like DetailPanel's ConfirmButton). Returns [armedKey, tap] where tap(key, commit) arms or commits.
+ */
+/** What a tap on `key` does when `armed` is the key armed so far. */
+export const nextTap = (armed: string | null, key: string): 'arm' | 'commit' => (armed === key ? 'commit' : 'arm')
+
+export function useTwoStep(ms = 4000): [string | null, (key: string, commit: () => void) => void] {
+  const [armed, setArmed] = useState<string | null>(null)
+  useEffect(() => {
+    if (armed === null) return
+    const id = window.setTimeout(() => setArmed(null), ms)
+    return () => window.clearTimeout(id)
+  }, [armed, ms])
+  const tap = (key: string, commit: () => void) => {
+    if (nextTap(armed, key) === 'commit') {
+      setArmed(null)
+      commit()
+    } else setArmed(key)
+  }
+  return [armed, tap]
+}

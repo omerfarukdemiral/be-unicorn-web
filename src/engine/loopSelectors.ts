@@ -168,10 +168,15 @@ export function roundOutlook(s: GameState): RoundOutlook | null {
  * Costs owed right now: the month's ledger, a month waiting on the payday desk and what the desk deferred
  * (GAMEPLAY V2 §6.1). Runway and the cash projection count all of it: runway does not lie about deferrals.
  */
-export function owedTotal(s: GameState): number {
+export function owedTotal(s: Pick<GameState, 'finance'>): number {
   const l = s.finance.ledger
   const p = s.finance.pendingPayday
   return (l ? ledgerCosts(l) : 0) + (p ? ledgerCosts(p.ledger) : 0) + (s.finance.deferred ?? 0)
+}
+
+/** Cash left after everything owed: the one "Kasa" the HUD chip and the end conditions share. */
+export function freeCash(s: Pick<GameState, 'stats' | 'finance'>): number {
+  return s.stats.cash - owedTotal(s)
 }
 
 /**

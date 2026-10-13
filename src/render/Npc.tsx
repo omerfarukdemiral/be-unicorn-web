@@ -1,5 +1,6 @@
 // Visiting NPCs (PLAN §7.3): investor, mentor, customer, journalist… enter through the door,
 // walk to their target, and walk out when their visit ends.
+import { fromBubble } from './bubbleHit'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
@@ -282,7 +283,7 @@ export const Npc = memo(function Npc(props: NpcProps) {
   })
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if (e.delta > 10) return
+    if (e.delta > 10 || fromBubble(e.nativeEvent)) return
     e.stopPropagation()
     props.onSelect(visitor.id)
   }

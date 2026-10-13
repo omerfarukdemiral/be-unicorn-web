@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { layoutBubbles, type BubbleBox, type Placement, type Viewport } from './bubbleLayout'
+import { freeBubbleHeight, layoutBubbles, type BubbleBox, type Placement, type Viewport } from './bubbleLayout'
 
 const VP: Viewport = { left: 8, top: 8, right: 1432, bottom: 892 }
 
@@ -425,5 +425,25 @@ describe('layoutBubbles', () => {
       const pr = res.get('reflection:x')!
       if (!pr.hidden) expect(hit(rectOf(ref, pr), stem)).toBe(false)
     })
+  })
+})
+
+describe('freeBubbleHeight (landscape phone 844 x 390)', () => {
+  // The runway strip (y 279..321) and the dock (y 330..) sit under the scene; the card's option list scrolls above them.
+  const vp: Viewport = {
+    left: 8,
+    top: 76,
+    right: 836,
+    bottom: 382,
+    obstacles: [
+      { left: 49, top: 277, right: 747, bottom: 323 },
+      { left: 13, top: 328, right: 448, bottom: 384 },
+    ],
+  }
+  it('stops at the first obstacle below the top, not at the screen bottom', () => {
+    expect(freeBubbleHeight(vp)).toBe(277 - 4 - 76)
+  })
+  it('with nothing below it is the whole free area', () => {
+    expect(freeBubbleHeight({ ...vp, obstacles: [] })).toBe(382 - 76)
   })
 })

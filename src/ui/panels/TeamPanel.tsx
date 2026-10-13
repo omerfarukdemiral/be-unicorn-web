@@ -2,7 +2,6 @@
 // §10.5): 36px person cards with a 4px gap (no hairline list), salary as the number, every hire carries its CostPreview.
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { onLeave } from '../../engine/effort'
 import { idleBuilders } from '../../engine/loopSelectors'
 import { DEPTS, type Candidate, type Dept, type Employee } from '../../engine/types'
 import { DEPT_TEXT } from '../../content'
@@ -11,12 +10,12 @@ import * as B from '../../engine/balance'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
-import { candidateFit, fatigueGood, fitChips } from '../effort'
+import { candidateFit, fatigueGood, fitChips, personLabel } from '../effort'
 import { ChipRow } from '../EffectChips'
 import { CATEGORY_ICON } from './ProjectsPanel'
 import { Bar, Button, Chip, CostPreview, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
 import { useSpendPreview } from '../widgets'
-import { DEPT_COLOR, moraleTone, soft, STATUS_DOT, STATUS_TONE } from '../theme'
+import { DEPT_COLOR, moraleTone, soft } from '../theme'
 
 type Sub = 'hire' | 'team'
 
@@ -195,9 +194,8 @@ function TeamList() {
 
 export function EmployeeRow({ employee: e, idle = false }: { employee: Employee; idle?: boolean }) {
   // E3: the battery beside the morale bar, and the pills of what the player set (calm pace, lead, leave).
-  const fx = useGameStore(
-    useShallow((s) => ({ on: s.state.derived.people?.[e.id] !== undefined, lead: s.state.projects.some((p) => p.leadId === e.id), away: onLeave(e, s.state.time.day) ? Math.ceil((e.offUntil ?? 0) - s.state.time.day) : 0 })),
-  )
+  const fx = useGameStore(useShallow((s) => ({ on: s.state.derived.people?.[e.id] !== undefined, lead: s.state.projects.some((p) => p.leadId === e.id) })))
+  const label = useGameStore(useShallow((s) => personLabel(s.state, e)))
   const fatigue = Math.round(e.fatigue ?? 0)
   const fatigueColor = fatigueGood(fatigue) === false ? 'var(--color-negative)' : fatigueGood(fatigue) === true ? 'var(--color-positive)' : 'var(--color-energy)'
   return (
@@ -208,8 +206,7 @@ export function EmployeeRow({ employee: e, idle = false }: { employee: Employee;
           <Dot color={DEPT_COLOR[e.dept].dot} size={6} />
           <span className="truncate text-[13px] font-semibold">{e.name}</span>
           {e.star && <Icon name="star" size={12} fill="currentColor" className="shrink-0 text-g-equity" />}
-          {e.status !== 'working' && fx.away === 0 && <Pill className={STATUS_TONE[e.status]} dot={STATUS_DOT[e.status]}>{t(`status.${e.status}`)}</Pill>}
-          {fx.away > 0 && <Pill dot="var(--color-ink-3)">{t('team.onLeave', { d: fx.away })}</Pill>}
+          {label.key !== 'working' && <Pill className={label.tone} dot={label.dot}>{label.text}</Pill>}
           {fx.lead && <Pill tint="var(--color-g-equity)"><Icon name="star" size={10} fill="currentColor" />{t('team.lead')}</Pill>}
           {fx.on && e.pace === 'calm' && <Pill tint="var(--color-positive)">{t('pace.calm')}</Pill>}
           {idle && e.status === 'working' && <Pill tint="var(--color-energy)" dot="var(--color-energy)">{t('team.idle')}</Pill>}

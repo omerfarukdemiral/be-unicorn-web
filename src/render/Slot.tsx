@@ -1,5 +1,6 @@
 // Floor slots: type markers, hover/tap highlight, influence area glow (PLAN §3.4),
 // and pointer → action routing (select / moveItem / assignDesk). Buying places automatically (shop).
+import { fromBubble } from './bubbleHit'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -87,7 +88,7 @@ function selectHeat(s: GameState): string {
 const HEAT_COLORS = ['#f26464', '#ffc93d', '#4fd08a'] as const
 
 function onSlotClick(slot: Slot, e: ThreeEvent<MouseEvent>): void {
-  if (e.delta > 10) return
+  if (e.delta > 10 || fromBubble(e.nativeEvent)) return
   e.stopPropagation()
   const api = storeApi()
   const placing = api.ui.placing

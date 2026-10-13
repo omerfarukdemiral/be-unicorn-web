@@ -20,6 +20,7 @@ import { FOUNDER_COLOR, FOUNDER_ICON } from '../theme'
 import { useFounderActions } from '../FounderActions'
 import { money, pct } from '../format'
 import { stageText, t } from '../i18n'
+import { useTwoStep } from '../hooks'
 import { requestOverlay } from '../modalQueue'
 import { PAYDAY_LINES, paydayView, type PaydayDesk } from '../overlays/paydayView'
 import { buildChips, MODULE_ICON, useBuildCost } from '../panels/ModulesSection'
@@ -298,6 +299,8 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
   const state = useGameStore((s) => s.state)
   const dispatch = useGameStore((s) => s.dispatch)
   const [err, setErr] = useState<string | null>(null)
+  // A hire is a monthly salary: the first tap asks "İşe al?", the second commits.
+  const [armed, tap] = useTwoStep()
   if (candidates.length === 0) return null
   return (
     <Expandable
@@ -314,17 +317,20 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
         return (
           <ChoiceRow
             key={c.id}
-            label={`${c.name} · ${t(`dept.${c.dept}`)}`}
+            label={armed === c.id ? t('bubble.hireConfirm', { name: c.name, pay: money(c.salary) }) : `${c.name} · ${t(`dept.${c.dept}`)}`}
+            primary={armed === c.id}
             title={t('team.hire')}
             icon={skill ? { icon: CATEGORY_ICON[skill.category], color: CATEGORY_COLOR[skill.category] } : undefined}
             chips={[
               { icon: 'cash', label: t('fx.tag.salary'), text: `−${money(c.salary)}`, tail: t('bubble.month'), good: false, title: t('hud.cash') },
               ...(skill?.fit ? fitChips(CATEGORY_ICON[skill.category]) : []),
             ]}
-            onClick={() => {
-              const res = dispatch({ type: 'hire', candidateId: c.id })
-              setErr(res.ok || !res.error ? null : t(`error.${res.error}`))
-            }}
+            onClick={() =>
+              tap(c.id, () => {
+                const res = dispatch({ type: 'hire', candidateId: c.id })
+                setErr(res.ok || !res.error ? null : t(`error.${res.error}`))
+              })
+            }
           />
         )
       })}

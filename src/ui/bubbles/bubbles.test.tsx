@@ -366,19 +366,28 @@ describe('effort bubbles (E3)', () => {
 
   const person = (id: string) => html(createElement(PersonBubble, { bubbleKey: `person:${id}`, employeeId: id }))
 
-  it('the person card: battery number, load, pace pill that flips with the pace, leave only when worn out', () => {
+  // The pace control shows both paces side by side (B1): the one in force is aria-pressed, each carries its own numbers.
+  const pressed = (out: string): string => /aria-pressed="true"[^>]*>(?:<span[^>]*>(?:<svg.*?<\/svg>)?)([^<]+)</.exec(out)?.[1] ?? ''
+
+  it('the person card: battery number, load, both paces side by side with their own numbers, leave only when worn out', () => {
     const { id } = withTired(20)
     openBubble(`person:${id}`)
     let out = person(id)
     expect(out).toContain('Yük')
-    expect(out).toContain('Tempo: Normal')
+    expect(out).toContain('Normal')
+    expect(out).toContain('Rahat')
+    expect(pressed(out)).toBe('Normal')
+    // Normal and Rahat no longer show the same fatigue number.
+    const fat = [...out.matchAll(/Yorgunluk<\/span><span class="tabular[^>]*>([^<]+)</g)].map((m) => m[1])
+    expect(fat).toHaveLength(2)
+    expect(fat[0]).not.toBe(fat[1])
     expect(out).not.toContain('İzin ver')
     store().dispatch({ type: 'setPace', employeeId: id, pace: 'calm' })
     openBubble(`person:${id}`)
-    expect(person(id)).toContain('Tempo: Rahat')
+    expect(pressed(person(id))).toBe('Rahat')
     store().dispatch({ type: 'setPace', employeeId: id, pace: 'normal' })
     openBubble(`person:${id}`)
-    expect(person(id)).toContain('Tempo: Normal')
+    expect(pressed(person(id))).toBe('Normal')
     withTired(55)
     openBubble(`person:${id}`)
     out = person(id)

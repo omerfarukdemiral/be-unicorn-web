@@ -105,15 +105,15 @@ function OfficeGlyph({ size, muted }: { size: number; muted?: boolean }) {
 // Post-mortem & victory
 // ---------------------------------------------------------------------------
 
-const PM_FORMAT: Record<PostMortemCode, (v: number) => string> = {
+export const PM_FORMAT: Record<PostMortemCode, (v: number) => string> = {
   runwayIgnored: (v) => t('unit.months', { v: fixed(v, 1) }),
   burnTooHigh: (v) => t('hud.perMonthPlain', { v: money(v) }),
   scaledWithoutPmf: (v) => pct(v),
   highChurn: (v) => pct(v, 1),
   lowMorale: (v) => String(Math.round(v)),
   prematureScaling: (v) => t('unit.people', { v: Math.round(v) }),
-  lateFundraise: (v) => t('unit.days', { v: Math.round(v) }),
-  overload: (v) => pct(v),
+  lateFundraise: (v) => t('unit.weeks', { v: Math.round(v) }),
+  overload: (v) => `${fixed(v + 1, 1)}×`,
   teamLost: (v) => t('unit.people', { v: Math.round(v) }),
   unfocused: (v) => t('unit.projects', { v: Math.round(v) }),
 }

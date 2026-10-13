@@ -15,14 +15,14 @@ import { castName } from './bubbles/speaker'
 import { t } from './i18n'
 import { fixed, money, pct } from './format'
 import { Bar, Button, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './primitives'
-import { moraleTone, STATUS_DOT, STATUS_TONE } from './theme'
+import { moraleTone } from './theme'
 import { useIsMobile } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AdFocusToggle } from './panels/AdFocus'
 import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
 import { ModulesSection } from './panels/ModulesSection'
 import { ChipRow } from './EffectChips'
-import { fatigueGood, fitChips, LeadLine, loadChip, PersonEffortRows, SprintRow, TeamOf } from './effort'
+import { fatigueGood, fitChips, LeadLine, loadChip, personLabel, PersonEffortRows, SprintRow, TeamOf } from './effort'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
 
 export type RenderPreview = (target: Selection) => ReactNode
@@ -70,7 +70,8 @@ export function DetailHeader({ selection }: { selection: Selection }) {
         }
         case 'employee': {
           const e = st.employees.find((x) => x.id === selection.id)
-          return { title: e?.name ?? '—', sub: e ? DEPT_TEXT[e.dept].name : '', pill: e ? t(`status.${e.status}`) : undefined, pillTone: e ? STATUS_TONE[e.status] : undefined, pillDot: e ? STATUS_DOT[e.status] : undefined }
+          const label = e ? personLabel(st, e) : undefined
+          return { title: e?.name ?? '—', sub: e ? DEPT_TEXT[e.dept].name : '', pill: label?.text, pillTone: label?.tone, pillDot: label?.dot }
         }
         case 'project': {
           const p = st.projects.find((x) => x.id === selection.id)
@@ -144,7 +145,11 @@ function ProjectTitle({ id, title }: { id: string; title: string }) {
         onFocus={(e) => e.currentTarget.select()}
         onBlur={save}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+            e.preventDefault()
+            e.stopPropagation()
+            e.currentTarget.select()
+          } else if (e.key === 'Enter') e.currentTarget.blur()
           else if (e.key === 'Escape') done()
         }}
         style={{ fontSize: 16 }}

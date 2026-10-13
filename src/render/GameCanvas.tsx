@@ -1,6 +1,7 @@
 // Render lane entry point: full-size <Canvas> with the isometric office.
 // Desktop: click = select/place, wheel = zoom step, right-click = cancel. Keyboard lives in ui/shortcuts.ts.
 // Touch: tap = select, pinch = zoom step. DPR capped at 2; low-power mode follows renderBudget (no shadow pass).
+import { fromBubble } from './bubbleHit'
 import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 import { useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
@@ -112,7 +113,7 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
           if (import.meta.env.DEV) (window as unknown as { __r3f?: unknown }).__r3f = state
         }}
         onPointerMissed={(e) => {
-          if (e.button !== 0) return
+          if (e.button !== 0 || fromBubble(e)) return
           const api = storeApi()
           if (!api.ui.placing) {
             api.select(null)

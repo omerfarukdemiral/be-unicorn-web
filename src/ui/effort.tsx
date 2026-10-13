@@ -2,11 +2,12 @@
 // the Ekip / Projeler panels and the detail panel share. Numbers come from the engine (balance, effort.ts); nothing here
 // decides a rule. From Pre-seed only: in the Garage effortOn is false and every control hides.
 import * as B from '../engine/balance'
-import { buildersOf, effortOn, founderProject, hasOpenWork, isBuilder, isSprinting, onLeave, projectDemand, projectLoad, supplyOf } from '../engine/effort'
+import { buildersOf, effortOn, fatigueRate, founderProject, hasOpenWork, isBuilder, isSprinting, onLeave, projectDemand, projectLoad, supplyOf } from '../engine/effort'
 import { useShallow } from 'zustand/react/shallow'
 import type { Candidate, Employee, GameState, Pace, Project, ProjectCategory } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
-import type { Chip } from './EffectChips'
+import { CONTENT } from '../content'
+import { ChipRow, type Chip } from './EffectChips'
 import { fixed, pct } from './format'
 import { t } from './i18n'
 import { Icon, type IconName } from './icons'
@@ -73,6 +74,36 @@ export function candidateFit(s: Pick<GameState, 'stage' | 'projects'>, c: Candid
   if (!category || !effortOn(s)) return null
   return { category, fit: s.projects.some((p) => p.category === category) }
 }
+
+/** The one label a person shows (team list, person card pill, bubbles): the cause, so a bored person is never "Yorgun". */
+export interface PersonLabel {
+  key: 'leaving' | 'leave' | 'burnout' | 'tired' | 'bored' | 'lowMorale' | 'new' | 'break' | 'working'
+  text: string
+  /** The mark colour: red only for what costs you a person or their output. */
+  dot: string
+  tone: string
+}
+
+export function personLabel(s: GameState, e: Employee): PersonLabel {
+  const day = s.time.day
+  const f = e.fatigue ?? 0
+  const on = effortOn(s)
+  const make = (key: PersonLabel['key'], dot: string, tone: string, d?: number): PersonLabel => ({ key, text: t(`person.${key}`, { d: d ?? 0 }), dot, tone })
+  const red = 'var(--color-negative)'
+  const grey = 'var(--color-ink-3)'
+  if (e.status === 'leaving') return make('leaving', red, 'text-ink', e.leaveDay !== undefined ? Math.max(0, Math.ceil(e.leaveDay - day)) : 0)
+  if (on && onLeave(e, day)) return make('leave', grey, 'text-ink-2', Math.ceil((e.offUntil ?? 0) - day))
+  if (on && (f >= B.FATIGUE_BURNOUT || e.status === 'burnout')) return make('burnout', red, 'text-ink')
+  if (on && f >= B.FATIGUE_TIRED) return make('tired', grey, 'text-ink')
+  if (on && e.dept !== 'sales' && (e.loadAvg ?? 1) < B.UNDERLOAD && (e.boredDays ?? 0) >= BORED_LABEL_DAYS) return make('bored', 'var(--color-energy)', 'text-ink')
+  if (e.morale < B.TIRED_MORALE) return make('lowMorale', grey, 'text-ink')
+  if (e.status === 'onboarding') return make('new', grey, 'text-ink-2')
+  if (e.status === 'break') return make('break', grey, 'text-ink-2')
+  return make('working', 'var(--color-positive)', 'text-ink-2')
+}
+
+/** Days under UNDERLOAD before "Sıkılıyor" shows (design §4.3). */
+const BORED_LABEL_DAYS = 7
 
 // ---------------------------------------------------------------------------
 // What a person / a project can be asked (pure)
@@ -166,17 +197,42 @@ export function FatigueMeter({ fatigue, className }: { fatigue: number; classNam
   )
 }
 
-/** One-tap pace: the pill names the pace now; the chips say what "Rahat" does (what you get, or what you give up). */
+/** What a pace does for this person: output ("Hız −%15") and their own fatigue per day ("Yorgunluk +1.2/g"). */
+export function paceChips(pace: 'normal' | 'calm', rate: number): Chip[] {
+  return [outputChip(pace === 'calm' ? `−${pct(1 - B.PACE_OUTPUT.calm)}` : `%${Math.round(B.PACE_OUTPUT.normal * 100)}`, pace === 'calm' ? false : null), batteryChip(rate, t('fx.tag.fatigue'))]
+}
+
+/** Both paces side by side, the one in force filled; each shows its own numbers for this person. A tap on the other switches. */
 export function PaceRow({ e }: { e: Employee }) {
   const calm = (e.pace ?? 'normal') === 'calm'
+  const rates = useGameStore(useShallow((s) => ({ normal: fatigueRate(s.state, CONTENT, e, 'normal'), calm: fatigueRate(s.state, CONTENT, e, 'calm') })))
   return (
-    <ChoiceRow
-      primary={calm}
-      icon={{ icon: 'battery', color: calm ? 'var(--color-positive)' : 'var(--color-ink-3)' }}
-      label={`${t('team.pace')}: ${t(calm ? 'pace.calm' : 'pace.normal')}`}
-      chips={calmChips()}
-      onClick={() => dispatch({ type: 'setPace', employeeId: e.id, pace: calm ? 'normal' : 'calm' })}
-    />
+    <div role="group" aria-label={t('team.pace')} className="grid grid-cols-2 gap-1.5">
+      {(['normal', 'calm'] as const).map((pace) => {
+        const on = (pace === 'calm') === calm
+        return (
+          <button
+            key={pace}
+            type="button"
+            aria-pressed={on}
+            onClick={(ev) => {
+              ev.stopPropagation()
+              if (!on) dispatch({ type: 'setPace', employeeId: e.id, pace })
+            }}
+            className={cx(
+              'flex min-h-11 min-w-0 flex-col items-start justify-center gap-1 rounded-control border px-2.5 py-1.5 text-left transition-colors',
+              on ? 'border-ink bg-surface text-ink ring-1 ring-ink' : 'border-border bg-surface-2/60 text-ink hover:border-border-strong hover:bg-surface-2',
+            )}
+          >
+            <span className="flex items-center gap-1.5 text-[13px] font-semibold leading-snug">
+              <Icon name="battery" size={15} tone={pace === 'calm' ? 'var(--color-positive)' : 'var(--color-ink-3)'} className="shrink-0" />
+              {t(`pace.${pace}`)}
+            </span>
+            <ChipRow chips={paceChips(pace, rates[pace])} />
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

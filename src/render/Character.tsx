@@ -13,6 +13,7 @@ import { GEO, HIT_MAT, flatMat } from './resources'
 import { FADE_MS, fadeScale, type GhostMode } from './departing'
 import { clearSpeaker, isCelebrating, sceneTime, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
 import { STAND, hold, release, reserve } from './spots'
+import { fromBubble } from './bubbleHit'
 import { LEGS_BY_BAND } from './stageLook'
 import { spawnCurve } from './useSpawnScale'
 import { Mover, doorScale, overlayYawn, poseCheer, poseSip, poseSit, poseStand, poseWalk, settle, speedMultiplier } from './walker'
@@ -150,7 +151,7 @@ function HitAndRing({ onSelect, selected }: HitProps) {
     m.visible = k.current > 0.01
   })
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if (e.delta > 10) return
+    if (e.delta > 10 || fromBubble(e.nativeEvent)) return
     e.stopPropagation()
     onSelect()
   }

@@ -436,6 +436,7 @@ const BASE_TEXT: Record<string, string> = {
   'bubble.pitch': 'Yatırımcı sunum bekliyor',
   'bubble.renewal': '{name} sözleşme · {d}g',
   'bubble.hire': '{n} aday bekliyor',
+  'bubble.hireConfirm': '{name} · İşe al? {pay}/ay',
   'bubble.moreCandidates': '+{n} aday · Ekip',
   'bubble.project': 'İlk ürünü seç',
   'bubble.leaving': '{name} ayrılıyor · {d}g',
@@ -484,6 +485,7 @@ const BASE_TEXT: Record<string, string> = {
   'unit.months': '{v} ay',
   'unit.weeksLeft': '{v} hafta kaldı',
   'unit.days': '{v} gün',
+  'unit.weeks': '{v} hafta',
   'unit.infinite': 'sonsuz',
   'activity.day': 'Gün {d}',
 
@@ -690,6 +692,16 @@ export const UI_TEXT: Record<string, string> = {
   // Team effort (E3): pace chips, sprint, lead, fatigue and leave bubbles.
   'pace.calm': 'Rahat',
   'pace.normal': 'Normal',
+  // The one label a person wears (personLabel): the cause, not the engine status.
+  'person.leaving': 'Gidiyor · {d}g',
+  'person.leave': 'İzinde · {d}g',
+  'person.burnout': 'Tükendi',
+  'person.tired': 'Yorgun',
+  'person.bored': 'Sıkılıyor',
+  'person.lowMorale': 'Keyifsiz',
+  'person.new': 'Yeni',
+  'person.break': 'Molada',
+  'person.working': 'Çalışıyor',
   'team.sprint': 'Sprint',
   'team.sprintEnd': 'Bitir',
   'team.slowDown': 'Yavaşlat',

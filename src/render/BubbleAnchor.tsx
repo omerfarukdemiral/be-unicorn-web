@@ -11,7 +11,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { Vector3, type Camera } from 'three'
 import type * as THREE from 'three'
 import { applyFrame, BubbleLayoutRegistry, createEntry, ENTER_SCALE, observeResize, removeEntry, resolveAnchor, setExiting, shiftBubble, runLayout, type Entry } from './bubbleDriver'
-import { OPEN_PRIORITY, priorityOf, type BubbleKind, type Viewport } from './bubbleLayout'
+import { freeBubbleHeight, OPEN_PRIORITY, priorityOf, type BubbleKind, type Viewport } from './bubbleLayout'
 import { useHtmlPortal } from './htmlPortal'
 import { speakerPositions } from './sceneRegistry'
 import { storeApi } from './source'
@@ -50,7 +50,7 @@ function sceneViewport(canvas: HTMLCanvasElement): Viewport {
     const r = el.getBoundingClientRect()
     if (r.width > 0 && r.height > 0 && onScreen(el)) juice.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
   }
-  return {
+  const vp: Viewport = {
     left: c.left + m,
     right: Math.min(c.right, window.innerWidth - inset.right) - m,
     top: Math.max(c.top, inset.top, hudBottom) + m,
@@ -58,6 +58,11 @@ function sceneViewport(canvas: HTMLCanvasElement): Viewport {
     obstacles,
     juice,
   }
+  // Open cards cap their option list at this (ui/bubbles/Expandable); written only when it moves.
+  const free = `${Math.round(freeBubbleHeight(vp))}px`
+  const root = document.documentElement
+  if (root.style.getPropertyValue('--scene-free-h') !== free) root.style.setProperty('--scene-free-h', free)
+  return vp
 }
 
 /** Runs the layout (throttled) and eases every bubble to its slot. Call once, after the anchors mount. */

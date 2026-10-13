@@ -7,7 +7,7 @@ import { useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import { ChipRow, type Chip } from '../EffectChips'
 import { useIsMobile, useLayoutMode } from '../hooks'
-import { expandableLimits } from '../layout/panelFit'
+import { CARD_HEADER_H, CARD_SLACK, expandableLimits } from '../layout/panelFit'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx, IconButton } from '../primitives'
@@ -154,7 +154,7 @@ export function Expandable({
           {detail && <IconButton icon="info" label={t('bubble.detail')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={() => launch(detail)} />}
           <IconButton icon="close" label={t('bubble.close')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={closeBubble} />
         </div>
-        <div className="flex flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5" style={{ maxHeight: limits.maxH }}>{children}</div>
+        <div className="flex flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5 *:shrink-0" style={{ maxHeight: `min(${limits.maxH}px, calc(var(--scene-free-h, 9999px) - ${CARD_HEADER_H + CARD_SLACK}px))` }}>{children}</div>
       </div>
       <BubbleTail style={tintEdge(mark.color)} />
     </div>

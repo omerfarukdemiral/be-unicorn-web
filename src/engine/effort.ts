@@ -189,6 +189,27 @@ export function peopleView(s: GameState): Record<EmployeeId, PersonEffort> {
   return out
 }
 
+/** One day's fatigue change at `pace` and load average `la`: pace + load − common area (and a break day) − lead relief. */
+function fatigueDelta(s: GameState, content: EngineContent, e: Employee, pace: EffectivePace, la: number, day: number | null): number {
+  const p = e.projectId !== undefined ? s.projects.find((x) => x.id === e.projectId) : undefined
+  let d = (pace === 'sprint' ? B.SPRINT_FATIGUE : B.PACE_FATIGUE[pace]) + B.LOAD_FATIGUE * (la - 1)
+  if (nearCommonArea(s, content, e)) {
+    d -= B.COMMON_AREA_RECOVERY
+    if (day === null) d -= B.BREAK_DAY_RECOVERY / B.BREAK_EVERY_DAYS
+    else if (isBreakDay(e.id, day)) d -= B.BREAK_DAY_RECOVERY
+  }
+  if (ledMember(p, e)) d -= B.LEAD_FATIGUE_RELIEF
+  return d
+}
+
+/**
+ * The steady fatigue per day this person would have at `pace` (a break day counts as its daily average), for their load
+ * average, common area and lead. The UI's side-by-side "Normal / Rahat" numbers; dailyEffort runs the same arithmetic.
+ */
+export function fatigueRate(s: GameState, content: EngineContent, e: Employee, pace: 'normal' | 'calm' | 'sprint'): number {
+  return fatigueDelta(s, content, e, pace, e.loadAvg ?? 1, null)
+}
+
 /**
  * Daily, from Pre-seed (before the status machine): loadAvg moves 1/LOAD_AVG_DAYS toward today's load; fatigue moves by
  * pace + LOAD_FATIGUE × (loadAvg − 1) − break day − common area − lead relief (on leave: − LEAVE_RECOVERY_PER_DAY only);
@@ -211,14 +232,7 @@ export function dailyEffort(s: GameState, content: EngineContent): void {
     const avg = e.loadAvg ?? 1
     const la = avg + ((view[e.id]?.load ?? avg) - avg) / B.LOAD_AVG_DAYS
     e.loadAvg = la
-    const pace = effectivePace(s, e, p)
-    let d = (pace === 'sprint' ? B.SPRINT_FATIGUE : B.PACE_FATIGUE[pace]) + B.LOAD_FATIGUE * (la - 1)
-    if (nearCommonArea(s, content, e)) {
-      d -= B.COMMON_AREA_RECOVERY
-      if (isBreakDay(e.id, Math.floor(day))) d -= B.BREAK_DAY_RECOVERY
-    }
-    if (ledMember(p, e)) d -= B.LEAD_FATIGUE_RELIEF
-    const f = Math.min(100, Math.max(0, before + d))
+    const f = Math.min(100, Math.max(0, before + fatigueDelta(s, content, e, effectivePace(s, e, p), la, Math.floor(day))))
     if (f !== 0 || e.fatigue !== undefined) e.fatigue = f
     if (p && isBuilder(e)) learn(e, p.category)
     if (inFlow(s, e, p)) {

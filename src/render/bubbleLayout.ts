@@ -64,6 +64,17 @@ export interface Viewport {
   juice?: readonly { left: number; top: number; right: number; bottom: number }[]
 }
 
+/**
+ * Height an open bubble may take: from the top of the free area down to the first obstacle below it (the dock, the
+ * runway strip), else to the bottom. A taller card scrolls its option list inside this (landscape phone, 844 x 390:
+ * the payday options used to run under the strip and the dock).
+ */
+export function freeBubbleHeight(vp: Viewport, minTop = 40): number {
+  let bottom = vp.bottom
+  for (const o of vp.obstacles ?? []) if (o.top > vp.top + minTop && o.top < bottom) bottom = o.top - 4
+  return Math.max(0, bottom - vp.top)
+}
+
 export interface Placement {
   dx: number
   dy: number

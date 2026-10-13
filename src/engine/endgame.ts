@@ -3,6 +3,7 @@ import * as B from './balance'
 import { promoteConcept } from './concepts'
 import { queueConcept } from './effects'
 import { owedCosts } from './derive'
+import { freeCash } from './loopSelectors'
 import { enterStage, pushStageReport } from './round'
 import type { ConceptId, GameState, PostMortemCode, PostMortemReason } from './types'
 import { pushActivity, pushEvent, type EngineContent } from './util'
@@ -105,7 +106,8 @@ export function dailyEndgame(s: GameState, content: EngineContent): void {
   if ((s.counters.hires ?? 0) > 0 && s.employees.length === 0) {
     const since = Number(s.flags['teamZeroSince'] ?? s.time.day)
     s.flags['teamZeroSince'] = since
-    if (s.time.day - since >= B.TEAM_ZERO_GRACE_DAYS) return endRun(s, content, 'teamLost')
+    // A lone founder with money left keeps playing and can hire: only an empty till ends it.
+    if (s.time.day - since >= B.TEAM_ZERO_GRACE_DAYS && freeCash(s) <= 0) return endRun(s, content, 'teamLost')
   } else if (s.flags['teamZeroSince'] !== undefined) {
     delete s.flags['teamZeroSince']
   }

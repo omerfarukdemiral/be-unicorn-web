@@ -2,6 +2,7 @@
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
 import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
+import { effortOn, ledMember, onLeave } from './effort'
 import { updateSize } from './modules'
 import { diligenceNow, offerFactor, priceRatio } from './round'
 import { modifierMult } from './util'
@@ -81,6 +82,45 @@ export function idleBuilders(s: Pick<GameState, 'employees'>, withOnboarding = f
     if (e.status === 'leaving' || (e.status === 'onboarding' && !withOnboarding)) continue
     if (e.projectId === undefined) out.push(e.id)
   }
+  return out
+}
+
+/** Why someone asks the player in the scene (E1 adds the effort needs to leaving / idle). */
+export type StaffAttention = 'leaving' | 'burnout' | 'tired' | 'bored' | 'idle'
+
+/**
+ * Who needs the player, in order leaving > burnout > tired > bored > idle, one need per person (ids in numeric order
+ * within a need; burnout and tired by fatigue, bored by bored days). From Pre-seed only: burnout (fatigue ≥
+ * FATIGUE_BURNOUT, at most STAFF_BURNOUT_MAX), tired (≥ FATIGUE_TIRED) and bored (BORED_BUBBLE_DAYS+ under UNDERLOAD)
+ * together at most STAFF_TIRED_BORED_MAX; a led project's members and anyone acked in the last STAFF_ACK_DAYS are
+ * spared tired / bored. Nobody on leave, onboarding or in sales asks for effort.
+ */
+export function staffAttention(s: GameState): [EmployeeId, StaffAttention][] {
+  const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id, 'en', { numeric: true })
+  const out: [EmployeeId, StaffAttention][] = []
+  const taken = new Set<EmployeeId>()
+  const push = (id: EmployeeId, need: StaffAttention) => {
+    taken.add(id)
+    out.push([id, need])
+  }
+  for (const e of [...s.employees].sort(byId)) if (e.status === 'leaving') push(e.id, 'leaving')
+  if (effortOn(s)) {
+    const day = s.time.day
+    const projects = new Map(s.projects.map((p) => [p.id, p]))
+    const askers = s.employees.filter((e) => !taken.has(e.id) && e.status !== 'onboarding' && e.dept !== 'sales' && !onLeave(e, day)).sort(byId)
+    const fatigue = (e: { fatigue?: number }) => e.fatigue ?? 0
+    const quiet = (e: (typeof askers)[number]) =>
+      (e.ackDay !== undefined && day < e.ackDay + B.STAFF_ACK_DAYS) || ledMember(e.projectId !== undefined ? projects.get(e.projectId) : undefined, e)
+    const burnt = askers.filter((e) => fatigue(e) >= B.FATIGUE_BURNOUT).sort((a, b) => fatigue(b) - fatigue(a))
+    for (const e of burnt.slice(0, B.STAFF_BURNOUT_MAX)) push(e.id, 'burnout')
+    const tired = askers.filter((e) => fatigue(e) >= B.FATIGUE_TIRED && fatigue(e) < B.FATIGUE_BURNOUT && !quiet(e)).sort((a, b) => fatigue(b) - fatigue(a))
+    const bored = askers
+      .filter((e) => !taken.has(e.id) && (e.boredDays ?? 0) >= B.BORED_BUBBLE_DAYS && (e.loadAvg ?? 1) < B.UNDERLOAD && !quiet(e))
+      .sort((a, b) => (b.boredDays ?? 0) - (a.boredDays ?? 0))
+    const tb: [EmployeeId, StaffAttention][] = [...tired.map((e): [EmployeeId, StaffAttention] => [e.id, 'tired']), ...bored.map((e): [EmployeeId, StaffAttention] => [e.id, 'bored'])]
+    for (const [id, need] of tb.slice(0, B.STAFF_TIRED_BORED_MAX)) push(id, need)
+  }
+  for (const id of [...idleBuilders(s)].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) if (!taken.has(id)) push(id, 'idle')
   return out
 }
 

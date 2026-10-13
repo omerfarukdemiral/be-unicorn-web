@@ -2,9 +2,9 @@
 import * as B from './balance'
 import * as E from './economy'
 import { employeeMoraleTarget, globalMoraleTarget, type Outputs } from './derive'
-import { auraAt, findSlot } from './office'
+import { candidateSkill, dailyEffort, effortOn, isBreakDay, nearCommonArea, onLeave } from './effort'
 import type { Rng } from './rng'
-import { DEPTS, type Candidate, type Dept, type Employee, type GameState } from './types'
+import { DEPTS, type Candidate, type Dept, type Employee, type GameState, type LeaveCause } from './types'
 import { incCounter, newId, policyHas, policyMult, policyQualityCap, policySum, pushActivity, pushEvent, type EngineContent } from './util'
 
 /** Pool size: base + stage up to the max, plus what the policies add on top of the max (hire-fast +2, GAMEPLAY V2 §7.2: the law's point is a bigger pool than any stage gives). */
@@ -21,7 +21,9 @@ export function makeCandidate(s: GameState, content: EngineContent, rng: Rng, de
   const id = newId(s, 'c')
   const name = names.length ? rng.pick(names) : content.employeeNames.length ? `${rng.pick(content.employeeNames)} ${id}` : id
   const salary = Math.round(E.salary(B.BASE_SALARY[d], s.stage) * (0.85 + 0.3 * (quality - B.CANDIDATE_QUALITY_MIN) / (B.CANDIDATE_QUALITY_MAX - B.CANDIDATE_QUALITY_MIN)))
-  return { id, name, dept: d, quality, salary, expiresDay: s.time.day + B.CANDIDATE_LIFETIME_DAYS }
+  // E1: a builder's one skill comes from the id's hash, so the pool's draws (and names) stay what they were.
+  const skills = d === 'eng' || d === 'product' ? { skills: [candidateSkill(s, id)] } : {}
+  return { id, name, dept: d, quality, salary, expiresDay: s.time.day + B.CANDIDATE_LIFETIME_DAYS, ...skills }
 }
 
 /** Refill the pool; the first pool always offers eng, product and marketing. */
@@ -47,7 +49,9 @@ export function yearlyRaises(s: GameState, content?: EngineContent): void {
     const years = Math.floor((s.time.day - e.hiredDay + 1e-6) / B.RAISE_EVERY_DAYS)
     e.raises ??= years
     if (years < 1 || e.raises >= years) continue
-    e.salary *= 1 + B.RAISE_YEARLY
+    // E1: quality grown in flow since the last raise is priced in too.
+    e.salary *= 1 + B.RAISE_YEARLY + B.FLOW_RAISE_PER_QUALITY * (e.qualityGain ?? 0)
+    delete e.qualityGain
     e.raises += 1
   }
 }
@@ -61,7 +65,10 @@ export function removeEmployee(s: GameState, id: string): Employee | undefined {
   if (idx < 0) return undefined
   const [e] = s.employees.splice(idx, 1)
   for (const slot of s.office.slots) if (slot.occupantId === id) delete slot.occupantId
-  for (const p of s.projects) p.assignedIds = p.assignedIds.filter((x) => x !== id)
+  for (const p of s.projects) {
+    p.assignedIds = p.assignedIds.filter((x) => x !== id)
+    if (p.leadId === id) delete p.leadId
+  }
   return e
 }
 
@@ -86,17 +93,18 @@ export function driftMorale(s: GameState, content: EngineContent, o: Outputs, dt
   s.stats.morale = sum / s.employees.length
 }
 
-/** Deterministic break day: every BREAK_EVERY_DAYS days, offset per employee. */
-function isBreakDay(id: string, day: number): boolean {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return (h + day) % B.BREAK_EVERY_DAYS === 0
-}
-
-/** Daily: statuses, resignation warnings and walk-outs. No random punishment: warning first, then a window. */
+/**
+ * Daily: effort first (E1, from Pre-seed), then statuses, resignation warnings and walk-outs. No random punishment:
+ * warning first, then a window. Order: (a) leaving walks out on its day; (b) morale under the bar outside a retain grace
+ * → notice; (c) BURNOUT_RESIGN_DAYS at FATIGUE_BURNOUT → notice; (d) BORED_QUIT_DAYS bored → notice (one bored notice at
+ * a time); (c) and (d) freeze in a grace and on leave; (e) the status, first match.
+ */
 export function dailyPeople(s: GameState, content: EngineContent): void {
   const day = s.time.day
   const quitAt = resignMorale(s, content)
+  const effort = effortOn(s)
+  dailyEffort(s, content)
+  let boredNotice = s.employees.some((e) => e.status === 'leaving' && e.leaveCause === 'bored')
   for (const e of [...s.employees]) {
     if (e.status === 'leaving') {
       if (e.leaveDay !== undefined && day >= e.leaveDay) {
@@ -109,17 +117,48 @@ export function dailyPeople(s: GameState, content: EngineContent): void {
     }
     const grace = Number(s.flags[`retained:${e.id}`] ?? -1)
     if (e.morale < quitAt && day >= grace) {
-      setStatus(e, 'leaving', day)
-      e.leaveDay = day + B.RESIGN_WARNING_DAYS
-      pushActivity(s, 'resignWarning', { name: e.name, id: e.id })
+      notice(s, e, 'morale')
       continue
     }
+    const off = onLeave(e, day)
+    if (effort && !off && e.dept !== 'sales' && day >= grace) {
+      if ((e.fatigue ?? 0) >= B.FATIGUE_BURNOUT) {
+        e.burnoutDays = (e.burnoutDays ?? 0) + 1
+        if (e.burnoutDays === 1) {
+          pushActivity(s, 'burnedOut', { name: e.name, id: e.id })
+          pushEvent(s, { kind: 'burnedOut', refId: e.id })
+        }
+      } else if (e.burnoutDays) e.burnoutDays = 0
+      if ((e.burnoutDays ?? 0) >= B.BURNOUT_RESIGN_DAYS) {
+        notice(s, e, 'burnout')
+        continue
+      }
+      const la = e.loadAvg ?? 1
+      if (la < B.UNDERLOAD) e.boredDays = (e.boredDays ?? 0) + 1
+      else if (la >= B.BORED_RESET_LOAD && e.boredDays) e.boredDays = 0
+      if ((e.boredDays ?? 0) >= B.BORED_QUIT_DAYS && !boredNotice) {
+        notice(s, e, 'bored')
+        boredNotice = true
+        continue
+      }
+    }
+    const fatigue = e.fatigue ?? 0
     if (day - e.hiredDay < B.ONBOARDING_DAYS) setStatus(e, 'onboarding', day)
-    else if (e.morale < quitAt) setStatus(e, 'burnout', day)
-    else if (e.morale < B.TIRED_MORALE) setStatus(e, 'tired', day)
+    else if (off) setStatus(e, 'break', day)
+    else if (fatigue >= B.FATIGUE_BURNOUT || e.morale < quitAt) setStatus(e, 'burnout', day)
+    else if (fatigue >= B.FATIGUE_TIRED || e.morale < B.TIRED_MORALE) setStatus(e, 'tired', day)
     else if (isBreakDay(e.id, Math.floor(day)) && nearCommonArea(s, content, e)) setStatus(e, 'break', day)
     else setStatus(e, 'working', day)
   }
+}
+
+/** The resignation notice: RESIGN_WARNING_DAYS to answer it (respondResignation), tagged with its cause. */
+function notice(s: GameState, e: Employee, cause: LeaveCause): void {
+  setStatus(e, 'leaving', s.time.day)
+  e.leaveDay = s.time.day + B.RESIGN_WARNING_DAYS
+  e.leaveCause = cause
+  pushActivity(s, 'resignWarning', { name: e.name, id: e.id, cause })
+  if (cause === 'bored') pushEvent(s, { kind: 'bored', refId: e.id })
 }
 
 /**
@@ -149,12 +188,6 @@ export function layoff(s: GameState, content: EngineContent, share: number): num
   return n
 }
 
-/** Mola (PLAN §7.2) needs a common-area item (coffee corner, kitchen…) in aura range of the desk. */
-function nearCommonArea(s: GameState, content: EngineContent, e: Employee): boolean {
-  const slot = e.deskSlotId !== undefined ? findSlot(s.office, e.deskSlotId) : undefined
-  return slot !== undefined && auraAt(s, content, slot) > 0
-}
-
 export function hireCandidate(s: GameState, c: Candidate, deskSlotId: string | undefined): Employee {
   const e: Employee = {
     id: newId(s, 'e'),
@@ -167,6 +200,7 @@ export function hireCandidate(s: GameState, c: Candidate, deskSlotId: string | u
     hiredDay: s.time.day,
     morale: Math.max(B.START_MORALE, s.stats.morale),
     ...(deskSlotId !== undefined ? { deskSlotId } : {}),
+    ...(c.skills?.length ? { skills: [...c.skills] } : {}),
   }
   s.employees.push(e)
   s.candidates = s.candidates.filter((x) => x.id !== c.id)

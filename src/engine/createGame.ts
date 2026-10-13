@@ -64,6 +64,7 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
       channels: { organic: 0, paid: 0, manual: 0, enterprise: 0 },
       stageProgress: 0,
       canStartRound: false,
+      people: {},
     },
     office: buildOffice(0),
     employees: [],

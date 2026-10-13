@@ -2,6 +2,7 @@
 import { BOARD_FROM_STAGE, DILIGENCE_MOM, INITIAL_TOOLS, DIRECTOR_PRESSURE_DEFAULT, HISTORY_MAX_MONTHS, LOAN_LEGACY_COVENANT, LOAN_LEGACY_MONTHS, LOAN_LEGACY_RATE, POLICY_NEVER_SIGNED } from './balance'
 import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
+import { peopleView } from './effort'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt, type ToolId } from './types'
 import { castOf, defaultMarket, ensureRivals, marketTools, newBoard } from './world'
 import { uniquePush } from './util'
@@ -104,8 +105,11 @@ function partialReceipts(mrrRaw: unknown, usersRaw: unknown): PartialReceipt[] {
   return out
 }
 
+/** derived.people (E1) is rebuilt by the first recompute after a load: never saved. */
 export function serialize(state: GameState): string {
-  const file: SaveFile = { version: SAVE_VERSION, state }
+  const derived = { ...state.derived }
+  delete derived.people
+  const file: SaveFile = { version: SAVE_VERSION, state: { ...state, derived } }
   return JSON.stringify(file)
 }
 
@@ -129,6 +133,8 @@ export function migrate(file: { version: number; state: unknown }): GameState | 
   if (Array.isArray(out.goalsDone)) out.goalsDone = [...new Set(out.goalsDone.map((id) => RENAMED_GOALS[id] ?? id))]
   // Garage levers (2026-10-08) open for any save, whatever its version.
   if (Array.isArray(out.unlockedTools)) for (const tool of INITIAL_TOOLS) uniquePush(out.unlockedTools, tool)
+  // E1: derived.people is not saved; rebuilt here (pure, no content) so the loaded state reads as it was.
+  if (out.derived && Array.isArray(out.employees) && Array.isArray(out.projects) && out.founder) out.derived.people = peopleView(out)
   out.meta.saveVersion = SAVE_VERSION
   return out
 }

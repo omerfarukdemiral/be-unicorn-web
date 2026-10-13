@@ -56,6 +56,14 @@ export type GameSpeed = 0 | 1 | 2 | 4
 
 export type EmployeeStatus = 'working' | 'tired' | 'burnout' | 'break' | 'onboarding' | 'leaving'
 
+/** Personal pace (E1, from Pre-seed): 'calm' trades output for recovery. A sprinting project lifts 'normal' to 'sprint'. */
+export const PACES = ['calm', 'normal'] as const
+export type Pace = (typeof PACES)[number]
+/** The pace someone works at today (derive only): their own, or 'sprint' on a sprinting project unless they are calm. */
+export type EffectivePace = Pace | 'sprint'
+/** Why a resignation notice came: low morale, ten days burnt out, or ninety days bored (E1). */
+export type LeaveCause = 'morale' | 'burnout' | 'bored'
+
 /** Active founder actions (PLAN §4.4). 'rest' recovers energy; 'refactorSprint' pays tech debt down (GAMEPLAY V2 §4.2). */
 export const FOUNDER_ACTIONS = ['findUsers', 'talkToUsers', 'motivateTeam', 'investorCoffee', 'salesCall', 'rest', 'refactorSprint'] as const
 export type FounderActionKind = (typeof FOUNDER_ACTIONS)[number]
@@ -296,6 +304,34 @@ export interface Employee {
   star?: boolean
   /** Yearly market raises paid so far (the one source of truth; old saves default lazily to the years served, no back pay). */
   raises?: number
+  // Effort (E1, from Pre-seed). All optional: an old save reads pace 'normal', fatigue 0, loadAvg 1, counters 0.
+  /** Missing = 'normal'. */
+  pace?: Pace
+  /** The project lead set this person calm (and puts them back to normal once rested); a manual setPace clears it. */
+  autoCalm?: true
+  /** 0–100: only multiplies output (≥ FATIGUE_TIRED × TIRED_OUTPUT, ≥ FATIGUE_BURNOUT × BURNOUT_OUTPUT), never morale. */
+  fatigue?: number
+  /** Workload, a LOAD_AVG_DAYS exponential average updated once a day (fatigue, boredom and flow read it). */
+  loadAvg?: number
+  /** Project categories this person is fluent in (at most MAX_SKILLS): a fit builder makes × FIT_OUTPUT. */
+  skills?: ProjectCategory[]
+  /** Days worked on a category not yet learned; at SKILL_LEARN_DAYS it is learned. */
+  skillDays?: Partial<Record<ProjectCategory, number>>
+  boredDays?: number
+  burnoutDays?: number
+  flowDays?: number
+  /** On leave while day < offUntil. */
+  offUntil?: number
+  /** No new leave before this day. */
+  leaveReadyDay?: number
+  /** The player waved off the tired / bored bubble on this day (silent for STAFF_ACK_DAYS). */
+  ackDay?: number
+  /** Set with the resignation notice. */
+  leaveCause?: LeaveCause
+  /** Was promoted to project lead once: the lead's raise is paid only the first time. */
+  wasLead?: true
+  /** Quality grown in flow not yet priced into a yearly raise. */
+  qualityGain?: number
 }
 
 export interface Candidate {
@@ -306,6 +342,8 @@ export interface Candidate {
   salary: number
   /** Day this candidate disappears from the pool. */
   expiresDay: number
+  /** Eng / product only: the one category they are fluent in (E1), drawn from the id's hash (no rng). */
+  skills?: ProjectCategory[]
 }
 
 export interface Project {
@@ -333,6 +371,12 @@ export interface Project {
   modules?: ProjectModule[]
   /** The module being built (or refreshed): the project's builders fill `progress` instead of the next update. */
   build?: ModuleBuild
+  /** Project lead (E1, from Seed): one of its builders. */
+  leadId?: EmployeeId
+  /** Sprinting while day < sprintUntil (E1). */
+  sprintUntil?: number
+  /** No new sprint before this day. */
+  sprintReadyDay?: number
 }
 
 export interface ProjectModule {
@@ -916,6 +960,20 @@ export interface DerivedMetrics {
    * Absent while no project has a module (equal weights, nothing multiplied).
    */
   projectMix?: Record<ProjectId, ProjectMixView>
+  /** Effort per person (E1), rebuilt by every recompute; empty in the garage. Never saved (serialize drops it). */
+  people?: Record<EmployeeId, PersonEffort>
+}
+
+/** Today's effort numbers of one person (E1). */
+export interface PersonEffort {
+  /** Instant workload: project demand / supply, 0–LOAD_CAP (1 = right-sized). */
+  load: number
+  /** Output multiplier read from the fatigue number (0 on leave). */
+  fatigueFactor: number
+  pace: EffectivePace
+  /** Builder fluent in their project's category. */
+  fit: boolean
+  flow: boolean
 }
 
 export interface ProjectMixView {
@@ -1292,6 +1350,7 @@ export type ActivityKind =
   | 'payday' | 'release' | 'goalDone'
   | 'roundWindow' | 'roundOffer' | 'roundPitch'
   | 'payrollMissed' | 'decisionDefaulted'
+  | 'grew' | 'burnedOut' | 'leadSet' | 'sprintStarted'
 
 /** Bottom-left activity line. Text lives in content (ACTIVITY_TEXT[kind]) with {param} placeholders. */
 export interface ActivityEntry {
@@ -1318,6 +1377,10 @@ export type GameEventKind =
   | 'roundMeeting'
   /** The player answered a meeting (refId = RoundPitch, value = offer factor change). */
   | 'roundPitched'
+  /** E1: someone's fatigue reached FATIGUE_BURNOUT (refId = employee). */
+  | 'burnedOut'
+  /** E1: a bored resignation notice (refId = employee). */
+  | 'bored'
   /** Payday left cash < 0 (value = shortfall): the bankruptcy clock starts, the rescue card comes. */
   | 'payrollMissed'
   /** An unanswered card applied its default option (refId = card, value = option index). */
@@ -1499,6 +1562,17 @@ export type Action =
   | { type: 'assignDesk'; employeeId: EmployeeId; slotId: SlotId | null }
   | { type: 'respondResignation'; employeeId: EmployeeId; response: 'raise' | 'talk' | 'letGo' }
   | { type: 'refreshCandidates' }
+  // Effort (E1, from Pre-seed; no moves)
+  /** Personal pace; clears the lead's auto-calm. */
+  | { type: 'setPace'; employeeId: EmployeeId; pace: Pace }
+  /** A SPRINT_DAYS push on a project with work left (SPRINT_COOLDOWN_DAYS after); on:false ends it early. */
+  | { type: 'sprint'; projectId: ProjectId; on: boolean }
+  /** LEAVE_DAYS off: no output, fatigue falls fast; LEAVE_COOLDOWN_DAYS per person. */
+  | { type: 'giveLeave'; employeeId: EmployeeId }
+  /** From Seed: a builder of a project with LEAD_MIN_TEAM+ builders leads it (null = no lead). */
+  | { type: 'setLead'; projectId: ProjectId; employeeId: EmployeeId | null }
+  /** Silences someone's tired / bored bubble for STAFF_ACK_DAYS. */
+  | { type: 'ackStaff'; employeeId: EmployeeId }
   // Office
   /** `slotId` omitted: auto place on the free slot nearest the center (findAutoSlot), else `noFreeSlot`. */
   | { type: 'placeItem'; itemId: FurnitureId; slotId?: SlotId }

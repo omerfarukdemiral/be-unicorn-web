@@ -37,6 +37,10 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   roundPitch: 'Pitch: {pitch}. Teklif {amount}.',
   payrollMissed: 'Maaşlar ödenemedi: kasa {amount} ekside. İflas sayacı başladı.',
   decisionDefaulted: 'Cevapsız kart kendi varsayılanıyla kapandı: {option}.',
+  grew: '{name} ustalaştı',
+  burnedOut: '{name} tükendi',
+  leadSet: '{name} ekip lideri',
+  sprintStarted: '{project} sprintte',
 }
 
 export const POST_MORTEM_TEXT: PostMortemTextTable = {

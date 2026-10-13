@@ -95,7 +95,8 @@ describe('costs scale (GAMEPLAY V2 §4.2)', () => {
   it('refactorSprint (Series A on): −(8 + eng) debt, production × 0.7 for 30 days, 90-day cooldown', () => {
     let s = hired()
     expect(api.applyAction({ ...s, techDebt: 50 }, { type: 'founderAction', kind: 'refactorSprint' }).error).toBe('notUnlocked')
-    s = { ...s, stage: 3, techDebt: 50 }
+    // E1: a lone engineer on a Series A web project carries load 2 and would burn out and quit within the 90 days; calm holds them.
+    s = { ...s, stage: 3, techDebt: 50, employees: s.employees.map((e) => ({ ...e, pace: 'calm' as const })) }
     expect(api.applyAction({ ...s, techDebt: 0 }, { type: 'founderAction', kind: 'refactorSprint' }).error).toBe('notFound')
     const eng = s.employees.filter((e) => e.dept === 'eng').length
     const r = api.applyAction(s, { type: 'founderAction', kind: 'refactorSprint' })

@@ -256,6 +256,44 @@ export function mockReduce(prev: GameState, a: Action): ActionResult {
       delete p.build
       return ok(s)
     }
+    // Effort (E1): no clock in the mock, so a leave or a sprint only stamps its days.
+    case 'setPace': {
+      const e = s.employees.find((x) => x.id === a.employeeId)
+      if (!e) return { state: prev, ok: false, error: 'notFound' }
+      e.pace = a.pace
+      delete e.autoCalm
+      return ok(s)
+    }
+    case 'sprint': {
+      const p = s.projects.find((x) => x.id === a.projectId)
+      if (!p) return { state: prev, ok: false, error: 'notFound' }
+      if (a.on) {
+        p.sprintUntil = s.time.day + 14
+        p.sprintReadyDay = s.time.day + 44
+      } else p.sprintUntil = s.time.day
+      return ok(s)
+    }
+    case 'giveLeave': {
+      const e = s.employees.find((x) => x.id === a.employeeId)
+      if (!e) return { state: prev, ok: false, error: 'notFound' }
+      e.offUntil = s.time.day + 5
+      e.leaveReadyDay = s.time.day + 30
+      e.status = 'break'
+      return ok(s)
+    }
+    case 'setLead': {
+      const p = s.projects.find((x) => x.id === a.projectId)
+      if (!p) return { state: prev, ok: false, error: 'notFound' }
+      if (a.employeeId === null) delete p.leadId
+      else p.leadId = a.employeeId
+      return ok(s)
+    }
+    case 'ackStaff': {
+      const e = s.employees.find((x) => x.id === a.employeeId)
+      if (!e) return { state: prev, ok: false, error: 'notFound' }
+      e.ackDay = s.time.day
+      return ok(s)
+    }
     case 'startRound':
       s.round = { active: true, targetStage: 2, startedDay: s.time.day, weeksTotal: 6, weeksLeft: 6, offer: { amount: 150_000, equity: 0.1, preMoney: 1_350_000 }, baseValuation: s.finance.valuation }
       s.derived.canStartRound = false

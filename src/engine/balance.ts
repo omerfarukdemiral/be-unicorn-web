@@ -263,6 +263,92 @@ export const ROUND_CLOSE_MORALE = 10
 export const ROUND_CLOSE_REPUTATION = 15
 
 // ---------------------------------------------------------------------------
+// Effort (E1, docs/GAMEPLAY_V2.md "Efor yönetimi"): load, fatigue, boredom, flow, skills, sprint, leave, lead.
+// One penalty channel each: fatigue only multiplies output, boredom only moves morale. Off in the garage.
+// ---------------------------------------------------------------------------
+export const EFFORT_MIN_STAGE: StageIndex = 1
+/**
+ * Demand of a project in builder-FTE: PROJECT_SIZE × DEMAND_PER_SIZE × (1 + DEMAND_STAGE_GROWTH × stage) while unfinished
+ * (or building a module, at its grown size), × FINISHED_DEMAND once done. E0 probe (24 seeds): good bots' active load
+ * median 0.86–1.15, careless 0.58–0.69.
+ */
+export const DEMAND_PER_SIZE = 0.3
+export const DEMAND_STAGE_GROWTH = 0.25
+export const FINISHED_DEMAND = 0.6
+export const LOAD_CAP = 2
+/** Supply below this never divides (a lone founder's 0.5). */
+export const LOAD_MIN_SUPPLY = 0.5
+export const LOAD_AVG_DAYS = 7
+/** FTE a person brings to their project's supply. */
+export const SUPPLY_ONBOARDING = 0.5
+export const SUPPLY_TIRED = 0.8
+export const SUPPLY_BURNOUT = 0.4
+export const PACE_OUTPUT: Readonly<Record<'calm' | 'normal', number>> = { calm: 0.85, normal: 1 }
+export const SPRINT_OUTPUT = 1.2
+/** Fatigue per day by pace, + LOAD_FATIGUE × (loadAvg − 1): neutral at load 1.17 on a normal pace. */
+export const PACE_FATIGUE: Readonly<Record<'calm' | 'normal', number>> = { calm: -3.5, normal: -0.5 }
+export const SPRINT_FATIGUE = 3
+export const LOAD_FATIGUE = 3
+export const FATIGUE_TIRED = 60
+export const FATIGUE_BURNOUT = 85
+export const TIRED_OUTPUT = 0.8
+export const BURNOUT_OUTPUT = 0.4
+/** Days in a row at FATIGUE_BURNOUT before the notice (frozen in a retain grace). */
+export const BURNOUT_RESIGN_DAYS = 10
+export const BREAK_DAY_RECOVERY = 6
+export const COMMON_AREA_RECOVERY = 0.5
+export const LEAVE_DAYS = 5
+export const LEAVE_RECOVERY_PER_DAY = 12
+export const LEAVE_COOLDOWN_DAYS = 30
+export const SPRINT_DAYS = 14
+export const SPRINT_COOLDOWN_DAYS = 30
+/** From TECH_DEBT_MIN_STAGE a sprint adds this much debt per engineer on the project. */
+export const SPRINT_DEBT_PER_ENG = 0.1
+/** loadAvg under UNDERLOAD counts a bored day (≥ BORED_RESET_LOAD resets): BORED_QUIT_DAYS → a notice; talk sets BORED_RETAIN_DAYS. */
+export const UNDERLOAD = 0.7
+export const BORED_RESET_LOAD = 0.8
+/** Morale target × (UNDERLOAD − loadAvg) / UNDERLOAD: −15 idle, −7.5 at load 0.35. */
+export const BORED_MORALE = -15
+export const BORED_QUIT_DAYS = 90
+export const BORED_RETAIN_DAYS = 45
+/** The bored bubble waits for this many bored days (one low day is no story). */
+export const BORED_BUBBLE_DAYS = 30
+export const FIT_OUTPUT = 1.08
+/** Share of eng/product candidates whose one skill is a category the company already builds. */
+export const CANDIDATE_FIT_BIAS = 0.6
+export const SKILL_LEARN_DAYS = 90
+export const MAX_SKILLS = 2
+/** Flow: fit, loadAvg in [MIN, MAX], fatigue < FLOW_FATIGUE_MAX, not sprinting → morale + FLOW_MORALE; FLOW_GROW_DAYS → quality + STEP. */
+export const FLOW_LOAD_MIN = 0.8
+export const FLOW_LOAD_MAX = 1.2
+export const FLOW_FATIGUE_MAX = 40
+export const FLOW_MORALE = 4
+export const FLOW_GROW_DAYS = 90
+export const FLOW_QUALITY_STEP = 0.03
+export const QUALITY_GROW_CAP = 1.5
+/** The next yearly raise adds this × the quality grown since (a candidate's salary spans 0.375 per quality point). */
+export const FLOW_RAISE_PER_QUALITY = 0.375
+export const LEAD_MIN_STAGE: StageIndex = 2
+export const LEAD_MIN_TEAM = 3
+export const LEAD_SALARY_FACTOR = 1.15
+export const LEAD_OWN_OUTPUT = 0.75
+export const LEAD_FATIGUE_RELIEF = 0.5
+export const LEAD_BORED_FACTOR = 0.5
+export const LEAD_AUTO_CALM_AT = 60
+export const LEAD_AUTO_NORMAL_AT = 25
+export const DEMOTE_MORALE = -10
+/** A project with more than NO_LEAD_FREE builders and no lead: speed × max(NO_LEAD_MIN, 1 − LOSS × (n − FREE)). */
+export const NO_LEAD_FREE = 8
+export const NO_LEAD_LOSS_PER_PERSON = 0.02
+export const NO_LEAD_MIN = 0.9
+export const STAFF_ACK_DAYS = 20
+/** Effort bubbles in the scene at once: burnt-out people, and tired + bored together. */
+export const STAFF_BURNOUT_MAX = 2
+export const STAFF_TIRED_BORED_MAX = 1
+/** respondResignation on a burnout notice: calm and this much fatigue off. */
+export const RETAIN_BURNOUT_FATIGUE = -20
+
+// ---------------------------------------------------------------------------
 // Valuation (PLAN §5.8)
 // ---------------------------------------------------------------------------
 export const PRE_REVENUE_MRR = 1_000

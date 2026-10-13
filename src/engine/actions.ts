@@ -4,6 +4,7 @@ import { learnConcept, minimizeConcept } from './concepts'
 import { answerDecision } from './decisions'
 import { recomputeDerived } from './derive'
 import { applyEffects, applyMorale, unlockTool } from './effects'
+import { buildersOf, effortOn, hasOpenWork, isBuilder, isSprinting, onLeave } from './effort'
 import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
 import { checkSale } from './endgame'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
@@ -17,6 +18,7 @@ import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
   FOUNDER_SLOT_ID,
+  PACES,
   POLICY_IDS,
   PROJECT_CATEGORIES,
   RENEW_OFFERS,
@@ -24,6 +26,7 @@ import {
   type ActionErrorCode,
   type ActionOf,
   type ActionResult,
+  type Employee,
   type GameState,
   type PolicyId,
   type Slot,
@@ -138,6 +141,16 @@ const respondResignation: Handler<'respondResignation'> = ({ s }, a) => {
     e.salary = Math.round(e.salary * B.RAISE_FACTOR)
     e.morale = Math.min(100, e.morale + B.RAISE_MORALE)
   }
+  // E1: a burnt-out person stays on a calmer pace with some fatigue off; a bored one only buys time (the fix is work).
+  if (e.leaveCause === 'burnout') {
+    e.pace = 'calm'
+    delete e.autoCalm
+    e.fatigue = Math.max(0, (e.fatigue ?? 0) + B.RETAIN_BURNOUT_FATIGUE)
+    e.burnoutDays = 0
+  } else if (e.leaveCause === 'bored') {
+    e.boredDays = B.BORED_RETAIN_DAYS
+  }
+  delete e.leaveCause
   e.status = 'working'
   e.statusSinceDay = s.time.day
   delete e.leaveDay
@@ -152,6 +165,106 @@ const refreshCandidates: Handler<'refreshCandidates'> = ({ s, content, rng }) =>
   s.stats.cash -= cost
   s.candidates = []
   fillCandidates(s, content, rng)
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Effort (E1, from Pre-seed): pace, sprint, leave, lead, ack. No moves.
+// ---------------------------------------------------------------------------
+
+const setPace: Handler<'setPace'> = ({ s }, a) => {
+  const e = s.employees.find((x) => x.id === a.employeeId)
+  if (!e) return 'notFound'
+  if (!effortOn(s)) return 'notUnlocked'
+  if (!(PACES as readonly string[]).includes(a.pace) || e.status === 'leaving') return 'invalid'
+  e.pace = a.pace
+  delete e.autoCalm
+  return null
+}
+
+/**
+ * A SPRINT_DAYS push on a project with work left (unfinished or a module build open): its non-calm builders work
+ * × SPRINT_OUTPUT and tire SPRINT_FATIGUE a day; SPRINT_COOLDOWN_DAYS before the next; from TECH_DEBT_MIN_STAGE debt per
+ * engineer. on:false ends it early (the cooldown stays). Never counts as a crunch (counters.crunches).
+ */
+const sprint: Handler<'sprint'> = ({ s }, a) => {
+  const p = s.projects.find((x) => x.id === a.projectId)
+  if (!p) return 'notFound'
+  if (!effortOn(s)) return 'notUnlocked'
+  const day = s.time.day
+  if (!a.on) {
+    if (!isSprinting(p, day)) return 'invalid'
+    p.sprintUntil = day
+    return null
+  }
+  const builders = buildersOf(s, p)
+  if (!hasOpenWork(p) || builders.length === 0 || isSprinting(p, day)) return 'invalid'
+  if (day < (p.sprintReadyDay ?? -Infinity)) return 'cooldown'
+  // Whole days: the sprint (and below the leave) covers exactly SPRINT_DAYS daily ticks, whatever the hour it starts.
+  p.sprintUntil = Math.floor(day) + B.SPRINT_DAYS + 1
+  p.sprintReadyDay = p.sprintUntil + B.SPRINT_COOLDOWN_DAYS
+  if (s.stage >= B.TECH_DEBT_MIN_STAGE) s.techDebt += B.SPRINT_DEBT_PER_ENG * builders.filter((e) => e.dept === 'eng').length
+  pushActivity(s, 'sprintStarted', { project: p.name, id: p.id })
+  return null
+}
+
+/** LEAVE_DAYS off (status 'break'): no output, out of the project's supply, fatigue − LEAVE_RECOVERY_PER_DAY a day. */
+const giveLeave: Handler<'giveLeave'> = ({ s }, a) => {
+  const e = s.employees.find((x) => x.id === a.employeeId)
+  if (!e) return 'notFound'
+  if (!effortOn(s)) return 'notUnlocked'
+  const day = s.time.day
+  if (e.status === 'leaving' || e.status === 'onboarding' || onLeave(e, day)) return 'invalid'
+  if (day < (e.leaveReadyDay ?? -Infinity)) return 'cooldown'
+  e.offUntil = Math.floor(day) + B.LEAVE_DAYS + 1
+  e.leaveReadyDay = day + B.LEAVE_COOLDOWN_DAYS
+  e.burnoutDays = 0
+  delete e.ackDay
+  e.status = 'break'
+  e.statusSinceDay = day
+  return null
+}
+
+/** The old lead steps down with DEMOTE_MORALE (the raise stays). */
+function demote(s: GameState, id: string | undefined): void {
+  const old = id !== undefined ? s.employees.find((x) => x.id === id) : undefined
+  if (old) old.morale = Math.max(0, Math.min(100, old.morale + B.DEMOTE_MORALE))
+}
+
+/**
+ * From Seed, optional: any builder of a project with LEAD_MIN_TEAM+ builders leads it. The first promotion ever pays
+ * × LEAD_SALARY_FACTOR for good; the lead makes × LEAD_OWN_OUTPUT, the members tire less, bore less and get calmed.
+ */
+const setLead: Handler<'setLead'> = ({ s }, a) => {
+  if (s.stage < B.LEAD_MIN_STAGE) return 'notUnlocked'
+  const p = s.projects.find((x) => x.id === a.projectId)
+  if (!p) return 'notFound'
+  if (a.employeeId === null) {
+    if (p.leadId === undefined) return null
+    demote(s, p.leadId)
+    delete p.leadId
+    return null
+  }
+  const e: Employee | undefined = s.employees.find((x) => x.id === a.employeeId)
+  if (!e) return 'notFound'
+  if (!p.assignedIds.includes(e.id) || !isBuilder(e) || e.status === 'onboarding' || e.status === 'leaving') return 'invalid'
+  if (buildersOf(s, p).length < B.LEAD_MIN_TEAM) return 'invalid'
+  if (p.leadId === e.id) return null
+  demote(s, p.leadId)
+  p.leadId = e.id
+  if (!e.wasLead) {
+    e.salary = Math.round(e.salary * B.LEAD_SALARY_FACTOR)
+    e.wasLead = true
+  }
+  pushActivity(s, 'leadSet', { name: e.name, id: e.id, project: p.name })
+  return null
+}
+
+/** Silences someone's tired / bored bubble for STAFF_ACK_DAYS (burnout and leaving still ask). */
+const ackStaff: Handler<'ackStaff'> = ({ s }, a) => {
+  const e = s.employees.find((x) => x.id === a.employeeId)
+  if (!e) return 'notFound'
+  e.ackDay = s.time.day
   return null
 }
 
@@ -318,7 +431,11 @@ const assign: Handler<'assign'> = ({ s }, a) => {
   if (!e) return 'notFound'
   const target = a.projectId === null ? undefined : s.projects.find((p) => p.id === a.projectId)
   if (a.projectId !== null && !target) return 'notFound'
-  for (const p of s.projects) p.assignedIds = p.assignedIds.filter((x) => x !== e.id)
+  for (const p of s.projects) {
+    p.assignedIds = p.assignedIds.filter((x) => x !== e.id)
+    // A lead who leaves the project leaves the lead behind (E1).
+    if (p.leadId === e.id && p !== target) delete p.leadId
+  }
   if (target) {
     target.assignedIds.push(e.id)
     e.projectId = target.id
@@ -543,6 +660,11 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   assignDesk,
   respondResignation,
   refreshCandidates,
+  setPace,
+  sprint,
+  giveLeave,
+  setLead,
+  ackStaff,
   placeItem,
   sellItem,
   moveItem,

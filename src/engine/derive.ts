@@ -2,6 +2,7 @@
 import * as B from './balance'
 import * as E from './economy'
 import { loanMonthlyService } from './effects'
+import { crowdFactor, effortMorale, effortOn, effortOutput, fits, founderProject, isBuilder, peopleView } from './effort'
 import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './founder'
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
@@ -40,12 +41,15 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
   const prodMod = modifierMult(s, 'production') * policyMult(s, content, 'production')
   const perEmployee: Record<string, number> = {}
   const deptOutput = perDept(0)
+  // E1: fatigue × pace (sprint / calm) from Pre-seed; 1 in the garage.
+  const projects = effortOn(s) ? new Map(s.projects.map((p) => [p.id, p])) : undefined
   for (const e of s.employees) {
     const slot = e.deskSlotId !== undefined ? findSlot(s.office, e.deskSlotId) : undefined
     const adjacency = (cluster.has(e.id) ? 1 + B.DEPT_CLUSTER_BONUS : 1) + fx.deptBonus[e.dept]
     const out =
       E.personOutput(B.BASE_OUTPUT[e.dept], deskQualityAt(content, slot), e.morale, adjacency, e.quality) *
       employeeStatusFactor(e) *
+      (projects ? effortOutput(s, e, e.projectId !== undefined ? projects.get(e.projectId) : undefined) : 1) *
       coord *
       prodMod
     perEmployee[e.id] = out
@@ -57,7 +61,9 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
 /**
  * §5.3 maturity gained per DAY by each project: assigned builders (+ the idle founder on the oldest unfinished one,
  * or on the first project once all are done), slowed by parallel projects and tech debt. progressProjects applies it
- * (to maturity, or after 1.0 to the next update); the horizon uses it for release ETAs.
+ * (to maturity, or after 1.0 to the next update, or to a module build); the horizon uses it for release ETAs.
+ * E1 from Pre-seed: a fit builder × FIT_OUTPUT, the lead × LEAD_OWN_OUTPUT, a crowd with no lead slows (crowdFactor);
+ * fatigue and pace are already in perEmployee.
  */
 export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, number> {
   const rates: Record<ProjectId, number> = {}
@@ -67,17 +73,23 @@ export function maturityRates(s: GameState, o: Outputs): Record<ProjectId, numbe
     E.parallelProjectSpeed(active.length, s.stage) *
     E.techDebtSpeed(s.techDebt) *
     (1 + o.fx.maturityBonus)
-  const founderProject = s.founder.currentAction ? undefined : (active[0] ?? s.projects[0])
+  const fp = founderProject(s)
+  const effort = effortOn(s)
+  const byId = new Map(s.employees.map((e) => [e.id, e]))
   for (const p of s.projects) {
-    let eng = p === founderProject ? B.FOUNDER_PROJECT_OUTPUT : 0
+    let eng = p === fp ? B.FOUNDER_PROJECT_OUTPUT : 0
     let prod = 0
+    let builders = 0
     for (const id of p.assignedIds) {
-      const e = s.employees.find((x) => x.id === id)
-      if (!e) continue
-      if (e.dept === 'eng') eng += o.perEmployee[id] ?? 0
-      else if (e.dept === 'product') prod += o.perEmployee[id] ?? 0
+      const e = byId.get(id)
+      if (!e || !isBuilder(e)) continue
+      builders += 1
+      let out = o.perEmployee[id] ?? 0
+      if (effort) out *= (fits(e, p) ? B.FIT_OUTPUT : 1) * (p.leadId === id ? B.LEAD_OWN_OUTPUT : 1)
+      if (e.dept === 'eng') eng += out
+      else prod += out
     }
-    rates[p.id] = E.maturityPerMonth(eng, prod, speed, p.size) / DAYS_PER_MONTH
+    rates[p.id] = E.maturityPerMonth(eng, prod, speed * (effort ? crowdFactor(p, builders) : 1), p.size) / DAYS_PER_MONTH
   }
   return rates
 }
@@ -160,7 +172,8 @@ export function policiesView(s: GameState, content: EngineContent, later: number
 export function employeeMoraleTarget(s: GameState, content: EngineContent, e: Employee, globalTarget: number): number {
   const slot = e.deskSlotId !== undefined ? findSlot(s.office, e.deskSlotId) : undefined
   const aura = slot ? auraAt(s, content, slot) : 0
-  return E.clamp(0, 100, globalTarget + aura)
+  // E1: boredom and flow (fatigue has no morale term: it only slows output).
+  return E.clamp(0, 100, globalTarget + aura + effortMorale(s, e))
 }
 
 /** Mean of a per-category factor over the launched projects (1 before the first launch). */
@@ -336,5 +349,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   if (moves) s.derived.moves = moves
   // Only once a project has a module: without, the mix is equal weights and no multipliers (and saves stay as small).
   if (ws.some((x) => x.p.modules?.length)) s.derived.projectMix = mixView
+  // E1: after capacity / overload (the engineers' and ops' load read them).
+  s.derived.people = peopleView(s)
   return o
 }

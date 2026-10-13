@@ -107,7 +107,8 @@ describe('effects (§7.2)', () => {
 
   it('salary-freeze: no yearly raise, no candidate above quality 1', () => {
     let s = sign(at(1, SHORT, 1), 'salary-freeze').state
-    s = api.step({ ...s, stats: { ...s.stats, cash: RICH } }, 361 - s.time.day)
+    // E1: an engineer with no project is bored from Pre-seed and quits in 90 days; an ops hand (load 1) stays the year.
+    s = api.step({ ...s, employees: s.employees.map((e) => ({ ...e, dept: 'ops' as const })), stats: { ...s.stats, cash: RICH } }, 361 - s.time.day)
     expect(s.employees[0]!.salary).toBe(3000)
     expect(s.candidates.length).toBeGreaterThan(0)
     expect(Math.max(...s.candidates.map((c) => c.quality))).toBeLessThanOrEqual(1)

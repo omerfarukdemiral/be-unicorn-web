@@ -2,7 +2,7 @@
 // the Ekip / Projeler panels and the detail panel share. Numbers come from the engine (balance, effort.ts); nothing here
 // decides a rule. From Pre-seed only: in the Garage effortOn is false and every control hides.
 import * as B from '../engine/balance'
-import { buildersOf, effortOn, fatigueRate, founderProject, hasOpenWork, isBuilder, isSprinting, onLeave, projectDemand, projectLoad, supplyOf } from '../engine/effort'
+import { buildersOf, effortOn, fatigueRate, fits, founderProject, hasOpenWork, isBuilder, isSprinting, onLeave, projectDemand, projectLoad, supplyOf } from '../engine/effort'
 import { useShallow } from 'zustand/react/shallow'
 import type { Candidate, Employee, GameState, Pace, Project, ProjectCategory } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
@@ -12,7 +12,8 @@ import { fixed, pct } from './format'
 import { t } from './i18n'
 import { Icon, type IconName } from './icons'
 import { Bar, cx } from './primitives'
-import { ChoiceRow } from './bubbles/Expandable'
+import { ChoiceRow, launch } from './bubbles/Expandable'
+import { CATEGORY_COLOR, CATEGORY_ICON } from './panels/ProjectsPanel'
 
 const dispatch = (a: Parameters<ReturnType<typeof useGameStore.getState>['dispatch']>[0]) => useGameStore.getState().dispatch(a)
 
@@ -27,8 +28,14 @@ export const loadGood = (l: number): boolean | null => (l > 1.2 ? false : l >= 0
 
 const signed = (v: number, text: string): string => `${v < 0 ? '−' : '+'}${text}`
 
-/** "Yük 1.4×". */
-export const loadChip = (load: number): Chip => ({ icon: 'scale', label: t('fx.tag.load'), text: `${fixed(load, 1)}×`, good: loadGood(load), title: t('fx.tag.load') })
+/** The load as a word: under 0.7 "az", up to 1.2 "iyi", up to 1.6 "ağır", beyond "aşırı". */
+export const loadWord = (load: number): string => t(load < 0.7 ? 'load.low' : load <= 1.2 ? 'load.ok' : load <= 1.6 ? 'load.heavy' : 'load.over')
+
+/** "Yük 1.4× ağır". */
+export const loadChip = (load: number): Chip => ({ icon: 'scale', label: t('fx.tag.load'), text: `${fixed(load, 1)}×`, tail: loadWord(load), good: loadGood(load), title: t('fx.tag.load') })
+
+/** The output a tired or burnt-out person already loses ("Hız −%20"); none when they are fresh. */
+export const hiddenLossChip = (fatigueFactor: number): Chip[] => (fatigueFactor < 1 ? [outputChip(`−${pct(1 - fatigueFactor)}`, false)] : [])
 
 /** ▲ output: "Hız −%15". `text` is already signed. */
 export const outputChip = (text: string, good: boolean | null, tail?: string): Chip => ({ icon: 'arrowUp', label: t('fx.tag.mod.production'), text, tail, good, title: t('fx.mod.production') })
@@ -114,14 +121,18 @@ export interface PersonControls {
   pace: Pace | null
   /** 'ready' | days of cooldown left | null (not offered: rested, new, away). */
   leave: 'ready' | number | null
-  /** Offered as the lead of their project (or the current lead can step down). */
-  lead: 'make' | 'unlead' | null
+  /** Offered as the lead of their project (or the current lead can step down); 'locked' = shown, not yet possible. */
+  lead: 'make' | 'unlead' | 'locked' | null
+  /** Why a 'locked' lead row is not yet possible: before Seed, or too few builders on the project (flat: useShallow compares it). */
+  leadLock: 'stage' | 'team' | null
+  /** Builders on the project now (the "n/3 kişi" chip). */
+  leadTeam: number
   /** The first promotion ever raises the salary. */
   leadFirst: boolean
 }
 
 export function personControls(s: GameState, e: Employee): PersonControls {
-  const none: PersonControls = { pace: null, leave: null, lead: null, leadFirst: false }
+  const none: PersonControls = { pace: null, leave: null, lead: null, leadLock: null, leadTeam: 0, leadFirst: false }
   if (!effortOn(s) || e.status === 'leaving') return none
   const day = s.time.day
   const pace = e.dept === 'sales' ? null : (e.pace ?? 'normal')
@@ -130,11 +141,22 @@ export function personControls(s: GameState, e: Employee): PersonControls {
   const leave = !tired || away ? null : day < (e.leaveReadyDay ?? -Infinity) ? Math.ceil((e.leaveReadyDay ?? 0) - day) : 'ready'
   const p = e.projectId !== undefined ? s.projects.find((x) => x.id === e.projectId) : undefined
   let lead: PersonControls['lead'] = null
-  if (p && s.stage >= B.LEAD_MIN_STAGE && isBuilder(e) && e.status !== 'onboarding') {
+  let leadLock: PersonControls['leadLock'] = null
+  let leadTeam = 0
+  if (p && isBuilder(e) && e.status !== 'onboarding') {
+    const n = buildersOf(s, p).length
+    leadTeam = n
     if (p.leadId === e.id) lead = 'unlead'
-    else if (buildersOf(s, p).length >= B.LEAD_MIN_TEAM) lead = 'make'
+    else if (s.stage < B.LEAD_MIN_STAGE) {
+      lead = 'locked'
+      leadLock = 'stage'
+    } else if (n >= B.LEAD_MIN_TEAM) lead = 'make'
+    else {
+      lead = 'locked'
+      leadLock = 'team'
+    }
   }
-  return { pace, leave, lead, leadFirst: !e.wasLead }
+  return { pace, leave, lead, leadLock, leadTeam, leadFirst: !e.wasLead }
 }
 
 export interface ProjectEffort {
@@ -176,6 +198,31 @@ export function projectEffort(s: GameState, p: Project): ProjectEffort {
 export function loadIf(s: GameState, p: Project, e: Employee): number {
   return projectLoad(s, p, p.assignedIds.includes(e.id) ? 0 : supplyOf(e, s.time.day))
 }
+
+/** Where a bored or idle builder helps most: the project to put them on, their load now and after joining. */
+export interface ProjectFit {
+  project: Project
+  now: number
+  after: number
+  fit: boolean
+}
+
+/**
+ * Among the projects with open work (not their own), the one whose load after they join stays at most 1.2, fluent
+ * projects first, then the heaviest load after joining. None under 1.2: the project that needs hands most. Null when no
+ * project has open work.
+ */
+export function bestProjectFor(s: GameState, e: Employee): ProjectFit | null {
+  const now = s.derived.people?.[e.id]?.load ?? 0
+  const open = s.projects.filter((p) => p.id !== e.projectId && hasOpenWork(p)).map((project) => ({ project, now, after: loadIf(s, project, e), fit: fits(e, project) }))
+  if (open.length === 0) return null
+  const fine = open.filter((x) => x.after <= 1.2)
+  if (fine.length > 0) return fine.sort((a, b) => Number(b.fit) - Number(a.fit) || b.after - a.after)[0]!
+  return open.sort((a, b) => b.after - a.after)[0]!
+}
+
+/** "Yük 0.3× → 1.1×" for the "Projeye ata" row. */
+export const loadMoveChip = (now: number, after: number): Chip => ({ icon: 'scale', label: t('fx.tag.load'), text: `${fixed(now, 1)}× → ${fixed(after, 1)}×`, good: loadGood(after), title: t('fx.tag.load') })
 
 // ---------------------------------------------------------------------------
 // Pieces
@@ -247,15 +294,58 @@ export function LeaveRow({ e, leave, primary }: { e: Employee; leave: 'ready' | 
   )
 }
 
-/** The person-level effort controls: pace, leave (when worn out), lead (when eligible). */
-export function PersonEffortRows({ e }: { e: Employee }) {
+/** Why "Lider yap" waits: "Seed" (stage) or "2/3 kişi". */
+export const leadLockChip = (lock: NonNullable<PersonControls['leadLock']>, team: number): Chip =>
+  lock === 'stage'
+    ? { icon: 'lock', label: '', text: CONTENT.stages[B.LEAD_MIN_STAGE]!.name, good: null, title: t('team.leadLockStage') }
+    : { icon: 'users', label: '', text: t('team.teamOf', { n: team, m: B.LEAD_MIN_TEAM }), good: null, title: t('team.leadLockTeam', { m: B.LEAD_MIN_TEAM }) }
+
+/** The "Projeye ata" suggestion a bored or idle builder's card opens with; null when it does not apply. */
+export function assignSuggestion(s: GameState, e: Employee): { fit: ProjectFit | null } | null {
+  if (!effortOn(s) || !isBuilder(e) || e.status === 'leaving' || e.status === 'onboarding') return null
+  const key = personLabel(s, e).key
+  return e.projectId === undefined || key === 'bored' ? { fit: bestProjectFor(s, e) } : null
+}
+
+/** "Projeye ata: {project}" with the load before → after; with no open work, "İş yok: modül ekle" opens Projeler. */
+export function AssignRow({ e }: { e: Employee }) {
+  const sug = useGameStore(
+    useShallow((s) => {
+      const a = assignSuggestion(s.state, e)
+      if (!a) return null
+      const f = a.fit
+      return { id: f?.project.id ?? null, name: f?.project.name ?? '', category: f?.project.category ?? 'web', now: f?.now ?? 0, after: f?.after ?? 0, fit: f?.fit ?? false }
+    }),
+  )
+  if (!sug) return null
+  if (sug.id === null)
+    return <ChoiceRow primary icon={{ icon: 'plus', color: 'var(--color-ink-3)' }} label={t('team.noWork')} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'projects' }))} />
+  const chips = [loadMoveChip(sug.now, sug.after), ...(sug.fit ? [{ icon: CATEGORY_ICON[sug.category], label: '', text: '✓', good: true, title: t('team.fit') } satisfies Chip] : [])]
+  return (
+    <ChoiceRow
+      primary
+      icon={{ icon: CATEGORY_ICON[sug.category], color: CATEGORY_COLOR[sug.category] }}
+      label={<span className="block max-w-[200px] truncate">{t('team.assignTo', { project: sug.name })}</span>}
+      title={sug.name}
+      chips={chips}
+      onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: sug.id! })}
+    />
+  )
+}
+
+/** The person-level effort controls: "Projeye ata" (bored / idle), pace, leave (when worn out), lead. */
+export function PersonEffortRows({ e, skipAssign }: { e: Employee; skipAssign?: boolean }) {
   const c = useGameStore(useShallow((s) => personControls(s.state, e)))
   const projectId = e.projectId
   return (
     <>
+      {!skipAssign && <AssignRow e={e} />}
       {c.pace && <PaceRow e={e} />}
       {c.leave !== null && <LeaveRow e={e} leave={c.leave} />}
-      {c.lead && projectId !== undefined && (
+      {c.lead === 'locked' && projectId !== undefined && (
+        <ChoiceRow disabled icon={{ icon: 'star', color: 'var(--color-ink-3)' }} label={t('team.makeLead')} chips={c.leadLock ? [leadLockChip(c.leadLock, c.leadTeam)] : []} onClick={() => undefined} />
+      )}
+      {(c.lead === 'make' || c.lead === 'unlead') && projectId !== undefined && (
         <ChoiceRow
           icon={{ icon: 'star', color: 'var(--color-g-equity)' }}
           label={t(c.lead === 'make' ? 'team.makeLead' : 'team.unlead')}

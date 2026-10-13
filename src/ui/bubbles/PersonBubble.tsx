@@ -10,7 +10,8 @@ import type { EmployeeId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import type { Chip } from '../EffectChips'
 import { ChipRow } from '../EffectChips'
-import { FatigueMeter, loadChip, loadIf, PersonEffortRows } from '../effort'
+import { assignSuggestion, AssignRow, FatigueMeter, hiddenLossChip, loadChip, loadIf, PersonEffortRows } from '../effort'
+import { useTwoStep } from '../hooks'
 import { money } from '../format'
 import { t } from '../i18n'
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
@@ -24,6 +25,8 @@ export function PersonBubble({ bubbleKey, employeeId }: { bubbleKey: string; emp
   const { e, projects } = useGameStore(useShallow((s) => ({ e: s.state.employees.find((x) => x.id === employeeId), projects: s.state.projects })))
   // The effort numbers (derived.people) and the "if they joined" loads read the whole state; the card is one bubble.
   const state = useGameStore((s) => s.state)
+  // Taking someone off their project is two taps (it frees their output; the card sits one thumb from it).
+  const [armed, tap] = useTwoStep()
   if (!e) return null
   const detail = () => useGameStore.getState().openPanel({ kind: 'detail', selection: { kind: 'employee', id: e.id } })
   const project = projects.find((p) => p.id === e.projectId)
@@ -35,10 +38,13 @@ export function PersonBubble({ bubbleKey, employeeId }: { bubbleKey: string; emp
   const effort = effortOn(state) ? state.derived.people?.[e.id] : undefined
   const fitChip: Chip | null = effort?.fit && project ? { icon: CATEGORY_ICON[project.category], label: '', text: '✓', good: true, title: t('team.fit') } : null
   const sub: Chip[] = effort
-    ? [loadChip(effort.load), ...(fitChip ? [fitChip] : []), ...(project?.leadId === e.id ? [{ icon: 'star' as const, label: '', text: t('team.lead'), good: true, title: t('team.lead') }] : [])]
+    ? [loadChip(effort.load), ...hiddenLossChip(effort.fatigueFactor), ...(fitChip ? [fitChip] : []), ...(project?.leadId === e.id ? [{ icon: 'star' as const, label: '', text: t('team.lead'), good: true, title: t('team.lead') }] : [])]
     : []
   // The current project first, then the others: a tap moves them, the current one's tap takes them off it.
-  const list = [...(project ? [project] : []), ...projects.filter((p) => p.id !== e.projectId)].slice(0, MAX_PROJECTS)
+  // A bored or idle builder opens with "Projeye ata: …" (the pick, with its load move); the list keeps the rest.
+  const sug = assignSuggestion(state, e)
+  const pick = sug?.fit?.project.id
+  const list = [...(project ? [project] : []), ...projects.filter((p) => p.id !== e.projectId && p.id !== pick)].slice(0, MAX_PROJECTS)
   return (
     <Expandable
       bubbleKey={bubbleKey}
@@ -56,6 +62,7 @@ export function PersonBubble({ bubbleKey, employeeId }: { bubbleKey: string; emp
           <ChipRow chips={sub} />
         </span>
       )}
+      {sug && <AssignRow e={e} />}
       {list.length > 0 ? (
         <>
           <span className="ui-label px-0.5 pt-1">{project ? t('detail.project') : t('bubble.assign')}</span>
@@ -64,20 +71,21 @@ export function PersonBubble({ bubbleKey, employeeId }: { bubbleKey: string; emp
             return (
               <ChoiceRow
                 key={p.id}
-                primary={on}
-                icon={{ icon: on ? 'check' : CATEGORY_ICON[p.category], color: CATEGORY_COLOR[p.category] }}
-                label={<span className="block max-w-[200px] truncate">{p.name}</span>}
-                chips={effort ? [loadChip(loadIf(state, p, e))] : undefined}
+                primary={on && armed !== p.id}
+                danger={on && armed === p.id}
+                icon={{ icon: on ? (armed === p.id ? 'warning' : 'check') : CATEGORY_ICON[p.category], color: CATEGORY_COLOR[p.category] }}
+                label={<span className="block max-w-[200px] truncate">{on && armed === p.id ? t('team.removeConfirm') : p.name}</span>}
+                chips={effort && !(on && armed === p.id) ? [loadChip(loadIf(state, p, e))] : undefined}
                 title={p.name}
-                onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: on ? null : p.id })}
+                onClick={() => (on ? tap(p.id, () => dispatch({ type: 'assign', employeeId: e.id, projectId: null })) : dispatch({ type: 'assign', employeeId: e.id, projectId: p.id }))}
               />
             )
           })}
         </>
-      ) : (
+      ) : pick ? null : (
         <ChoiceRow primary label={t('bubble.startProject')} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'projects' }))} />
       )}
-      <PersonEffortRows e={e} />
+      <PersonEffortRows e={e} skipAssign />
     </Expandable>
   )
 }

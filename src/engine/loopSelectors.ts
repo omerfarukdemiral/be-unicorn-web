@@ -86,14 +86,15 @@ export function idleBuilders(s: Pick<GameState, 'employees'>, withOnboarding = f
 }
 
 /** Why someone asks the player in the scene (E1 adds the effort needs to leaving / idle). */
-export type StaffAttention = 'leaving' | 'burnout' | 'tired' | 'bored' | 'idle'
+export type StaffAttention = 'leaving' | 'burnout' | 'tired' | 'bored' | 'calmBack' | 'idle'
 
 /**
- * Who needs the player, in order leaving > burnout > tired > bored > idle, one need per person (ids in numeric order
- * within a need; burnout and tired by fatigue, bored by bored days). From Pre-seed only: burnout (fatigue ≥
- * FATIGUE_BURNOUT, at most STAFF_BURNOUT_MAX), tired (≥ FATIGUE_TIRED) and bored (BORED_BUBBLE_DAYS+ under UNDERLOAD)
- * together at most STAFF_TIRED_BORED_MAX; a led project's members and anyone acked in the last STAFF_ACK_DAYS are
- * spared tired / bored. Nobody on leave, onboarding or in sales asks for effort.
+ * Who needs the player, in order leaving > burnout > tired > bored > calmBack > idle, one need per person (ids in
+ * numeric order within a need; burnout and tired by fatigue, bored by bored days). From Pre-seed only: burnout (fatigue
+ * ≥ FATIGUE_BURNOUT, all of them: the scene pins those bubbles), tired (≥ FATIGUE_TIRED), bored (BORED_BUBBLE_DAYS+
+ * under UNDERLOAD) and calmBack (a calm pace the player set, fatigue under CALM_BACK_AT: "Normale dön?") together at
+ * most STAFF_TIRED_BORED_MAX; a led project's members and anyone acked in the last STAFF_ACK_DAYS are spared those
+ * three. Nobody on leave, onboarding or in sales asks for effort.
  */
 export function staffAttention(s: GameState): [EmployeeId, StaffAttention][] {
   const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id, 'en', { numeric: true })
@@ -112,12 +113,19 @@ export function staffAttention(s: GameState): [EmployeeId, StaffAttention][] {
     const quiet = (e: (typeof askers)[number]) =>
       (e.ackDay !== undefined && day < e.ackDay + B.STAFF_ACK_DAYS) || ledMember(e.projectId !== undefined ? projects.get(e.projectId) : undefined, e)
     const burnt = askers.filter((e) => fatigue(e) >= B.FATIGUE_BURNOUT).sort((a, b) => fatigue(b) - fatigue(a))
-    for (const e of burnt.slice(0, B.STAFF_BURNOUT_MAX)) push(e.id, 'burnout')
+    for (const e of burnt) push(e.id, 'burnout')
     const tired = askers.filter((e) => fatigue(e) >= B.FATIGUE_TIRED && fatigue(e) < B.FATIGUE_BURNOUT && !quiet(e)).sort((a, b) => fatigue(b) - fatigue(a))
     const bored = askers
       .filter((e) => !taken.has(e.id) && (e.boredDays ?? 0) >= B.BORED_BUBBLE_DAYS && (e.loadAvg ?? 1) < B.UNDERLOAD && !quiet(e))
       .sort((a, b) => (b.boredDays ?? 0) - (a.boredDays ?? 0))
-    const tb: [EmployeeId, StaffAttention][] = [...tired.map((e): [EmployeeId, StaffAttention] => [e.id, 'tired']), ...bored.map((e): [EmployeeId, StaffAttention] => [e.id, 'bored'])]
+    const rested = askers
+      .filter((e) => !taken.has(e.id) && e.pace === 'calm' && !e.autoCalm && fatigue(e) < B.CALM_BACK_AT && !quiet(e))
+      .sort((a, b) => fatigue(a) - fatigue(b))
+    const tb: [EmployeeId, StaffAttention][] = [
+      ...tired.map((e): [EmployeeId, StaffAttention] => [e.id, 'tired']),
+      ...bored.map((e): [EmployeeId, StaffAttention] => [e.id, 'bored']),
+      ...rested.map((e): [EmployeeId, StaffAttention] => [e.id, 'calmBack']),
+    ]
     for (const [id, need] of tb.slice(0, B.STAFF_TIRED_BORED_MAX)) push(id, need)
   }
   for (const id of [...idleBuilders(s)].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) if (!taken.has(id)) push(id, 'idle')

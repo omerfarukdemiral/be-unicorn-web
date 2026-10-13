@@ -15,7 +15,6 @@ import {
   ARRIVE_MAX_MS,
   MAX_ACTIONABLE,
   MAX_IDLE,
-  MAX_BURNOUT,
   MAX_TIRED_BORED,
   capBubbles,
   REFLECTION_MS,
@@ -147,17 +146,18 @@ describe('routeBubbles: who asks', () => {
 })
 
 describe('routeBubbles: caps', () => {
-  it(`shows at most ${MAX_ACTIONABLE} actionable bubbles: decision > visitor > desk > leaving > idle`, () => {
+  it(`shows at most ${MAX_ACTIONABLE} actionable bubbles: decision > visitor > leaving (pinned) > desk > idle`, () => {
     const s = game()
     withDecision(s, 'investor')
     withPitch(s, true)
     s.finance.pendingPayday = { day: 30 } as PendingPayday
     s.employees = [emp('e2'), emp('e1', { status: 'leaving' })]
-    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'visitor:pitch:vr', 'desk:payday'])
-    // Without the pitch, the person walking out gets the third slot before the idle builder.
+    // E1 round 3: the person walking out is pinned above the desk's payday, which loses the third slot.
+    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'visitor:pitch:vr', 'staff:e1'])
+    // Without the pitch the payday comes back, still under the pinned leaver.
     s.round = undefined
     s.visitors = s.visitors.filter((v) => v.id !== 'vr')
-    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'desk:payday', 'staff:e1'])
+    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'staff:e1', 'desk:payday'])
   })
 
   it('a decision asked at the desk hides the desk topic (one bubble per anchor)', () => {
@@ -214,11 +214,11 @@ describe('BubbleTimeline', () => {
     const tl = new BubbleTimeline()
     const c = [L('decision', 'decision:x', 'x', 'desk2'), L('desk', 'desk:payday', 'payday', 'desk'), L('staff', 'staff:e1', 'leaving', 'e1'), L('staff', 'staff:e2', 'idle', 'e2')]
     const r0 = tl.step(c, null, 0)
-    expect(shown(r0)).toEqual(['desk:payday', 'staff:e1'])
+    expect(shown(r0)).toEqual(['staff:e1', 'desk:payday'])
     expect(r0.nextAt).toBe(DECISION_DELAY_MS)
-    expect(shown(tl.step(c, null, DECISION_DELAY_MS))).toEqual(['decision:x', 'desk:payday', 'staff:e1'])
+    expect(shown(tl.step(c, null, DECISION_DELAY_MS))).toEqual(['decision:x', 'staff:e1', 'desk:payday'])
     // Idle comes later and the cap (3) is already full.
-    expect(shown(tl.step(c, null, IDLE_DELAY_MS))).toEqual(['decision:x', 'desk:payday', 'staff:e1'])
+    expect(shown(tl.step(c, null, IDLE_DELAY_MS))).toEqual(['decision:x', 'staff:e1', 'desk:payday'])
   })
 
   it('a round pill nobody opens steps back so the next desk topic can ask', () => {
@@ -393,9 +393,8 @@ describe('effort needs in the scene (E3)', () => {
   }
   const lines = (s: GameState) => routeCandidates(s, { bubbleOpen: null }).filter((l) => l.kind === 'staff').map((l) => `${l.speakerId}:${l.ref}`)
 
-  it('leaving > burnout > tired > bored, the engine capping burnout at 2 and tired + bored at 1', () => {
-    expect(lines(worn())).toEqual(['e3:leaving', 'e5:burnout', 'e1:burnout', 'e2:tired'])
-    expect(MAX_BURNOUT).toBe(2)
+  it('leaving > burnout (all of them, pinned) > tired > bored, the engine capping tired + bored at 1', () => {
+    expect(lines(worn())).toEqual(['e3:leaving', 'e5:burnout', 'e1:burnout', 'e4:burnout', 'e2:tired'])
     expect(MAX_TIRED_BORED).toBe(1)
   })
 
@@ -411,12 +410,13 @@ describe('effort needs in the scene (E3)', () => {
     expect(lines(s)).toEqual(['e3:leaving'])
   })
 
-  it('burnout ranks between leaving and tired; the caps hold for the scene too, an open one excepted', () => {
+  it('burnout ranks between leaving and tired and is never capped; the tired / bored cap holds for the scene too, an open one excepted', () => {
     const L = (ref: string, id: string): RoutedLine => ({ kind: 'staff', key: `staff:${id}`, speakerId: id, ref })
     const all = [L('tired', 'a'), L('burnout', 'b'), L('leaving', 'c')]
     expect(keys(capBubbles(all, null))).toEqual(['staff:c', 'staff:b', 'staff:a'])
     const many = [L('burnout', 'a'), L('burnout', 'b'), L('burnout', 'c'), L('tired', 'd')]
-    expect(keys(capBubbles(many, null))).toEqual(['staff:a', 'staff:b', 'staff:d'])
+    // Pinned: three burnt-out people all stay, and the tired one still gets a slot.
+    expect(keys(capBubbles(many, null))).toEqual(['staff:a', 'staff:b', 'staff:c', 'staff:d'])
     expect(keys(capBubbles([L('tired', 'a'), L('bored', 'b')], null))).toEqual(['staff:a'])
     expect(keys(capBubbles([L('tired', 'a'), L('bored', 'b')], 'staff:b'))).toEqual(['staff:b'])
   })

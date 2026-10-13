@@ -6,17 +6,18 @@
 import { useShallow } from 'zustand/react/shallow'
 import { actionEnergy } from '../../engine/founder'
 import * as B from '../../engine/balance'
-import { hasOpenWork, projectLoad } from '../../engine/effort'
+import { hasOpenWork, projectLoad, fatigueRate } from '../../engine/effort'
+import { CONTENT } from '../../content'
 import type { Employee, EmployeeId, GameState, Project } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import type { Chip } from '../EffectChips'
-import { calmChips, carryOnChips, cooldownChip, fatigueGood, leaveChips, loadChip, personControls } from '../effort'
-import { money } from '../format'
+import { batteryChip, calmChips, carryOnChips, cooldownChip, fatigueGood, leaveChips, loadChip, outputChip, personControls } from '../effort'
+import { money, pct } from '../format'
 import { t } from '../i18n'
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
 import { ChoiceRow, Expandable, launch } from './Expandable'
 
-export type StaffNeed = 'leaving' | 'burnout' | 'tired' | 'bored' | 'idle'
+export type StaffNeed = 'leaving' | 'burnout' | 'tired' | 'bored' | 'calmBack' | 'idle'
 
 const MAX_PROJECTS = 3
 /** The busiest projects a bored person can move to. */
@@ -98,6 +99,7 @@ export function StaffBubble({ bubbleKey, employeeId, need }: { bubbleKey: string
     )
   }
 
+  if (need === 'calmBack') return <CalmBack bubbleKey={bubbleKey} e={e} state={state} detail={detail} />
   if (need === 'burnout' || need === 'tired' || need === 'bored') return <EffortNeed bubbleKey={bubbleKey} e={e} need={need} state={state} detail={detail} />
 
   const open = projects.slice(0, MAX_PROJECTS)
@@ -120,6 +122,23 @@ export function StaffBubble({ bubbleKey, employeeId, need }: { bubbleKey: string
       ) : (
         <ChoiceRow primary label={t('bubble.startProject')} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'projects' }))} />
       )}
+    </Expandable>
+  )
+}
+
+/** "Dinlendi. Normale dönsün mü?": back to the normal pace (faster, tires again) or stay calm (waved off for a while). */
+function CalmBack({ bubbleKey, e, state, detail }: { bubbleKey: string; e: Employee; state: GameState; detail: () => void }) {
+  const dispatch = useGameStore((s) => s.dispatch)
+  const gain = 1 / B.PACE_OUTPUT.calm - 1
+  return (
+    <Expandable bubbleKey={bubbleKey} kind="staff" face={`team-${e.dept}`} mark={{ icon: 'battery', color: 'var(--color-positive)' }} line={t('bubble.calmBack', { name: e.name })} detail={detail}>
+      <ChoiceRow
+        primary
+        label={t('team.backToNormal')}
+        chips={[outputChip(`+${pct(gain)}`, true), batteryChip(fatigueRate(state, CONTENT, e, 'normal'), t('fx.tag.fatigue'))]}
+        onClick={() => dispatch({ type: 'setPace', employeeId: e.id, pace: 'normal' })}
+      />
+      <ChoiceRow label={t('team.keepCalm')} onClick={() => dispatch({ type: 'ackStaff', employeeId: e.id })} />
     </Expandable>
   )
 }

@@ -152,12 +152,17 @@ export function dailyPeople(s: GameState, content: EngineContent): void {
   }
 }
 
-/** The resignation notice: RESIGN_WARNING_DAYS to answer it (respondResignation), tagged with its cause. */
+/**
+ * The resignation notice: RESIGN_WARNING_DAYS to answer it (respondResignation; BURNOUT_NOTICE_DAYS for a burnout),
+ * tagged with its cause. Every cause pushes `resignNotice` (value = days left): the store slows the game on it.
+ */
 function notice(s: GameState, e: Employee, cause: LeaveCause): void {
+  const days = cause === 'burnout' ? B.BURNOUT_NOTICE_DAYS : B.RESIGN_WARNING_DAYS
   setStatus(e, 'leaving', s.time.day)
-  e.leaveDay = s.time.day + B.RESIGN_WARNING_DAYS
+  e.leaveDay = s.time.day + days
   e.leaveCause = cause
   pushActivity(s, 'resignWarning', { name: e.name, id: e.id, cause })
+  pushEvent(s, { kind: 'resignNotice', refId: e.id, value: days })
   if (cause === 'bored') pushEvent(s, { kind: 'bored', refId: e.id })
 }
 

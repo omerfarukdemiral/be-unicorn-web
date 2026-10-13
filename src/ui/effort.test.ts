@@ -51,7 +51,7 @@ describe('effort controls', () => {
     e.leaveReadyDay = s.time.day + 12
     expect(personControls(s, e).leave).toBe(12)
     s.stage = 0
-    expect(personControls(s, e)).toEqual({ pace: null, leave: null, lead: null, leadFirst: false })
+    expect(personControls(s, e)).toEqual({ pace: null, leave: null, lead: null, leadLock: null, leadTeam: 0, leadFirst: false })
   })
 
   it('lead: from Seed, on a project of 3+ builders; the lead can step down', () => {
@@ -61,8 +61,12 @@ describe('effort controls', () => {
     p.leadId = e.id
     expect(personControls(s, e).lead).toBe('unlead')
     p.leadId = undefined
+    // E1 round 3: the row never hides, it says what is missing (Seed, then the builders).
     s.stage = 1
-    expect(personControls(s, e).lead).toBeNull()
+    expect(personControls(s, e)).toMatchObject({ lead: 'locked', leadLock: 'stage' })
+    s.stage = 2
+    p.assignedIds = p.assignedIds.slice(0, 2)
+    expect(personControls(s, e)).toMatchObject({ lead: 'locked', leadLock: 'team', leadTeam: 2 })
   })
 
   it('a project: supply against demand, the sprint ready, running, then cooling down', () => {

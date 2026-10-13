@@ -16,13 +16,13 @@ import { t } from './i18n'
 import { fixed, money, pct } from './format'
 import { Bar, Button, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './primitives'
 import { moraleTone } from './theme'
-import { useIsMobile } from './hooks'
+import { useIsMobile, useTwoStep } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AdFocusToggle } from './panels/AdFocus'
 import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
 import { ModulesSection } from './panels/ModulesSection'
 import { ChipRow } from './EffectChips'
-import { fatigueGood, fitChips, LeadLine, loadChip, personLabel, PersonEffortRows, SprintRow, TeamOf } from './effort'
+import { fatigueGood, fitChips, hiddenLossChip, LeadLine, loadChip, personLabel, PersonEffortRows, SprintRow, TeamOf } from './effort'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
 
 export type RenderPreview = (target: Selection) => ReactNode
@@ -304,6 +304,8 @@ function EmployeeDetail({ id }: { id: string }) {
   const mobile = useIsMobile()
   // E3: the person's battery, load and fit (derived.people; absent in the Garage).
   const effort = useGameStore((s) => (e ? s.state.derived.people?.[e.id] : undefined))
+  // Taking someone off their project is two taps, like the sale of furniture.
+  const [armed, tap] = useTwoStep()
   if (!e) return <p className="text-xs text-ink-2">{t('detail.gone')}</p>
   const fatigue = Math.round(e.fatigue ?? 0)
   const fatigueColor = fatigueGood(fatigue) === false ? 'var(--color-negative)' : fatigueGood(fatigue) === true ? 'var(--color-positive)' : 'var(--color-energy)'
@@ -319,7 +321,7 @@ function EmployeeDetail({ id }: { id: string }) {
         <Stat label={t('detail.desk')} value={e.deskSlotId ? t('detail.seated') : <span className="inline-flex items-center gap-1.5"><Dot color="var(--color-negative)" size={6} />{t('team.noSeat')}</span>} />
       </div>
       {effort && (
-        <ChipRow chips={[loadChip(effort.load), ...(effort.fit && current ? fitChips(CATEGORY_ICON[current.category]) : [])]} />
+        <ChipRow chips={[loadChip(effort.load), ...hiddenLossChip(effort.fatigueFactor), ...(effort.fit && current ? fitChips(CATEGORY_ICON[current.category]) : [])]} />
       )}
       <section>
         <SectionTitle>{t('detail.project')}</SectionTitle>
@@ -334,11 +336,14 @@ function EmployeeDetail({ id }: { id: string }) {
                   key={p.id}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => dispatch({ type: 'assign', employeeId: e.id, projectId: on ? null : p.id })}
-                  className={cx('inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold pointer-coarse:min-h-11', on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink')}
+                  onClick={() => (on ? tap(p.id, () => dispatch({ type: 'assign', employeeId: e.id, projectId: null })) : dispatch({ type: 'assign', employeeId: e.id, projectId: p.id }))}
+                  className={cx(
+                    'inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold pointer-coarse:min-h-11',
+                    on && armed === p.id ? 'border-negative bg-surface text-negative-ink' : on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink',
+                  )}
                 >
-                  <Icon name={CATEGORY_ICON[p.category]} size={13} />
-                  {p.name}
+                  <Icon name={on && armed === p.id ? 'warning' : CATEGORY_ICON[p.category]} size={13} />
+                  {on && armed === p.id ? t('team.removeConfirm') : p.name}
                 </button>
               )
             })}

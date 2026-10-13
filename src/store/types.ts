@@ -1,6 +1,6 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
-import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameState, HudWidget, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
+import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameSpeed, GameState, HudWidget, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -127,6 +127,12 @@ export interface UiState {
   slowdownAt: number | null
   /** Game day the automatic slowdown hands 4× back (null = no restore pending; the player's own setSpeed clears it). */
   slowdownResumeDay: number | null
+  /**
+   * An effort crisis (burnout, a resignation notice) dropped the speed to 1×: the speed to bring back (`prevSpeed`),
+   * the people in crisis and the last game day to hold. Ends when none of them is still burnt out / leaving, or on
+   * `untilDay`; the player's own setSpeed cancels it. null = no hold.
+   */
+  effortHold: { employeeIds: string[]; untilDay: number; prevSpeed: GameSpeed } | null
   /**
    * Gauges pinned to the top bar (docs/LAYOUT.md §5.2): at most PIN_MAX, oldest first. A pin whose gauge is locked
    * (e.g. a new run) is not shown but keeps its place. Persisted in localStorage 'be-unicorn:ui'.

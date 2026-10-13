@@ -1381,6 +1381,8 @@ export type GameEventKind =
   | 'burnedOut'
   /** E1: a bored resignation notice (refId = employee). */
   | 'bored'
+  /** E1 (round 3): someone handed in their notice, any cause (refId = employee, value = days to leave). */
+  | 'resignNotice'
   /** Payday left cash < 0 (value = shortfall): the bankruptcy clock starts, the rescue card comes. */
   | 'payrollMissed'
   /** An unanswered card applied its default option (refId = card, value = option index). */

@@ -250,6 +250,12 @@ export const MORALE_APPROACH_PER_DAY = 0.05
 export const TIRED_MORALE = 40
 export const RESIGN_MORALE = 28
 export const RESIGN_WARNING_DAYS = 3
+/** A burnt-out person gives this long to answer (E1 round 3: time to see the bubble at 1×; burnout → leaving = 17 days). */
+export const BURNOUT_NOTICE_DAYS = 7
+/** The "Normale dön?" question: someone on a calm pace you set whose fatigue fell under this. */
+export const CALM_BACK_AT = 20
+/** An effort crisis (burnout, a notice) holds the game at 1× for at most this many game days. */
+export const EFFORT_HOLD_DAYS = 7
 /** After a retain, no new warning for this many days. */
 export const RETAIN_GRACE_DAYS = 20
 /** Mola (PLAN §7.2): a content employee near a common-area item takes a coffee break every N days. */
@@ -342,8 +348,7 @@ export const NO_LEAD_FREE = 8
 export const NO_LEAD_LOSS_PER_PERSON = 0.02
 export const NO_LEAD_MIN = 0.9
 export const STAFF_ACK_DAYS = 20
-/** Effort bubbles in the scene at once: burnt-out people, and tired + bored together. */
-export const STAFF_BURNOUT_MAX = 2
+/** Effort bubbles in the scene at once besides the pinned ones (burnout, notice): tired, bored and "Normale dön?" together. */
 export const STAFF_TIRED_BORED_MAX = 1
 /** respondResignation on a burnout notice: calm and this much fatigue off. */
 export const RETAIN_BURNOUT_FATIGUE = -20

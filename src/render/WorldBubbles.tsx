@@ -135,17 +135,27 @@ export const REFLECTION_FRESH_DAYS = 10
 /** Counts against MAX_ACTIONABLE (reflections and ambient lines do not). */
 export const isActionable = (l: Pick<RoutedLine, 'kind'>): boolean => l.kind === 'decision' || l.kind === 'visitor' || l.kind === 'desk' || l.kind === 'staff' || l.kind === 'person'
 
+/** Burnout and a resignation notice cost the player a person: their bubbles are pinned (E1 round 3). */
+export const isPinned = (l: Pick<RoutedLine, 'kind' | 'ref'>): boolean => l.kind === 'staff' && (l.ref === 'leaving' || l.ref === 'burnout')
+
+/** Tired, bored and "Normale dön?" share one slot. */
+const isTiredBoredKind = (l: Pick<RoutedLine, 'kind' | 'ref'>): boolean => l.kind === 'staff' && (l.ref === 'tired' || l.ref === 'bored' || l.ref === 'calmBack')
+
+/** Decision > visitor > pinned staff (leaving, then burnout) > desk > the rest. */
 const rankOf = (l: RoutedLine): number =>
-  l.kind === 'decision' ? 0 : l.kind === 'visitor' ? 1 : l.kind === 'desk' ? 2 : l.kind === 'staff' ? (l.ref === 'leaving' ? 3 : l.ref === 'burnout' ? 3.5 : 4) : 5
+  l.kind === 'decision' ? 0 : l.kind === 'visitor' ? 1 : isPinned(l) ? (l.ref === 'leaving' ? 1.5 : 1.6) : l.kind === 'desk' ? 2 : l.kind === 'staff' ? 4 : 5
 
 /** Idle builders ask one at a time: a late office full of "boşta" pills reads as a notification wall. */
 export const MAX_IDLE = 1
 
-/** Effort bubbles (E3): burnt-out people, and tired + bored together (the engine's own caps, held again for the open one). */
-export const MAX_BURNOUT = B.STAFF_BURNOUT_MAX
+/** Effort bubbles (E3): tired, bored and "Normale dön?" together (the engine's own cap, held again for the open one). Pinned ones have none. */
 export const MAX_TIRED_BORED = B.STAFF_TIRED_BORED_MAX
 
-/** ≤ MAX_ACTIONABLE actionable bubbles, one per anchor, ≤ MAX_IDLE idle builders, ≤ MAX_BURNOUT burnt out, ≤ MAX_TIRED_BORED tired / bored, the open one first, then by priority. Others pass through. */
+/**
+ * ≤ MAX_ACTIONABLE actionable bubbles, one per anchor, ≤ MAX_IDLE idle builders, ≤ MAX_TIRED_BORED tired / bored, the
+ * open one first, then by priority. Pinned staff bubbles (burnout, notice) are never dropped and take slots only from
+ * the others (at least one other still fits). Others pass through.
+ */
 export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | null): RoutedLine[] {
   const act = lines.filter(isActionable)
   const ranked = act
@@ -154,21 +164,22 @@ export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | nu
   const anchors = new Set<string>()
   const out: RoutedLine[] = []
   let idle = 0
-  let burnout = 0
   let tiredBored = 0
+  let others = 0
+  const pinned = new Set(ranked.filter(({ l }) => isPinned(l)).map(({ l }) => l.speakerId))
+  const room = Math.max(1, MAX_ACTIONABLE - pinned.size)
   for (const { l } of ranked) {
-    if (out.length >= MAX_ACTIONABLE) break
+    const pin = isPinned(l)
+    if (!pin && others >= room && l.key !== bubbleOpen) continue
     if (anchors.has(l.speakerId)) continue
     const isIdle = l.kind === 'staff' && l.ref === 'idle'
-    const isBurnout = l.kind === 'staff' && l.ref === 'burnout'
-    const isTiredBored = l.kind === 'staff' && (l.ref === 'tired' || l.ref === 'bored')
+    const isTiredBored = isTiredBoredKind(l)
     const mine = l.key === bubbleOpen
     if (isIdle && idle >= MAX_IDLE && !mine) continue
-    if (isBurnout && burnout >= MAX_BURNOUT && !mine) continue
     if (isTiredBored && tiredBored >= MAX_TIRED_BORED && !mine) continue
     if (isIdle) idle++
-    if (isBurnout) burnout++
     if (isTiredBored) tiredBored++
+    if (!pin) others++
     anchors.add(l.speakerId)
     out.push(l)
   }
@@ -240,12 +251,12 @@ interface Seen {
  * A decision never waits: the card is already running, so it asks above its visitor at the door at once
  * (QA: a decision active > 4.5 s with no bubble while the visitor queued in the doorway, or never under a manual pause).
  */
-const waitsForArrival = (l: RoutedLine): boolean => (l.kind === 'visitor' || l.kind === 'staff') && l.speakerId !== DESK
+const waitsForArrival = (l: RoutedLine): boolean => (l.kind === 'visitor' || l.kind === 'staff') && l.speakerId !== DESK && !isPinned(l)
 
 /** Pills that may wait for long (a builder with nothing to build, someone tired or bored, a round window or a module question the player sits out) step back unopened. */
-const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && (l.ref === 'idle' || l.ref === 'tired' || l.ref === 'bored')) || (l.kind === 'desk' && (l.ref === 'round' || l.ref === 'module'))
+const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && (l.ref === 'idle' || isTiredBoredKind(l))) || (l.kind === 'desk' && (l.ref === 'round' || l.ref === 'module'))
 
-const delayOf = (l: RoutedLine): number => (l.kind === 'decision' ? DECISION_DELAY_MS : l.kind === 'staff' && (l.ref === 'idle' || l.ref === 'tired' || l.ref === 'bored') ? IDLE_DELAY_MS : 0)
+const delayOf = (l: RoutedLine): number => (l.kind === 'decision' ? DECISION_DELAY_MS : l.kind === 'staff' && (l.ref === 'idle' || isTiredBoredKind(l)) ? IDLE_DELAY_MS : 0)
 
 /**
  * Real-time gate between routing and the scene: delays (decision, idle builder), linger (idle builder), the

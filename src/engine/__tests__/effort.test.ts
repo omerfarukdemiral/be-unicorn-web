@@ -500,7 +500,7 @@ describe('lead (E1 §11)', () => {
 })
 
 describe('staffAttention (E1)', () => {
-  it('leaving > burnout (≤ 2) > tired + bored (≤ 1) > idle; leads, acks and the garage keep quiet', () => {
+  it('leaving > burnout (all) > tired + bored (≤ 1) > idle; leads, acks and the garage keep quiet', () => {
     const s = company(1, 6)
     const set = (id: string, over: Partial<Employee>) => Object.assign(person(s, id), over)
     set('e1', { status: 'leaving' })
@@ -510,9 +510,9 @@ describe('staffAttention (E1)', () => {
     set('e5', { fatigue: 70 })
     set('e6', { boredDays: 40, loadAvg: 0.3 })
     s.employees.push(emp('i1', { projectId: undefined }))
-    expect(staffAttention(s)).toEqual([['e1', 'leaving'], ['e3', 'burnout'], ['e4', 'burnout'], ['e5', 'tired'], ['i1', 'idle']])
+    expect(staffAttention(s)).toEqual([['e1', 'leaving'], ['e3', 'burnout'], ['e4', 'burnout'], ['e2', 'burnout'], ['e5', 'tired'], ['i1', 'idle']])
     set('e5', { ackDay: s.time.day })
-    expect(staffAttention(s).map(([, n]) => n)).toEqual(['leaving', 'burnout', 'burnout', 'bored', 'idle'])
+    expect(staffAttention(s).map(([, n]) => n)).toEqual(['leaving', 'burnout', 'burnout', 'burnout', 'bored', 'idle'])
     s.projects[0]!.leadId = 'e2'
     expect(staffAttention(s).some(([, n]) => n === 'bored' || n === 'tired')).toBe(false)
     s.time.day += B.STAFF_ACK_DAYS + 1
@@ -557,5 +557,42 @@ describe('module builds (W2a × E1)', () => {
     const g = company(0, 1)
     dailyEffort(g, content)
     expect(g.employees[0]!.loadAvg).toBeUndefined()
+  })
+})
+
+describe('effort crises (E1 round 3)', () => {
+  it('a burnout notice gives BURNOUT_NOTICE_DAYS and pushes resignNotice; the other causes keep 3', () => {
+    const s = company(1, 1, 'web', { fatigue: 95, loadAvg: 2, burnoutDays: B.BURNOUT_RESIGN_DAYS - 1 })
+    days(s, 1, 2)
+    const e = person(s)
+    expect(e.leaveCause).toBe('burnout')
+    expect(e.leaveDay! - s.time.day).toBe(B.BURNOUT_NOTICE_DAYS)
+    expect(B.BURNOUT_NOTICE_DAYS).toBeGreaterThanOrEqual(7)
+    expect(s.events.filter((x) => x.kind === 'resignNotice')).toMatchObject([{ refId: 'e1', value: B.BURNOUT_NOTICE_DAYS }])
+    const m = company(1, 1, 'web', { morale: 5, fatigue: 0 })
+    days(m, 1, 1)
+    expect(person(m).leaveCause).toBe('morale')
+    expect(person(m).leaveDay! - m.time.day).toBe(B.RESIGN_WARNING_DAYS)
+    expect(m.events.some((x) => x.kind === 'resignNotice' && x.value === B.RESIGN_WARNING_DAYS)).toBe(true)
+  })
+
+  it('burnout → leaving takes at least BURNOUT_NOTICE_DAYS after the notice', () => {
+    const s = company(1, 1, 'web', { fatigue: 95, loadAvg: 2, burnoutDays: B.BURNOUT_RESIGN_DAYS - 1 })
+    days(s, 1, 2)
+    days(s, B.BURNOUT_NOTICE_DAYS - 1, 2)
+    expect(s.employees).toHaveLength(1)
+    days(s, 1, 2)
+    expect(s.employees).toHaveLength(0)
+  })
+
+  it('"Normale dön?": a calm pace the player set, fatigue under CALM_BACK_AT, not acked, not auto-calm', () => {
+    const s = company(1, 2, 'web', { pace: 'calm', fatigue: B.CALM_BACK_AT - 1 })
+    expect(staffAttention(s).map(([, n]) => n)).toEqual(['calmBack'])
+    person(s, 'e2').fatigue = 50
+    person(s, 'e1').ackDay = s.time.day
+    expect(staffAttention(s)).toEqual([])
+    person(s, 'e1').ackDay = undefined
+    person(s, 'e1').autoCalm = true
+    expect(staffAttention(s)).toEqual([])
   })
 })

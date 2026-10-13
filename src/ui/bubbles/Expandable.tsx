@@ -183,6 +183,7 @@ export function ChoiceRow({
   disabled,
   title,
   icon,
+  danger,
 }: {
   label: ReactNode
   chips?: readonly Chip[]
@@ -193,6 +194,8 @@ export function ChoiceRow({
   disabled?: boolean
   title?: string
   icon?: BubbleMark
+  /** An armed destructive tap ("Projeden çıkar? Onayla"): red outline. */
+  danger?: boolean
 }) {
   const mobile = useIsMobile()
   const hasFx = !!effects || (chips?.length ?? 0) > 0
@@ -209,7 +212,9 @@ export function ChoiceRow({
       className={cx(
         'flex min-h-9 w-full min-w-0 flex-col items-start justify-center gap-1 rounded-control border px-2.5 py-1.5 text-left transition-colors pointer-coarse:min-h-11 disabled:cursor-not-allowed disabled:opacity-50',
         mobile && 'min-h-11',
-        filled
+        danger
+          ? 'border-negative bg-surface text-negative-ink ring-1 ring-negative'
+          : filled
           ? 'border-ink bg-ink text-on-ink enabled:hover:opacity-90'
           : primary
             ? 'border-ink bg-surface text-ink ring-1 ring-ink enabled:hover:bg-surface-2'

@@ -10,6 +10,7 @@
 import { create } from 'zustand'
 import { DECISIONS } from '../content'
 import { applyAction, createGame, step } from '../engine'
+import * as B from '../engine/balance'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readCodex, readProfile, readSave, readUiSave, writeCodex, writeProfile, writeSave, writeUiSave } from './save'
 import { addPin, autoPin, defaultPins, removePin } from './metricPins'
@@ -50,6 +51,9 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
   'roundClosed',
   'release',
 ])
+
+/** Events that start an effort crisis: the game drops to 1× and the person's bubble is pinned (E1 round 3). */
+export const EFFORT_CRISIS_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(['burnedOut', 'resignNotice'])
 
 /** Game days at 1× after an important moment before 4× comes back (~6 s at 1×, SECONDS_PER_DAY = 2). */
 export const SLOWDOWN_WINDOW_DAYS = 3
@@ -93,6 +97,57 @@ export function hasImportantMoment(prev: GameState, next: GameState): boolean {
     }
   }
   return false
+}
+
+/** Who the new events in `next` put in an effort crisis (burnt out, handed in a notice). */
+export function newCrises(prev: GameState, next: GameState): string[] {
+  const since = lastEventId(prev)
+  const out: string[] = []
+  for (const e of next.events) if (e.id > since && EFFORT_CRISIS_KINDS.has(e.kind) && e.refId !== undefined && !out.includes(e.refId)) out.push(e.refId)
+  return out
+}
+
+/** Still in crisis: in the company and burnt out or on notice. */
+const inCrisis = (s: GameState, id: string): boolean => {
+  const e = s.employees.find((x) => x.id === id)
+  return e !== undefined && (e.status === 'leaving' || e.status === 'burnout')
+}
+
+/**
+ * Effort crisis hold: a burnout or notice at 2× / 4× drops the speed to 1× (a real setSpeed, like the moment slowdown)
+ * and keeps it there until the people in crisis are answered or gone, or EFFORT_HOLD_DAYS pass; then the player's
+ * speed comes back. Honours "Önemli anda yavaşla".
+ */
+function effortCrisisStep(prev: GameState, next: GameState): void {
+  const ui = useGameStore.getState().ui
+  const crisis = newCrises(prev, next)
+  // At 1× inside a moment slowdown the player's speed is the one waiting to come back.
+  const waiting = next.time.speed === 1 && ui.slowdownResumeDay !== null
+  if (crisis.length > 0 && ui.slowOnMoments && (next.time.speed > 1 || waiting)) {
+    const hold = ui.effortHold
+    autoSetSpeed(1)
+    useGameStore.setState((s) => ({
+      ui: {
+        ...s.ui,
+        slowdownAt: performance.now(),
+        // The 4× restore of an important moment would undo the hold: the hold hands the speed back itself.
+        slowdownResumeDay: null,
+        effortHold: { employeeIds: [...new Set([...(hold?.employeeIds ?? []), ...crisis])], untilDay: next.time.day + B.EFFORT_HOLD_DAYS, prevSpeed: hold?.prevSpeed ?? (waiting ? 4 : next.time.speed) },
+      },
+    }))
+    return
+  }
+  const hold = ui.effortHold
+  if (!hold) return
+  if (crisis.length > 0) {
+    // Already at 1× (held): a new crisis person joins the hold and the window starts over.
+    useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: { ...hold, employeeIds: [...new Set([...hold.employeeIds, ...crisis])], untilDay: next.time.day + B.EFFORT_HOLD_DAYS } } }))
+    return
+  }
+  const open = hold.employeeIds.some((id) => inCrisis(next, id))
+  if (open && next.time.day < hold.untilDay) return
+  useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: null } }))
+  if (next.time.speed === 1) autoSetSpeed(hold.prevSpeed)
 }
 
 /** True when `next` brought an event that closes an open center screen (INTERRUPT_EVENT_KINDS). */
@@ -171,6 +226,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   slowOnMoments: true,
   slowdownAt: null,
   slowdownResumeDay: null,
+  effortHold: null,
   pinnedMetrics: saved.pinnedMetrics ?? [],
   seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
   pinTouched: saved.pinTouched ?? false,
@@ -386,7 +442,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     set((s) => ({ state: res.state, ui: withAutoPins(withPause(withDesk(starts ? { ...s.ui, runStarted: true } : s.ui, res.state), res.state), state, res.state) }))
     retargetEmptiedDetail(action, res.state)
     // The player's own speed choice always wins over a pending 4× restore.
-    if (action.type === 'setSpeed' && !autoSpeed && get().ui.slowdownResumeDay !== null) set((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
+    if (action.type === 'setSpeed' && !autoSpeed && (get().ui.slowdownResumeDay !== null || get().ui.effortHold !== null)) set((s) => ({ ui: { ...s.ui, slowdownResumeDay: null, effortHold: null } }))
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
     if (!res.state.decisions.active && get().ui.decisionExpanded) get().setDecisionExpanded(false)
@@ -593,7 +649,10 @@ function afterStep(prev: GameState, next: GameState): void {
   const ac = next.concepts.active
   if (ac && !conceptVisitorStays(next, ac.id)) dispatch({ type: 'minimizeConcept', conceptId: ac.id })
   if (centerOpen(useGameStore.getState().ui) && hasInterrupt(prev, next)) closeOverlay()
+  effortCrisisStep(prev, next)
   const ui = useGameStore.getState().ui
+  // An effort hold owns the speed until it ends.
+  if (ui.effortHold) return
   const resumeDay = next.time.day + SLOWDOWN_WINDOW_DAYS
   if (ui.slowOnMoments && next.time.speed === 4 && hasImportantMoment(prev, next)) {
     autoSetSpeed(1)

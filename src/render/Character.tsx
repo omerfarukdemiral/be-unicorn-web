@@ -90,6 +90,11 @@ function loungeFor(L: OfficeLayout, id: string): XZ[] {
   return n <= 1 ? L.lounge : [...L.lounge.slice(k), ...L.lounge.slice(0, k)]
 }
 
+/** Someone on a break stands in the lounge; with no common area (a leave in an office without one) they step out of the door. */
+export function breakMode(hasLounge: boolean): 'lounge' | 'away' {
+  return hasLounge ? 'lounge' : 'away'
+}
+
 function loungeYawOf(L: OfficeLayout, p: XZ): number {
   const i = L.lounge.indexOf(p)
   return i >= 0 ? (L.loungeYaw[i] ?? Math.PI) : Math.PI
@@ -171,6 +176,8 @@ export interface EmployeeCharacterProps {
   overload: boolean
   /** A builder with nothing to build (idleBuilders): the "…" marker while otherwise working. */
   idle: boolean
+  /** Leads a project (E3): a star over the head. */
+  lead?: boolean
   selected: boolean
   onSelect: (id: string) => void
 }
@@ -186,6 +193,8 @@ function sameEmployeeProps(a: EmployeeCharacterProps, b: EmployeeCharacterProps)
     a.speed === b.speed &&
     a.overload === b.overload &&
     a.idle === b.idle &&
+    a.lead === b.lead &&
+    a.employee.offUntil === b.employee.offUntil &&
     a.selected === b.selected &&
     a.onSelect === b.onSelect
   )
@@ -244,21 +253,24 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
     // Decide the goal for the current status.
     const status = e.status
     // 'leaving' walks to the door and waits there (respondResignation window).
-    let mode: 'seat' | 'lounge' | 'wander' | 'door' | 'idle' = 'idle'
+    let mode: 'seat' | 'lounge' | 'wander' | 'door' | 'idle' | 'away' = 'idle'
     if (status === 'leaving') mode = 'door'
-    else if (status === 'break') mode = 'lounge'
+    else if (status === 'break') mode = breakMode(L.lounge.length > 0)
     else if (status === 'onboarding') mode = seat && hash01(e.id, Math.floor(t / 12)) < 0.3 ? 'seat' : 'wander'
     else if (seat) mode = 'seat'
 
     // Standing spots are reserved (spots.ts): nobody picks a point someone else already stands on.
     // A seat is held too, so a visitor never picks the point across a pod where this person sits.
     if (mode === 'seat' && seat) hold(STAND, e.id, seat.pos)
-    else if (mode === 'seat' || mode === 'wander') release(STAND, e.id)
+    else if (mode === 'seat' || mode === 'wander' || mode === 'away') release(STAND, e.id)
     if (mode === 'seat' && seat) {
       const key = `seat:${seat.pos[0].toFixed(2)},${seat.pos[1].toFixed(2)}`
       const burnoutYaw = Math.atan2(L.door.pos[0] - seat.pos[0], L.door.pos[1] - seat.pos[1])
       if (mover.goalKey !== key) mover.goTo(seat.pos, L, key, seat.yaw)
       mover.faceYaw = status === 'burnout' ? burnoutYaw : seat.yaw
+    } else if (mode === 'away') {
+      // On leave with no coffee corner: out of the door, back to the seat when the leave ends (goTo walks in from outside).
+      if (mover.goalKey !== 'away') mover.exit(L, 'away')
     } else if (mode === 'lounge') {
       const spot = reserve(STAND, e.id, loungeFor(L, e.id))!
       const key = `lounge:${spot[0].toFixed(2)},${spot[1].toFixed(2)}`
@@ -323,7 +335,7 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
   return (
     <>
       <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
-        <CharacterModel look={look} rig={rig} />
+        <CharacterModel look={look} rig={rig} lead={props.lead} />
         <HitAndRing selected={props.selected} onSelect={() => props.onSelect(employee.id)} />
       </group>
       <group ref={icon} position={[mover.x, 0, mover.z]} visible={!mover.outside}>

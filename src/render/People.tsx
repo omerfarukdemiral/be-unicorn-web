@@ -31,6 +31,9 @@ export function People() {
   const [employees, visitors, action, chosenSpeed, overload] = useGS(selectPeople)
   // Builders with nothing to build carry a "…" over the head (playtest LD1).
   const idle = useGS(idleBuilders)
+  // The project leads (E3): a gold star over the head. A primitive key, so the set rebuilds only when a lead changes.
+  const leadKey = useGS((s) => s.projects.flatMap((p) => (p.leadId ? [p.leadId] : [])).join(','))
+  const leads = useMemo(() => new Set(leadKey ? leadKey.split(',') : []), [leadKey])
   // A focus pause (decision / Defter card / open bubble / modal) holds the world still without touching time.speed.
   const held = useUi((u) => u.pauseReasons.length > 0)
   const generation = useUi((u) => u.generation)
@@ -131,6 +134,7 @@ export function People() {
           speed={speed}
           overload={overload}
           idle={idle.includes(e.id)}
+          lead={leads.has(e.id)}
           selected={(selection?.kind === 'employee' && selection.id === e.id) || openEmployee === e.id}
           onSelect={selectEmployee}
         />

@@ -10,11 +10,13 @@ import { DeskBubble, PAY_ALL } from './DeskBubble'
 import { pitchChips } from '../pitch'
 import { closeBubble, launch, openBubble } from './Expandable'
 import { ReflectionBubble } from './ReflectionBubble'
+import { PersonBubble } from './PersonBubble'
 import { StaffBubble } from './StaffBubble'
 import { renderWorldBubble } from './worldBubble'
 import { company } from '../../engine/__tests__/moduleFixtures'
 import { moduleAsk } from '../../engine/modules'
 import { MODULE_TEXT, moduleName } from '../../content'
+import type { Employee } from '../../engine/types'
 
 const store = () => useGameStore.getState()
 const CARD = 'remote-vs-office'
@@ -310,3 +312,88 @@ describe('module question at the desk (W2c)', () => {
   })
 })
 
+
+describe('effort bubbles (E3)', () => {
+  /** A stage 2 company; `fatigue` on its first engineer, whose id and name come back. */
+  function withTired(fatigue: number, extra: Partial<Employee> = {}): { id: string; name: string } {
+    const c = company(['web'], 2)
+    const e = c.employees.find((x) => x.dept === 'eng')!
+    Object.assign(e, { fatigue, status: 'working', ...extra })
+    useGameStore.setState({ state: c })
+    return { id: e.id, name: e.name }
+  }
+  const staff = (id: string, need: 'tired' | 'burnout' | 'bored') => html(createElement(StaffBubble, { bubbleKey: `staff:${id}`, employeeId: id, need }))
+
+  it('tired: one sentence collapsed; open: slow down, leave, carry on', () => {
+    const { id, name } = withTired(70)
+    const closed = staff(id, 'tired')
+    expect(closed).toContain(`${name} yoruldu.`)
+    expect(closed).not.toContain('Yavaşlat')
+    openBubble(`staff:${id}`)
+    const out = staff(id, 'tired')
+    for (const label of ['Yavaşlat', 'İzin ver', 'Devam']) expect(out).toContain(label)
+    expect(out).toContain('−%15')
+    expect(out).toContain('−%20')
+  })
+
+  it('burnout: leave is the main move, then slow down and let go', () => {
+    const { id, name } = withTired(90)
+    expect(staff(id, 'burnout')).toContain(`${name} tükendi.`)
+    openBubble(`staff:${id}`)
+    const out = staff(id, 'burnout')
+    expect(out.indexOf('İzin ver')).toBeGreaterThan(-1)
+    expect(out.indexOf('İzin ver')).toBeLessThan(out.indexOf('Yavaşlat'))
+    expect(out.indexOf('Yavaşlat')).toBeLessThan(out.indexOf('Bırak'))
+    expect(out).toContain('−60')
+  })
+
+  it('bored: the busiest project with its load, and a wave-off', () => {
+    const { id, name } = withTired(0, { projectId: undefined })
+    expect(staff(id, 'bored')).toContain(`${name} boşa harcanıyor.`)
+    useGameStore.setState({ state: { ...store().state, projects: store().state.projects.map((p) => ({ ...p, maturity: 0.4 })) } })
+    openBubble(`staff:${id}`)
+    const out = staff(id, 'bored')
+    expect(out).toContain(store().state.projects[0]!.name)
+    expect(out).toContain('Yük')
+    expect(out).toContain('Devam')
+  })
+
+  it('a resignation by burnout names its cause and promises rest', () => {
+    const { id, name } = withTired(90, { status: 'leaving', leaveCause: 'burnout', leaveDay: store().state.time.day + 7 })
+    const out = html(createElement(StaffBubble, { bubbleKey: `staff:${id}`, employeeId: id, need: 'leaving' }))
+    expect(out).toContain(`${name} tükendi, 7g içinde gidiyor.`)
+  })
+
+  const person = (id: string) => html(createElement(PersonBubble, { bubbleKey: `person:${id}`, employeeId: id }))
+
+  it('the person card: battery number, load, pace pill that flips with the pace, leave only when worn out', () => {
+    const { id } = withTired(20)
+    openBubble(`person:${id}`)
+    let out = person(id)
+    expect(out).toContain('Yük')
+    expect(out).toContain('Tempo: Normal')
+    expect(out).not.toContain('İzin ver')
+    store().dispatch({ type: 'setPace', employeeId: id, pace: 'calm' })
+    openBubble(`person:${id}`)
+    expect(person(id)).toContain('Tempo: Rahat')
+    store().dispatch({ type: 'setPace', employeeId: id, pace: 'normal' })
+    openBubble(`person:${id}`)
+    expect(person(id)).toContain('Tempo: Normal')
+    withTired(55)
+    openBubble(`person:${id}`)
+    out = person(id)
+    expect(out).toContain('İzin ver · 5g')
+  })
+
+  it('the Garage has none of it', () => {
+    const e = store().state.employees[0] ?? store().state.candidates[0]
+    expect(e).toBeDefined()
+    const st = store().state
+    const emp = { ...(st.employees[0] ?? st.candidates[0]!), id: 'e-g', status: 'working', fatigue: 90 } as unknown as Employee
+    useGameStore.setState({ state: { ...st, employees: [...st.employees, emp] } })
+    openBubble('person:e-g')
+    const out = person('e-g')
+    expect(out).not.toContain('Tempo')
+    expect(out).not.toContain('Yük')
+  })
+})

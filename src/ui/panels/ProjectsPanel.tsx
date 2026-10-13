@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_CATEGORIES, type Project, type ProjectCategory } from '../../engine/types'
 import * as B from '../../engine/balance'
+import { effortOn } from '../../engine/effort'
 import { PROJECT_CATEGORY_TEXT, PROJECT_NAMES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
@@ -15,6 +16,7 @@ import { Avatar, DeptPill } from './TeamPanel'
 import { InfoTip } from '../InfoTip'
 import { ModuleStrip } from './ModulesSection'
 import { AdFocusMark } from './AdFocus'
+import { LeadLine, SprintRow, TeamOf } from '../effort'
 
 /** Turkish project name from content, unique within the run. */
 function nextProjectName(): string {
@@ -163,6 +165,7 @@ function ProjectCard({ project: p }: { project: Project }) {
   const [open, setOpen] = useState(false)
   const select = useGameStore((s) => s.select)
   const finished = p.launched && p.maturity >= 1
+  const effort = useGameStore((s) => effortOn(s.state))
   return (
     <li className="px-1 py-3">
       <div className="flex items-center gap-2">
@@ -185,10 +188,15 @@ function ProjectCard({ project: p }: { project: Project }) {
         </div>
       )}
       <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>
+        {/* From Pre-seed the count is supply / demand in the load's colour (E3); the garage keeps the head count. */}
+        {effort ? <TeamOf project={p} /> : <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>}
+        <LeadLine project={p} />
         <Button size="sm" tone="ghost" icon={open ? 'chevronUp' : 'users'} onClick={() => setOpen((o) => !o)}>
           {t('projects.assign')}
         </Button>
+      </div>
+      <div className="mt-1 flex flex-col gap-1.5">
+        <SprintRow project={p} />
       </div>
       {open && <AssignList project={p} />}
     </li>

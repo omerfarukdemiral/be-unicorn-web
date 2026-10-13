@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_NAME_MAX } from '../engine/balance'
+import { effortOn } from '../engine/effort'
 import { nameKey } from '../engine/names'
 import { FOUNDER_SLOT_ID, type Employee, type Project, type Slot } from '../engine/types'
 import { DEPT_TEXT, FURNITURE, NPC_TEXT, PROJECT_CATEGORY_TEXT } from '../content'
@@ -19,6 +20,8 @@ import { effectTags } from './panels/ShopPanel'
 import { AdFocusToggle } from './panels/AdFocus'
 import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
 import { ModulesSection } from './panels/ModulesSection'
+import { ChipRow } from './EffectChips'
+import { fatigueGood, fitChips, LeadLine, loadChip, PersonEffortRows, SprintRow, TeamOf } from './effort'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
 
 export type RenderPreview = (target: Selection) => ReactNode
@@ -293,16 +296,25 @@ function EmployeeDetail({ id }: { id: string }) {
   const setPlacing = useGameStore((s) => s.setPlacing)
   const closePanel = useGameStore((s) => s.closePanel)
   const mobile = useIsMobile()
+  // E3: the person's battery, load and fit (derived.people; absent in the Garage).
+  const effort = useGameStore((s) => (e ? s.state.derived.people?.[e.id] : undefined))
   if (!e) return <p className="text-xs text-ink-2">{t('detail.gone')}</p>
+  const fatigue = Math.round(e.fatigue ?? 0)
+  const fatigueColor = fatigueGood(fatigue) === false ? 'var(--color-negative)' : fatigueGood(fatigue) === true ? 'var(--color-positive)' : 'var(--color-energy)'
+  const current = projects.find((p) => p.id === e.projectId)
   return (
     <div className="flex flex-col gap-4">
       {e.status === 'leaving' && <ResignationCard employee={e} />}
       <div className="grid grid-cols-2 gap-2">
         <Stat label={t('hud.morale')} value={Math.round(e.morale)} sub={<Bar value={e.morale / 100} tone={moraleTone(e.morale)} height={4} className="mt-1" />} />
         <Stat label={t('detail.salary')} value={t('hud.perMonthPlain', { v: money(e.salary) })} />
+        {effort && e.dept !== 'sales' && <Stat label={t('fx.tag.fatigue')} value={fatigue} sub={<Bar value={fatigue / 100} color={fatigueColor} height={4} className="mt-1" />} />}
         {showQuality && <Stat label={t('detail.quality')} value={<QualityStars quality={e.quality} />} />}
         <Stat label={t('detail.desk')} value={e.deskSlotId ? t('detail.seated') : <span className="inline-flex items-center gap-1.5"><Dot color="var(--color-negative)" size={6} />{t('team.noSeat')}</span>} />
       </div>
+      {effort && (
+        <ChipRow chips={[loadChip(effort.load), ...(effort.fit && current ? fitChips(CATEGORY_ICON[current.category]) : [])]} />
+      )}
       <section>
         <SectionTitle>{t('detail.project')}</SectionTitle>
         {projects.length === 0 ? (
@@ -327,6 +339,11 @@ function EmployeeDetail({ id }: { id: string }) {
           </div>
         )}
       </section>
+      {effort && (
+        <section className="flex flex-col gap-1.5">
+          <PersonEffortRows e={e} />
+        </section>
+      )}
       <section className="grid grid-cols-2 gap-2">
         <Button
           icon="move"
@@ -359,6 +376,7 @@ function ProjectDetail({ id }: { id: string }) {
   const p = useGameStore((s) => s.state.projects.find((x) => x.id === id))
   const employees = useGameStore(useShallow((s) => s.state.employees))
   const dispatch = useGameStore((s) => s.dispatch)
+  const effort = useGameStore((s) => effortOn(s.state))
   if (!p) return <p className="text-xs text-ink-2">{t('detail.gone')}</p>
   const team = employees.filter((e) => p.assignedIds.includes(e.id))
   // Modules open on a live product at 1.0 (engine moduleError).
@@ -384,8 +402,15 @@ function ProjectDetail({ id }: { id: string }) {
       )}
       <div className="grid grid-cols-2 gap-2">
         <Stat label={t('detail.team')} value={team.length} sub={teamSummary(team)} />
+        {effort && (
+          <div className="col-span-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <TeamOf project={p as Project} />
+            <LeadLine project={p as Project} />
+          </div>
+        )}
         <Stat label={t('detail.scope')} value={fixed(p.size, 1)} />
       </div>
+      <SprintRow project={p as Project} />
       {finished && <ModulesSection project={p as Project} />}
       {p.launched && <AdFocusToggle projectId={p.id} />}
       <Button icon="chat" onClick={() => dispatch({ type: 'founderAction', kind: 'talkToUsers', targetId: p.id })}>

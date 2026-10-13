@@ -81,6 +81,7 @@ const PATHS = {
   mail: <><rect x="3.5" y="5.5" width="17" height="13" rx="2" /><path d="m4 7 8 6 8-6" /></>,
   logout: <><path d="M14 4.5H6.5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1H14" /><path d="M10 12h10M16.5 8.5 20 12l-3.5 3.5" /></>,
   pencil: <><path d="M4.5 19.5l.8-4L16 4.8a1.8 1.8 0 0 1 2.5 0l.7.7a1.8 1.8 0 0 1 0 2.5L8.5 18.7Z" /><path d="m14.5 6.5 3 3" /></>,
+  battery: <><rect x="3" y="7.5" width="15.5" height="9" rx="2.5" /><path d="M21 10.5v3M6.5 11v2" /></>,
   cloud: <path d="M7 18.5a4 4 0 0 1-.6-7.95A5.5 5.5 0 0 1 17 9a4.75 4.75 0 0 1 .5 9.5Z" />,
 } satisfies Record<string, ReactNode>
 
@@ -151,6 +152,7 @@ const BODY: Partial<Record<IconName, true | ReactNode>> = {
   building: <path d="M5 20.5V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15.5ZM15 9.5h3.5a1 1 0 0 1 1 1v10H15Z" />,
   trophy: <><path d="M8 4h8v5a4 4 0 0 1-8 0Z" /><path d="M9.5 20l.5-3.5h4l.5 3.5Z" /></>,
   mail: true,
+  battery: true,
   cloud: true,
 }
 

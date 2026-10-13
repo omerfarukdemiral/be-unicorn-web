@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Employee } from '../engine/types'
+import type { PersonEffort } from '../engine/types'
 import { LOW_MORALE, TECH_DEBT_BADGE, deskBadges, popPhase } from './DeskBadges'
 
 const emp = (over: Partial<Employee>): Employee =>
@@ -34,3 +35,34 @@ describe('desk badges (T20)', () => {
     expect(a).not.toEqual(b)
   })
 })
+
+describe('effort badges (E3)', () => {
+  const view = (over: Partial<PersonEffort> = {}): PersonEffort => ({ load: 1, fatigueFactor: 1, pace: 'normal', fit: false, flow: false, ...over })
+  const fx = (over: Partial<PersonEffort> = {}, day = 10): { day: number; people: Record<string, PersonEffort> } => ({ day, people: { e1: view(over) } })
+  const kinds = (e: Partial<Employee>, f?: ReturnType<typeof fx>) => deskBadges([emp(e)], 0, f)[0]?.kinds
+
+  it('one persistent badge per desk: tired over morale over bored', () => {
+    const worn = { fatigue: 70, morale: 10, loadAvg: 0.2, projectId: undefined }
+    expect(kinds(worn, fx())).toEqual(['tired'])
+    expect(kinds({ ...worn, fatigue: 10 }, fx())).toEqual(['morale'])
+    expect(kinds({ ...worn, fatigue: 10, morale: 70 }, fx())).toEqual(['bored'])
+    expect(kinds({ ...worn, fatigue: 10, morale: 70, loadAvg: 1 }, fx())).toBeUndefined()
+  })
+
+  it('burnout and leaving heads speak for themselves; on leave nothing is tired or bored', () => {
+    expect(kinds({ fatigue: 90, status: 'burnout', projectId: undefined }, fx())).toBeUndefined()
+    expect(kinds({ fatigue: 70, offUntil: 20, projectId: undefined, status: 'break' }, fx())).toBeUndefined()
+  })
+
+  it('flow pops gold, a sprint pops red (every 5 s); both replace the plain production pop', () => {
+    expect(kinds({}, fx({ flow: true }))).toEqual(['flow'])
+    expect(kinds({}, fx({ pace: 'sprint' }))).toEqual(['sprint'])
+    expect(kinds({}, fx())).toEqual(['production'])
+  })
+
+  it('without the effort view (the Garage) nothing changes', () => {
+    expect(kinds({ fatigue: 90, loadAvg: 0.1, projectId: undefined })).toBeUndefined()
+    expect(kinds({ fatigue: 90, loadAvg: 0.1 }, { day: 1, people: {} })).toEqual(['production'])
+  })
+})
+

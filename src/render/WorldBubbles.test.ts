@@ -15,6 +15,9 @@ import {
   ARRIVE_MAX_MS,
   MAX_ACTIONABLE,
   MAX_IDLE,
+  MAX_BURNOUT,
+  MAX_TIRED_BORED,
+  capBubbles,
   REFLECTION_MS,
   routeBubbles,
   routeCandidates,
@@ -370,5 +373,61 @@ describe('routeBubbles: the module question (W2c)', () => {
     expect(shown.find((l) => l.kind === 'desk')!.ref).toBe('payday')
     const key = `desk:module:${s.projects[0]!.id}`
     expect(keys(open(s, key))).toContain(key)
+  })
+})
+
+describe('effort needs in the scene (E3)', () => {
+  /** A Pre-seed office with one person per need. */
+  function worn(): GameState {
+    const s = game()
+    s.stage = 1
+    s.employees = [
+      emp('e1', { fatigue: 90, projectId: 'p1' }),
+      emp('e2', { fatigue: 70, projectId: 'p1' }),
+      emp('e3', { status: 'leaving' }),
+      emp('e4', { fatigue: 88, projectId: 'p1' }),
+      emp('e5', { fatigue: 95, projectId: 'p1' }),
+      emp('e6', { boredDays: 40, loadAvg: 0.3, projectId: 'p1' }),
+    ]
+    return s
+  }
+  const lines = (s: GameState) => routeCandidates(s, { bubbleOpen: null }).filter((l) => l.kind === 'staff').map((l) => `${l.speakerId}:${l.ref}`)
+
+  it('leaving > burnout > tired > bored, the engine capping burnout at 2 and tired + bored at 1', () => {
+    expect(lines(worn())).toEqual(['e3:leaving', 'e5:burnout', 'e1:burnout', 'e2:tired'])
+    expect(MAX_BURNOUT).toBe(2)
+    expect(MAX_TIRED_BORED).toBe(1)
+  })
+
+  it('a bored person asks when nobody is tired', () => {
+    const s = worn()
+    s.employees = s.employees.filter((e) => e.id === 'e6')
+    expect(lines(s)).toEqual(['e6:bored'])
+  })
+
+  it('the Garage asks for none of it', () => {
+    const s = worn()
+    s.stage = 0
+    expect(lines(s)).toEqual(['e3:leaving'])
+  })
+
+  it('burnout ranks between leaving and tired; the caps hold for the scene too, an open one excepted', () => {
+    const L = (ref: string, id: string): RoutedLine => ({ kind: 'staff', key: `staff:${id}`, speakerId: id, ref })
+    const all = [L('tired', 'a'), L('burnout', 'b'), L('leaving', 'c')]
+    expect(keys(capBubbles(all, null))).toEqual(['staff:c', 'staff:b', 'staff:a'])
+    const many = [L('burnout', 'a'), L('burnout', 'b'), L('burnout', 'c'), L('tired', 'd')]
+    expect(keys(capBubbles(many, null))).toEqual(['staff:a', 'staff:b', 'staff:d'])
+    expect(keys(capBubbles([L('tired', 'a'), L('bored', 'b')], null))).toEqual(['staff:a'])
+    expect(keys(capBubbles([L('tired', 'a'), L('bored', 'b')], 'staff:b'))).toEqual(['staff:b'])
+  })
+
+  it('a tired pill steps back after IDLE_SHOW_MS like an idle one, a burnout pill stays', () => {
+    const tl = new BubbleTimeline()
+    const staff = (id: string, ref: string): RoutedLine => ({ kind: 'staff', key: `staff:${id}`, speakerId: id, ref })
+    const shown = (r: { lines: { key: string; exiting?: boolean }[] }) => r.lines.filter((l) => !l.exiting).map((l) => l.key)
+    const c = [staff('e1', 'tired'), staff('e2', 'burnout')]
+    tl.step(c, null, 0)
+    expect(shown(tl.step(c, null, IDLE_DELAY_MS))).toEqual(['staff:e2', 'staff:e1'])
+    expect(shown(tl.step(c, null, IDLE_DELAY_MS + IDLE_SHOW_MS))).toEqual(['staff:e2'])
   })
 })

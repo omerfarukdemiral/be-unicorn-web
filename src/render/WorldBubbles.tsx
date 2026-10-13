@@ -6,10 +6,11 @@
 // → capBubbles (≤ MAX_ACTIONABLE, one per anchor, priority order) → BubbleAnchor (layout + fade).
 import { useEffect, useMemo, useState } from 'react'
 import { DECISIONS, OFFICE_LINES } from '../content'
+import * as B from '../engine/balance'
 import type { DecisionCardId, GameState, NpcRole } from '../engine/types'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, DeskTopic, StaffNeed, VisitorTopic, WorldBubble } from './bubbles'
-import { idleBuilders } from '../engine/loopSelectors'
+import { staffAttention } from '../engine/loopSelectors'
 import { moduleAsk } from '../engine/modules'
 import { firstFreeDesk } from '../engine/office'
 import { UI_TONES } from './palette'
@@ -54,12 +55,12 @@ export interface RoutedLine {
   stamp?: string
 }
 
-/** Who needs the player in the scene: people walking out first, then builders with nothing to build (each by id). */
-export function staffNeeds(s: Pick<GameState, 'employees'>): [string, StaffNeed][] {
-  const byId = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true })
-  const leaving = s.employees.filter((e) => e.status === 'leaving').map((e) => e.id).sort(byId)
-  const idle = [...idleBuilders(s)].sort(byId)
-  return [...leaving.map((id): [string, StaffNeed] => [id, 'leaving']), ...idle.map((id): [string, StaffNeed] => [id, 'idle'])]
+/**
+ * Who needs the player in the scene: people walking out first, then (E3, from Pre-seed) the burnt out, one tired or
+ * bored person, then builders with nothing to build. The engine decides (staffAttention); the caps are its too.
+ */
+export function staffNeeds(s: GameState): [string, StaffNeed][] {
+  return staffAttention(s)
 }
 
 const roundVisitor = (s: GameState): string | undefined => s.visitors.find((v) => v.purpose === 'round')?.id
@@ -134,12 +135,16 @@ export const REFLECTION_FRESH_DAYS = 10
 export const isActionable = (l: Pick<RoutedLine, 'kind'>): boolean => l.kind === 'decision' || l.kind === 'visitor' || l.kind === 'desk' || l.kind === 'staff' || l.kind === 'person'
 
 const rankOf = (l: RoutedLine): number =>
-  l.kind === 'decision' ? 0 : l.kind === 'visitor' ? 1 : l.kind === 'desk' ? 2 : l.kind === 'staff' ? (l.ref === 'leaving' ? 3 : 4) : 5
+  l.kind === 'decision' ? 0 : l.kind === 'visitor' ? 1 : l.kind === 'desk' ? 2 : l.kind === 'staff' ? (l.ref === 'leaving' ? 3 : l.ref === 'burnout' ? 3.5 : 4) : 5
 
 /** Idle builders ask one at a time: a late office full of "boşta" pills reads as a notification wall. */
 export const MAX_IDLE = 1
 
-/** ≤ MAX_ACTIONABLE actionable bubbles, one per anchor, ≤ MAX_IDLE idle builders, the open one first, then by priority. Others pass through. */
+/** Effort bubbles (E3): burnt-out people, and tired + bored together (the engine's own caps, held again for the open one). */
+export const MAX_BURNOUT = B.STAFF_BURNOUT_MAX
+export const MAX_TIRED_BORED = B.STAFF_TIRED_BORED_MAX
+
+/** ≤ MAX_ACTIONABLE actionable bubbles, one per anchor, ≤ MAX_IDLE idle builders, ≤ MAX_BURNOUT burnt out, ≤ MAX_TIRED_BORED tired / bored, the open one first, then by priority. Others pass through. */
 export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | null): RoutedLine[] {
   const act = lines.filter(isActionable)
   const ranked = act
@@ -148,12 +153,21 @@ export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | nu
   const anchors = new Set<string>()
   const out: RoutedLine[] = []
   let idle = 0
+  let burnout = 0
+  let tiredBored = 0
   for (const { l } of ranked) {
     if (out.length >= MAX_ACTIONABLE) break
     if (anchors.has(l.speakerId)) continue
     const isIdle = l.kind === 'staff' && l.ref === 'idle'
-    if (isIdle && idle >= MAX_IDLE && l.key !== bubbleOpen) continue
+    const isBurnout = l.kind === 'staff' && l.ref === 'burnout'
+    const isTiredBored = l.kind === 'staff' && (l.ref === 'tired' || l.ref === 'bored')
+    const mine = l.key === bubbleOpen
+    if (isIdle && idle >= MAX_IDLE && !mine) continue
+    if (isBurnout && burnout >= MAX_BURNOUT && !mine) continue
+    if (isTiredBored && tiredBored >= MAX_TIRED_BORED && !mine) continue
     if (isIdle) idle++
+    if (isBurnout) burnout++
+    if (isTiredBored) tiredBored++
     anchors.add(l.speakerId)
     out.push(l)
   }
@@ -227,10 +241,10 @@ interface Seen {
  */
 const waitsForArrival = (l: RoutedLine): boolean => (l.kind === 'visitor' || l.kind === 'staff') && l.speakerId !== DESK
 
-/** Pills that may wait for long (a builder with nothing to build, a round window or a module question the player sits out) step back unopened. */
-const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && l.ref === 'idle') || (l.kind === 'desk' && (l.ref === 'round' || l.ref === 'module'))
+/** Pills that may wait for long (a builder with nothing to build, someone tired or bored, a round window or a module question the player sits out) step back unopened. */
+const snoozes = (l: RoutedLine): boolean => (l.kind === 'staff' && (l.ref === 'idle' || l.ref === 'tired' || l.ref === 'bored')) || (l.kind === 'desk' && (l.ref === 'round' || l.ref === 'module'))
 
-const delayOf = (l: RoutedLine): number => (l.kind === 'decision' ? DECISION_DELAY_MS : l.kind === 'staff' && l.ref === 'idle' ? IDLE_DELAY_MS : 0)
+const delayOf = (l: RoutedLine): number => (l.kind === 'decision' ? DECISION_DELAY_MS : l.kind === 'staff' && (l.ref === 'idle' || l.ref === 'tired' || l.ref === 'bored') ? IDLE_DELAY_MS : 0)
 
 /**
  * Real-time gate between routing and the scene: delays (decision, idle builder), linger (idle builder), the

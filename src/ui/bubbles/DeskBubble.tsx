@@ -25,6 +25,7 @@ import { PAYDAY_LINES, paydayView, type PaydayDesk } from '../overlays/paydayVie
 import { buildChips, MODULE_ICON, useBuildCost } from '../panels/ModulesSection'
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
 import { cx, IconBadge } from '../primitives'
+import { candidateFit, fitChips } from '../effort'
 import { BlockedLine, ChoiceRow, closeBubble, Expandable, launch, type BubbleMark } from './Expandable'
 import { castName } from './speaker'
 import { investorLabel, meetingLine, PITCH_ICON, pitchChips } from '../pitch'
@@ -292,6 +293,8 @@ function RenewalBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string
 
 function HireBubble({ bubbleKey }: { bubbleKey: string }) {
   const candidates = useGameStore(useShallow((s) => s.state.candidates))
+  // E3: an engineer / product hire's one category (the icon), and a tick + speed when the company builds it.
+  const state = useGameStore((s) => s.state)
   const dispatch = useGameStore((s) => s.dispatch)
   const [err, setErr] = useState<string | null>(null)
   if (candidates.length === 0) return null
@@ -305,18 +308,25 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
       line={t('bubble.hire', { n: candidates.length })}
       detail={() => useGameStore.getState().openPanel({ kind: 'team' })}
     >
-      {candidates.slice(0, MAX_CANDIDATES).map((c) => (
-        <ChoiceRow
-          key={c.id}
-          label={`${c.name} · ${t(`dept.${c.dept}`)}`}
-          title={t('team.hire')}
-          chips={[{ icon: 'cash', label: t('fx.tag.salary'), text: `−${money(c.salary)}`, tail: t('bubble.month'), good: false, title: t('hud.cash') }]}
-          onClick={() => {
-            const res = dispatch({ type: 'hire', candidateId: c.id })
-            setErr(res.ok || !res.error ? null : t(`error.${res.error}`))
-          }}
-        />
-      ))}
+      {candidates.slice(0, MAX_CANDIDATES).map((c) => {
+        const skill = candidateFit(state, c)
+        return (
+          <ChoiceRow
+            key={c.id}
+            label={`${c.name} · ${t(`dept.${c.dept}`)}`}
+            title={t('team.hire')}
+            icon={skill ? { icon: CATEGORY_ICON[skill.category], color: CATEGORY_COLOR[skill.category] } : undefined}
+            chips={[
+              { icon: 'cash', label: t('fx.tag.salary'), text: `−${money(c.salary)}`, tail: t('bubble.month'), good: false, title: t('hud.cash') },
+              ...(skill?.fit ? fitChips(CATEGORY_ICON[skill.category]) : []),
+            ]}
+            onClick={() => {
+              const res = dispatch({ type: 'hire', candidateId: c.id })
+              setErr(res.ok || !res.error ? null : t(`error.${res.error}`))
+            }}
+          />
+        )
+      })}
       {candidates.length > MAX_CANDIDATES && (
         <ChoiceRow label={t('bubble.moreCandidates', { n: candidates.length - MAX_CANDIDATES })} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'team' }))} />
       )}

@@ -780,3 +780,23 @@ Bitmiş projelerin ~%50'si >1.5: ekipsiz, yalnız kurucu (arz 0.5) kalan projele
 - careless < 0.7: 0.69 / 0.58 -> sağlanıyor.
 => DEMAND_PER_SIZE = 0.3 ONAYLANDI (değişiklik yok).
 => DEMAND_STAGE_GROWTH = 0.25 TUTULUYOR ama Series A+ aktif verisi yok; bitmiş proje p50'si vcRocket'te 1.08 -> 1.10 -> 1.26 -> 1.89 (a2-a5), yani arz talebi geç aşamada yakalayamıyor. E1, geç aşama yükünü sınırlarken 0.25'i kullansın; E1 testlerinde a4+ için sabit değil bot ölçümü esas alınmalı. Ayar gerekirse 0.20'ye düşürmek a5 vcRocket medyanını ~1.89 -> ~1.7 yapar (tahmin, ölçülmedi).
+
+## Efor yönetimi
+
+Pre-seed'den itibaren (Garaj'da kapalı). Tek ceza kanalı: yorgunluk yalnız üretimi çarpar, sıkılma yalnız morali oynatır. Sayılar `engine/balance.ts` "Effort" bloğunda; kural `engine/effort.ts`.
+
+### Sayılar
+- Yük = talep / max(0.5, arz). Talep = PROJECT_SIZE x 0.3 x (1 + 0.25 x aşama), bitmiş x 0.6. Yük 0-2 kırpılı, 7 günlük üstel ortalama (loadAvg).
+- Yorgunluk / gün = tempo (Normal -0.5, Rahat -3.5, Sprint +3) + 3 x (loadAvg - 1) - mola 6 (5 günde bir) - ortak alan 0.5 - lider rahatlaması 0.5. 60'ta x0.8, 85'te x0.4 üretim; 85'te 10 gün = tükenme ihbarı.
+- Sıkılma: loadAvg < 0.7 moral hedefi -30 x (0.7 - loadAvg) / 0.7 (lider altında yarısı); 30 gün sonra balon, 90 gün sonra ihbar.
+- Uyum: aday başına bir kategori; uyumlu inşacı x1.08. Akış (uyum, yük 0.8-1.2, yorgunluk < 40): moral +4, 90 günde kalite +0.03 (bir sonraki zamda fiyatlanır).
+- İzin 5 gün (üretim 0, yorgunluk -12/gün, 30 gün bekleme). Sprint 14 gün (x1.2 üretim, +3 yorgunluk/gün, Series A+ mühendis başına +0.1 borç, 30 gün bekleme). Lider Seed+, 3+ inşacı: maaş x1.15 (bir kez), kendi üretimi x0.75, ekip yorgunluğu -0.5/gün, 8+ kişide liderli proje hız kaybı yok.
+
+### Sahnede
+- Masa rozeti (biri kalıcı): yorgun (pil, turuncu) > moral (kırık kalp) > sıkılmış (zzz, gri). Akış altın ▲, sprint kırmızı ▲ (5 sn'de bir). Lidere altın yıldız.
+- Balonlar: ayrılıyor > tükendi (en çok 2) > yorgun / sıkılmış (toplam 1) > boşta (1). Yorgun / sıkılmış 20 sn sonra çekilir, 40 sn sonra yine sorar.
+- İzindeki kişi ortak alana gider; yoksa kapıdan çıkıp izin bitince masasına döner.
+
+### Ölçüm ve sim hedefleri (24 tohum x 4500 gün, E2)
+Unicorn: bootstrap 24/24 (60.9 dk), vcRocket 24/24 (83.7), niche 24/24 (54.6), platform 24/24 (66.8; yönetimsiz 81.4). coaster 0/24, coasterModules 0/24. İyi botlar 0 iflas. Kabul edilen sapmalar: careless Seed morali 62 (hedef <= 52), takım isyanı 0/24. Aşama süresi tablosu: MIN_DAY_FOR_STAGE 0/65/95/180/350/560/895.
+Efor balonu yoğunluğu: Series B+, 28+ kişide dakikada <= 1 (`sim/__tests__/effortBubbles.test.ts`).

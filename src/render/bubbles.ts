@@ -13,8 +13,8 @@ interface BubbleBase {
   speakerId: string
 }
 
-/** Why an employee asks for the player: walking out, or a builder with nothing to build. */
-export type StaffNeed = 'leaving' | 'idle'
+/** Why an employee asks for the player: walking out, burnt out, tired, bored (E3), or a builder with nothing to build. */
+export type StaffNeed = 'leaving' | 'burnout' | 'tired' | 'bored' | 'idle'
 
 /** ui.bubbleOpen key of an employee's scene card (tapping them opens it, T14). */
 export const personKey = (employeeId: string): string => `person:${employeeId}`

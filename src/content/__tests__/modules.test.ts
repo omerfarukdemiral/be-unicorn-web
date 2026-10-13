@@ -16,6 +16,12 @@ describe('module text', () => {
     }
   })
 
+  it('version strings carry no Turkish suffix glued to the number (v2, v6, v9 differ)', () => {
+    for (const k of ['module.toVersion', 'module.rel.tier', 'module.slotsPreview'] as const) {
+      expect(UI_TEXT[k], k).not.toMatch(/\}'(e|te|de|a|ya|ye|da)\b/)
+    }
+  })
+
   it('one-liners are one sentence of ≤ 10 words', () => {
     for (const id of PROJECT_MODULE_IDS) {
       expect(wordCount(MODULE_TEXT[id].line), id).toBeLessThanOrEqual(10)
@@ -72,7 +78,7 @@ describe('module text', () => {
   it('every version / slot / estimate / measured / lock / relation key exists with its params, none empty', () => {
     const need: Record<string, string[]> = {
       'module.version': ['{v}'], 'module.toVersion': ['{v}', '{p}'], 'module.slots': ['{used}', '{total}'],
-      'module.slotsOpen': ['{v}'], 'module.slotsPreview': ['{p}'], 'module.buildingEta': ['{module}', '{d}'],
+      'module.slotsOpen': ['{v}', '{n}'], 'module.slotsPreview': ['{n}', '{p}'], 'module.buildingEta': ['{module}', '{d}'],
       'module.allTier': ['{v}'], 'module.est.users': ['{n}'], 'module.est.money': ['{v}'], 'module.est.tam': ['{n}'],
       'module.est.wave': ['{n}'], 'module.est.fast': ['{p}'], 'module.est.talk': ['{n}'], 'module.est.rent': ['{v}'],
       'module.rel.synergy': ['{module}', '{p}'], 'module.rel.requires': ['{module}'], 'module.rel.excluded': ['{module}'],
@@ -81,7 +87,7 @@ describe('module text', () => {
       'module.measured.lost': ['{d}', '{x}', '{y}'], 'module.measured.lostDone': ['{x}', '{y}'], 'module.measured.lostNew': ['{d}', '{x}'],
       'module.measured.rev': ['{d}', '{x}', '{y}'], 'module.measured.revDone': ['{x}', '{y}'], 'module.measured.revNew': ['{d}', '{x}'],
       'module.measured.infra': ['{x}'], 'module.measured.every': ['{a}', '{b}'], 'module.measured.every1': ['{a}'],
-      'release.moduleUsers': ['{module}', '{u}'], 'release.version': ['{project}', '{v}'], 'bubble.moduleVersion': ['{project}', '{v}', '{module}'],
+      'release.moduleUsers': ['{module}', '{u}'], 'release.version': ['{project}', '{v}', '{n}'], 'bubble.moduleVersion': ['{project}', '{v}', '{n}', '{module}'],
       'module.est.rentBig': [], 'module.est.none': [],
     }
     for (const k of ['organicZero', 'noAds', 'capped', 'noUsers', 'gapBound']) need[`module.est.why.${k}`] = []

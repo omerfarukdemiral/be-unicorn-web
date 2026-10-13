@@ -12,7 +12,7 @@ export const MODULE_TEXT: Record<ProjectModuleId, ModuleText> = {
   referral: { name: 'Davet sistemi', line: 'Davet eden kullanıcıya kredi verirsin, gelir biraz düşer.' },
   paywall: { name: 'Paywall', line: 'Daha çok kazanırsın ama ürün daha yavaş yayılır.' },
   onboarding: { name: 'Onboarding', line: 'Yeni kullanıcı ilk gün bırakmaz, araç aylık ücretli.' },
-  analytics: { name: 'Analitik', line: 'Hangi reklam para getiriyor görürsün, araç aylık ücretli.' },
+  analytics: { name: 'Analitik', line: 'Hangi reklamın para getirdiğini görürsün, aylık ücretli.' },
   freemium: { name: 'Freemium', line: 'Ücretsiz sürüm hızlı yayılır, kullanıcı başı gelir düşer.' },
   openApi: { name: 'Public API', line: 'Başka ürünler sana bağlanır, müşteri kolay ayrılmaz.' },
   localization: { name: 'Lokalizasyon', line: 'Yeni dillerle yeni ülkelere açılırsın, reklam biraz pahalanır.' },

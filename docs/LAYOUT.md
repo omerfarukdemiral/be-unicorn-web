@@ -156,6 +156,18 @@ Oyunun başında çoğu aksiyon kilitli (40px) olduğundan pratikte bol yer kal�
 - **Yatay telefon** (`useIsMobile` landscape): üst bar **tek satır** (aşama + 4 gösterge + hız + ⚙, h52), alt bar **tek satır**
   (aksiyonlar + sekmeler, h52), şerit h36 → 390px yükseklikte ~210px sahne kalır.
 
+#### 1.4.1 Mobil denetim listesi (elle; tarayıcı test bağımlılığı yok)
+
+Viewport'lar (dokunmatik, `isMobile`): 375×667, 390×844, 360×740, 844×390. Her biri için başlangıç, sahne, Mağaza/Ekip/Projeler/Büyüme/Metrikler
+panelleri, ProjectDetail (ad değiştirme, modül yuvaları, öneri satırları, "Tüm modüller"), Büyüme › Pazarlama (reklam odağı çip satırı),
+kişi/personel balonları, ödeme günü, aşama atlama, tur görüşmesi.
+- `document.documentElement.scrollWidth <= innerWidth`; panelde ve açık balonda yatay taşma yok (çip satırları kendi içinde kayar, bu serbest).
+- Kaba imleçte her `button/input` ≥ 44px (kutusu küçük ikon-butonlar `before:` ile 44px'lik vuruş alanı alır, bkz. InfoTip); input `font-size` 16.
+- Açık balon yatayda founder dock'un üstünde; kartın gövdesi kendi içinde kayar. Balon metni 390px'te tek satır (kesilirse `…`).
+- Konsolda hata yok; `renderer.info` çizim çağrısı aşama 0/3/6 (`createMockState`, `?power=full` ve varsayılan).
+- Şerit satırı 44px kartın 1px kenarlığı yüzünden 42px dokunma alanı verir; bilinen, kabul edildi.
+- Emülasyon güvenli alanı (notch) ve gerçek GPU hızını göstermez: gerçek telefonda elle bak.
+
 ---
 
 ## 2. Her bilginin TEK evi

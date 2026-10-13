@@ -31,4 +31,11 @@ describe('touch targets', () => {
     expect(out).toContain('pointer-coarse:before:-inset-4')
     expect(out).toContain('width="14"')
   })
+
+  it('the Metrikler link to the round gets a 44px hit area on a coarse pointer (MR audit: it was 127x16)', () => {
+    const src = files['./widgets.tsx']!
+    const at = src.indexOf("metrics.round.link")
+    const btn = src.slice(src.lastIndexOf('<button', at), at)
+    expect(btn).toContain('pointer-coarse:before:-inset-y-3.5')
+  })
 })

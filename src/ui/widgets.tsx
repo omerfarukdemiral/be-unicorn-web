@@ -378,7 +378,7 @@ function RoundTimerWidget({ variant }: WidgetProps) {
         icon="timer"
         label={t('hud.roundTimer')}
         value={
-          <button type="button" onClick={() => openPanel({ kind: 'growth', section: 'round' })} className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-brand-ink hover:underline">
+          <button type="button" onClick={() => openPanel({ kind: 'growth', section: 'round' })} className={'relative inline-flex items-center gap-0.5 text-[13px] font-semibold text-brand-ink hover:underline pointer-coarse:before:absolute pointer-coarse:before:-inset-x-2 pointer-coarse:before:-inset-y-3.5 pointer-coarse:before:content-[""]'}>
             {t('metrics.round.link')}
             <Icon name="chevronRight" size={14} />
           </button>

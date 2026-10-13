@@ -211,6 +211,13 @@ function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
   }, [r, cx, cz])
   const budget = renderBudget(lowPower, layout.stage)
   const mapSize = budget.shadowMapSize
+  // A runtime drop to lowPower turns the sun's shadow off; free the map it already allocated.
+  useEffect(() => {
+    const l = light.current
+    if (!l || budget.shadows || !l.shadow.map) return
+    l.shadow.map.dispose()
+    l.shadow.map = null
+  }, [budget.shadows])
   // The sun's colour and blur follow the company's size (G2); it snaps with the stage pop, hidden by it.
   const sun = sunFor(band, lowPower)
   return (

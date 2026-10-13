@@ -199,11 +199,14 @@ const IDENTITY = new THREE.Matrix4()
 export function bakeSkinned(root: THREE.Object3D, bones: readonly THREE.Object3D[], { shadow = 'keep' }: BakeOptions = {}): () => void {
   const parts = collectParts(root, bones)
   if (parts.length < 2) return () => {}
+  const skeletons: THREE.Skeleton[] = []
   const meshes = bucketParts(parts, shadow).map((b) => {
     const m = new THREE.SkinnedMesh(mergeBucket(b, true), b.material ?? bakedMat())
     // Vertices sit in their bone's own frame: identity bind and inverse bind matrices, so the skinned position is
     // bone.matrixWorld · vertex. Rig groups are plain Object3Ds; the skeleton only reads their matrixWorld.
-    m.bind(new THREE.Skeleton(bones as THREE.Bone[], bones.map(() => new THREE.Matrix4())), IDENTITY)
+    const skeleton = new THREE.Skeleton(bones as THREE.Bone[], bones.map(() => new THREE.Matrix4()))
+    skeletons.push(skeleton)
+    m.bind(skeleton, IDENTITY)
     m.castShadow = b.cast
     m.receiveShadow = b.receive
     // The bounds of bone-local vertices mean nothing: never cull a person (they are small and few).
@@ -211,7 +214,12 @@ export function bakeSkinned(root: THREE.Object3D, bones: readonly THREE.Object3D
     m.raycast = () => {}
     return m
   })
-  return finish(root, parts, meshes)
+  const undo = finish(root, parts, meshes)
+  // Each skeleton may own a bone texture: free it with the merge, or every rebake (hire, leave, look) leaks one.
+  return () => {
+    undo()
+    for (const sk of skeletons) sk.dispose()
+  }
 }
 
 /**

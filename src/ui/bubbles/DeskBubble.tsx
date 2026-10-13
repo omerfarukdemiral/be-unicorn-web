@@ -346,7 +346,7 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
 // Project module (W2c): a finished product has room to grow, or a module has slipped
 // ---------------------------------------------------------------------------
 
-/** One question about one project: the next module to build ("Kur" is one tap) or a stale one to refresh; "Diğerleri" opens the project. */
+/** One question about one project: the next module to build ("Ekle" is one tap) or a stale one to refresh; "Diğerleri" opens the project. */
 function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string }) {
   const dispatch = useGameStore((s) => s.dispatch)
   const cost = useBuildCost()

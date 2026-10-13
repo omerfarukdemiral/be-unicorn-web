@@ -29,7 +29,7 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   release: '{project} {level} yayında: +{users} kullanıcı.',
   goalDone: 'Aşama hedefi tamam: {goal}.',
   projectRenamed: '{from} artık {to}',
-  moduleStarted: '{project}: {module} kuruluyor',
+  moduleStarted: '{project}: {module} geliştiriliyor',
   moduleShipped: '{project}: {module} yayında',
   versionShipped: '{project} v{version} yayında: +{users} kullanıcı',
   adFocusChanged: 'Reklamlar artık {project} için',

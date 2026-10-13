@@ -1,4 +1,4 @@
-// Project module names + one-liners (GAMEPLAY V2 modules, PLAN §3.4). The id list lives in engine/types.ts.
+// Project module names + one-liners (GAMEPLAY V2 modules, PLAN §3.4; round 3 catalogue, design §1.4 + §6). The id list lives in engine/types.ts.
 import type { ProjectCategory, ProjectModuleId } from '../engine/types'
 
 export interface ModuleText {
@@ -12,15 +12,15 @@ export const MODULE_TEXT: Record<ProjectModuleId, ModuleText> = {
   referral: { name: 'Davet sistemi', line: 'Davet eden kullanıcıya kredi verirsin, gelir biraz düşer.' },
   paywall: { name: 'Paywall', line: 'Daha çok kazanırsın ama ürün daha yavaş yayılır.' },
   onboarding: { name: 'Onboarding', line: 'Yeni kullanıcı ilk gün bırakmaz, araç aylık ücretli.' },
-  analytics: { name: 'Analitik', line: 'Hangi reklamın para getirdiğini görürsün, araç aylık ücretli.' },
+  analytics: { name: 'Analitik', line: 'Hangi reklam para getiriyor görürsün, araç aylık ücretli.' },
   freemium: { name: 'Freemium', line: 'Ücretsiz sürüm hızlı yayılır, kullanıcı başı gelir düşer.' },
   openApi: { name: 'Public API', line: 'Başka ürünler sana bağlanır, müşteri kolay ayrılmaz.' },
   localization: { name: 'Lokalizasyon', line: 'Yeni dillerle yeni ülkelere açılırsın, reklam biraz pahalanır.' },
   aiAssistant: { name: 'AI asistan', line: 'Kullanıcı başı gelir artar, sunucu faturası da.' },
-  // Core, new in MV2a (names and lines from the round-3 design tables; MV2b polishes).
+  // Core, new in round 3
   notifications: { name: 'Bildirimler', line: 'Unutanı geri çağırırsın, gönderim servisi aylık ücretli.' },
   support: { name: 'Canlı destek', line: 'Sorunu anında çözersin, destek aracı aylık ücretli.' },
-  cicd: { name: 'Otomatik test', line: 'Her güncelleme daha az emek ister, sunucusu ücretli.' },
+  cicd: { name: 'Otomatik test', line: 'Her güncelleme daha az emek ister, test sunucusu ücretli.' },
   abTest: { name: 'A/B testi', line: 'İki fiyatı denersin, kazanan kalır, güncellemeler uzar.' },
   security: { name: 'Güvenlik denetimi', line: 'Borç erir, büyük müşteri güvenir, her sürüm denetlenir.' },
   sso: { name: 'Kurumsal giriş (SSO)', line: 'Şirketler toplu hesap açar, kod tabanı ağırlaşır.' },
@@ -52,9 +52,9 @@ export const MODULE_TEXT: Record<ProjectModuleId, ModuleText> = {
   fineTune: { name: 'Özel model', line: 'Kendi modelin daha iyi cevaplar, GPU faturası ağır.' },
   agents: { name: 'Ajan modu', line: 'Model işi baştan sona yapar, sunucu ve borç artar.' },
   // API
-  docs: { name: 'Dokümantasyon', line: 'Geliştirici kendi başına entegre olur, her güncellemede yazılır.' },
+  docs: { name: 'Dokümantasyon', line: 'Geliştirici kendi başına bağlanır, her güncellemede yazarsın.' },
   rateLimit: { name: 'Rate limit', line: 'Sunucu faturan düşer, sınıra takılan biraz kullanıcı kaçar.' },
-  sdks: { name: "SDK'lar", line: 'Her dilde hazır kütüphane, bakımı her güncellemede uzar.' },
+  sdks: { name: "SDK'lar", line: 'Her dilde hazır kütüphane, bakımı güncellemeleri uzatır.' },
   webhooks: { name: "Webhook'lar", line: 'Müşterinin sistemi sana bağlanır, kolay ayrılmaz, biraz borç.' },
   sandbox: { name: 'Test ortamı', line: 'Geliştirici risksiz dener, test sunucusu aylık ücretli.' },
   usageDashboard: { name: 'Kullanım paneli', line: 'Müşteri harcamasını görür, faturaya şaşırmaz, güncellemeler uzar.' },
@@ -75,7 +75,7 @@ export const MODULE_TEXT: Record<ProjectModuleId, ModuleText> = {
   payments: { name: 'Ödeme altyapısı (escrow)', line: 'Para güvenle el değiştirir, ödeme servisi aylık ücretli.' },
   sellerDashboard: { name: 'Satıcı paneli', line: 'Satıcı ilanını kendi yönetir, güncellemeler uzar.' },
   search: { name: 'Akıllı arama', line: 'Aranan hemen bulunur, satış artar, sunucu yüklenir.' },
-  promotedListings: { name: 'Öne çıkan ilan', line: 'Satıcı öne çıkmak için öder, liste reklam dolar.' },
+  promotedListings: { name: 'Öne çıkan ilan', line: 'Satıcı öne çıkmak için öder, liste reklamla dolar.' },
   buyerProtection: { name: 'Alıcı koruması', line: 'Alıcı rahat alır ve kalır, iadeler gelirden yer.' },
   shipping: { name: 'Kargo entegrasyonu', line: 'Kargo tek tıkla çıkar, yeni şehirler açılır, servis ücretli.' },
   recommendations: { name: 'Öneri motoru', line: 'Herkese uygun ilanı gösterirsin, satış artar, sunucu yüklenir.' },
@@ -85,8 +85,16 @@ export const MODULE_TEXT: Record<ProjectModuleId, ModuleText> = {
 /** API projects call the open-API module by its portal name (balance: api churn×0.85, arpu×1.10). */
 const API_PORTAL_NAME = 'Geliştirici portalı'
 
-/** Module name for a project of this category; api projects get the portal name for openApi. */
+/** Category names for shared modules: the same effect, said the way that product's people say it. */
+export const CATEGORY_MODULE_NAME: Partial<Record<ProjectCategory, Partial<Record<ProjectModuleId, string>>>> = {
+  api: { openApi: API_PORTAL_NAME, onboarding: 'Hızlı başlangıç', paywall: 'Ücretli plan' },
+  game: { onboarding: 'Eğitim bölümü', referral: 'Arkadaşını çağır', feedback: 'Oyuncu yorumları', notifications: 'Oyun bildirimleri', support: 'Oyuncu desteği' },
+  marketplace: { referral: 'Arkadaşını getir', onboarding: 'İlk ilan rehberi', support: 'Alıcı-satıcı desteği', paywall: 'Satıcı aboneliği' },
+  mobile: { notifications: 'Push bildirimi', onboarding: 'İlk açılış turu' },
+  ai: { feedback: 'Cevap puanlama', onboarding: 'İlk soru rehberi' },
+}
+
+/** Module name for a project of this category (category override first, then the shared name). */
 export function moduleName(id: ProjectModuleId, category?: ProjectCategory): string {
-  if (id === 'openApi' && category === 'api') return API_PORTAL_NAME
-  return MODULE_TEXT[id].name
+  return (category && CATEGORY_MODULE_NAME[category]?.[id]) || MODULE_TEXT[id].name
 }

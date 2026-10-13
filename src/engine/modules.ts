@@ -186,8 +186,7 @@ export function focusPreview(s: GameState, focus: ProjectId | null): number {
   const next = focusEffects(s, focus)
   const d = s.derived
   const ch = d.channels
-  const cac = d.cac / adFocusWarmup(s) / cur.cac * next.cac
-  const paid = cac > 0 ? ch.paid * (d.cac / adFocusWarmup(s) / cur.cac) / cac : ch.paid
+  const paid = next.cac > 0 ? ch.paid * cur.cac / next.cac : ch.paid
   const organic = ch.organic / cur.organic * next.organic
   const churn = s.stats.churn / cur.churn * next.churn
   const arpu = s.stats.arpu / cur.arpu * next.arpu

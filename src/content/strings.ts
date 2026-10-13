@@ -133,6 +133,7 @@ export const ACTION_SUBJECT_TEXT: Partial<Record<Action['type'], string>> = {
   assign: 'Atama',
   founderAction: 'Kurucu aksiyonu',
   setAdBudget: 'Reklam',
+  setAdFocus: 'Reklam odağı',
   setPrice: 'Fiyat',
   answerDecision: 'Karar',
   startRound: 'Tur',

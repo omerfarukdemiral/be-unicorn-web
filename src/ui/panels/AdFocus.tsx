@@ -51,7 +51,7 @@ export function AdFocusRow() {
           <FocusChip key={p.id} on={focus === p.id} label={p.name} color={CATEGORY_COLOR[p.category]} icon={CATEGORY_ICON[p.category]} onClick={() => dispatch({ type: 'setAdFocus', projectId: p.id })} />
         ))}
       </div>
-      {focus && (chips.length > 0 || warming) && (
+      {(focus ? chips.length > 0 || warming : warming) && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {chips.map((k) => (
             <span key={k.key} className={cx('tabular inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-bold', k.d!.sign * k.good > 0 ? 'text-positive-ink' : 'text-negative-ink')}>

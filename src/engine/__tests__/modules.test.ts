@@ -598,6 +598,14 @@ describe('ad focus (W3)', () => {
     expect(Math.abs(focusPreview(f, null) / flat - 1)).toBeLessThan(0.01)
   })
 
+  it('focusPreview: staying on the current focus reproduces the state\'s own next-month estimate (paid keeps the current CAC factor)', () => {
+    const s = full(['game', 'api', 'ai'], 0)
+    const ch = s.derived.channels
+    const own = s.stats.users * (1 - s.stats.churn) + ch.organic + ch.paid + ch.manual
+    const want = own * s.stats.arpu + s.finance.enterpriseCustomers.reduce((a, e) => a + e.mrr, 0)
+    expect(focusPreview(s, s.projects[0]!.id) / want).toBeCloseTo(1, 6)
+  })
+
   it('save round-trip keeps the focus; a save without it derives the same', () => {
     const s = full(['game', 'api'], 1)
     const back = deserialize(serialize(s)) as GameState

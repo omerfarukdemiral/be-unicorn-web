@@ -410,6 +410,9 @@ describe('project modules (W2c)', () => {
     const html = detail(focused)
     expect(html).toContain(t('ads.focusOn'))
     expect(html).not.toContain(t('ads.focusThis'))
+    // Switching back to the company still shows the warm-up chip.
+    const back = { ...two, finance: { ...two.finance, adFocus: undefined, adFocusDay: two.time.day } }
+    expect(grow(back)).toContain(t('ads.warmup', { d: 14 }))
   })
 
   it('a finished product: "Modüller" with n/max, slots as 56px squares, the percent text gone, "Kapsam" for the old "Büyüklük"', () => {

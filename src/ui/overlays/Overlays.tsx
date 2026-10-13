@@ -113,7 +113,7 @@ export const PM_FORMAT: Record<PostMortemCode, (v: number) => string> = {
   lowMorale: (v) => String(Math.round(v)),
   prematureScaling: (v) => t('unit.people', { v: Math.round(v) }),
   lateFundraise: (v) => t('unit.weeks', { v: Math.round(v) }),
-  overload: (v) => `${fixed(v + 1, 1)}×`,
+  overload: (v) => `${fixed(v + 1, 1)}× yük`,
   teamLost: (v) => t('unit.people', { v: Math.round(v) }),
   unfocused: (v) => t('unit.projects', { v: Math.round(v) }),
 }

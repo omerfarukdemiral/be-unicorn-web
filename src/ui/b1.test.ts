@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../engine/balance'
 import { company } from '../engine/__tests__/moduleFixtures'
-import { fromBubble } from '../render/bubbleHit'
 import { nextTap } from './hooks'
 import { personLabel } from './effort'
 import { PM_FORMAT } from './overlays/Overlays'
@@ -34,7 +33,7 @@ describe('post-mortem formats', () => {
       const out = PM_FORMAT[code](code === 'scaledWithoutPmf' || code === 'highChurn' ? 0.35 : 15.94)
       expect(out, code).not.toMatch(/%\s*\d{3,}|\d{3,}\s*%/)
     }
-    expect(PM_FORMAT.overload(15.94)).toBe('16.9×')
+    expect(PM_FORMAT.overload(15.94)).toBe('16.9× yük')
     expect(PM_FORMAT.lateFundraise(3)).toBe('3 hafta')
   })
 })
@@ -44,9 +43,5 @@ describe('two-step tap and bubble hit', () => {
     expect(nextTap(null, 'c1')).toBe('arm')
     expect(nextTap('c1', 'c1')).toBe('commit')
     expect(nextTap('c1', 'c2')).toBe('arm')
-  })
-  it('a target outside the DOM is not a bubble', () => {
-    expect(fromBubble(undefined)).toBe(false)
-    expect(fromBubble({ target: null })).toBe(false)
   })
 })

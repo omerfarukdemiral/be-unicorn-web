@@ -93,7 +93,7 @@ export function personLabel(s: GameState, e: Employee): PersonLabel {
   const grey = 'var(--color-ink-3)'
   if (e.status === 'leaving') return make('leaving', red, 'text-ink', e.leaveDay !== undefined ? Math.max(0, Math.ceil(e.leaveDay - day)) : 0)
   if (on && onLeave(e, day)) return make('leave', grey, 'text-ink-2', Math.ceil((e.offUntil ?? 0) - day))
-  if (on && (f >= B.FATIGUE_BURNOUT || e.status === 'burnout')) return make('burnout', red, 'text-ink')
+  if (on && (f >= B.FATIGUE_BURNOUT)) return make('burnout', red, 'text-ink')
   if (on && f >= B.FATIGUE_TIRED) return make('tired', grey, 'text-ink')
   if (on && e.dept !== 'sales' && (e.loadAvg ?? 1) < B.UNDERLOAD && (e.boredDays ?? 0) >= BORED_LABEL_DAYS) return make('bored', 'var(--color-energy)', 'text-ink')
   if (e.morale < B.TIRED_MORALE) return make('lowMorale', grey, 'text-ink')
@@ -204,7 +204,8 @@ export function paceChips(pace: 'normal' | 'calm', rate: number): Chip[] {
 
 /** Both paces side by side, the one in force filled; each shows its own numbers for this person. A tap on the other switches. */
 export function PaceRow({ e }: { e: Employee }) {
-  const calm = (e.pace ?? 'normal') === 'calm'
+  const cur = e.pace ?? 'normal'
+  const calm = cur === 'calm'
   const rates = useGameStore(useShallow((s) => ({ normal: fatigueRate(s.state, CONTENT, e, 'normal'), calm: fatigueRate(s.state, CONTENT, e, 'calm') })))
   return (
     <div role="group" aria-label={t('team.pace')} className="grid grid-cols-2 gap-1.5">

@@ -72,8 +72,11 @@ export interface Viewport {
 export function freeBubbleHeight(vp: Viewport, minTop = 40): number {
   let bottom = vp.bottom
   for (const o of vp.obstacles ?? []) if (o.top > vp.top + minTop && o.top < bottom) bottom = o.top - 4
-  return Math.max(0, bottom - vp.top)
+  // Floor: an obstacle far off to the side must not squeeze the list to nothing.
+  return Math.max(MIN_FREE_H, bottom - vp.top)
 }
+
+const MIN_FREE_H = 120
 
 export interface Placement {
   dx: number

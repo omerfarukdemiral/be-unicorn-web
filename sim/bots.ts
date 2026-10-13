@@ -460,7 +460,7 @@ function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: Decision
   for (const e of c.s.employees) {
     // E2: a bored notice is answered with work first (the fix for boredom is load, not a raise).
     if (e.status === 'leaving' && e.leaveCause === 'bored' && cfg?.effort) assignByLoad(c, e)
-    // A careless player misses half the bored / burnout notices (no cfg = no care): the person walks out.
+    // A careless player misses a quarter of the bored / burnout notices (no cfg = no care): the person walks out.
     if (e.status === 'leaving' && !cfg && rng && e.leaveCause !== undefined && e.leaveCause !== 'morale' && rng.next() < CARELESS_MISS) continue
     if (e.status === 'leaving') act({ type: 'respondResignation', employeeId: e.id, response: 'talk' }) || act({ type: 'respondResignation', employeeId: e.id, response: 'raise' })
   }
@@ -852,13 +852,13 @@ function manage(c: Ctx, cfg: BotConfig): void {
 /**
  * Moves builders who are idle (a finished project without a build) or slack (loadAvg under UNDERLOAD and their own
  * project fine without them) to the open-work project with load over MOVE_TO_LOAD, the fit ones first. At most
- * MOVES_PER_DAY, one person once per MOVE_EVERY_DAYS. `only`: a bored resignation notice, moved at once. Returns whether anyone moved.
+ * MOVES_PER_DAY, one person once per MOVE_EVERY_DAYS; a project's lead stays put (moving drops the lead and the bot would re-promote and re-pay). `only`: a bored resignation notice, moved at once. Returns whether anyone moved.
  */
 function assignByLoad(c: Ctx, only?: { id: string }): boolean {
   const day = c.s.time.day
   let moved = false
   let left = only ? 1 : MOVES_PER_DAY
-  const movers = c.s.employees.filter((e) => isBuilder(e) && e.status !== 'onboarding' && (!only || e.id === only.id) && (only || day - (c.mem[`mv:${e.id}`] ?? -99) >= MOVE_EVERY_DAYS))
+  const movers = c.s.employees.filter((e) => isBuilder(e) && e.status !== 'onboarding' && !c.s.projects.some((p) => p.leadId === e.id) && (!only || e.id === only.id) && (only || day - (c.mem[`mv:${e.id}`] ?? -99) >= MOVE_EVERY_DAYS))
   for (const e of movers) {
     if (left <= 0) break
     const own = e.projectId !== undefined ? c.s.projects.find((p) => p.id === e.projectId) : undefined

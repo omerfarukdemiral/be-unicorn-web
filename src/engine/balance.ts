@@ -307,8 +307,8 @@ export const SPRINT_DEBT_PER_ENG = 0.1
 /** loadAvg under UNDERLOAD counts a bored day (≥ BORED_RESET_LOAD resets): BORED_QUIT_DAYS → a notice; talk sets BORED_RETAIN_DAYS. */
 export const UNDERLOAD = 0.7
 export const BORED_RESET_LOAD = 0.8
-/** Morale target × (UNDERLOAD − loadAvg) / UNDERLOAD: −15 idle, −7.5 at load 0.35. */
-export const BORED_MORALE = -15
+/** Morale target × (UNDERLOAD − loadAvg) / UNDERLOAD: −30 idle, −15 at load 0.35 (E2: −15 moved a careless Seed office by 1 point). */
+export const BORED_MORALE = -30
 export const BORED_QUIT_DAYS = 90
 export const BORED_RETAIN_DAYS = 45
 /** The bored bubble waits for this many bored days (one low day is no story). */

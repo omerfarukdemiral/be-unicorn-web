@@ -13,6 +13,9 @@ import {
   modules as moduleLib,
   nextCrisis,
   nextLockedRing,
+  projectLoad,
+  hasOpenWork,
+  onLeave,
   previewSpend,
   serialize,
   type Action,
@@ -23,6 +26,7 @@ import {
   type GameEvent,
   type GameEventKind,
   type GameState,
+  type LeaveCause,
   type NextCrisis,
   type PaydayChoice,
   type PolicyId,
@@ -106,6 +110,13 @@ export interface BotConfig {
    * and the run is then bit-identical to one from before modules existed.
    */
   modules?: readonly ProjectModuleId[]
+  /**
+   * E2 effort management (default on for the good bots, never for careless / the coast probes): pace and leave by fatigue,
+   * builders moved by load, a lead on a big project. See manage().
+   */
+  effort?: boolean
+  /** E2: starts a sprint when the project is a step from its next release (or a round's diligence is open). */
+  sprint?: boolean
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -314,6 +325,21 @@ export interface BotRun {
   /** Full weeks that ran with a round going, and those that ended with no move left (modules share the weekly budget). */
   roundWeeks: number
   roundWeeksDry: number
+  /** E2 effort: resignation notices that walked out by cause, burnout events, fatigue over person-days from Pre-seed. */
+  resignationsByCause: Record<LeaveCause, number>
+  burnouts: number
+  avgFatigue: number
+  p90Fatigue: number
+  /** Share of person-days (non-sales, from Pre-seed) bored (loadAvg under UNDERLOAD) and in flow. */
+  boredShare: number
+  flowShare: number
+  leadsSet: number
+  sprints: number
+  qualityGrowths: number
+  /** Effort actions the engine refused (invalid / notUnlocked / cooldown): the random bot's, kept out of the counts. */
+  rejected: number
+  /** Team morale (stats.morale) on the last payday of each stage (index = stage; 0 = no payday there). */
+  moraleByStage: number[]
 }
 
 export interface CrisisRun {
@@ -344,7 +370,8 @@ const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
 /** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
 const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT_KINDS, 'founderActionDone', 'hired', 'visitorArrived', 'stageUp'])
 /** Bot actions that count as a meaningful player move (not background knob-twiddling like ad/price/assign). */
-const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival', 'renewContract', 'buildModule', 'refreshModule'])
+const EFFORT_ACTIONS: ReadonlySet<string> = new Set(['setPace', 'sprint', 'giveLeave', 'setLead', 'ackStaff'])
+const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival', 'renewContract', 'buildModule', 'refreshModule', 'sprint', 'giveLeave', 'setLead'])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -408,6 +435,9 @@ function scoreOption(s: GameState, card: DecisionCard, i: number, cfg: BotConfig
  * Concepts, decision cards and resignation windows: the "answer the bubbles" part of play. `loans`: a careless player
  * answers at random but always takes a loan offered (§15).
  */
+/** Share of the bored / burnout notices a careless player never answers. */
+const CARELESS_MISS = 0.25
+
 function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: DecisionPolicy = 'best', loans = false): void {
   const { act, content } = c
   for (let i = 0; i < 5 && c.s.concepts.active; i++) if (!act({ type: 'openConcept', conceptId: c.s.concepts.active.id })) break
@@ -428,6 +458,10 @@ function housekeeping(c: Ctx, cfg: BotConfig | null, rng?: Rng, policy: Decision
     act({ type: 'answerDecision', cardId: card.id, optionIndex: best })
   }
   for (const e of c.s.employees) {
+    // E2: a bored notice is answered with work first (the fix for boredom is load, not a raise).
+    if (e.status === 'leaving' && e.leaveCause === 'bored' && cfg?.effort) assignByLoad(c, e)
+    // A careless player misses half the bored / burnout notices (no cfg = no care): the person walks out.
+    if (e.status === 'leaving' && !cfg && rng && e.leaveCause !== undefined && e.leaveCause !== 'morale' && rng.next() < CARELESS_MISS) continue
     if (e.status === 'leaving') act({ type: 'respondResignation', employeeId: e.id, response: 'talk' }) || act({ type: 'respondResignation', employeeId: e.id, response: 'raise' })
   }
 }
@@ -763,14 +797,104 @@ const AD_MIN_SHARE = 0.02
 const REFACTOR_AT_SPEED = 0.8
 const REFACTOR_AT_DEBT = (1 - REFACTOR_AT_SPEED) / balance.TECH_DEBT_PER_POINT
 
+/**
+ * E2 effort management (docs/GAMEPLAY_V2.md "Efor yönetimi"): what a sensible player does about fatigue and load.
+ * Calm at TIRED_AT, back to normal at RESTED_AT; leave for burnout or fatigue >= LEAVE_AT; idle or slack builders move
+ * to the project that is short of hands (fit first); a lead on a big project; a sprint a step from the next release.
+ */
+const CALM_AT = 55
+const RESTED_AT = 20
+const LEAVE_AT = 75
+const MOVE_TO_LOAD = 1.1
+const MOVE_FROM_LOAD = 1
+const MOVE_EVERY_DAYS = 14
+const MOVES_PER_DAY = 2
+const BORED_ACT_DAYS = 30
+const LEAD_STAGE = 2
+const LEAD_AT_BUILDERS = 6
+const SPRINT_NEAR = 0.08
+
+const isBuilder = (e: { dept: Dept }): boolean => e.dept === 'eng' || e.dept === 'product'
+const boredBuilders = (s: GameState): number => s.employees.filter((e) => isBuilder(e) && (e.boredDays ?? 0) >= BORED_ACT_DAYS).length
+
+function manage(c: Ctx, cfg: BotConfig): void {
+  const s = c.s
+  if (s.stage < balance.EFFORT_MIN_STAGE) return
+  const day = s.time.day
+  for (const e of s.employees) {
+    if (e.dept === 'sales' || e.status === 'leaving') continue
+    const f = e.fatigue ?? 0
+    const pace = e.pace ?? 'normal'
+    if (pace === 'normal' && f >= CALM_AT) c.act({ type: 'setPace', employeeId: e.id, pace: 'calm' })
+    else if (pace === 'calm' && !e.autoCalm && f <= RESTED_AT) c.act({ type: 'setPace', employeeId: e.id, pace: 'normal' })
+    if ((e.status === 'burnout' || f >= LEAVE_AT) && !onLeave(e, day) && day >= (e.leaveReadyDay ?? -Infinity)) c.act({ type: 'giveLeave', employeeId: e.id })
+  }
+  // A lead on every project of LEAD_AT_BUILDERS+: the longest-tenured fit builder.
+  if (s.stage >= LEAD_STAGE) {
+    for (const p of s.projects) {
+      if (p.leadId !== undefined) continue
+      const team = p.assignedIds.map((id) => s.employees.find((x) => x.id === id)).filter((e) => e && isBuilder(e) && e.status !== 'leaving')
+      if (team.length < LEAD_AT_BUILDERS) continue
+      const pick = team.filter((e) => e!.status !== 'onboarding').sort((a, b) => Number(b!.skills?.includes(p.category) ?? false) - Number(a!.skills?.includes(p.category) ?? false) || a!.hiredDay - b!.hiredDay)[0]
+      if (pick) c.act({ type: 'setLead', projectId: p.id, employeeId: pick.id })
+    }
+  }
+  if (cfg.sprint) {
+    const dd = s.round?.active && (s.derived.round?.diligence ?? []).some((d) => !d.met && d.asked !== false)
+    for (const p of s.projects) {
+      if (!hasOpenWork(p) || p.maturity >= 1) continue
+      const next = balance.RELEASE_THRESHOLDS.find((t) => p.maturity < t - 1e-9)
+      if (next !== undefined && (next - p.maturity <= SPRINT_NEAR || dd)) c.act({ type: 'sprint', projectId: p.id, on: true })
+    }
+  }
+}
+
+/**
+ * Moves builders who are idle (a finished project without a build) or slack (loadAvg under UNDERLOAD and their own
+ * project fine without them) to the open-work project with load over MOVE_TO_LOAD, the fit ones first. At most
+ * MOVES_PER_DAY, one person once per MOVE_EVERY_DAYS. `only`: a bored resignation notice, moved at once. Returns whether anyone moved.
+ */
+function assignByLoad(c: Ctx, only?: { id: string }): boolean {
+  const day = c.s.time.day
+  let moved = false
+  let left = only ? 1 : MOVES_PER_DAY
+  const movers = c.s.employees.filter((e) => isBuilder(e) && e.status !== 'onboarding' && (!only || e.id === only.id) && (only || day - (c.mem[`mv:${e.id}`] ?? -99) >= MOVE_EVERY_DAYS))
+  for (const e of movers) {
+    if (left <= 0) break
+    const own = e.projectId !== undefined ? c.s.projects.find((p) => p.id === e.projectId) : undefined
+    const idle = own === undefined || !hasOpenWork(own)
+    const slack = (e.loadAvg ?? 1) < balance.UNDERLOAD && own !== undefined && projectLoad(c.s, own, -1) <= MOVE_FROM_LOAD
+    if (!only && !idle && !slack) continue
+    const targets = c.s.projects
+      .filter((p) => p.id !== own?.id && hasOpenWork(p) && projectLoad(c.s, p) > MOVE_TO_LOAD)
+      .sort((a, b) => Number(e.skills?.includes(b.category) ?? false) - Number(e.skills?.includes(a.category) ?? false) || projectLoad(c.s, b) - projectLoad(c.s, a))
+    const t = targets[0]
+    if (t && c.act({ type: 'assign', employeeId: e.id, projectId: t.id })) {
+      c.mem[`mv:${e.id}`] = day
+      moved = true
+      left--
+    }
+  }
+  return moved
+}
+
+/** Nobody to move and someone idle for BORED_ACT_DAYS: open the next product, else let modules() build now. */
+function boredRelief(c: Ctx, cfg: BotConfig): void {
+  const n = c.s.projects.length
+  if (c.s.stage >= 2 && cfg.extraCategories.length && n < 1 + cfg.extraCategories.length && c.act({ type: 'startProject', category: cfg.extraCategories[n - 1]! })) return
+  c.mem.bored = c.s.time.day
+}
+
 function growth(c: Ctx, cfg: BotConfig): void {
   const { act } = c
   if (c.s.stage >= 2 && cfg.extraCategories.length && c.s.projects.length < 1 + cfg.extraCategories.length && c.s.projects.every((p) => p.maturity > 0.6)) {
     act({ type: 'startProject', category: cfg.extraCategories[c.s.projects.length - 1]! })
   }
-  // Idle builders (finished projects) move to the least mature project.
+  // Idle builders (finished projects) move to the least mature project; with effort on, by load (assignByLoad).
   const target = [...c.s.projects].filter((p) => p.maturity < 1).sort((a, b) => a.maturity - b.maturity)[0]
-  if (target) {
+  if (cfg.effort && c.s.stage >= balance.EFFORT_MIN_STAGE) {
+    if (!assignByLoad(c) && boredBuilders(c.s) > 0) boredRelief(c, cfg)
+  } else if (target) {
     for (const e of c.s.employees) {
       if ((e.dept === 'eng' || e.dept === 'product') && (e.projectId === undefined || (c.s.projects.find((p) => p.id === e.projectId)?.maturity ?? 1) >= 1)) {
         act({ type: 'assign', employeeId: e.id, projectId: target.id })
@@ -830,7 +954,7 @@ const MODULE_RUNWAY = 6
 function modules(c: Ctx, cfg: BotConfig): void {
   if (!cfg.modules?.length || preparing(c.s, cfg)) return
   const m = c.s.derived.moves
-  if (c.s.round?.active && m && m.left <= 1) return
+  if (c.s.round?.active && m && m.left <= 1 && c.s.time.day - (c.mem.bored ?? -99) > 1) return
   for (const p of c.s.projects) {
     if (!p.launched || p.maturity < 1 || p.build) continue
     const offers = moduleLib.moduleOffers(c.s, p)
@@ -1037,7 +1161,7 @@ function randomTurn(c: Ctx, rng: Rng): void {
   const { act, content } = c
   if (rng.next() < 0.5) housekeeping(c, null, rng)
   if (rng.next() > 0.3) return
-  const roll = rng.int(0, 9)
+  const roll = rng.int(0, 13)
   const slot = rng.pick(c.s.office.slots)
   switch (roll) {
     case 0: if (c.s.candidates.length) act({ type: 'hire', candidateId: rng.pick(c.s.candidates).id }); break
@@ -1051,6 +1175,11 @@ function randomTurn(c: Ctx, rng: Rng): void {
     // W2b: a random module on a random project (the engine refuses what is not allowed), and a random rename.
     case 8: { const p = c.s.projects.length ? rng.pick(c.s.projects) : undefined; if (p) act({ type: 'buildModule', projectId: p.id, moduleId: rng.pick(PROJECT_MODULE_IDS) }); break }
     case 9: { const p = c.s.projects.length ? rng.pick(c.s.projects) : undefined; if (p && rng.next() < 0.4) act({ type: 'renameProject', projectId: p.id, name: `Proje ${rng.int(1, 99)}` }); break }
+    // E2: random pace / sprint / leave / lead / ack (refusals land in the 'rejected' bucket, not in the counts).
+    case 10: { const e = c.s.employees.length ? rng.pick(c.s.employees) : undefined; if (e) act({ type: 'setPace', employeeId: e.id, pace: rng.pick(['calm', 'normal'] as const) }); break }
+    case 11: { const p = c.s.projects.length ? rng.pick(c.s.projects) : undefined; if (p) act({ type: 'sprint', projectId: p.id, on: rng.next() < 0.8 }); break }
+    case 12: { const e = c.s.employees.length ? rng.pick(c.s.employees) : undefined; if (e) act(rng.next() < 0.6 ? { type: 'giveLeave', employeeId: e.id } : { type: 'ackStaff', employeeId: e.id }); break }
+    case 13: { const p = c.s.projects.length ? rng.pick(c.s.projects) : undefined; const e = c.s.employees.length ? rng.pick(c.s.employees) : undefined; if (p && e) act({ type: 'setLead', projectId: p.id, employeeId: rng.next() < 0.8 ? e.id : null }); break }
   }
 }
 
@@ -1097,7 +1226,9 @@ export function playBot(
   overrides: Partial<BotConfig> = {},
 ): BotRun {
   const base = kind === 'idle' || kind === 'random' ? null : kind === 'careless' ? CARELESS : kind in V2_BOTS ? V2_BOTS[kind as V2BotKind] : BOTS[kind as Archetype]
-  const cfg = base ? { ...base, ...overrides } : null
+  // E2: the good bots manage effort (the sprint on vcRocket and greedyGood); careless and the coast probes do not.
+  const manages = base !== null && kind !== 'careless' && kind !== 'coaster' && kind !== 'coasterModules' && kind !== 'idleAfterProfit'
+  const cfg = base ? { ...base, effort: manages, sprint: manages && (kind === 'vcRocket' || kind === 'greedyGood'), ...overrides } : null
   const careless = kind === 'careless'
   const api = createEngine(content)
   let s = api.createGame({ seed })
@@ -1127,11 +1258,26 @@ export function playBot(
   let focusChanges = 0
   let roundWeeks = 0
   let roundWeeksDry = 0
+  const resignationsByCause: Record<LeaveCause, number> = { morale: 0, burnout: 0, bored: 0 }
+  let burnouts = 0
+  let leadsSet = 0
+  let sprints = 0
+  let qualityGrowths = 0
+  let rejected = 0
+  let seenActivity = 0
+  let personDays = 0
+  let boredDays = 0
+  let flowDays = 0
+  /** Fatigue per person-day in buckets of 5 (0..100). */
+  const fatigueHist = new Array<number>(21).fill(0)
   const ctx: Ctx = {
     get s() { return s },
     act: (a: Action): boolean => {
       const r = api.applyAction(s, a)
+      if (!r.ok && EFFORT_ACTIONS.has(a.type) && (r.error === 'invalid' || r.error === 'notUnlocked' || r.error === 'cooldown')) rejected++
       if (r.ok) {
+        if (a.type === 'setLead' && a.employeeId !== null && s.projects.find((p) => p.id === a.projectId)?.leadId !== a.employeeId) leadsSet++
+        if (a.type === 'sprint' && a.on) sprints++
         s = r.state
         if (a.type === 'startRound' && a.down) downRounds++
         if (a.type === 'buildModule') {
@@ -1176,6 +1322,7 @@ export function playBot(
   let paydayDeferrals = 0
   let paydaysShort = 0
   let peakValuation = 0
+  const moraleByStage = [0, 0, 0, 0, 0, 0, 0]
   const techDebtByStage: (number | null)[] = [null, null, null, null, null, null, null]
   const penetrationByStage = [0, 0, 0, 0, 0, 0, 0]
   const crises: (CrisisRun & { eventId: number })[] = []
@@ -1245,6 +1392,7 @@ export function playBot(
       rebalance(ctx, cfg)
       hiring(ctx, cfg)
       growth(ctx, cfg)
+      if (cfg.effort) manage(ctx, cfg)
       modules(ctx, cfg)
       if (Math.floor(s.time.day) % 7 === 0) adFocus(ctx)
       if (!crowded) expand(ctx, cfg)
@@ -1276,6 +1424,20 @@ export function playBot(
       week = { start: m.weekStart, total: view.total, stage: s.stage }
     }
     if (profitDay === null && s.finance.mrr > 0 && s.finance.net > 0) profitDay = s.time.day
+    if (s.stage >= balance.EFFORT_MIN_STAGE) {
+      const causes = new Map(before.employees.filter((e) => e.status === 'leaving').map((e) => [e.id, e.leaveCause ?? 'morale'] as const))
+      for (const e of s.events) if (e.id > seenId && e.kind === 'resigned' && e.refId !== undefined && causes.has(e.refId as string)) resignationsByCause[causes.get(e.refId as string)!]++
+      for (const e of s.employees) {
+        if (e.dept === 'sales') continue
+        personDays++
+        fatigueHist[Math.min(20, Math.floor((e.fatigue ?? 0) / 5))]!++
+        if ((e.loadAvg ?? 1) < balance.UNDERLOAD) boredDays++
+        if (s.derived.people?.[e.id]?.flow) flowDays++
+      }
+      for (const e of s.events) if (e.id > seenId && e.kind === 'burnedOut') burnouts++
+      for (const a of s.activity) if (a.id > seenActivity && a.kind === 'grew') qualityGrowths++
+      seenActivity = s.activity[s.activity.length - 1]?.id ?? seenActivity
+    }
     if ((s.finance.runway ?? 99) < 3) daysRunwayBelow3++
     if (s.rivals?.[0]?.ahead) rivalPassedDays++
     const sat = (s.derived.horizon ?? []).some((h) => h.kind === 'saturation')
@@ -1321,6 +1483,7 @@ export function playBot(
         stageMinRunway[s.stage] = Math.min(stageMinRunway[s.stage] ?? 99, rw)
         for (const k of crises) if (e.id > k.eventId && e.day - k.day <= CRISIS_WINDOW_DAYS) k.minRunway = Math.min(k.minRunway, rw)
         techDebtByStage[s.stage] = s.techDebt
+        moraleByStage[s.stage] = s.stats.morale
         penetrationByStage[s.stage] = s.derived.penetration ?? 0
         rivalShareByStage[s.stage] = (s.rivals ?? []).reduce((a, r) => a + r.share, 0)
         const nearStage = NEAR_DEATH_STAGES.includes(s.stage)
@@ -1447,7 +1610,29 @@ export function playBot(
     focusChanges,
     roundWeeks,
     roundWeeksDry,
+    resignationsByCause,
+    burnouts,
+    avgFatigue: personDays ? fatigueHist.reduce((a, n, i) => a + n * (i * 5 + 2.5), 0) / personDays : 0,
+    p90Fatigue: percentileBucket(fatigueHist, personDays, 0.9),
+    boredShare: personDays ? boredDays / personDays : 0,
+    flowShare: personDays ? flowDays / personDays : 0,
+    leadsSet,
+    sprints,
+    qualityGrowths,
+    rejected,
+    moraleByStage,
   }
+}
+
+/** Upper edge of the 5-wide bucket that holds the q-quantile. */
+function percentileBucket(hist: number[], total: number, q: number): number {
+  if (!total) return 0
+  let acc = 0
+  for (let i = 0; i < hist.length; i++) {
+    acc += hist[i]!
+    if (acc >= q * total) return Math.min(100, (i + 1) * 5)
+  }
+  return 100
 }
 
 function topShare(counts: Record<string, number>): number {

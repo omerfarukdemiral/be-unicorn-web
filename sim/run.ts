@@ -107,6 +107,7 @@ const t0 = Date.now()
  * (idle / random / policy / size / timing) reuse the archetype runs.
  */
 const QUICK = arg('quick', 0) > 0
+const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
 {
   const sp = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}, content: RunSpec['content'] = 'full'): RunSpec => ({ kind, policy, overrides, content })
   const always: RunSpec[] = [
@@ -119,6 +120,8 @@ const QUICK = arg('quick', 0) > 0
     ...ARCHETYPES.map((a) => sp(a, 'best', {}, 'calm')),
     ...ARCHETYPES.map((a) => sp(a, 'best', { modules: [] })),
     sp('careless', 'best', { modules: [] }),
+    // E2: the same bots without effort management (the stage-arrival baseline of the acceptance band).
+    ...ARCHETYPES.map((a) => sp(a, 'best', NO_EFFORT)),
   ]
   const full: RunSpec[] = QUICK
     ? []
@@ -164,6 +167,7 @@ const EAGER_ARCHS: BotKind[] = ['bootstrap', 'platform']
 const eagerRuns = EAGER_ARCHS.map((a) => [a, extra(a, 'best', { roundEagerness: 0.6 }), byArch.get(a)!] as const)
 
 /** W2b before/after: the same bots and seeds with no module list (the run from before modules existed). */
+const noEffort = new Map<BotKind, BotRun[]>(ARCHETYPES.map((k) => [k, runMany(k, 'best', NO_EFFORT)]))
 const noModules = new Map<BotKind, BotRun[]>([...ARCHETYPES, 'careless' as const].map((k) => [k, runMany(k, 'best', { modules: [] })]))
 
 const md: string[] = []
@@ -404,6 +408,28 @@ line()
   const coasterM = v2Runs.get('coasterModules')!
   const mom = coasterM.map((r) => r.stageDays.reduce<number>((a, d, i) => (d != null ? i : a), 0))
   line(`Anti-coast: coasterModules Unicorn ${uniCount(coasterM)}/${SEEDS} (hedef 0) · ulaştığı en yüksek aşama: ${STAGES[Math.max(...mom)]} · kurulan modül (medyan) ${median(coasterM.map((r) => sumOf(r.modulesBuilt))) ?? 0}`)
+}
+line()
+
+line('## Efor yönetimi (E2)')
+line()
+line('İyi botlar yorgunluğa göre tempo/izin verir, boşta kalanı yüke göre taşır, 6+ kişilik projeye lider koyar (vcRocket ve greedyGood sprint de atar). Dikkatsiz bot hiçbirini yapmaz. Aşama varışı: yönetimli / yönetimsiz (aynı seed’ler, medyan dk).')
+line()
+line('| Bot | Ayrılma (medyan): moral / tükenme / sıkılma | Tükenme olayı | Yorgunluk ort. / p90 | Sıkılan gün payı | Akış gün payı | Lider | Sprint | Kalite artışı | Moral Seed (medyan) | Aşama varışı Seed·A·B·Unicorn (yönetimli / yönetimsiz) |')
+line('|---|---|---|---|---|---|---|---|---|---|---|')
+const effortRows: [string, BotRun[]][] = [...byArch, ['careless', careless], ['greedyGood', v2Runs.get('greedyGood')!]]
+const arrive = (runs: BotRun[], st: number) => fmtMin(median(runs.map((r) => r.stageDays[st]).filter((d): d is number => d != null)))
+for (const [name, runs] of effortRows) {
+  const base = noEffort.get(name as BotKind)
+  const cause = (c: 'morale' | 'burnout' | 'bored') => median(runs.map((r) => r.resignationsByCause[c])) ?? 0
+  const arr = [2, 3, 4, 6].map((st) => (base ? `${arrive(runs, st)} / ${arrive(base, st)}` : arrive(runs, st))).join(' · ')
+  line(`| ${name} | ${cause('morale')} / ${cause('burnout')} / ${cause('bored')} | ${sumOf(runs.map((r) => r.burnouts))} | ${(median(runs.map((r) => r.avgFatigue)) ?? 0).toFixed(0)} / ${(median(runs.map((r) => r.p90Fatigue)) ?? 0).toFixed(0)} | ${pct(median(runs.map((r) => r.boredShare)) ?? 0, 1)} | ${pct(median(runs.map((r) => r.flowShare)) ?? 0, 1)} | ${sumOf(runs.map((r) => r.leadsSet))} | ${sumOf(runs.map((r) => r.sprints))} | ${sumOf(runs.map((r) => r.qualityGrowths))} | ${(median(runs.map((r) => r.moraleByStage[2] ?? 0)) ?? 0).toFixed(0)} | ${arr} |`)
+}
+line()
+{
+  const mutiny = careless.filter((r) => r.end === 'teamLost').length
+  const carelessQuits = median(careless.map((r) => r.resignationsByCause.bored + r.resignationsByCause.burnout)) ?? 0
+  line(`Dikkatsiz: sıkılma + tükenme ayrılması (medyan) ${carelessQuits} (hedef ≥ 2) · Seed morali medyan ${(median(careless.map((r) => r.moraleByStage[2] ?? 0)) ?? 0).toFixed(0)} (hedef ≤ 52) · ekip isyanı ${mutiny}/${careless.length} (hedef 1–8/24 aralığı). Rastgele botun reddedilen efor eylemi: ${sumOf(random.map((r) => r.rejected))}.`)
 }
 line()
 

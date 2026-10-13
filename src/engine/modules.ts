@@ -12,6 +12,7 @@ import {
   type ProjectCategory,
   type ProjectMixView,
   type ProjectModule,
+  type ProjectId,
   type ProjectModuleId,
   type StageIndex,
 } from './types'
@@ -122,9 +123,76 @@ export function moduleUpkeep(s: GameState, p: Project, weight: number, mrr = s.f
   return sum
 }
 
-/** The launched projects and their weight in the mix (W2a: equal weights, the flat mean; W3 tilts toward the ad focus). */
-export function projectWeights(s: GameState): { p: Project; w: number }[] {
-  return s.projects.filter((p) => p.launched).map((p) => ({ p, w: 1 }))
+/** How hard the ads lean on the focus: ads against last month's MRR (the month-end snapshot, so this tick's own growth cannot feed back). */
+export function adIntensity(s: GameState): number {
+  const floor = B.CAC_SPEND_FLOOR[Math.min(B.CAC_SPEND_FLOOR.length - 1, s.stage)]!
+  const prev = s.finance.mrrHistory[s.finance.mrrHistory.length - 1] ?? 0
+  return Math.min(1, Math.max(0, s.finance.adBudget / Math.max(prev, floor)))
+}
+
+/** The launched project the ads promote, or undefined (no focus, or it points at a missing / unlaunched one: ignored). */
+export function adFocusProject(s: GameState): Project | undefined {
+  const id = s.finance.adFocus
+  return id === undefined ? undefined : s.projects.find((p) => p.id === id && p.launched)
+}
+
+/**
+ * The launched projects and their weight in the mix: equal (the flat mean), the ad focus 1 + AD_FOCUS_TILT × adIntensity.
+ * `focus` overrides s.finance.adFocus (null = the whole company) for the previews.
+ */
+export function projectWeights(s: GameState, focus?: ProjectId | null): { p: Project; w: number }[] {
+  const id = focus === undefined ? s.finance.adFocus : focus ?? undefined
+  const tilt = id === undefined ? 0 : B.AD_FOCUS_TILT * adIntensity(s)
+  return s.projects.filter((p) => p.launched).map((p) => ({ p, w: p.id === id ? 1 + tilt : 1 }))
+}
+
+/** CAC factor of the focus change still settling: AD_FOCUS_WARMUP_CAC on the day, linear to 1 at AD_FOCUS_WARMUP_DAYS. */
+export function adFocusWarmup(s: GameState): number {
+  const day = s.finance.adFocusDay
+  if (day === undefined) return 1
+  const left = 1 - (s.time.day - day) / B.AD_FOCUS_WARMUP_DAYS
+  return left > 0 ? 1 + (B.AD_FOCUS_WARMUP_CAC - 1) * Math.min(1, left) : 1
+}
+
+export interface FocusEffects {
+  /** Company multipliers (focus / balanced), ≠ 1 only where the products differ. */
+  arpu: number
+  organic: number
+  cac: number
+  churn: number
+}
+
+/** What a focus does to the company's channels against the balanced mean: the weighted means' ratios (cheap, no tick). */
+export function focusEffects(s: GameState, focus: ProjectId | null): FocusEffects {
+  const day = s.time.day
+  const flat = projectWeights(s, null)
+  const tilted = projectWeights(s, focus)
+  const ratio = (f: (p: Project) => number) => wMean(tilted, f) / wMean(flat, f)
+  return {
+    arpu: ratio((p) => (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day)),
+    organic: ratio((p) => (B.CATEGORY_ORGANIC[p.category] ?? 1) * moduleMult(p, 'organic', day)),
+    cac: ratio((p) => moduleMult(p, 'cac', day)),
+    churn: ratio((p) => moduleMult(p, 'churn', day)),
+  }
+}
+
+/**
+ * Estimated MRR a month from now if the ads promoted `focus` (null = the company): the derived channels moved from the
+ * current focus to that one (the multipliers' ratios), no warm-up. users × (1 − churn) + new, at the new ARPU. For bots
+ * and previews, not the tick.
+ */
+export function focusPreview(s: GameState, focus: ProjectId | null): number {
+  const cur = focusEffects(s, adFocusProject(s)?.id ?? null)
+  const next = focusEffects(s, focus)
+  const d = s.derived
+  const ch = d.channels
+  const cac = d.cac / adFocusWarmup(s) / cur.cac * next.cac
+  const paid = cac > 0 ? ch.paid * (d.cac / adFocusWarmup(s) / cur.cac) / cac : ch.paid
+  const organic = ch.organic / cur.organic * next.organic
+  const churn = s.stats.churn / cur.churn * next.churn
+  const arpu = s.stats.arpu / cur.arpu * next.arpu
+  const users = Math.max(0, s.stats.users * (1 - churn) + organic + paid + ch.manual)
+  return users * arpu + s.finance.enterpriseCustomers.reduce((a, e) => a + e.mrr, 0)
 }
 
 /**

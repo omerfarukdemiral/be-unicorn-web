@@ -801,6 +801,10 @@ export interface FinanceState {
   payrollMissed?: boolean
   /** Monthly ad spend, 0 until adBudget tool. */
   adBudget: number
+  /** W3: the launched product the ads promote (setAdFocus); undefined = the whole company, balanced. */
+  adFocus?: ProjectId
+  /** Day the focus last changed (the CAC warm-up counts from it). */
+  adFocusDay?: number
   /** 0.7–1.6, player-set once priceControl unlocked. */
   priceMultiplier: number
   /** Day of last price increase (churn penalty lasts 30 days). */
@@ -1281,7 +1285,7 @@ export interface AmbientBubble {
 export type ActivityKind =
   | 'hired' | 'fired' | 'resigned' | 'resignWarning' | 'retained'
   | 'itemPlaced' | 'itemSold' | 'itemMoved' | 'ringOpened'
-  | 'projectStarted' | 'projectLaunched' | 'projectRenamed' | 'moduleStarted' | 'moduleShipped'
+  | 'projectStarted' | 'projectLaunched' | 'projectRenamed' | 'moduleStarted' | 'moduleShipped' | 'adFocusChanged'
   | 'founderActionStarted' | 'founderActionDone'
   | 'roundStarted' | 'roundProgress' | 'roundClosed' | 'roundShrunk'
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'
@@ -1516,6 +1520,7 @@ export type Action =
   // Controls & growth
   | { type: 'setSpeed'; speed: GameSpeed }
   | { type: 'setAdBudget'; amount: number }
+  | { type: 'setAdFocus'; projectId: ProjectId | null }
   | { type: 'setPrice'; multiplier: number }
   // Teaching & decisions
   | { type: 'openConcept'; conceptId: ConceptId }

@@ -6,7 +6,7 @@ import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './f
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
-import { moduleMult, projectMix, projectWeights, wMean } from './modules'
+import { adFocusWarmup, moduleMult, projectMix, projectWeights, wMean } from './modules'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
@@ -180,6 +180,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
   const rivalShare = E.rivalShareTotal(s.rivals)
+  // W3: projectWeights tilts toward the ad focus; the CAC carries the focus change's warm-up.
   // W2a: the category mix carries each project's modules (wMean over the launched ones; with no modules, categoryMix).
   const day = s.time.day
   const ws = projectWeights(s)
@@ -194,7 +195,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   // churn; ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
   const tam = E.marketTam(marketOf(s).segments, s.time.day) * mix('tam')
   const pen = E.penetration(s.stats.users, tam)
-  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac') * mix('cac')
+  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac') * mix('cac') * adFocusWarmup(s)
   const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic') * wMean(ws, (p) => (B.CATEGORY_ORGANIC[p.category] ?? 1) * moduleMult(p, 'organic', day))
   // One paid channel: its saturation reads the TOTAL ad budget, whatever the modules do to the CAC.
   const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)

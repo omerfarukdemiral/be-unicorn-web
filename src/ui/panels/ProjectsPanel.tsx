@@ -14,6 +14,7 @@ import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
 import { InfoTip } from '../InfoTip'
 import { ModuleStrip } from './ModulesSection'
+import { AdFocusMark } from './AdFocus'
 
 /** Turkish project name from content, unique within the run. */
 function nextProjectName(): string {
@@ -169,6 +170,7 @@ function ProjectCard({ project: p }: { project: Project }) {
         <button type="button" className="min-h-9 min-w-0 flex-1 truncate py-1 text-left text-sm font-semibold hover:underline pointer-coarse:min-h-11" onClick={() => select({ kind: 'project', id: p.id })}>
           {p.name}
         </button>
+        <AdFocusMark projectId={p.id} />
         {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
         {!finished && <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>}
       </div>

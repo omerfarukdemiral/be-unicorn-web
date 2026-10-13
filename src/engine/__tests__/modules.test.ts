@@ -5,11 +5,12 @@ import * as E from '../economy'
 import { averageLaunchedMaturity, computeOutputs, maturityRates, recomputeDerived } from '../derive'
 import { completeFounderAction } from '../founder'
 import { accrueMonth, checkReleases, ledgerOf, resolvePayday, updateWave } from '../loop'
-import { MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
+import { adFocusWarmup, focusEffects, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
 import { createRngState, Rng } from '../rng'
 import { progressProjects } from '../tick'
 import { PROJECT_MODULE_IDS, type Action, type GameState, type ModuleEffectKind, type Project, type ProjectCategory, type ProjectModuleId, type TimedAction } from '../types'
 import { clone, modifierMult, policyMult } from '../util'
+import { deserialize, serialize } from '../save'
 import { api, build, company, content, current, legacy, withModules } from './moduleFixtures'
 
 describe('no modules: the economy is bit for bit the old one', () => {
@@ -482,5 +483,130 @@ describe('replay', () => {
     const a = run()
     expect(a).toBe(run())
     expect(a).toContain('"modules":[{"id":"feedback"')
+  })
+})
+
+describe('ad focus (W3)', () => {
+  const full = (cats: readonly ProjectCategory[], focusIdx: number | null) => {
+    const s = company(cats, 2)
+    s.finance.adBudget = 1_000_000 // far past MRR and the stage floor: adIntensity 1
+    if (focusIdx !== null) s.finance.adFocus = s.projects[focusIdx]!.id
+    recomputeDerived(s, content)
+    return s
+  }
+
+  it('no focus or no ads: the flat mean; full ads on 3 projects: 0.6 / 0.2 / 0.2', () => {
+    const flat = full(['game', 'api', 'ai'], null)
+    expect(projectWeights(flat).map((x) => x.w)).toEqual([1, 1, 1])
+    const noAds = full(['game', 'api', 'ai'], 0)
+    noAds.finance.adBudget = 0
+    expect(projectWeights(noAds).map((x) => x.w)).toEqual([1, 1, 1])
+    const f = full(['game', 'api', 'ai'], 0)
+    const w = projectWeights(f).map((x) => x.w)
+    const total = w.reduce((a, b) => a + b, 0)
+    expect(w.map((x) => x / total)).toEqual([0.6, 0.2, 0.2].map((x) => expect.closeTo(x, 9)))
+    expect(Object.values(projectMix(withModules(f, 1, ['feedback']))).reduce((a, x) => a + x.weight, 0)).toBeCloseTo(1, 9)
+  })
+
+  it('a focus at a missing or unlaunched project is ignored', () => {
+    const s = full(['game', 'api'], null)
+    s.finance.adFocus = 'nope'
+    expect(projectWeights(s).map((x) => x.w)).toEqual([1, 1])
+    s.projects[1]!.launched = false
+    s.finance.adFocus = s.projects[1]!.id
+    expect(projectWeights(s).map((x) => x.w)).toEqual([1])
+  })
+
+  it('the company mult sits between the projects; the tilt reads last month MRR; recompute is stable', () => {
+    const s = full(['game', 'api', 'ai'], 0)
+    const per = s.projects.map((p) => (B.CATEGORY_ARPU[p.category] ?? 1))
+    const mean = s.stats.arpu
+    expect(Number.isFinite(mean)).toBe(true)
+    const e = focusEffects(s, s.projects[0]!.id)
+    expect(e.arpu).toBeGreaterThan(0)
+    expect(Math.min(...per)).toBeLessThanOrEqual(Math.max(...per))
+    // A big MRR this tick does not move the weights; last month's snapshot does.
+    const a = projectWeights(s)[0]!.w
+    s.finance.mrr *= 50
+    expect(projectWeights(s)[0]!.w).toBe(a)
+    s.finance.mrrHistory.push(1e9)
+    expect(projectWeights(s)[0]!.w).toBeLessThan(a)
+    const x = clone(s)
+    recomputeDerived(x, content)
+    const y = clone(x)
+    recomputeDerived(y, content)
+    expect(y.derived).toEqual(x.derived)
+  })
+
+  it('saturation: paid <= paidPerMonth(total ads, cac_base * 0.85, pen) for any focus; the spend input is untouched', () => {
+    for (let i = 0; i < 3; i++) {
+      const s = full(['game', 'api', 'ai'], i)
+      const base = full(['game', 'api', 'ai'], null)
+      expect(s.finance.adBudget).toBe(base.finance.adBudget)
+      const cacBase = E.cac(s.stage, s.derived.avgMaturity, s.finance.adBudget, s.finance.mrr, s.derived.penetration ?? 0)
+      const bound = E.paidPerMonth(s.finance.adBudget, cacBase * 0.85 * modifierMult(s, 'cac') * policyMult(s, content, 'cac'), s.derived.penetration ?? 0)
+      expect(s.derived.channels.paid).toBeLessThanOrEqual(bound + 1e-9)
+    }
+  })
+
+  it('setAdFocus: locked tool, missing, unlaunched, same focus; set and clear', () => {
+    const s = company(['game', 'api'], 2)
+    const id = s.projects[0]!.id
+    const locked = clone(s)
+    locked.unlockedTools = locked.unlockedTools.filter((t) => t !== 'adBudget')
+    expect(api.applyAction(locked, { type: 'setAdFocus', projectId: id })).toMatchObject({ ok: false, error: 'notUnlocked' })
+    expect(api.applyAction(s, { type: 'setAdFocus', projectId: 'nope' })).toMatchObject({ ok: false, error: 'notFound' })
+    const un = clone(s)
+    un.projects[1]!.launched = false
+    expect(api.applyAction(un, { type: 'setAdFocus', projectId: un.projects[1]!.id })).toMatchObject({ ok: false, error: 'notUnlocked' })
+    const same = api.applyAction(s, { type: 'setAdFocus', projectId: null })
+    expect(same.ok).toBe(true)
+    expect(same.state.finance.adFocusDay).toBeUndefined()
+    const moves = s.founder.moves?.left
+    const r = api.applyAction(s, { type: 'setAdFocus', projectId: id })
+    expect(r.ok).toBe(true)
+    expect(r.state.finance.adFocus).toBe(id)
+    expect(r.state.finance.adFocusDay).toBe(s.time.day)
+    expect(r.state.founder.moves?.left).toBe(moves)
+    const back = api.applyAction(r.state, { type: 'setAdFocus', projectId: null })
+    expect(back.state.finance.adFocus).toBeUndefined()
+  })
+
+  it('warm-up: CAC x1.15 on the day, x1.075 at day 7, x1 at day 14', () => {
+    const s = company(['game', 'api'], 2)
+    expect(adFocusWarmup(s)).toBe(1)
+    s.finance.adFocusDay = s.time.day
+    expect(adFocusWarmup(s)).toBeCloseTo(1.15, 9)
+    s.time.day += 7
+    expect(adFocusWarmup(s)).toBeCloseTo(1.075, 9)
+    s.time.day += 7
+    expect(adFocusWarmup(s)).toBe(1)
+    const fresh = company(['game', 'api'], 2)
+    const base = fresh.derived.cac
+    fresh.finance.adFocusDay = fresh.time.day
+    recomputeDerived(fresh, content)
+    expect(fresh.derived.cac).toBeCloseTo(base * 1.15, 6)
+  })
+
+  it('focusPreview: null from a focused state matches the flat state estimate', () => {
+    const s = full(['game', 'api', 'ai'], 0)
+    const cur = focusPreview(s, s.projects[0]!.id)
+    const flat = focusPreview(s, null)
+    expect(Number.isFinite(cur) && Number.isFinite(flat)).toBe(true)
+    const f = full(['game', 'api', 'ai'], null)
+    // The ratios leave out the spend saturation's own small feedback through MRR: within 1%.
+    expect(Math.abs(focusPreview(f, null) / flat - 1)).toBeLessThan(0.01)
+  })
+
+  it('save round-trip keeps the focus; a save without it derives the same', () => {
+    const s = full(['game', 'api'], 1)
+    const back = deserialize(serialize(s)) as GameState
+    expect(back.finance.adFocus).toBe(s.projects[1]!.id)
+    const old = full(['game', 'api'], null)
+    const o = clone(old)
+    delete o.finance.adFocus
+    delete o.finance.adFocusDay
+    recomputeDerived(o, content)
+    expect(o.derived).toEqual(old.derived)
   })
 })

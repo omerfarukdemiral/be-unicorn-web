@@ -391,6 +391,27 @@ describe('project modules (W2c)', () => {
     return renderToStaticMarkup(createElement(DetailBody, { selection: { kind: 'project', id: s.projects[0]!.id } }))
   }
 
+  it('ad focus (W3): the chip row needs 2 launched projects and ads; the focused product is marked, the other offers the switch', () => {
+    const two = company(['web', 'game'], 2)
+    two.unlockedTools = [...new Set([...two.unlockedTools, 'adBudget' as const])]
+    const grow = (st: GameState) => {
+      useGameStore.setState({ state: st })
+      return renderToStaticMarkup(createElement(GrowthPanel, {}))
+    }
+    expect(grow(two)).toContain('data-ad-focus')
+    const noAds = { ...two, finance: { ...two.finance, adBudget: 0 } }
+    expect(grow(noAds)).not.toContain('data-ad-focus')
+    const one = company(['web'], 2)
+    one.unlockedTools = two.unlockedTools
+    expect(grow(one)).not.toContain('data-ad-focus')
+    // Detail: the other product offers the switch, the focused one wears the chip.
+    expect(detail(two)).toContain(t('ads.focusThis'))
+    const focused = { ...two, finance: { ...two.finance, adFocus: two.projects[0]!.id } }
+    const html = detail(focused)
+    expect(html).toContain(t('ads.focusOn'))
+    expect(html).not.toContain(t('ads.focusThis'))
+  })
+
   it('a finished product: "Modüller" with n/max, slots as 56px squares, the percent text gone, "Kapsam" for the old "Büyüklük"', () => {
     const s = company(['web'], 2)
     s.projects[0]!.modules = [{ id: 'feedback', day: s.time.day }]

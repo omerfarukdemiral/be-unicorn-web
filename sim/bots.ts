@@ -3,12 +3,14 @@ import type { DecisionCard, FurnitureItem } from '../src/content/index'
 import {
   FOUNDER_ACTIONS,
   PROJECT_CATEGORIES,
+  PROJECT_MODULE_IDS,
   Rng,
   balance,
   createEngine,
   createRngState,
   DAYS_PER_WEEK,
   loanAmount,
+  modules as moduleLib,
   nextCrisis,
   nextLockedRing,
   previewSpend,
@@ -24,6 +26,7 @@ import {
   type NextCrisis,
   type PaydayChoice,
   type PolicyId,
+  type ProjectModuleId,
   type ProjectCategory,
   type PitchOption,
   type RoundPitch,
@@ -38,8 +41,8 @@ import {
  * 'burner', 'frugal'.
  */
 export type BotKind = Archetype | 'idle' | 'random' | 'careless' | V2BotKind
-export type V2BotKind = 'coaster' | 'idleAfterProfit' | 'greedyGood' | 'burner' | 'frugal'
-export const V2_BOT_KINDS: readonly V2BotKind[] = ['coaster', 'idleAfterProfit', 'greedyGood', 'burner', 'frugal']
+export type V2BotKind = 'coaster' | 'coasterModules' | 'idleAfterProfit' | 'greedyGood' | 'burner' | 'frugal'
+export const V2_BOT_KINDS: readonly V2BotKind[] = ['coaster', 'coasterModules', 'idleAfterProfit', 'greedyGood', 'burner', 'frugal']
 
 export interface BotConfig {
   kind: BotKind
@@ -98,6 +101,11 @@ export interface BotConfig {
    * signPolicies). Careless signs nothing.
    */
   policyPlan: readonly PolicyId[]
+  /**
+   * W2b project modules: the bot's pick order (first buildable one wins, see modules()). Empty / missing = builds none,
+   * and the run is then bit-identical to one from before modules existed.
+   */
+  modules?: readonly ProjectModuleId[]
 }
 
 const ALL_CAP = [4, 8, 12, 21, 32, 44, 44]
@@ -119,6 +127,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
     policyPlan: ['remote-first', 'quality-gate', 'profit-share'],
+    modules: ['paywall', 'onboarding', 'analytics', 'openApi', 'aiAssistant'],
   },
   // Aggressive hiring, ads, earliest rounds.
   vcRocket: {
@@ -128,6 +137,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'large', pitchStyle: 'fast', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
     policyPlan: ['hire-fast', 'crunch-culture', 'ads-first'],
+    modules: ['referral', 'analytics', 'freemium', 'localization', 'aiAssistant'],
   },
   // One project, high price, small senior team, enterprise deals.
   niche: {
@@ -137,6 +147,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
     policyPlan: ['remote-first', 'profit-share', 'quality-gate'],
+    modules: ['feedback', 'openApi', 'onboarding', 'paywall'],
   },
   // Many projects, eng/ops heavy.
   platform: {
@@ -146,6 +157,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'bold', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
     policyPlan: ['hire-fast', 'remote-first', 'ads-first'],
+    modules: ['feedback', 'referral', 'onboarding', 'openApi', 'localization'],
   },
 }
 
@@ -159,8 +171,10 @@ export const BOTS: Record<Archetype, BotConfig> = {
  */
 export const V2_BOTS: Record<V2BotKind, BotConfig> = {
   // The coast probes keep the one-product plan: what they test is stopping, not a second line.
-  coaster: { ...BOTS.bootstrap, kind: 'coaster', extraCategories: [], afterProfit: 'coast' },
-  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', extraCategories: [], afterProfit: 'idle' },
+  coaster: { ...BOTS.bootstrap, kind: 'coaster', extraCategories: [], afterProfit: 'coast', modules: [] },
+  // The anti-coast gate (W2b): the coaster that also fills every slot and refreshes stale modules once profitable.
+  coasterModules: { ...BOTS.bootstrap, kind: 'coasterModules', extraCategories: [], afterProfit: 'coast' },
+  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', extraCategories: [], afterProfit: 'idle', modules: [] },
   greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false, loans: 'always', desk: 'halfPay' },
   burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
@@ -290,6 +304,16 @@ export interface BotRun {
   preparedForCrisis: number
   /** Decision cards shown over the run (the card budget, §3 md.11). */
   cardsShown: number
+  /** W2b: modules started per stage (index = stage), by id, the first one, and the refreshes. */
+  modulesBuilt: number[]
+  moduleIds: Record<string, number>
+  firstModule: string | null
+  refreshes: number
+  /** W3: ad focus changes (setAdFocus accepted). */
+  focusChanges: number
+  /** Full weeks that ran with a round going, and those that ended with no move left (modules share the weekly budget). */
+  roundWeeks: number
+  roundWeeksDry: number
 }
 
 export interface CrisisRun {
@@ -320,7 +344,7 @@ const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
 /** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
 const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT_KINDS, 'founderActionDone', 'hired', 'visitorArrived', 'stageUp'])
 /** Bot actions that count as a meaningful player move (not background knob-twiddling like ad/price/assign). */
-const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival', 'renewContract'])
+const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival', 'renewContract', 'buildModule', 'refreshModule'])
 
 /** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
 export const DAYS_5_MIN = 150
@@ -792,6 +816,71 @@ function growth(c: Ctx, cfg: BotConfig): void {
   }
 }
 
+/** W2b: a module is refreshed once its strength (moduleStrength) falls under this. */
+const REFRESH_BELOW = 0.7
+/** Months of runway left after a module's cash and upkeep. */
+const MODULE_RUNWAY = 6
+
+/**
+ * Project modules: one per day at most. A finished, live project with nothing building first refreshes an installed
+ * module that went stale (< REFRESH_BELOW), else builds the first buildable one of cfg.modules (the engine's offer
+ * check covers stage, category, exclusions, slots, cash, energy and moves). Not while preparing for a crisis, and not in a
+ * round week with one move left (the pitch needs it).
+ */
+function modules(c: Ctx, cfg: BotConfig): void {
+  if (!cfg.modules?.length || preparing(c.s, cfg)) return
+  const m = c.s.derived.moves
+  if (c.s.round?.active && m && m.left <= 1) return
+  for (const p of c.s.projects) {
+    if (!p.launched || p.maturity < 1 || p.build) continue
+    const offers = moduleLib.moduleOffers(c.s, p)
+    const stale = offers.find((o) => o.refresh && o.error === null && moduleStrengthOf(c.s, p, o.id) < REFRESH_BELOW)
+    const pick = stale ?? cfg.modules.map((id) => offers.find((o) => o.id === id && !o.refresh && o.error === null)).find((o) => o !== undefined)
+    if (!pick || !affordsWithRunway(c.s, pick.cost, moduleUpkeepOf(c.s, pick.id), MODULE_RUNWAY)) continue
+    if (c.act({ type: pick.refresh ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: pick.id })) return
+  }
+}
+
+/** W3: switch the ad focus only when the best choice beats the current by this much, and not within FOCUS_MIN_DAYS of the last change. */
+const FOCUS_MIN_GAIN = 0.02
+const FOCUS_MIN_DAYS = 30
+
+/**
+ * Ad focus: with 2+ launched products and ads running, the highest estimated MRR a month out (modules.focusPreview) wins;
+ * stays on the current one (Şirket by default) when the gain is under FOCUS_MIN_GAIN.
+ */
+function adFocus(c: Ctx): void {
+  const s = c.s
+  if (!s.unlockedTools.includes('adBudget') || s.finance.adBudget <= 0) return
+  const live = s.projects.filter((p) => p.launched)
+  if (live.length < 2) return
+  if (s.finance.adFocusDay !== undefined && s.time.day - s.finance.adFocusDay < FOCUS_MIN_DAYS) return
+  const cur = moduleLib.adFocusProject(s)?.id ?? null
+  const base = moduleLib.focusPreview(s, cur)
+  let best: string | null = cur
+  let bestMrr = base
+  for (const id of [null, ...live.map((p) => p.id)]) {
+    const v = moduleLib.focusPreview(s, id)
+    if (v > bestMrr) {
+      bestMrr = v
+      best = id
+    }
+  }
+  if (best !== cur && bestMrr > base * (1 + FOCUS_MIN_GAIN)) c.act({ type: 'setAdFocus', projectId: best })
+}
+
+function moduleStrengthOf(s: GameState, p: GameState['projects'][number], id: ProjectModuleId): number {
+  const m = p.modules?.find((x) => x.id === id)
+  return m ? moduleLib.moduleStrength(m, s.time.day) : 1
+}
+
+/** The monthly upkeep a build would add (its weight in the mix is the flat mean, this project among the launched). */
+function moduleUpkeepOf(s: GameState, id: ProjectModuleId): number {
+  const def = moduleLib.moduleDef(id)
+  const n = Math.max(1, s.projects.filter((x) => x.launched).length)
+  return def?.upkeep?.(s, 1 / n, s.finance.mrr) ?? 0
+}
+
 /**
  * Cash left after a one-off spend covers `months` of runway: months of net burn while burning; a profitable company
  * keeps the same months of a quarter of its gross burn (a profit can turn into a loss with the next storm).
@@ -948,7 +1037,7 @@ function randomTurn(c: Ctx, rng: Rng): void {
   const { act, content } = c
   if (rng.next() < 0.5) housekeeping(c, null, rng)
   if (rng.next() > 0.3) return
-  const roll = rng.int(0, 7)
+  const roll = rng.int(0, 9)
   const slot = rng.pick(c.s.office.slots)
   switch (roll) {
     case 0: if (c.s.candidates.length) act({ type: 'hire', candidateId: rng.pick(c.s.candidates).id }); break
@@ -959,6 +1048,9 @@ function randomTurn(c: Ctx, rng: Rng): void {
     case 5: act({ type: 'setPrice', multiplier: rng.range(0.7, 1.6) }); break
     case 6: act({ type: 'startRound', size: rng.pick(['small', 'target', 'large'] as const) }) || act({ type: 'roundPitch', pitch: rng.pick(c.s.derived.round?.pitchOptions?.map((o) => o.pitch) ?? ['deck']) }); break
     case 7: { const r = nextLockedRing(c.s.office); if (r !== null) act({ type: 'openRing', ring: r }); break }
+    // W2b: a random module on a random project (the engine refuses what is not allowed), and a random rename.
+    case 8: { const p = c.s.projects.length ? rng.pick(c.s.projects) : undefined; if (p) act({ type: 'buildModule', projectId: p.id, moduleId: rng.pick(PROJECT_MODULE_IDS) }); break }
+    case 9: { const p = c.s.projects.length ? rng.pick(c.s.projects) : undefined; if (p && rng.next() < 0.4) act({ type: 'renameProject', projectId: p.id, name: `Proje ${rng.int(1, 99)}` }); break }
   }
 }
 
@@ -1028,6 +1120,13 @@ export function playBot(
   }
   /** Down rounds started (counted in ctx.act). */
   let downRounds = 0
+  const modulesBuilt = [0, 0, 0, 0, 0, 0, 0]
+  const moduleIds: Record<string, number> = {}
+  let firstModule: string | null = null
+  let refreshes = 0
+  let focusChanges = 0
+  let roundWeeks = 0
+  let roundWeeksDry = 0
   const ctx: Ctx = {
     get s() { return s },
     act: (a: Action): boolean => {
@@ -1035,6 +1134,13 @@ export function playBot(
       if (r.ok) {
         s = r.state
         if (a.type === 'startRound' && a.down) downRounds++
+        if (a.type === 'buildModule') {
+          modulesBuilt[s.stage] = (modulesBuilt[s.stage] ?? 0) + 1
+          moduleIds[a.moduleId] = (moduleIds[a.moduleId] ?? 0) + 1
+          firstModule ??= a.moduleId
+        }
+        if (a.type === 'refreshModule') refreshes++
+        if (a.type === 'setAdFocus') focusChanges++
         const key = a.type === 'founderAction' ? `founderAction:${a.kind}` : a.type
         actionCounts[key] = (actionCounts[key] ?? 0) + 1
         if (MOVE_ACTIONS.has(a.type)) moment(s.time.day)
@@ -1113,6 +1219,10 @@ export function playBot(
         furnish(ctx, cfg)
         hiring(ctx, cfg)
         growth(ctx, cfg)
+        modules(ctx, cfg)
+        // Careless: now and then a random focus (the engine refuses what is not allowed).
+        const live = s.projects.filter((p) => p.launched)
+        if (live.length >= 2 && botRng.next() < 0.15) ctx.act({ type: 'setAdFocus', projectId: botRng.pick([null, ...live.map((p) => p.id)]) })
         renewals(ctx, botRng)
         founder(ctx, cfg, true)
         fundraise(ctx, { ...cfg, roundSize: botRng.pick(['small', 'target', 'large'] as const) }, true)
@@ -1120,6 +1230,8 @@ export function playBot(
     } else if (cfg?.afterProfit && profitDay !== null) {
       if (cfg.afterProfit === 'coast') {
         housekeeping(ctx, cfg, undefined, policy)
+        modules(ctx, cfg)
+        if (cfg.modules?.length && Math.floor(s.time.day) % 7 === 0) adFocus(ctx)
         if (s.unlockedTools.includes('adBudget') && s.time.day - profitDay >= COAST_AD_EVERY_DAYS * (coastBumps + 1)) {
           coastBumps++
           ctx.act({ type: 'setAdBudget', amount: Math.max(COAST_AD_FLOOR, Math.round(s.finance.adBudget * 2)) })
@@ -1133,6 +1245,8 @@ export function playBot(
       rebalance(ctx, cfg)
       hiring(ctx, cfg)
       growth(ctx, cfg)
+      modules(ctx, cfg)
+      if (Math.floor(s.time.day) % 7 === 0) adFocus(ctx)
       if (!crowded) expand(ctx, cfg)
       boardroom(ctx, cfg)
       signPolicies(ctx, cfg)
@@ -1154,6 +1268,10 @@ export function playBot(
       if (week && week.start % DAYS_PER_WEEK === 0 && before.founder.moves) {
         movesUsed[week.stage] = (movesUsed[week.stage] ?? 0) + Math.max(0, week.total - before.founder.moves.left)
         movesGiven[week.stage] = (movesGiven[week.stage] ?? 0) + week.total
+        if (before.round?.active) {
+          roundWeeks++
+          if (before.founder.moves.left === 0) roundWeeksDry++
+        }
       }
       week = { start: m.weekStart, total: view.total, stage: s.stage }
     }
@@ -1322,6 +1440,13 @@ export function playBot(
     crises: crises.map(({ eventId: _id, ...k }) => k),
     preparedForCrisis: crises.filter((k) => k.prepared).length,
     cardsShown,
+    modulesBuilt,
+    moduleIds,
+    firstModule,
+    refreshes,
+    focusChanges,
+    roundWeeks,
+    roundWeeksDry,
   }
 }
 

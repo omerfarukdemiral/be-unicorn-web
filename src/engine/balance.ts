@@ -150,6 +150,15 @@ export const CAC_SPEND_K = 0.75
 export const CAC_SPEND_EXP = 1.5
 export const CAC_SPEND_FLOOR: readonly number[] = [500, 2_000, 10_000, 50_000, 250_000, 1_000_000, 1_000_000]
 export const CAC_SATURATION_K = 3
+/**
+ * [W3] Ad focus: the one company ad budget promotes one launched product. The focused project's weight in the mix is
+ * 1 + AD_FOCUS_TILT × adIntensity (adIntensity = clamp01(ads / max(last month's MRR, CAC_SPEND_FLOOR)), the others stay 1),
+ * so full ads on 3 products give 0.6 / 0.2 / 0.2. A change costs CAC × AD_FOCUS_WARMUP_CAC that fades linearly to 1 over
+ * AD_FOCUS_WARMUP_DAYS (the new audience takes time to find).
+ */
+export const AD_FOCUS_TILT = 2
+export const AD_FOCUS_WARMUP_DAYS = 14
+export const AD_FOCUS_WARMUP_CAC = 1.15
 export const ORGANIC_PEN_FLOOR = 0.1
 
 // ---------------------------------------------------------------------------

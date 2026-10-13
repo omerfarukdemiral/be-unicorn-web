@@ -25,6 +25,7 @@ import { RenewalSection } from './RenewalSection'
 import { priceGate } from '../loopUi'
 import { openConceptCard } from '../uiActions'
 import { InfoTip } from '../InfoTip'
+import { AdFocusRow } from './AdFocus'
 
 function useTool(id: ToolId): boolean {
   return useGameStore((s) => s.state.unlockedTools.includes(id))
@@ -160,6 +161,7 @@ function ChannelSection() {
               <AdStep key={st.key} label={t(`growth.adStep.${st.key}`)} amount={st.amount} budget={d.budget} />
             ))}
           </div>
+          <AdFocusRow />
           <div className="mt-2 grid grid-cols-2 gap-2">
             <Stat label={t('growth.cac')} icon="coin" color={WIDGET_COLOR.burnBreakdown} value={money(d.cac)} info={t('growth.cacInfo')} />
             {showLtv && (

@@ -387,6 +387,22 @@ const setAdBudget: Handler<'setAdBudget'> = ({ s }, a) => {
   return null
 }
 
+/** W3: the one ad budget promotes this launched product (null = the whole company). A change starts the CAC warm-up; no move. */
+const setAdFocus: Handler<'setAdFocus'> = ({ s }, a) => {
+  if (!s.unlockedTools.includes('adBudget')) return 'notUnlocked'
+  const p = a.projectId === null ? undefined : s.projects.find((x) => x.id === a.projectId)
+  if (a.projectId !== null) {
+    if (!p) return 'notFound'
+    if (!p.launched) return 'notUnlocked'
+  }
+  if ((s.finance.adFocus ?? null) === a.projectId) return null
+  if (p) s.finance.adFocus = p.id
+  else delete s.finance.adFocus
+  s.finance.adFocusDay = s.time.day
+  pushActivity(s, 'adFocusChanged', { project: p?.name ?? 'Şirket', id: p?.id ?? '' })
+  return null
+}
+
 const setPrice: Handler<'setPrice'> = ({ s }, a) => {
   if (!s.unlockedTools.includes('priceControl')) return 'notUnlocked'
   if (!Number.isFinite(a.multiplier) || a.multiplier < B.PRICE_MIN || a.multiplier > B.PRICE_MAX) return 'invalid'
@@ -540,6 +556,7 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   founderAction,
   setSpeed,
   setAdBudget,
+  setAdFocus,
   setPrice,
   openConcept,
   minimizeConcept: minimizeConceptH,

@@ -16,6 +16,7 @@ import { Bar, Button, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './
 import { moraleTone, STATUS_DOT, STATUS_TONE } from './theme'
 import { useIsMobile } from './hooks'
 import { effectTags } from './panels/ShopPanel'
+import { AdFocusToggle } from './panels/AdFocus'
 import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
 import { ModulesSection } from './panels/ModulesSection'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
@@ -386,6 +387,7 @@ function ProjectDetail({ id }: { id: string }) {
         <Stat label={t('detail.scope')} value={fixed(p.size, 1)} />
       </div>
       {finished && <ModulesSection project={p as Project} />}
+      {p.launched && <AdFocusToggle projectId={p.id} />}
       <Button icon="chat" onClick={() => dispatch({ type: 'founderAction', kind: 'talkToUsers', targetId: p.id })}>
         {t('founder.talkToUsers')}
       </Button>

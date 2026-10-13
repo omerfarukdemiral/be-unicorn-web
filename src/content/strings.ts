@@ -679,6 +679,12 @@ export const UI_TEXT: Record<string, string> = {
   'ads.focus': 'Reklam odağı',
   'ads.focusCompany': 'Şirket',
   'ads.focusThis': 'Reklamı buna çevir',
+  'ads.focusOn': 'Reklam odağı',
+  'ads.delta.arpu': 'ARPU {v}',
+  'ads.delta.organic': 'organik {v}',
+  'ads.delta.cac': 'CAC {v}',
+  'ads.delta.churn': 'kayıp {v}',
+  'ads.warmup': '{d}g',
   'activity.moduleShipped': '{project}: {module} yayında',
   'activity.adFocusChanged': 'Reklamlar artık {project} için',
   // Team effort (E3): pace chips, sprint, lead, fatigue and leave bubbles.

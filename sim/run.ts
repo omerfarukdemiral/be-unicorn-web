@@ -117,6 +117,8 @@ const QUICK = arg('quick', 0) > 0
     sp('bootstrap', 'best', { prepareCrisis: false }),
     sp('vcRocket', 'best', { prepareCrisis: false }),
     ...ARCHETYPES.map((a) => sp(a, 'best', {}, 'calm')),
+    ...ARCHETYPES.map((a) => sp(a, 'best', { modules: [] })),
+    sp('careless', 'best', { modules: [] }),
   ]
   const full: RunSpec[] = QUICK
     ? []
@@ -160,6 +162,9 @@ const calmRuns = ARCHETYPES.flatMap((a) => runMany(a, 'best', {}, 'calm'))
 /** Round timing: take the window as soon as it opens (eagerness 0.6) vs wait for the target (1.0). */
 const EAGER_ARCHS: BotKind[] = ['bootstrap', 'platform']
 const eagerRuns = EAGER_ARCHS.map((a) => [a, extra(a, 'best', { roundEagerness: 0.6 }), byArch.get(a)!] as const)
+
+/** W2b before/after: the same bots and seeds with no module list (the run from before modules existed). */
+const noModules = new Map<BotKind, BotRun[]>([...ARCHETYPES, 'careless' as const].map((k) => [k, runMany(k, 'best', { modules: [] })]))
 
 const md: string[] = []
 const line = (s = '') => md.push(s)
@@ -281,6 +286,7 @@ line()
 function goodRunsAll(): BotRun[] {
   return [...byArch.values()].flat()
 }
+const uniCount = (runs: BotRun[]) => runs.filter((r) => r.stageDays[6] != null).length
 const uniOf = (runs: BotRun[]) => median(runs.map((r) => r.stageDays[6]).filter((d): d is number => d !== null && d !== undefined))
 const eqOf = (runs: BotRun[]) => median(runs.map((r) => r.equity)) ?? 0
 
@@ -368,6 +374,39 @@ const topShares = goodRunsAll().map((r) => r.topActionShare)
 line(`En sık aksiyonun tüm aksiyonlara payı (iyi botlar): medyan ${pct(median(topShares) ?? 0, 1)}, en kötü ${pct(Math.max(...topShares), 1)} (hedef ≤ %35).`)
 line()
 
+line('## Modüller (W2b)')
+line()
+line('Proje modülleri: iyi botlar MVP sonrası sırayla kurar, bayatlayanı (< %70) yeniler. Önce/sonra aynı seed’lerde modülsüz koşuyla.')
+line()
+line('| Bot | Modül kuran koşu | Kurulan modül (medyan) | Yenileme (medyan) | İlk seçim | En sık 3 modül | Tur haftası, hamlesiz bitiş | Reklam odağı değişimi (medyan) |')
+line('|---|---|---|---|---|---|---|---|')
+const sumOf = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+const moduleRows: [string, BotRun[]][] = [...byArch, ['careless', careless], ['coasterModules', v2Runs.get('coasterModules')!]]
+for (const [name, runs] of moduleRows) {
+  const built = runs.map((r) => sumOf(r.modulesBuilt))
+  const firsts = runs.reduce<Record<string, number>>((acc, r) => (r.firstModule ? ((acc[r.firstModule] = (acc[r.firstModule] ?? 0) + 1), acc) : acc), {})
+  const ids = runs.reduce<Record<string, number>>((acc, r) => (Object.entries(r.moduleIds).forEach(([k, v]) => (acc[k] = (acc[k] ?? 0) + v)), acc), {})
+  const top = Object.entries(ids).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(', ')
+  const fmt = (o: Record<string, number>) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || '—'
+  const rw = sumOf(runs.map((r) => r.roundWeeks))
+  line(`| ${name} | ${built.filter((n) => n > 0).length}/${runs.length} | ${median(built) ?? 0} | ${median(runs.map((r) => r.refreshes)) ?? 0} | ${fmt(firsts)} | ${top || '—'} | ${pct(sumOf(runs.map((r) => r.roundWeeksDry)), rw)} (${rw} hafta) | ${median(runs.map((r) => r.focusChanges)) ?? 0} |`)
+}
+line()
+line('Önce (modülsüz) / sonra (modüllü), Unicorn’a ulaşan koşu · Unicorn medyanı · iflas:')
+line()
+line('| Grup | Bot | Önce | Sonra |')
+line('|---|---|---|---|')
+const GROUPS: [string, BotKind][] = [['tek ürün', 'niche'], ['ek kategori', 'bootstrap'], ['ek kategori', 'vcRocket'], ['ek kategori', 'platform'], ['dikkatsiz', 'careless']]
+const beforeAfter = (runs: BotRun[]) => `${runs.filter((r) => r.stageDays[6] != null).length}/${runs.length} · ${fmtMin(uniOf(runs))} · ${runs.filter(failedRun).length} iflas`
+for (const [group, k] of GROUPS) line(`| ${group} | ${k} | ${beforeAfter(noModules.get(k)!)} | ${beforeAfter(k === 'careless' ? careless : byArch.get(k as (typeof ARCHETYPES)[number])!)} |`)
+line()
+{
+  const coasterM = v2Runs.get('coasterModules')!
+  const mom = coasterM.map((r) => r.stageDays.reduce<number>((a, d, i) => (d != null ? i : a), 0))
+  line(`Anti-coast: coasterModules Unicorn ${uniCount(coasterM)}/${SEEDS} (hedef 0) · ulaştığı en yüksek aşama: ${STAGES[Math.max(...mom)]} · kurulan modül (medyan) ${median(coasterM.map((r) => sumOf(r.modulesBuilt))) ?? 0}`)
+}
+line()
+
 line('## GAMEPLAY V2 botları (docs/GAMEPLAY_V2.md §15)')
 line()
 line('coaster / idleAfterProfit: bootstrap, kâra geçince otopilot. greedyGood: riskli ama akıllı. burner / frugal: aynı plan, farklı yakış. Kârda = maaş gününde net ≥ 0.')
@@ -433,7 +472,6 @@ function band(n: number, total: number, lo: number, hi: number): [string, boolea
 const yes = (ok: boolean) => (ok ? 'EVET' : 'HAYIR')
 const crit = (label: string, [text, ok]: [string, boolean], note = '') => line(`- ${label}: ${text}: **${yes(ok)}**${note}`)
 const v2 = (k: V2BotKind) => v2Runs.get(k)!
-const uniCount = (runs: BotRun[]) => runs.filter((r) => r.stageDays[6] != null).length
 crit('İyi bot iflas', band(goodRuns.filter(failedRun).length, goodRuns.length, 0, 0.05))
 {
   // §15 / §16 Faz I iz kriteri: every good-bot death shows a defined bad decision in its last DEATH_TRACE_DAYS.
@@ -448,6 +486,7 @@ crit('İyi bot iflas', band(goodRuns.filter(failedRun).length, goodRuns.length, 
 crit('Careless iflas', band(careless.filter(failedRun).length, careless.length, 0.4, 0.6))
 crit('greedyGood iflas', band(v2('greedyGood').filter(failedRun).length, SEEDS, 0.15, 0.3))
 crit('coaster Unicorn (E1 nihai)', band(uniCount(v2('coaster')), SEEDS, 0, 0))
+crit('coasterModules Unicorn (W2b anti-coast)', band(uniCount(v2('coasterModules')), SEEDS, 0, 0))
 {
   // §15: the bad-decision policy must cost lives, not only minutes (bootstrap + vcRocket, same seeds).
   const gaps = worstRuns.map(([a, runs]) => {

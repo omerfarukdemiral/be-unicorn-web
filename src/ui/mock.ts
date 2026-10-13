@@ -210,6 +210,10 @@ export function mockReduce(prev: GameState, a: Action): ActionResult {
     case 'setAdBudget':
       s.finance.adBudget = a.amount
       return ok(s)
+    case 'setAdFocus':
+      if (a.projectId === null) delete s.finance.adFocus
+      else s.finance.adFocus = a.projectId
+      return ok(s)
     case 'openRing': {
       const r = s.office.rings.find((x) => x.index === a.ring)
       if (!r) return { state: prev, ok: false, error: 'notFound' }

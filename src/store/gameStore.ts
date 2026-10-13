@@ -85,9 +85,9 @@ export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   for (const e of next.events) {
     if (e.id <= since) continue
     if (e.kind === 'release') {
-      // A module delivery, the first 1.0 and a version release (a version without a minor) count; a plain update does not.
+      // A module delivery (not a refresh, which ships 0 users), the first 1.0 and a version release (a version without a minor) count; a plain update does not.
       const r = next.releases?.find((x) => x.id === e.refId)
-      if (r?.update === undefined || (r.version !== undefined && r.minor === undefined)) return true
+      if ((r?.update === undefined && !(r?.module && r.users === 0)) || (r?.version !== undefined && r.minor === undefined)) return true
       continue
     }
     if (IMPORTANT_EVENT_KINDS.has(e.kind)) return true

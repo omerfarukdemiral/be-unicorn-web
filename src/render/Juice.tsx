@@ -226,9 +226,9 @@ function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boole
   useYieldToBubbles(box)
   const later = useSceneTimers()
   useEffect(() => later(BANNER_MS, () => setOn(false)), [later])
-  if (!on) return null
   const r = wave.release
   const category = useGS((s) => s.projects.find((p) => p.id === r.projectId)?.category)
+  if (!on) return null
   const level = UI_TEXT[`release.level.${Math.max(1, Math.min(5, r.level))}`] ?? String(r.level)
   // MV2c: a module delivery names the module, a version release the version and its new slots; the rest keeps "Yayında! v1".
   const isVersion = r.version !== undefined && r.version > 1 && r.minor === undefined && !r.module

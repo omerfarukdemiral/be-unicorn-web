@@ -1,6 +1,7 @@
 // All characters in the scene: employees, the founder and visiting NPCs, plus departing ghosts
 // (people already gone from GameState walking out / shrinking away instead of popping out).
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { StageBand } from '../content/stageBand'
 import { idleBuilders } from '../engine/loopSelectors'
 import { FOUNDER_SLOT_ID, type Dept, type GameState, type NpcRole } from '../engine/types'
 import { DepartingFigure, EmployeeCharacter, FounderCharacter, employeeLook } from './Character'
@@ -27,7 +28,7 @@ interface GhostData {
 const DESK_ACTIONS = 'desk:actions'
 
 // Characters are memoised on the fields they draw, so this list re-rendering per tick stays cheap.
-export function People() {
+export function People({ band = 1 }: { band?: StageBand }) {
   const [employees, visitors, action, chosenSpeed, overload] = useGS(selectPeople)
   // Builders with nothing to build carry a "…" over the head (playtest LD1).
   const idle = useGS(idleBuilders)
@@ -76,6 +77,9 @@ export function People() {
     return () => clearSpeaker('desk')
   }, [layout])
 
+  const bandRef = useRef(band)
+  bandRef.current = band
+
   // Departing ghosts. A layout effect so the ghost mounts in the same paint the live character leaves.
   const [ghosts, setGhosts] = useState<Ghost<GhostData>[]>([])
   const seen = useRef<{ generation: number; list: Seen<Who>[] } | null>(null)
@@ -101,7 +105,7 @@ export function People() {
       // Never drawn, or already outside the door: nothing to show leaving.
       if (!from || from.outside) continue
       const who = g.data
-      const look = 'dept' in who ? employeeLook(g.id, who.dept) : npcLook(g.id, who.role)
+      const look = 'dept' in who ? employeeLook(g.id, who.dept, bandRef.current) : npcLook(g.id, who.role, bandRef.current)
       added.push({ ...g, data: { look, from: { ...from }, headY: 'dept' in who ? 1.05 : NPC_HEAD_Y } })
     }
     setGhosts((cur) => {
@@ -117,6 +121,7 @@ export function People() {
   return (
     <group>
       <FounderCharacter
+        band={band}
         action={action}
         founderSlot={founderSlot}
         deskSlots={occupiedDesks}
@@ -131,6 +136,7 @@ export function People() {
           employee={e}
           deskSlot={e.deskSlotId ? slots.find((s) => s.id === e.deskSlotId) : undefined}
           layout={layout}
+          band={band}
           speed={speed}
           overload={overload}
           idle={idle.includes(e.id)}
@@ -145,6 +151,7 @@ export function People() {
           visitor={v}
           slots={slots}
           layout={layout}
+          band={band}
           getDay={getDay}
           speed={speed}
           selected={selection?.kind === 'visitor' && selection.id === v.id}

@@ -1,9 +1,11 @@
 // Maps a furniture id to a render model. Uses the content catalog when the id exists,
 // otherwise guesses from keywords so mock states and future items still draw something sensible.
 import { FURNITURE } from '../content'
-import type { FurnitureItem } from '../content'
+import type { FurnitureItem, PrimitiveHint } from '../content'
+import type { StageBand } from '../content/stageBand'
 import type { SlotType } from '../engine/types'
 import { SLOT_COLORS } from './palette'
+import { STARTER_ITEMS, extrasFor } from './stageLook'
 
 export const SHAPES = [
   'desk', 'deskErgo', 'deskDual',
@@ -21,6 +23,8 @@ export interface ResolvedFurniture {
   size: 1 | 2
   slotType: SlotType
   colors: { primary: string; secondary: string; accent: string }
+  /** Finish pieces of a bigger company (G2), drawn on top of the item; empty at band 1 and on lowPower. */
+  extras: readonly PrimitiveHint[]
 }
 
 // Order matters: first match wins.
@@ -94,21 +98,36 @@ function catalogItem(id: string): FurnitureItem | undefined {
 
 const cache = new Map<string, ResolvedFurniture>()
 
-export function resolveFurniture(id: string, slotType: SlotType = 'desk'): ResolvedFurniture {
-  const key = `${id}|${slotType}|${FURNITURE.length}`
+/** A starter item's colours as the company grows: the next catalog tiers' paint (band 2: one step up, band 3: two). */
+function starterColors(item: FurnitureItem, band: StageBand): FurnitureItem['visual']['colors'] {
+  let cur: FurnitureItem = item
+  for (let step = band - 1; step > 0 && cur.upgradesTo; step--) cur = catalogItem(cur.upgradesTo) ?? cur
+  return cur.visual.colors
+}
+
+/**
+ * `band` is the company's look band (content/stageBand): purchased and shop items gain `extras` from band 2 and keep
+ * their colours at every band; only STARTER_ITEMS are repainted. `withExtras` false is the same item without the
+ * finish (the scene's mesh budget). The result is cached and shared: never mutate it or the catalog hints.
+ */
+export function resolveFurniture(id: string, slotType: SlotType = 'desk', band: StageBand = 1, withExtras = true): ResolvedFurniture {
+  const key = `${id}|${slotType}|${band}|${withExtras ? 1 : 0}|${FURNITURE.length}`
   const hit = cache.get(key)
   if (hit) return hit
   const item = catalogItem(id)
   const type = item?.slotType ?? slotType
   const shape = (item && guessShape(item.visual.shape)) ?? guessShape(id) ?? DEFAULT_BY_TYPE[type]
   const base = DEFAULT_COLORS[shape]
+  const own = item && STARTER_ITEMS.has(item.id) && band >= 2 ? starterColors(item, band) : item?.visual.colors
   const colors = {
-    primary: item?.visual.colors.primary ?? base.primary,
-    secondary: item?.visual.colors.secondary ?? base.secondary,
-    accent: item?.visual.colors.accent ?? base.accent,
+    primary: own?.primary ?? base.primary,
+    secondary: own?.secondary ?? base.secondary,
+    accent: own?.accent ?? base.accent,
   }
   const size: 1 | 2 = item?.size ?? (type === 'room' || shape === 'meeting' || shape === 'serverRack' ? 2 : 1)
-  const out: ResolvedFurniture = { id, item, shape, size, slotType: type, colors }
+  // Finish is drawn over the catalog's hand-placed primitives; a mock id with no hints has none to line up with.
+  const extras = withExtras && item?.visual.primitives?.length ? extrasFor(shape, band) : []
+  const out: ResolvedFurniture = { id, item, shape, size, slotType: type, colors, extras }
   cache.set(key, out)
   return out
 }

@@ -8,11 +8,13 @@ import { CONCEPTS } from '../content'
 import type { PrimitiveHint } from '../content'
 import { FOUNDER_SLOT_ID, type GameState, type Slot } from '../engine/types'
 import { CELL } from './constants'
+import type { StageBand } from '../content/stageBand'
 import { resolveFurniture, type ResolvedFurniture } from './furnitureCatalog'
 import { BOOK_COLORS } from './palette'
 import { GEO, capsuleGeo, glassMat, glowMat, mat, torusGeo } from './resources'
+import { MAX_EXTRAS_IN_SCENE, furnitureBand, founderDeskExtras, pickExtras } from './stageLook'
 import { useGS } from './source'
-import type { XZ } from './layout'
+import type { OfficeLayout, XZ } from './layout'
 import { useLayout, useOffice } from './sceneRegistry'
 import { useSpawnScale } from './useSpawnScale'
 
@@ -476,7 +478,12 @@ export const FurnitureModel = memo(function FurnitureModel({ resolved, span = fa
         body = <Generic colors={colors} />
     }
   }
-  return <group scale={[CELL, CELL, CELL]}>{body}</group>
+  return (
+    <group scale={[CELL, CELL, CELL]}>
+      {body}
+      {resolved.extras.length > 0 && <Primitives hints={resolved.extras} colors={colors} />}
+    </group>
+  )
 })
 
 const selectBooks = (s: GameState) => s.concepts.learned.join(',')
@@ -495,12 +502,34 @@ export function useBookColors(): string[] {
 /** Look of the founder desk while its slot holds no item. */
 const FOUNDER_DESK_ITEM = 'desk-basic'
 
-interface Placed {
+export interface Placed {
   key: string
   pos: XZ
   yaw: number
   span: boolean
   resolved: ResolvedFurniture
+  /** The founder's bare desk (no item in the slot). */
+  bare?: boolean
+}
+
+/**
+ * The pieces to draw. A key is the slot and its item, never the band: a band change re-resolves a piece in place
+ * (new finish, same React key), so nothing remounts or plops in again. The finish comes in as many extra meshes as
+ * the scene's budget allows (the founder desk's nameplate always).
+ */
+export function placeItems(slots: readonly Slot[], layout: OfficeLayout, look: StageBand): Placed[] {
+  const out: Placed[] = []
+  for (const s of slots) {
+    if ((!s.itemId && s.id !== FOUNDER_SLOT_ID) || s.spanOf) continue
+    const c = layout.itemCenter.get(s.id)
+    if (!c) continue
+    out.push({ key: `${s.id}:${s.itemId}`, pos: c.pos, yaw: c.yaw, span: c.span, resolved: resolveFurniture(s.itemId ?? FOUNDER_DESK_ITEM, s.type, look), bare: !s.itemId })
+  }
+  const keep = pickExtras(out.map((p) => ({ key: p.key, count: p.bare ? 0 : p.resolved.extras.length })), MAX_EXTRAS_IN_SCENE - founderDeskExtras(look).length)
+  return out.map((p) => {
+    if (p.bare) return { ...p, resolved: { ...p.resolved, extras: founderDeskExtras(look) } }
+    return keep.has(p.key) || p.resolved.extras.length === 0 ? p : { ...p, resolved: resolveFurniture(p.resolved.id, p.resolved.slotType, look, false) }
+  })
 }
 
 /** One placed item. Grows in when bought / moved here (spawn), shrinks out as a ghost when sold / moved away. */
@@ -528,22 +557,18 @@ const PlacedItem = memo(function PlacedItem({
   )
 })
 
-/** All placed furniture in the office. */
-export function FurnitureLayer() {
+/**
+ * All placed furniture in the office. `band` (G2) is the company's look band: purchased items gain a finish from
+ * band 2 within a scene budget, starter items are repainted, the founder desk gets a nameplate at band 3. A band
+ * change re-resolves the pieces in place: PlacedItem keeps its key, so nothing remounts or plops in again.
+ */
+export function FurnitureLayer({ band = 1, lowPower = false }: { band?: StageBand; lowPower?: boolean }) {
   const slots = useOffice().slots
   const layout = useLayout()
   const books = useBookColors()
   const overload = useGS(selectOverload)
-  const placed = useMemo(() => {
-    const out: Placed[] = []
-    for (const s of slots as readonly Slot[]) {
-      if ((!s.itemId && s.id !== FOUNDER_SLOT_ID) || s.spanOf) continue
-      const c = layout.itemCenter.get(s.id)
-      if (!c) continue
-      out.push({ key: `${s.id}:${s.itemId}`, pos: c.pos, yaw: c.yaw, span: c.span, resolved: resolveFurniture(s.itemId ?? FOUNDER_DESK_ITEM, s.type) })
-    }
-    return out
-  }, [slots, layout])
+  const look = furnitureBand(band, lowPower)
+  const placed = useMemo(() => placeItems(slots, layout, look), [slots, layout, look])
 
   // First mount of the layer (a loaded save) and a stage move do not plop in piece by piece; only
   // later changes inside one office animate.

@@ -16,6 +16,8 @@ import { FurnitureLayer } from './Furniture'
 import { furnishedBox, type FrameBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
 import { stagePalette } from './palette'
+import { stageBand, type StageBand } from '../content/stageBand'
+import { sunFor } from './stageLook'
 import { People } from './People'
 import { speakerPositions, useLayout, useOffice } from './sceneRegistry'
 import { SlotsLayer } from './Slot'
@@ -186,7 +188,7 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   return <OrthographicCamera ref={cam} makeDefault near={1} far={CAM_FAR} position={[CAM_DIST, CAM_DIST, CAM_DIST]} zoom={60} />
 }
 
-function Lights({ lowPower }: { lowPower: boolean }) {
+function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
   const layout = useLayout()
   const light = useRef<THREE.DirectionalLight>(null)
   const r = Math.max(layout.radius, 4) + 2
@@ -208,6 +210,8 @@ function Lights({ lowPower }: { lowPower: boolean }) {
     l.shadow.needsUpdate = true
   }, [r, cx, cz])
   const mapSize = lowPower ? 1024 : 2048
+  // The sun's colour and blur follow the company's size (G2); it snaps with the stage pop, hidden by it.
+  const sun = sunFor(band, lowPower)
   return (
     <>
       <hemisphereLight args={['#fff4e4', '#e6d2b8', 1.35]} />
@@ -218,12 +222,12 @@ function Lights({ lowPower }: { lowPower: boolean }) {
         key={mapSize}
         position={[layout.center[0] - 8, 16, layout.center[1] + 10]}
         intensity={1.6}
-        color="#fff0dc"
+        color={sun.color}
         castShadow
         shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.02}
-        shadow-radius={lowPower ? 2 : 5}
+        shadow-radius={sun.radius}
       />
     </>
   )
@@ -265,17 +269,18 @@ function Background() {
 
 export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbles = true }: OfficeSceneProps) {
   const uiZoom = useUi((u) => u.zoom)
+  const band = useGS((s: GameState) => stageBand(s.office.stage))
   return (
     <>
       <Background />
       <CameraRig zoomLevel={zoom ?? uiZoom} />
-      <Lights lowPower={lowPower} />
+      <Lights lowPower={lowPower} band={band} />
       <StageTransition>
         <Surroundings lowPower={lowPower} />
-        <Office />
+        <Office lowPower={lowPower} />
         <SlotsLayer />
-        <FurnitureLayer />
-        <People />
+        <FurnitureLayer band={band} lowPower={lowPower} />
+        <People band={band} />
         <DeskBadges />
       </StageTransition>
       <EffectsLayer />

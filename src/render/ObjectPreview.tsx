@@ -5,13 +5,15 @@ import { NeutralToneMapping } from 'three'
 import type * as THREE from 'three'
 import type { GameState, ProjectCategory } from '../engine/types'
 import type { Selection } from '../store/types'
-import { CELL } from './constants'
-import { FOUNDER_LOOK, employeeLook } from './Character'
+import { stageBand } from '../content/stageBand'
+import { CELL, detectLowPower } from './constants'
+import { employeeLook, founderLook } from './Character'
 import { CharacterModel } from './CharacterModel'
 import { FurnitureModel, useBookColors } from './Furniture'
 import { resolveFurniture } from './furnitureCatalog'
 import { npcLook } from './Npc'
 import { PASTEL, SLOT_COLORS } from './palette'
+import { furnitureBand } from './stageLook'
 import { GEO, glowMat, mat } from './resources'
 import { RenderStateProvider, useGS } from './source'
 
@@ -97,10 +99,10 @@ function ProjectModel({ category }: { category: ProjectCategory }) {
   }
 }
 
-const selectForPreview = (s: GameState) => [s.office.slots, s.employees, s.visitors, s.projects] as const
+const selectForPreview = (s: GameState) => [s.office.slots, s.employees, s.visitors, s.projects, stageBand(s.office.stage)] as const
 
 function PreviewContent({ target }: { target: Selection }) {
-  const [slots, employees, visitors, projects] = useGS(selectForPreview)
+  const [slots, employees, visitors, projects, band] = useGS(selectForPreview)
   const books = useBookColors()
   let body: ReactNode = null
   let person: ReactNode = null
@@ -109,7 +111,7 @@ function PreviewContent({ target }: { target: Selection }) {
     case 'slot': {
       const slot = slots.find((s) => s.id === target.id)
       if (slot?.itemId) {
-        const r = resolveFurniture(slot.itemId, slot.type)
+        const r = resolveFurniture(slot.itemId, slot.type, furnitureBand(band, detectLowPower()))
         const span = r.size === 2
         body = (
           <group scale={span ? 0.5 : 0.8}>
@@ -125,15 +127,15 @@ function PreviewContent({ target }: { target: Selection }) {
     }
     case 'employee': {
       const e = employees.find((x) => x.id === target.id)
-      if (e) person = <CharacterModel look={employeeLook(e.id, e.dept)} />
+      if (e) person = <CharacterModel look={employeeLook(e.id, e.dept, band)} />
       break
     }
     case 'founder':
-      person = <CharacterModel look={FOUNDER_LOOK} />
+      person = <CharacterModel look={founderLook(band)} />
       break
     case 'visitor': {
       const v = visitors.find((x) => x.id === target.id)
-      if (v) person = <CharacterModel look={npcLook(v.id, v.role)} />
+      if (v) person = <CharacterModel look={npcLook(v.id, v.role, band)} />
       break
     }
     case 'project': {

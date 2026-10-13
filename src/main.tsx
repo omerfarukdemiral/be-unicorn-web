@@ -50,7 +50,7 @@ if (studio === 'portraits') {
 } else if (studio === 'items') {
   const { ItemStudio } = await import('./render/ItemStudio')
   document.body.style.background = 'transparent'
-  createRoot(root).render(<ItemStudio size={Number(params.get('size')) || undefined} page={Number(params.get('page')) || 0} />)
+  createRoot(root).render(<ItemStudio size={Number(params.get('size')) || undefined} page={Number(params.get('page')) || 0} band={(Math.min(3, Math.max(0, Number(params.get('band') ?? 1) || 0)) | 0) as 0 | 1 | 2 | 3} />)
 } else {
   initAudio()
   createRoot(root).render(

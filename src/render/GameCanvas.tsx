@@ -71,8 +71,11 @@ function useZoomGestures() {
   }
 }
 
+/** Dev only: ?power=full never drops to lowPower (a software-GL screenshot run would otherwise always decline). */
+const FORCE_FULL_POWER = import.meta.env.DEV && new URLSearchParams(location.search).get('power') === 'full'
+
 export function GameCanvas({ renderBubble, mockState, className, ambientBubbles = true }: GameCanvasProps = {}) {
-  const [lowPower, setLowPower] = useState(detectLowPower)
+  const [lowPower, setLowPower] = useState(() => !FORCE_FULL_POWER && detectLowPower())
   const gestures = useZoomGestures()
 
   return (
@@ -114,7 +117,7 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
         }}
       >
         <RenderStateProvider state={mockState}>
-          <PerformanceMonitor onDecline={() => setLowPower(true)} />
+          <PerformanceMonitor onDecline={() => !FORCE_FULL_POWER && setLowPower(true)} />
           <OfficeScene lowPower={lowPower} renderBubble={renderBubble} ambientBubbles={ambientBubbles} />
         </RenderStateProvider>
       </Canvas>

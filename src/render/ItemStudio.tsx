@@ -6,6 +6,7 @@ import { useLayoutEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { NeutralToneMapping } from 'three'
 import { FURNITURE } from '../content/furniture'
+import type { StageBand } from '../content/stageBand'
 import { CAMERA_DIR } from './constants'
 import { FurnitureModel } from './Furniture'
 import { resolveFurniture } from './furnitureCatalog'
@@ -55,9 +56,9 @@ function Fit({ target }: { target: React.RefObject<THREE.Group | null> }) {
   return null
 }
 
-function Shot({ id, size }: { id: string; size: number }) {
+function Shot({ id, size, band }: { id: string; size: number; band: StageBand }) {
   const g = useRef<THREE.Group>(null)
-  const resolved = resolveFurniture(id)
+  const resolved = resolveFurniture(id, 'desk', band)
   return (
     <div data-item={id} style={{ width: size, height: size }}>
       <Canvas
@@ -84,11 +85,12 @@ function Shot({ id, size }: { id: string; size: number }) {
   )
 }
 
-export function ItemStudio({ size = ITEM_SIZES[0], page = 0 }: { size?: number; page?: number }) {
+/** `band` (dev, ?band=0..3) shows the items as a bigger company's office would; the shop shots are band 1 (the default). */
+export function ItemStudio({ size = ITEM_SIZES[0], page = 0, band = 1 }: { size?: number; page?: number; band?: StageBand }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 16, background: 'transparent' }}>
       {ITEM_IDS.slice(page * ITEM_PAGE, (page + 1) * ITEM_PAGE).map((id) => (
-        <Shot key={id} id={id} size={size} />
+        <Shot key={id} id={id} size={size} band={band} />
       ))}
     </div>
   )

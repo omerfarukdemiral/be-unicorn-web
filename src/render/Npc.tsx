@@ -3,6 +3,7 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
+import type { StageBand } from '../content/stageBand'
 import type { NpcRole, Slot, Visitor } from '../engine/types'
 import { CELL, hash01, pick, rotateXZ } from './constants'
 import { CharacterModel, createRig, type Accessory, type CharacterLook } from './CharacterModel'
@@ -27,14 +28,24 @@ const ROLE_ACCESSORIES: Record<NpcRole, Accessory[]> = {
   journalist: ['camera'],
 }
 
-export function npcLook(id: string, role: NpcRole): CharacterLook {
+/**
+ * Visitors dress for the company they visit (G2); band 1 is today's look. An investor only shows up in a tie and
+ * briefcase from band 2 on (garage: in jeans-and-hoodie mode, no briefcase); a customer in a cap is a garage regular.
+ */
+function accessoriesFor(role: NpcRole, band: StageBand): Accessory[] {
+  if (role === 'investor' && band === 0) return []
+  if (role === 'customer' && band >= 2) return []
+  return ROLE_ACCESSORIES[role]
+}
+
+export function npcLook(id: string, role: NpcRole, band: StageBand = 1): CharacterLook {
   const c = NPC_COLORS[role]
   return {
     body: c.body,
     skin: pick(SKIN_TONES, id, 1),
     hair: role === 'mentor' ? MENTOR_HAIR : pick(HAIR_COLORS, id, 2),
     hairStyle: role === 'mentor' ? 3 : Math.floor(hash01(id, 4) * 3),
-    accessories: ROLE_ACCESSORIES[role],
+    accessories: accessoriesFor(role, band),
     legs: role === 'investor' ? NPC_LEGS.investor : NPC_LEGS.default,
   }
 }
@@ -163,6 +174,8 @@ export interface NpcProps {
   visitor: Visitor
   slots: readonly Slot[]
   layout: OfficeLayout
+  /** The company's look band (G2): what visitors wear. */
+  band?: StageBand
   /** Current game day, read per frame (no re-render per tick). */
   getDay: () => number
   speed: number
@@ -183,6 +196,7 @@ function sameNpcProps(a: NpcProps, b: NpcProps): boolean {
     sameVisitor(a.visitor, b.visitor) &&
     a.slots === b.slots &&
     a.layout === b.layout &&
+    a.band === b.band &&
     a.getDay === b.getDay &&
     a.speed === b.speed &&
     a.selected === b.selected &&
@@ -194,7 +208,7 @@ function sameNpcProps(a: NpcProps, b: NpcProps): boolean {
 
 export const Npc = memo(function Npc(props: NpcProps) {
   const { visitor } = props
-  const look = useMemo(() => npcLook(visitor.id, visitor.role), [visitor.id, visitor.role])
+  const look = useMemo(() => npcLook(visitor.id, visitor.role, props.band), [visitor.id, visitor.role, props.band])
   const rig = useMemo(createRig, [])
   const root = useRef<THREE.Group>(null)
   // Created once; later layout changes only re-plan paths.

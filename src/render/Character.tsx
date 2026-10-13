@@ -3,6 +3,7 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
+import type { StageBand } from '../content/stageBand'
 import type { Dept, Employee, FounderActionRun, Slot } from '../engine/types'
 import { CELL, damp, hash01, hashString, pick, rotateXZ, yawOf } from './constants'
 import { CharacterModel, StatusIcon, createRig, type Accessory, type CharacterLook } from './CharacterModel'
@@ -12,12 +13,14 @@ import { GEO, HIT_MAT, flatMat } from './resources'
 import { FADE_MS, fadeScale, type GhostMode } from './departing'
 import { clearSpeaker, isCelebrating, sceneTime, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
 import { STAND, hold, release, reserve } from './spots'
+import { LEGS_BY_BAND } from './stageLook'
 import { spawnCurve } from './useSpawnScale'
 import { Mover, doorScale, overlayYawn, poseCheer, poseSip, poseSit, poseStand, poseWalk, settle, speedMultiplier } from './walker'
 
 const HEAD_Y = 1.05
 
-export function employeeLook(id: string, dept: Dept): CharacterLook {
+/** `band` (G2) dresses the same person for a bigger company; band 1 is exactly today's look. The shirt stays the department's colour. */
+export function employeeLook(id: string, dept: Dept, band: StageBand = 1): CharacterLook {
   const acc: Accessory[] = []
   const r = hash01(id, 3)
   if (dept === 'eng' && r < 0.6) acc.push('headphones')
@@ -31,7 +34,7 @@ export function employeeLook(id: string, dept: Dept): CharacterLook {
     hair: pick(HAIR_COLORS, id, 2),
     hairStyle: hashString(`${id}#4`) % 4,
     accessories: acc,
-    legs: pick(LEG_COLORS, id, 5),
+    legs: LEGS_BY_BAND[band] ?? pick(LEG_COLORS, id, 5),
   }
 }
 
@@ -43,6 +46,12 @@ export const FOUNDER_LOOK: CharacterLook = {
   accessories: ['horn'],
   legs: FOUNDER_LEGS,
   scale: 1.06,
+}
+
+/** The founder at the top band wears a tie (G2); other bands are FOUNDER_LOOK itself. */
+const FOUNDER_LOOK_TIE: CharacterLook = { ...FOUNDER_LOOK, accessories: [...FOUNDER_LOOK.accessories, 'tie'] }
+export function founderLook(band: StageBand = 1): CharacterLook {
+  return band >= 3 ? FOUNDER_LOOK_TIE : FOUNDER_LOOK
 }
 
 /** Seat position and facing for a desk slot. */
@@ -170,6 +179,8 @@ export interface EmployeeCharacterProps {
   employee: Employee
   deskSlot: Slot | undefined
   layout: OfficeLayout
+  /** The company's look band (G2): what they wear. */
+  band?: StageBand
   /** Game speed multiplier (0 = paused). */
   speed: number
   /** Derived overload > 0: engineers rush. */
@@ -190,6 +201,7 @@ function sameEmployeeProps(a: EmployeeCharacterProps, b: EmployeeCharacterProps)
     a.employee.status === b.employee.status &&
     a.deskSlot === b.deskSlot &&
     a.layout === b.layout &&
+    a.band === b.band &&
     a.speed === b.speed &&
     a.overload === b.overload &&
     a.idle === b.idle &&
@@ -202,7 +214,7 @@ function sameEmployeeProps(a: EmployeeCharacterProps, b: EmployeeCharacterProps)
 
 export const EmployeeCharacter = memo(function EmployeeCharacter(props: EmployeeCharacterProps) {
   const { employee, layout } = props
-  const look = useMemo(() => employeeLook(employee.id, employee.dept), [employee.id, employee.dept])
+  const look = useMemo(() => employeeLook(employee.id, employee.dept, props.band), [employee.id, employee.dept, props.band])
   const rig = useMemo(createRig, [])
   const root = useRef<THREE.Group>(null)
   const icon = useRef<THREE.Group>(null)
@@ -350,6 +362,7 @@ export interface FounderCharacterProps {
   founderSlot: Slot | undefined
   deskSlots: Slot[]
   layout: OfficeLayout
+  band?: StageBand
   speed: number
   selected: boolean
   onSelect: () => void
@@ -366,6 +379,7 @@ function sameFounderProps(a: FounderCharacterProps, b: FounderCharacterProps): b
     a.founderSlot === b.founderSlot &&
     a.deskSlots === b.deskSlots &&
     a.layout === b.layout &&
+    a.band === b.band &&
     a.speed === b.speed &&
     a.selected === b.selected &&
     a.onSelect === b.onSelect
@@ -484,7 +498,7 @@ export const FounderCharacter = memo(function FounderCharacter(props: FounderCha
   return (
     <>
       <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
-        <CharacterModel look={FOUNDER_LOOK} rig={rig} />
+        <CharacterModel look={founderLook(props.band)} rig={rig} />
         <HitAndRing selected={props.selected} onSelect={props.onSelect} />
       </group>
       <group ref={icon} position={[mover.x, 0, mover.z]} visible={!mover.outside}>

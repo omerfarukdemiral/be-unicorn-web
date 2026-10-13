@@ -9,6 +9,7 @@ import type { Box, OfficeLayout, RingBand } from './layout'
 import { LOCKED_OPACITY, PASTEL, PROP_COLORS, stagePalette, type StagePalette } from './palette'
 import { GEO, glassMat, glowMat, mat } from './resources'
 import { mood, useLayout } from './sceneRegistry'
+import { seedDecorPlan } from './stageLook'
 import { FLOOR_TILE, WALL_TILE, floorTexture, wallTexture } from './surfaces'
 
 type V3 = [number, number, number]
@@ -298,6 +299,18 @@ function CoworkingDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalet
   )
 }
 
+/** Seed (G2): prints, a clock and a plaque on the back wall, up at the banner's height or higher. */
+function SeedDecor({ layout }: { layout: OfficeLayout }) {
+  const pieces = useMemo(() => seedDecorPlan(layout.bounds, layout.door), [layout.bounds, layout.door])
+  return (
+    <group>
+      {pieces.map((p, i) => (
+        <mesh key={i} geometry={p.round ? GEO.cyl : GEO.box} material={mat(p.color)} scale={p.size} position={p.pos} rotation={p.rot} receiveShadow />
+      ))}
+    </group>
+  )
+}
+
 function Columns({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   // Columns standing in a locked ring recede with it: the trim colour pulled toward the locked tone. The locked tone
   // itself rendered as unlit black boxes beside the blue pillars (QA: read as a missing material, not "locked").
@@ -354,14 +367,19 @@ function CampusDecor({ layout }: { layout: OfficeLayout }) {
   )
 }
 
-function StageDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
+function StageDecor({ layout, pal, lowPower }: { layout: OfficeLayout; pal: StagePalette; lowPower: boolean }) {
   switch (layout.stage) {
     case 0:
       return <GarageDecor layout={layout} pal={pal} />
     case 1:
       return <CoworkingDecor layout={layout} pal={pal} />
     case 2:
-      return <CoworkingDecor layout={layout} pal={pal} />
+      return (
+        <>
+          <CoworkingDecor layout={layout} pal={pal} />
+          {!lowPower && <SeedDecor layout={layout} />}
+        </>
+      )
     case 3:
       return <Columns layout={layout} pal={pal} />
     case 4:
@@ -527,7 +545,7 @@ function LockTape({ box }: { box: Box }) {
 
 // ---------------------------------------------------------------------------
 
-export function Office() {
+export function Office({ lowPower = false }: { lowPower?: boolean }) {
   const layout = useLayout()
   const pal = stagePalette(layout.stage as StageIndex)
   const lockedIdx = layout.bands.findIndex((b) => !b.unlocked)
@@ -536,7 +554,7 @@ export function Office() {
     <group>
       <Floor layout={layout} pal={pal} />
       {layout.stage !== 6 && <Walls layout={layout} pal={pal} />}
-      <StageDecor layout={layout} pal={pal} />
+      <StageDecor layout={layout} pal={pal} lowPower={lowPower} />
       {layout.bands.map((band) => (
         <RingBandView key={`${layout.stage}:${band.ring}`} band={band} pal={pal} />
       ))}

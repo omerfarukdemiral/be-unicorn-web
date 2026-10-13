@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import type { EffectBundle, GameEvent, GameState, NextStep, ValuationBreakdown } from '../engine/types'
 import * as B from '../engine/balance'
 import { valuation } from '../engine/economy'
-import { cacReason } from '../engine/ads'
+import { cacFactors, type CacFactor } from '../engine/ads'
 import { CRISES, DECISIONS, moduleName, POLICIES, PRICING_GATE, STAGES } from '../content'
 import { withCase } from '../content/format'
 import { useGameStore } from '../store/gameStore'
@@ -194,12 +194,24 @@ export function followStep(step: NextStep): void {
 }
 
 /**
- * A1: why the CAC is what it is, one line (≤ 8 words): the biggest factor at or above CAC_REASON_MIN, named
- * ("CAC ×1.6: Reklam savaşı", "CAC ×1.4: bütçe MRR'ı aştı, reklam doyuyor"). null when nothing stands out.
+ * A1: why the CAC is what it is, one line (≤ 8 words): the biggest factor at or above CAC_REASON_MIN that has words
+ * ("CAC ×1.6: Reklam savaşı", "CAC ×1.4: bütçe MRR'ı aştı, reklam doyuyor"). A top factor with nothing to name (a module
+ * mix without one module behind it, a policy that is not adopted) hands the line to the next one. null when nothing
+ * stands out.
  */
 export function cacReasonText(s: GameState): string | null {
-  const r = cacReason(s)
-  if (!r) return null
+  // cacFactors lists in the tie order (crisis > spend > … > policy); the sort is stable, so equal values keep it.
+  const big = cacFactors(s)
+    .filter((f) => f.value >= B.CAC_REASON_MIN - 1e-9)
+    .sort((a, b) => (Math.abs(a.value - b.value) < 1e-9 ? 0 : b.value - a.value))
+  for (const f of big) {
+    const text = cacFactorText(s, f)
+    if (text) return text
+  }
+  return null
+}
+
+function cacFactorText(s: GameState, r: CacFactor): string | null {
   const f = fixed(r.value, 1)
   switch (r.key) {
     case 'crisis': {
@@ -208,7 +220,8 @@ export function cacReasonText(s: GameState): string | null {
       return crisis ? t('ads.cac.crisis', { f, name: crisis.name }) : t('ads.cac.card', { f })
     }
     case 'spend':
-      return t('ads.cac.spend', { f })
+      // "aştı" only when it did: a budget under the MRR still saturates (the curve starts well below it).
+      return t(s.finance.adBudget > s.finance.mrr ? 'ads.cac.spend' : 'ads.cac.spendBig', { f })
     case 'market':
       return t('ads.cac.market', { f, p: Math.round((r.pen ?? 0) * 100) })
     case 'focus':

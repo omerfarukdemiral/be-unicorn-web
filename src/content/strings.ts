@@ -685,6 +685,8 @@ export const UI_TEXT: Record<string, string> = {
   'ads.warmup': '{d}g',
   // A1: what the ads buy, why the CAC is what it is, which step ends the runway, what a focus moves.
   'ads.paidLine': 'Reklamdan +{n} kullanıcı/30g · CAC {c}',
+  'ads.cacLine': 'CAC {c}',
+  'ads.focusTapAgain': 'Seçmek için tekrar dokun',
   'ads.stepPaid': '{v} · +{n}/30g',
   'ads.runwayEnds': 'Runway bitiyor',
   'ads.focusGain': '{project} +{n} kullanıcı/30g',
@@ -693,6 +695,7 @@ export const UI_TEXT: Record<string, string> = {
   'ads.cac.crisis': 'CAC ×{f}: {name}',
   'ads.cac.card': 'CAC ×{f}: verdiğin bir karar',
   'ads.cac.spend': "CAC ×{f}: bütçe MRR'ı aştı, reklam doyuyor",
+  'ads.cac.spendBig': 'CAC ×{f}: bütçe büyüdü, reklam doyuyor',
   'ads.cac.market': 'CAC ×{f}: pazar doluyor, %{p} zaten sende',
   'ads.cac.focus': 'CAC ×{f}: yeni odak ısınıyor · {d}g',
   'ads.cac.maturity': 'CAC ×{f}: ürün henüz ham',

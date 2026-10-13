@@ -406,9 +406,10 @@ function runwayText(m: number | null): string {
  * Data comes in as the engine's previewSpend() result; this component computes nothing. Red only when the move
  * lands in the danger band (runway < 3 or the next payday cannot be paid: the one red rule).
  */
-export function CostPreview({ preview, cost, className }: { preview: SpendPreview; cost?: string; className?: string }) {
+/** `danger` forces the red line (A1: an ad step that ends the runway), on top of the payday / short-runway rule. */
+export function CostPreview({ preview, cost, className, danger: force }: { preview: SpendPreview; cost?: string; className?: string; danger?: boolean }) {
   const after = preview.runwayAfter
-  const danger = preview.paydayShort || (after !== null && after < RUNWAY_DANGER_MONTHS)
+  const danger = force || preview.paydayShort || (after !== null && after < RUNWAY_DANGER_MONTHS)
   return (
     <span
       data-danger={danger ? '' : undefined}

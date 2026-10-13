@@ -98,13 +98,27 @@ const LETTER_NAME: Readonly<Record<string, string>> = {
   A: 'a', B: 'be', C: 'ce', Ç: 'çe', D: 'de', E: 'e', F: 'fe', G: 'ge', Ğ: 'yumuşak ge', H: 'he', I: 'ı', İ: 'i', J: 'je', K: 'ke', L: 'le',
   M: 'me', N: 'ne', O: 'o', Ö: 'ö', P: 'pe', Q: 'ku', R: 're', S: 'se', Ş: 'şe', T: 'te', U: 'u', Ü: 'ü', V: 've', W: 've', X: 'iks', Y: 'ye', Z: 'ze',
 }
+// A name ending in a number reads its last spoken word: "Pano 2" = iki, "Kasa 10" = on, "Ajans 300" = yüz.
+const ONES = ['', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz']
+const TENS = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan']
+function spokenNumber(digits: string): string {
+  const n = digits.replace(/^0+/, '')
+  if (!n) return 'sıfır'
+  const r = n.split('').reverse()
+  if (r[0] !== '0') return ONES[+r[0]!]!
+  if (r[1] && r[1] !== '0') return TENS[+r[1]]!
+  if (r[2] && r[2] !== '0') return 'yüz'
+  return n.length <= 6 ? 'bin' : n.length <= 9 ? 'milyon' : 'milyar'
+}
 const BACK = 'aıou'
 const VOWELS = 'aıoueiöü'
 const VOICELESS = 'fstkçşhp'
 
 /** "Tılsım" dat → "Tılsım'a", "Pano" dat → "Pano'ya", "Seed" loc → "Seed'de", "Series A" loc → "Series A'da", "Kasa" loc → "Kasa'da". */
 export function withCase(name: string, kind: 'dat' | 'loc'): string {
-  const word = name.trim().split(/\s+/).pop() ?? ''
+  const last0 = name.trim().split(/\s+/).pop() ?? ''
+  const digits = /\d+$/.exec(last0)?.[0]
+  const word = digits ? spokenNumber(digits) : last0
   const spoken = (LETTER_NAME[word] ?? word.replace(/I/g, 'ı').replace(/İ/g, 'i').toLowerCase()).replace(/[^a-zçğıöşü]/g, '')
   let vowel = 'e'
   for (let i = spoken.length - 1; i >= 0; i--) {

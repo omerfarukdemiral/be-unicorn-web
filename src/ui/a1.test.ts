@@ -23,6 +23,11 @@ describe('withCase', () => {
     ])
     expect(withCase('Kitap', 'loc')).toBe("Kitap'ta")
   })
+
+  it('a name ending in a number reads the number (A1 fix: "Pano 2\'ye", not "Pano 2\'e")', () => {
+    expect(['Pano 2', 'Kasa 10', 'Tılsım 3', 'Ajans 300', 'Pano2'].map((n) => withCase(n, 'dat'))).toEqual(["Pano 2'ye", "Kasa 10'a", "Tılsım 3'e", "Ajans 300'e", "Pano2'ye"])
+    expect(withCase('Pano 4', 'loc')).toBe("Pano 4'te")
+  })
 })
 
 describe('cacReasonText', () => {
@@ -45,6 +50,19 @@ describe('cacReasonText', () => {
     const spend = clone(s)
     spend.finance.adBudget = 2 * Math.max(spend.finance.mrr, 10_000)
     expect(cacReasonText(spend)).toMatch(/^CAC ×\d\.\d: bütçe MRR'ı aştı, reklam doyuyor$/)
+  })
+
+  it('"aştı" only when the budget passed the MRR; a top factor with no words hands the line to the next (A1 fix)', () => {
+    const s = company(['web', 'mobile'], 2)
+    s.stageStart = { ...s.stageStart!, day: s.time.day - 365 }
+    s.derived.avgMaturity = 1
+    s.derived.penetration = 0
+    s.finance.mrr = 200_000
+    s.finance.adBudget = 120_000
+    expect(cacReasonText(s)).toBe('CAC ×1.3: bütçe büyüdü, reklam doyuyor')
+    // A policy multiplier with no adopted policy behind it is bigger but has nothing to name.
+    s.derived.policies = { available: [], adopted: [], nextSignDay: 0, mult: { cac: 1.8 }, movesBonus: 0, burnAsk: 0, payLater: 0 }
+    expect(cacReasonText(s)).toBe('CAC ×1.3: bütçe büyüdü, reklam doyuyor')
   })
 })
 

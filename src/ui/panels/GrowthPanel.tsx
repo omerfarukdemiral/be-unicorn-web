@@ -166,7 +166,7 @@ function ChannelSection() {
           <div className="mt-2 flex flex-col gap-0.5" data-ad-return>
             <div className="tabular inline-flex items-center gap-1 text-[13px] font-semibold text-ink">
               <Icon name="coin" size={13} style={{ color: iconTone(WIDGET_COLOR.burnBreakdown) }} />
-              <span className="min-w-0">{t('ads.paidLine', { n: num(d.ch.paid), c: money(d.cac) })}</span>
+              <span className="min-w-0">{d.budget > 0 ? t('ads.paidLine', { n: num(d.ch.paid), c: money(d.cac) }) : t('ads.cacLine', { c: money(d.cac) })}</span>
               <InfoTip title={t('growth.cac')} size={12}>
                 {t('growth.cacInfo')}
               </InfoTip>
@@ -236,7 +236,7 @@ function AdStep({ label, amount, budget }: { label: string; amount: number; budg
         <span className="tabular text-[17px] font-semibold leading-none">{label}</span>
         <span className="tabular mt-0.5 truncate text-[11px] font-medium text-ink-2">{amount > 0 ? t('ads.stepPaid', { v: money(amount), n: num(paid) }) : money(amount)}</span>
       </button>
-      <CostPreview preview={preview} className="justify-center" />
+      <CostPreview preview={preview} danger={warn} className="justify-center" />
       {warn && <span className="text-center text-[11px] font-bold text-negative-ink">{t('ads.runwayEnds')}</span>}
     </div>
   )

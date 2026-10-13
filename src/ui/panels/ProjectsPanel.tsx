@@ -9,7 +9,7 @@ import { PROJECT_CATEGORY_TEXT, PROJECT_NAMES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
-import { money, pct } from '../format'
+import { money, num, pct } from '../format'
 import { launchGain } from '../loopUi'
 import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
@@ -177,6 +177,7 @@ function ProjectCard({ project: p }: { project: Project }) {
         {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
         {!finished && <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>}
       </div>
+      {p.launched && <ProductUsers projectId={p.id} />}
       {/* At 1.0 the bar has nothing left to say: the card shows what the product grew into (modules, GAMEPLAY V2). */}
       {finished ? (
         <div className="mt-2">
@@ -200,6 +201,22 @@ function ProjectCard({ project: p }: { project: Project }) {
       </div>
       {open && <AssignList project={p} />}
     </li>
+  )
+}
+
+/** A1: the product's own users and the new ones a month it draws today ("1.2K kullanıcı · +40/30g"). */
+export function ProductUsers({ projectId, className = 'mt-1' }: { projectId: string; className?: string }) {
+  const v = useGameStore(
+    useShallow((s) => {
+      const m = s.state.derived.projectMix?.[projectId]
+      return { users: m?.users ?? 0, flow: Math.round((m?.paidPerMonth ?? 0) + (m?.organicPerMonth ?? 0)) }
+    }),
+  )
+  return (
+    <div className={cx('tabular inline-flex items-center gap-1 text-[12px] font-semibold text-ink-2', className)} data-product-users>
+      <Icon name="users" size={13} />
+      {t('projects.users', { users: num(v.users), n: num(v.flow) })}
+    </div>
   )
 }
 

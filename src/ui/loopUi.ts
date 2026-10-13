@@ -4,7 +4,9 @@ import { useEffect, useRef } from 'react'
 import type { EffectBundle, GameEvent, GameState, NextStep, ValuationBreakdown } from '../engine/types'
 import * as B from '../engine/balance'
 import { valuation } from '../engine/economy'
-import { DECISIONS, PRICING_GATE } from '../content'
+import { cacReason } from '../engine/ads'
+import { CRISES, DECISIONS, moduleName, POLICIES, PRICING_GATE, STAGES } from '../content'
+import { withCase } from '../content/format'
 import { useGameStore } from '../store/gameStore'
 import { t } from './i18n'
 import { fixed, money, num, pct, signedMoney } from './format'
@@ -188,5 +190,39 @@ export function followStep(step: NextStep): void {
     }
     case 'growth':
       return openPanel(step.id === 'round' || step.id === 'roundWait' ? { kind: 'growth', section: 'round' } : { kind: 'growth' }, { root: true })
+  }
+}
+
+/**
+ * A1: why the CAC is what it is, one line (≤ 8 words): the biggest factor at or above CAC_REASON_MIN, named
+ * ("CAC ×1.6: Reklam savaşı", "CAC ×1.4: bütçe MRR'ı aştı, reklam doyuyor"). null when nothing stands out.
+ */
+export function cacReasonText(s: GameState): string | null {
+  const r = cacReason(s)
+  if (!r) return null
+  const f = fixed(r.value, 1)
+  switch (r.key) {
+    case 'crisis': {
+      const src = r.source ?? ''
+      const crisis = CRISES.find((c) => `crisis:${c.id}` === src || c.cardId === src)
+      return crisis ? t('ads.cac.crisis', { f, name: crisis.name }) : t('ads.cac.card', { f })
+    }
+    case 'spend':
+      return t('ads.cac.spend', { f })
+    case 'market':
+      return t('ads.cac.market', { f, p: Math.round((r.pen ?? 0) * 100) })
+    case 'focus':
+      return t('ads.cac.focus', { f, d: r.days ?? 1 })
+    case 'maturity':
+      return t('ads.cac.maturity', { f })
+    case 'stage':
+      return t('ads.cac.stage', { f, stage: withCase(STAGES[s.stage]?.name ?? '', 'loc') })
+    case 'modules':
+      return r.module ? t('ads.cac.modules', { f, module: moduleName(r.module) }) : null
+    case 'policy': {
+      const adopted = s.derived.policies?.adopted ?? []
+      const pol = POLICIES.find((p) => adopted.includes(p.id) && (p.effect.mult?.cac ?? 1) > 1)
+      return pol ? t('ads.cac.policy', { f, policy: pol.name }) : null
+    }
   }
 }

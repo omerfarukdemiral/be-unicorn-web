@@ -1,6 +1,7 @@
 // Project modules (W2a): what a launched, finished (1.0) product grows into. Catalogue + pure math; the actions live
 // in actions.ts, the build in tick.progressProjects, the delivery in loop.checkReleases, the mix in derive.ts.
-// No per-project user stock: every gain is a multiplier on the company's existing channels, weighted over the projects.
+// A1: every product holds its share of the company's users (p.users); the gains are multipliers on its own numbers and
+// the company mixes weigh the products by those shares.
 import * as B from './balance'
 import { actionEnergy, movesError } from './founder'
 import {
@@ -123,27 +124,45 @@ export function moduleUpkeep(s: GameState, p: Project, weight: number, mrr = s.f
   return sum
 }
 
-/** How hard the ads lean on the focus: ads against last month's MRR (the month-end snapshot, so this tick's own growth cannot feed back). */
-export function adIntensity(s: GameState): number {
-  const floor = B.CAC_SPEND_FLOOR[Math.min(B.CAC_SPEND_FLOOR.length - 1, s.stage)]!
-  const prev = s.finance.mrrHistory[s.finance.mrrHistory.length - 1] ?? 0
-  return Math.min(1, Math.max(0, s.finance.adBudget / Math.max(prev, floor)))
-}
-
 /** The launched project the ads promote, or undefined (no focus, or it points at a missing / unlaunched one: ignored). */
 export function adFocusProject(s: GameState): Project | undefined {
   const id = s.finance.adFocus
   return id === undefined ? undefined : s.projects.find((p) => p.id === id && p.launched)
 }
 
+// A1 per-product users -----------------------------------------------------------------------------------------------
+
 /**
- * The launched projects and their weight in the mix: equal (the flat mean), the ad focus 1 + AD_FOCUS_TILT × adIntensity.
+ * Each launched project's share of the company's users (p.users / Σ). Equal while nobody holds any users yet (an old
+ * save, the first launch): `equal` says so, and the weights then stay exactly 1 (the old flat mean, bit for bit).
+ */
+export function projectShares(s: GameState): { shares: { p: Project; share: number }[]; equal: boolean } {
+  const live = s.projects.filter((p) => p.launched)
+  let total = 0
+  for (const p of live) total += Math.max(0, p.users ?? 0)
+  if (!(total > 0)) return { shares: live.map((p) => ({ p, share: 1 / live.length })), equal: true }
+  return { shares: live.map((p) => ({ p, share: Math.max(0, p.users ?? 0) / total })), equal: false }
+}
+
+/**
+ * The launched projects and their weight in the company's ARPU / churn / organic / TAM mix: (1 − b) / n + b × share
+ * (b = MIX_SHARE_BLEND). Before anyone holds users: 1 each, the flat mean.
+ */
+export function projectWeights(s: GameState): { p: Project; w: number }[] {
+  const { shares, equal } = projectShares(s)
+  if (equal) return shares.map(({ p }) => ({ p, w: 1 }))
+  const b = B.MIX_SHARE_BLEND
+  const n = shares.length
+  return shares.map(({ p, share }) => ({ p, w: (1 - b) / n + b * share }))
+}
+
+/**
+ * Ad weights: AD_FOCUS_WEIGHT for the focus, 1 for the others. They split the paid users and weigh the CAC's module mix.
  * `focus` overrides s.finance.adFocus (null = the whole company) for the previews.
  */
-export function projectWeights(s: GameState, focus?: ProjectId | null): { p: Project; w: number }[] {
-  const id = focus === undefined ? s.finance.adFocus : focus ?? undefined
-  const tilt = id === undefined ? 0 : B.AD_FOCUS_TILT * adIntensity(s)
-  return s.projects.filter((p) => p.launched).map((p) => ({ p, w: p.id === id ? 1 + tilt : 1 }))
+export function adWeights(s: GameState, focus?: ProjectId | null): { p: Project; w: number }[] {
+  const id = focus === undefined ? adFocusProject(s)?.id : focus ?? undefined
+  return s.projects.filter((p) => p.launched).map((p) => ({ p, w: p.id === id ? B.AD_FOCUS_WEIGHT : 1 }))
 }
 
 /** CAC factor of the focus change still settling: AD_FOCUS_WARMUP_CAC on the day, linear to 1 at AD_FOCUS_WARMUP_DAYS. */
@@ -154,52 +173,163 @@ export function adFocusWarmup(s: GameState): number {
   return left > 0 ? 1 + (B.AD_FOCUS_WARMUP_CAC - 1) * Math.min(1, left) : 1
 }
 
-export interface FocusEffects {
-  /** Company multipliers (focus / balanced), ≠ 1 only where the products differ. */
-  arpu: number
+/** One product's part of today's flows: fractions of the paid and organic users (each sums to 1 over the launched). */
+export interface FlowPart {
+  p: Project
+  paid: number
   organic: number
-  cac: number
-  churn: number
 }
 
-/** What a focus does to the company's channels against the balanced mean: the weighted means' ratios (cheap, no tick). */
-export function focusEffects(s: GameState, focus: ProjectId | null): FocusEffects {
+/**
+ * How new users split over the launched products: paid by ad weight; organic by (share + ORGANIC_SHARE_FLOOR) ×
+ * category organic × organic modules. `focus` as in adWeights.
+ */
+export function flowSplit(s: GameState, focus?: ProjectId | null): FlowPart[] {
+  const ads = adWeights(s, focus)
+  const { shares } = projectShares(s)
   const day = s.time.day
-  const flat = projectWeights(s, null)
-  const tilted = projectWeights(s, focus)
-  const ratio = (f: (p: Project) => number) => wMean(tilted, f) / wMean(flat, f)
-  return {
-    arpu: ratio((p) => (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day)),
-    organic: ratio((p) => (B.CATEGORY_ORGANIC[p.category] ?? 1) * moduleMult(p, 'organic', day)),
-    cac: ratio((p) => moduleMult(p, 'cac', day)),
-    churn: ratio((p) => moduleMult(p, 'churn', day)),
+  let adTotal = 0
+  for (const a of ads) adTotal += a.w
+  const org = shares.map(({ p, share }) => (share + B.ORGANIC_SHARE_FLOOR) * (B.CATEGORY_ORGANIC[p.category] ?? 1) * moduleMult(p, 'organic', day))
+  let orgTotal = 0
+  for (const o of org) orgTotal += o
+  return ads.map(({ p, w }, i) => ({ p, paid: adTotal > 0 ? w / adTotal : 0, organic: orgTotal > 0 ? org[i]! / orgTotal : 0 }))
+}
+
+/**
+ * Keeps Σ p.users = stats.users (A1): any direct change to the company's users (a card's effect, a percent, a rival
+ * bought) lands on the products in proportion; with nobody holding users yet, they split equally among the launched
+ * ones. Unlaunched projects hold none. Called at the start of every tick's user flow.
+ */
+export function syncProjectUsers(s: GameState): void {
+  const live = s.projects.filter((p) => p.launched)
+  if (live.length === 0) return
+  const want = Math.max(0, s.stats.users)
+  let total = 0
+  for (const p of live) total += Math.max(0, p.users ?? 0)
+  if (Math.abs(total - want) <= 1e-9 * Math.max(1, want) && live.every((p) => p.users !== undefined)) return
+  if (total > 0) {
+    const k = want / total
+    for (const p of live) p.users = Math.max(0, p.users ?? 0) * k
+  } else {
+    for (const p of live) p.users = want / live.length
+  }
+}
+
+/** Users that walk into one product (a release wave, a manual find): its stock and its acquired counter. */
+export function addProjectUsers(p: Project, n: number): void {
+  if (!(n > 0)) return
+  p.users = (p.users ?? 0) + n
+  p.acq = (p.acq ?? 0) + n
+}
+
+/**
+ * One tick of the user flow per product (A1): paid by ad weight, organic by flowSplit, churn by users × the product's
+ * churn modules (normalized so Σ = the company's churned users), revenue by users × its ARPU factors (Σ = self-serve
+ * revenue). Writes p.users / acq / lost / rev; the company stock is moved by the caller.
+ */
+export function flowProjectUsers(s: GameState, paid: number, organic: number, lost: number, revenue: number): void {
+  const parts = flowSplit(s)
+  if (parts.length === 0) return
+  const day = s.time.day
+  let churnW = 0
+  let revW = 0
+  const cw: number[] = []
+  const rw: number[] = []
+  for (const { p } of parts) {
+    const u = Math.max(0, p.users ?? 0)
+    const c = u * moduleMult(p, 'churn', day)
+    const r = u * (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day)
+    cw.push(c)
+    rw.push(r)
+    churnW += c
+    revW += r
+  }
+  parts.forEach((part, i) => {
+    const p = part.p
+    const inflow = paid * part.paid + organic * part.organic
+    const out = churnW > 0 ? (lost * cw[i]!) / churnW : 0
+    p.users = Math.max(0, (p.users ?? 0) + inflow - out)
+    p.acq = (p.acq ?? 0) + inflow
+    p.lost = (p.lost ?? 0) + out
+    if (revenue > 0 && revW > 0) p.rev = (p.rev ?? 0) + (revenue * rw[i]!) / revW
+  })
+}
+
+/** Month end (A1): each launched product's counters, whole numbers, the last PROJECT_SNAPS_MAX kept. */
+export function snapProjects(s: GameState): void {
+  for (const p of s.projects) {
+    if (!p.launched || p.acq === undefined) continue
+    const list = (p.snaps ??= [])
+    list.push({ day: Math.floor(s.time.day), acq: Math.round(p.acq), lost: Math.round(p.lost ?? 0), rev: Math.round(p.rev ?? 0) })
+    if (list.length > B.PROJECT_SNAPS_MAX) list.splice(0, list.length - B.PROJECT_SNAPS_MAX)
   }
 }
 
 /**
- * Estimated MRR a month from now if the ads promoted `focus` (null = the company): the derived channels moved from the
- * current focus to that one (the multipliers' ratios), no warm-up. users × (1 − churn) + new, at the new ARPU. For bots
- * and previews, not the tick.
+ * Paid users a month under `focus`: today's paid channel at the CAC the focus's module mix gives (the ad weights move
+ * it; the warm-up is left out on both sides).
  */
-export function focusPreview(s: GameState, focus: ProjectId | null): number {
-  const cur = focusEffects(s, adFocusProject(s)?.id ?? null)
-  const next = focusEffects(s, focus)
-  const d = s.derived
-  const ch = d.channels
-  const paid = next.cac > 0 ? ch.paid * cur.cac / next.cac : ch.paid
-  const organic = ch.organic / cur.organic * next.organic
-  const churn = s.stats.churn / cur.churn * next.churn
-  const arpu = s.stats.arpu / cur.arpu * next.arpu
-  const users = Math.max(0, s.stats.users * (1 - churn) + organic + paid + ch.manual)
-  return users * arpu + s.finance.enterpriseCustomers.reduce((a, e) => a + e.mrr, 0)
+export function focusPaidTotal(s: GameState, focus: ProjectId | null): number {
+  const day = s.time.day
+  const paid = s.derived.channels.paid
+  const cacMix = (ws: { p: Project; w: number }[]) => wMean(ws, (p) => moduleMult(p, 'cac', day))
+  const cur = cacMix(adWeights(s))
+  const next = cacMix(adWeights(s, focus))
+  return next > 0 ? (paid * cur) / next : paid
+}
+
+/** Each launched product's paid users a month under `focus` (the focus chips: "Tılsım'a +40 kullanıcı/30g"). */
+export function focusPaidSplit(s: GameState, focus: ProjectId | null): Record<string, number> {
+  const total = focusPaidTotal(s, focus)
+  const out: Record<string, number> = {}
+  for (const part of flowSplit(s, focus)) out[part.p.id] = total * part.paid
+  return out
 }
 
 /**
- * Σ w_p × f(p) / Σ w_p over the launched projects (1 before the first launch). With equal weights and no modules this
- * is categoryMix bit for bit (the same running sum divided by n). `ws`: projectWeights(s), computed once per derive.
+ * Estimated MRR `months` from now if the ads promoted `focus` (null = the company), no warm-up and no tick: each
+ * product's users go forward with its own acquisition (paid by the focus's ad weights at the CAC its module mix gives,
+ * organic as today), its own churn and its own ARPU. 0 months = today's MRR. For the focus chips and the bots.
+ */
+export function focusPreview(s: GameState, focus: ProjectId | null, months = 3): number {
+  const parts = flowSplit(s, focus)
+  const enterprise = s.finance.enterpriseCustomers.reduce((a, e) => a + e.mrr, 0)
+  if (parts.length === 0) return s.finance.mrr
+  const day = s.time.day
+  const ch = s.derived.channels
+  const paid = focusPaidTotal(s, focus)
+  const { shares } = projectShares(s)
+  const ws = projectWeights(s)
+  const arpuRel = (p: Project) => (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day)
+  const churnRel = (p: Project) => moduleMult(p, 'churn', day)
+  const arpuMix = wMean(ws, arpuRel)
+  const churnMix = wMean(ws, churnRel)
+  const users = shares.map(({ p, share }) => (p.users !== undefined ? Math.max(0, p.users) : share * s.stats.users))
+  const arpu = parts.map(({ p }) => (arpuMix > 0 ? (s.stats.arpu * arpuRel(p)) / arpuMix : s.stats.arpu))
+  const churn = parts.map(({ p }) => Math.min(1, churnMix > 0 ? (s.stats.churn * churnRel(p)) / churnMix : s.stats.churn))
+  for (let m = 0; m < months; m++) {
+    parts.forEach((part, i) => {
+      users[i] = Math.max(0, users[i]! * (1 - churn[i]!) + paid * part.paid + (ch.organic + ch.manual) * part.organic)
+    })
+  }
+  let mrr = enterprise
+  parts.forEach((_, i) => (mrr += users[i]! * arpu[i]!))
+  return mrr
+}
+
+/**
+ * Σ w_p × f(p) / Σ w_p over the launched projects (1 before the first launch). With equal weights (no modules, equal
+ * shares) this is categoryMix bit for bit: the same running sum divided by n.
  */
 export function wMean(ws: readonly { p: Project; w: number }[], f: (p: Project) => number): number {
   if (ws.length === 0) return 1
+  const w0 = ws[0]!.w
+  if (ws.every((x) => x.w === w0)) {
+    let sum = 0
+    for (const { p } of ws) sum += f(p)
+    return sum / ws.length
+  }
   let sum = 0
   let total = 0
   for (const { p, w } of ws) {
@@ -209,23 +339,34 @@ export function wMean(ws: readonly { p: Project; w: number }[], f: (p: Project) 
   return sum / total
 }
 
-/** derived.projectMix (written once a project has a module): each launched project's normalized weight, its capped multipliers (≠ 1 only) and upkeep. */
-export function projectMix(s: GameState, mrr = s.finance.mrr, ws = projectWeights(s)): Record<string, ProjectMixView> {
+/**
+ * derived.projectMix (once a project is live): each launched project's normalized mix weight, its capped multipliers
+ * (≠ 1 only), its upkeep, and (A1) its users, share and today's paid / organic users a month (`paid` / `organic`: the
+ * company's channels).
+ */
+export function projectMix(s: GameState, mrr = s.finance.mrr, ws = projectWeights(s), paid = s.derived.channels?.paid ?? 0, organic = s.derived.channels?.organic ?? 0): Record<string, ProjectMixView> {
   const total = ws.reduce((a, x) => a + x.w, 0)
+  const { shares } = projectShares(s)
+  const split = flowSplit(s)
   const out: Record<string, ProjectMixView> = {}
-  for (const { p, w } of ws) {
+  ws.forEach(({ p, w }, i) => {
     const weight = w / total
     const mult: Partial<Record<ModuleEffectKind, number>> = {}
-    if (!p.modules?.length) {
-      out[p.id] = { weight, mult, upkeep: 0 }
-      continue
-    }
-    for (const kind of MODULE_KINDS) {
+    for (const kind of p.modules?.length ? MODULE_KINDS : []) {
       const v = moduleMult(p, kind, s.time.day)
       if (v !== 1) mult[kind] = v
     }
-    out[p.id] = { weight, mult, upkeep: moduleUpkeep(s, p, weight, mrr) }
-  }
+    const part = split[i]!
+    out[p.id] = {
+      weight,
+      mult,
+      upkeep: p.modules?.length ? moduleUpkeep(s, p, weight, mrr) : 0,
+      users: Math.round(Math.max(0, p.users ?? shares[i]!.share * s.stats.users)),
+      share: shares[i]!.share,
+      paidPerMonth: paid * part.paid,
+      organicPerMonth: organic * part.organic,
+    }
+  })
   return out
 }
 
@@ -420,9 +561,10 @@ export function buildStatus(s: GameState, p: Project): { id: ProjectModuleId; re
   return { id: b.id, refresh: b.refresh === true, fraction: Math.min(1, b.progress / work), days: rate > 0 ? Math.ceil(Math.max(0, work - b.progress) / rate) : null }
 }
 
-/** A module's monthly upkeep if it were built on this project now (0 for modules with none). */
+/** A module's monthly upkeep if it were built on this project now, at its weight in the mix (0 for modules with none). */
 export function moduleUpkeepHint(s: GameState, p: Project, id: ProjectModuleId): number {
   const ws = projectWeights(s)
-  const weight = ws.length > 0 ? (ws.some((x) => x.p.id === p.id) ? 1 : 0) / ws.length : 0
+  const total = ws.reduce((a, x) => a + x.w, 0)
+  const weight = total > 0 ? (ws.find((x) => x.p.id === p.id)?.w ?? 0) / total : 0
   return Math.round(moduleDef(id)?.upkeep?.(s, weight, s.finance.mrr) ?? 0)
 }

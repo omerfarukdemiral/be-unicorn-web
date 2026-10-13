@@ -6,6 +6,7 @@ import * as B from './balance'
 import { clamp, segmentRamp } from './economy'
 import { applyMorale } from './effects'
 import { movesError, spendMoves } from './founder'
+import { snapProjects } from './modules'
 import type { Rng } from './rng'
 import {
   NPC_ROLES,
@@ -68,6 +69,7 @@ export function monthEnd(s: GameState): void {
   }
   s.flags['manualLastMonth'] = Number(s.flags['manualThisMonth'] ?? 0)
   s.flags['manualThisMonth'] = 0
+  snapProjects(s)
   s.flags['findUsesThisMonth'] = 0
   s.flags['salesCallsThisMonth'] = 0
   rivalsMonthEnd(s)

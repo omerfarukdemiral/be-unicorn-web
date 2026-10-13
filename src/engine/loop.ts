@@ -6,7 +6,7 @@ import { clamp, ledgerCosts } from './economy'
 import { applyMorale, loanOf, syncDebt } from './effects'
 import { lastUpdateDay, owedTotal } from './loopSelectors'
 import { yearlyRaises } from './people'
-import { moduleDef, moduleMult, moduleWork, updateSize } from './modules'
+import { addProjectUsers, moduleDef, moduleMult, moduleWork, updateSize } from './modules'
 import { DAYS_PER_MONTH, type GameState, type ModuleBuild, type MonthLedger, type MonthReceipt, type PaydayChoice, type PendingPayday, type Project, type ProjectModuleId, type ReleaseEntry } from './types'
 import { newId, policiesOf, policyMult, policySum, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 import { directorOf, graceAfterMissedPayroll } from './world'
@@ -133,6 +133,7 @@ function closeMonth(s: GameState, content: EngineContent, l: MonthLedger, m: Mon
     debt: s.finance.debt,
     adBudget: s.finance.adBudget,
     usersDelta: usersDelta(s),
+    ...(l.adUsers ? { adUsers: l.adUsers } : {}),
     stage: s.stage,
     ...(s.derived.penetration !== undefined ? { penetration: s.derived.penetration } : {}),
   }
@@ -403,6 +404,7 @@ function pushReceipt(s: GameState, r: MonthReceipt): void {
   if (r.deferred) out.deferred = Math.round(r.deferred)
   if (r.adBudget) out.adBudget = Math.round(r.adBudget)
   if (r.usersDelta !== undefined) out.usersDelta = Math.round(r.usersDelta)
+  if (r.adUsers) out.adUsers = Math.round(r.adUsers)
   if (r.stage !== undefined) out.stage = r.stage
   if (r.burnMultiple !== undefined) out.burnMultiple = ratio(r.burnMultiple)
   if (r.penetration !== undefined) out.penetration = ratio(r.penetration)
@@ -467,6 +469,8 @@ export function updateWave(s: GameState, p?: Project): number {
 function ship(s: GameState, content: EngineContent, p: Project, level: number, users: number, update?: number, extra?: { module: ProjectModuleId }): void {
   const mrrBefore = s.finance.mrr
   s.stats.users += users
+  // A1: the wave walks into the product that shipped.
+  if (p.launched) addProjectUsers(p, users)
   recomputeDerived(s, content)
   const entry: ReleaseEntry = { id: newId(s, 'rel'), day: s.time.day, projectId: p.id, projectName: p.name, level, users, mrr: Math.max(0, s.finance.mrr - mrrBefore) }
   if (update !== undefined) entry.update = update

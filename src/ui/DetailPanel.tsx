@@ -19,7 +19,7 @@ import { moraleTone } from './theme'
 import { useIsMobile, useTwoStep } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AdFocusToggle } from './panels/AdFocus'
-import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar } from './panels/ProjectsPanel'
+import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar, ProductUsers } from './panels/ProjectsPanel'
 import { ModulesSection } from './panels/ModulesSection'
 import { ChipRow } from './EffectChips'
 import { fatigueGood, fitChips, hiddenLossChip, LeadLine, loadChip, personLabel, PersonEffortRows, SprintRow, TeamOf } from './effort'
@@ -400,6 +400,7 @@ function ProjectDetail({ id }: { id: string }) {
           <Dot color="var(--color-positive)" size={7} />
           <span className="text-xs font-semibold text-ink-2">{t('detail.live')}</span>
           <Bar value={1} color={CATEGORY_COLOR[p.category]} height={3} className="flex-1" />
+          <ProductUsers projectId={p.id} className="shrink-0" />
         </section>
       ) : (
         <section>
@@ -409,6 +410,7 @@ function ProjectDetail({ id }: { id: string }) {
           </div>
           <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
           <p className="font-text mt-2 text-[11px] text-ink-2">{p.launched ? t('detail.launched') : t('detail.mvpHint', { v: pct(0.2) })}</p>
+          {p.launched && <ProductUsers projectId={p.id} />}
         </section>
       )}
       <div className="grid grid-cols-2 gap-2">

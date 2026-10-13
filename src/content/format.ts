@@ -91,3 +91,30 @@ export function fillTemplate(template: string, params?: Record<string, string | 
 export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
 }
+
+// Turkish case endings after a name (A1 chips: "Tılsım'a +40 kullanıcı", "Series A'da reklam pahalı"). The ending follows
+// the last vowel heard: a single capital letter reads as its name ("A" = a, "B" = be), other words as written.
+const LETTER_NAME: Readonly<Record<string, string>> = {
+  A: 'a', B: 'be', C: 'ce', Ç: 'çe', D: 'de', E: 'e', F: 'fe', G: 'ge', Ğ: 'yumuşak ge', H: 'he', I: 'ı', İ: 'i', J: 'je', K: 'ke', L: 'le',
+  M: 'me', N: 'ne', O: 'o', Ö: 'ö', P: 'pe', Q: 'ku', R: 're', S: 'se', Ş: 'şe', T: 'te', U: 'u', Ü: 'ü', V: 've', W: 've', X: 'iks', Y: 'ye', Z: 'ze',
+}
+const BACK = 'aıou'
+const VOWELS = 'aıoueiöü'
+const VOICELESS = 'fstkçşhp'
+
+/** "Tılsım" dat → "Tılsım'a", "Pano" dat → "Pano'ya", "Seed" loc → "Seed'de", "Series A" loc → "Series A'da", "Kasa" loc → "Kasa'da". */
+export function withCase(name: string, kind: 'dat' | 'loc'): string {
+  const word = name.trim().split(/\s+/).pop() ?? ''
+  const spoken = (LETTER_NAME[word] ?? word.replace(/I/g, 'ı').replace(/İ/g, 'i').toLowerCase()).replace(/[^a-zçğıöşü]/g, '')
+  let vowel = 'e'
+  for (let i = spoken.length - 1; i >= 0; i--) {
+    if (VOWELS.includes(spoken[i]!)) {
+      vowel = spoken[i]!
+      break
+    }
+  }
+  const v = BACK.includes(vowel) ? 'a' : 'e'
+  const last = spoken[spoken.length - 1] ?? ''
+  if (kind === 'dat') return `${name}'${VOWELS.includes(last) ? 'y' : ''}${v}`
+  return `${name}'${VOICELESS.includes(last) ? 't' : 'd'}${v}`
+}

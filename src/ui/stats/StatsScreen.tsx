@@ -245,6 +245,8 @@ function GrowthTab({ series, live, sel, onSelect, animate }: TabProps) {
   const rival = useGameStore(useShallow((s) => leadRival(s.state.rivals)))
   const v = useMemo(() => growthView(series, live, round, rival), [series, live, round, rival])
   const ch = useGameStore(useShallow((s) => ({ ...s.state.derived.channels })))
+  // A1: the users last month's ads brought ("Reklam: +n kullanıcı").
+  const adUsers = useGameStore((s) => s.state.finance.lastReceipt?.adUsers ?? 0)
   const locked = useGameStore(useShallow((s) => statsLocks(s.state.unlockedWidgets, s.state.unlockedTools, v.penetration)))
   const mrr = valueAt(v.mrr, sel)
   const users = valueAt(v.users, sel)
@@ -291,7 +293,12 @@ function GrowthTab({ series, live, sel, onSelect, animate }: TabProps) {
           animate={animate}
         />
       </Tile>
-      <Tile label={t('stats.newUsers')} icon="users" color={WIDGET_COLOR.users}>
+      <Tile
+        label={t('stats.newUsers')}
+        icon="users"
+        color={WIDGET_COLOR.users}
+        sub={adUsers >= 1 ? <span className="tabular text-[11px] font-semibold text-ink-2">{t('receipt.adUsers', { n: num(adUsers) })}</span> : undefined}
+      >
         {v.newUsers.length === 0 ? (
           <EmptyChart icon="users" label={t('stats.newUsers')} />
         ) : (

@@ -1,27 +1,56 @@
-// Reklam odağı (W3): the one company ad budget promotes one launched product. A chip row under the budget steps
-// (Şirket = balanced), what the chosen focus does to the channels as up to 3 delta chips, the warm-up while it settles.
+// Reklam odağı (W3, A1): the one company ad budget promotes one launched product. A chip row under the budget steps
+// (Şirket = balanced). Under it, what the shown focus moves in absolute numbers: who gains paid users, who loses, the
+// MRR 3 months out, and the warm-up while it settles. Shown = the hovered chip (mouse), else the chosen one; the chosen
+// one is measured against Şirket, a hovered one against the current focus.
+import { useState, type PointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import * as B from '../../engine/balance'
-import { adFocusProject, adFocusWarmup, focusEffects } from '../../engine/modules'
+import { adFocusProject, adFocusWarmup, focusPaidSplit, focusPreview } from '../../engine/modules'
+import type { GameState } from '../../engine/types'
+import { withCase } from '../../content/format'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
+import { money, num } from '../format'
 import { cx } from '../primitives'
 import { CATEGORY_COLOR, CATEGORY_ICON } from './ProjectsPanel'
 
-/** Signed percent of a ratio ("+6%", "−3%"), null under 1% (nothing to say). */
-function delta(ratio: number): { text: string; sign: number } | null {
-  const v = Math.round((ratio - 1) * 100)
-  if (v === 0) return null
-  return { text: `${v > 0 ? '+' : '−'}${Math.abs(v)}%`, sign: Math.sign(v) }
+/** The focus chips' numbers (flat, for useShallow): the biggest paid gainer and loser a month, the MRR change 3 months out. */
+export interface FocusChips {
+  gain: string | null
+  gainN: number
+  loss: string | null
+  lossN: number
+  mrr: number
 }
 
-const KINDS = [
-  { key: 'arpu', icon: 'coin', good: 1 },
-  { key: 'organic', icon: 'trend', good: 1 },
-  { key: 'cac', icon: 'scale', good: -1 },
-  { key: 'churn', icon: 'leak', good: -1 },
-] as const
+const NO_CHIPS: FocusChips = { gain: null, gainN: 0, loss: null, lossN: 0, mrr: 0 }
+
+/** `shown` against `base` (null = Şirket). Nothing when they are the same. Whole users and dollars only. */
+export function focusChips(s: GameState, shown: string | null, base: string | null): FocusChips {
+  if (shown === base) return NO_CHIPS
+  const a = focusPaidSplit(s, shown)
+  const b = focusPaidSplit(s, base)
+  const out = { ...NO_CHIPS }
+  for (const p of s.projects) {
+    if (!(p.id in a)) continue
+    const d = a[p.id]! - (b[p.id] ?? 0)
+    if (d > out.gainN) {
+      out.gainN = d
+      out.gain = p.name
+    }
+    if (-d > out.lossN) {
+      out.lossN = -d
+      out.loss = p.name
+    }
+  }
+  out.gainN = Math.round(out.gainN)
+  out.lossN = Math.round(out.lossN)
+  if (out.gainN < 1) out.gain = null
+  if (out.lossN < 1) out.loss = null
+  out.mrr = Math.round(focusPreview(s, shown, 3) - focusPreview(s, base, 3))
+  return out
+}
 
 export function AdFocusRow() {
   const projects = useGameStore((s) => s.state.projects)
@@ -29,16 +58,19 @@ export function AdFocusRow() {
   const focus = useGameStore((s) => adFocusProject(s.state)?.id ?? null)
   const warm = useGameStore((s) => Math.ceil(B.AD_FOCUS_WARMUP_DAYS - (s.state.time.day - (s.state.finance.adFocusDay ?? -99))))
   const warming = useGameStore((s) => adFocusWarmup(s.state) > 1)
-  const fx = useGameStore(useShallow((s) => (focus ? focusEffects(s.state, focus) : null)))
+  // undefined = nothing hovered; null = the Şirket chip.
+  const [hover, setHover] = useState<string | null | undefined>(undefined)
+  const shown = hover !== undefined ? hover : focus
+  const base = shown === focus ? null : focus
+  const fx = useGameStore(useShallow((s) => focusChips(s.state, shown, base)))
   const dispatch = useGameStore((s) => s.dispatch)
   const live = projects.filter((p) => p.launched)
   if (live.length < 2 || budget <= 0) return null
-  const chips = fx
-    ? KINDS.map((k) => ({ ...k, d: delta(fx[k.key]) }))
-        .filter((k) => k.d)
-        .sort((a, b) => Math.abs(parseInt(b.d!.text.replace('−', '-'))) - Math.abs(parseInt(a.d!.text.replace('−', '-'))))
-        .slice(0, 3)
-    : []
+  const hoverProps = (id: string | null) => ({
+    onPointerEnter: (e: PointerEvent) => e.pointerType === 'mouse' && setHover(id),
+    onPointerLeave: () => setHover(undefined),
+  })
+  const showMrr = Math.abs(fx.mrr) >= 1
   return (
     <div className="mt-3" data-ad-focus>
       <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-ink-2">
@@ -46,19 +78,16 @@ export function AdFocusRow() {
         {t('ads.focus')}
       </div>
       <div className="ui-scroll -mx-1 flex snap-x gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label={t('ads.focus')}>
-        <FocusChip on={focus === null} label={t('ads.focusCompany')} onClick={() => dispatch({ type: 'setAdFocus', projectId: null })} />
+        <FocusChip on={focus === null} label={t('ads.focusCompany')} onClick={() => dispatch({ type: 'setAdFocus', projectId: null })} {...hoverProps(null)} />
         {live.map((p) => (
-          <FocusChip key={p.id} on={focus === p.id} label={p.name} color={CATEGORY_COLOR[p.category]} icon={CATEGORY_ICON[p.category]} onClick={() => dispatch({ type: 'setAdFocus', projectId: p.id })} />
+          <FocusChip key={p.id} on={focus === p.id} label={p.name} color={CATEGORY_COLOR[p.category]} icon={CATEGORY_ICON[p.category]} onClick={() => dispatch({ type: 'setAdFocus', projectId: p.id })} {...hoverProps(p.id)} />
         ))}
       </div>
-      {(focus ? chips.length > 0 || warming : warming) && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {chips.map((k) => (
-            <span key={k.key} className={cx('tabular inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-bold', k.d!.sign * k.good > 0 ? 'text-positive-ink' : 'text-negative-ink')}>
-              <Icon name={k.icon} size={12} />
-              {t(`ads.delta.${k.key}`, { v: k.d!.text })}
-            </span>
-          ))}
+      {(fx.gain || fx.loss || showMrr || warming) && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-focus-chips>
+          {fx.gain && <DeltaChip good icon="users" text={t('ads.focusGain', { project: withCase(fx.gain, 'dat'), n: num(fx.gainN) })} />}
+          {fx.loss && <DeltaChip good={false} icon="users" text={t('ads.focusLoss', { project: withCase(fx.loss, 'dat'), n: num(fx.lossN) })} />}
+          {showMrr && <DeltaChip good={fx.mrr > 0} icon="coin" text={t('ads.focusMrr', { v: `${fx.mrr > 0 ? '+' : '−'}${money(Math.abs(fx.mrr))}` })} />}
           {warming && (
             <span className="tabular inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-bold text-ink-2">
               <Icon name="hourglass" size={12} />
@@ -71,12 +100,39 @@ export function AdFocusRow() {
   )
 }
 
-function FocusChip({ on, label, color, icon, onClick }: { on: boolean; label: string; color?: string; icon?: Parameters<typeof Icon>[0]['name']; onClick: () => void }) {
+function DeltaChip({ good, icon, text }: { good: boolean; icon: Parameters<typeof Icon>[0]['name']; text: string }) {
+  return (
+    <span className={cx('tabular inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-bold', good ? 'text-positive-ink' : 'text-negative-ink')}>
+      <Icon name={icon} size={12} />
+      {text}
+    </span>
+  )
+}
+
+function FocusChip({
+  on,
+  label,
+  color,
+  icon,
+  onClick,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  on: boolean
+  label: string
+  color?: string
+  icon?: Parameters<typeof Icon>[0]['name']
+  onClick: () => void
+  onPointerEnter?: (e: PointerEvent) => void
+  onPointerLeave?: () => void
+}) {
   return (
     <button
       type="button"
       aria-pressed={on}
       onClick={onClick}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       className={cx('ui-key ui-key-sm inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold', on ? 'ui-key-soft' : 'ui-key-routine')}
     >
       {icon && <Icon name={icon} size={14} style={color ? { color } : undefined} />}

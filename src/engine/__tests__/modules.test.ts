@@ -5,7 +5,7 @@ import * as E from '../economy'
 import { averageLaunchedMaturity, computeOutputs, maturityRates, recomputeDerived } from '../derive'
 import { completeFounderAction } from '../founder'
 import { accrueMonth, checkReleases, ledgerOf, resolvePayday, updateWave } from '../loop'
-import { adFocusWarmup, focusEffects, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
+import { adFocusWarmup, adWeights, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
 import { createRngState, Rng } from '../rng'
 import { progressProjects } from '../tick'
 import { PROJECT_MODULE_IDS, type Action, type GameState, type ModuleEffectKind, type Project, type ProjectCategory, type ProjectModuleId, type TimedAction } from '../types'
@@ -13,20 +13,22 @@ import { clone, modifierMult, policyMult } from '../util'
 import { deserialize, serialize } from '../save'
 import { api, build, company, content, current, legacy, withModules } from './moduleFixtures'
 
-describe('no modules: the economy is bit for bit the old one', () => {
+describe('no modules, equal shares: the economy is bit for bit the old one', () => {
   const sets: ProjectCategory[][] = [['mobile'], ['web', 'game'], ['ai', 'api', 'marketplace']]
   for (const cats of sets) {
     it(`${cats.length} project(s): ${cats.join(', ')}`, () => {
       // A few months in (history, rivals, releases), then compared on the same state.
       const s = api.step(company(cats, 2, 5 + cats.length), 75)
+      // A1 (rule change on purpose): the mixes weigh the products by their user shares. The old flat mean is the
+      // equal-share case, so the products get equal users here; the share-weighted mix has its own tests.
+      for (const p of s.projects) p.users = s.stats.users / cats.length
       const want = legacy(clone(s))
       const got = clone(s)
       recomputeDerived(got, content)
       expect(current(got)).toEqual(want)
       for (const [k, v] of Object.entries(want)) expect(current(got)[k as keyof typeof want]).toBe(v)
-      // Nothing to show without a module: the derived view (and the save) stays as it was.
-      expect(got.derived.projectMix).toBeUndefined()
-      const mix = projectMix(got)
+      // A1: the view is there once a product is live, with no multipliers and no upkeep without a module.
+      const mix = got.derived.projectMix!
       expect(Object.values(mix).map((x) => x.weight)).toEqual(cats.map(() => 1 / cats.length))
       expect(Object.values(mix).every((x) => Object.keys(x.mult).length === 0 && x.upkeep === 0)).toBe(true)
     })
@@ -486,51 +488,40 @@ describe('replay', () => {
   })
 })
 
-describe('ad focus (W3)', () => {
+describe('ad focus (W3, A1: weights route the paid users)', () => {
   const full = (cats: readonly ProjectCategory[], focusIdx: number | null) => {
     const s = company(cats, 2)
-    s.finance.adBudget = 1_000_000 // far past MRR and the stage floor: adIntensity 1
+    s.finance.adBudget = 1_000_000
     if (focusIdx !== null) s.finance.adFocus = s.projects[focusIdx]!.id
     recomputeDerived(s, content)
     return s
   }
 
-  it('no focus or no ads: the flat mean; full ads on 3 projects: 0.6 / 0.2 / 0.2', () => {
-    const flat = full(['game', 'api', 'ai'], null)
-    expect(projectWeights(flat).map((x) => x.w)).toEqual([1, 1, 1])
-    const noAds = full(['game', 'api', 'ai'], 0)
-    noAds.finance.adBudget = 0
-    expect(projectWeights(noAds).map((x) => x.w)).toEqual([1, 1, 1])
+  // A1 (rule change on purpose): W3's tilt tests (1 + AD_FOCUS_TILT × adIntensity, 0.6 / 0.2 / 0.2 of the mix, the tilt
+  // reading last month's MRR) are gone with the tilt. The ad weights are AD_FOCUS_WEIGHT for the focus, 1 for the others.
+  it('ad weights: 1 each without a focus; the focus × AD_FOCUS_WEIGHT whatever the budget', () => {
+    expect(adWeights(full(['game', 'api', 'ai'], null)).map((x) => x.w)).toEqual([1, 1, 1])
     const f = full(['game', 'api', 'ai'], 0)
-    const w = projectWeights(f).map((x) => x.w)
-    const total = w.reduce((a, b) => a + b, 0)
-    expect(w.map((x) => x / total)).toEqual([0.6, 0.2, 0.2].map((x) => expect.closeTo(x, 9)))
+    expect(adWeights(f).map((x) => x.w)).toEqual([B.AD_FOCUS_WEIGHT, 1, 1])
+    f.finance.adBudget = 10
+    expect(adWeights(f).map((x) => x.w)).toEqual([B.AD_FOCUS_WEIGHT, 1, 1])
+    // The mix weights do not move with the focus (they follow the users).
+    expect(projectWeights(f).map((x) => x.w)).toEqual([1, 1, 1])
     expect(Object.values(projectMix(withModules(f, 1, ['feedback']))).reduce((a, x) => a + x.weight, 0)).toBeCloseTo(1, 9)
   })
 
   it('a focus at a missing or unlaunched project is ignored', () => {
     const s = full(['game', 'api'], null)
     s.finance.adFocus = 'nope'
-    expect(projectWeights(s).map((x) => x.w)).toEqual([1, 1])
+    expect(adWeights(s).map((x) => x.w)).toEqual([1, 1])
     s.projects[1]!.launched = false
     s.finance.adFocus = s.projects[1]!.id
-    expect(projectWeights(s).map((x) => x.w)).toEqual([1])
+    expect(adWeights(s).map((x) => x.w)).toEqual([1])
   })
 
-  it('the company mult sits between the projects; the tilt reads last month MRR; recompute is stable', () => {
+  it('recompute is stable with a focus and uneven users', () => {
     const s = full(['game', 'api', 'ai'], 0)
-    const per = s.projects.map((p) => (B.CATEGORY_ARPU[p.category] ?? 1))
-    const mean = s.stats.arpu
-    expect(Number.isFinite(mean)).toBe(true)
-    const e = focusEffects(s, s.projects[0]!.id)
-    expect(e.arpu).toBeGreaterThan(0)
-    expect(Math.min(...per)).toBeLessThanOrEqual(Math.max(...per))
-    // A big MRR this tick does not move the weights; last month's snapshot does.
-    const a = projectWeights(s)[0]!.w
-    s.finance.mrr *= 50
-    expect(projectWeights(s)[0]!.w).toBe(a)
-    s.finance.mrrHistory.push(1e9)
-    expect(projectWeights(s)[0]!.w).toBeLessThan(a)
+    s.projects.forEach((p, i) => (p.users = s.stats.users * [0.5, 0.3, 0.2][i]!))
     const x = clone(s)
     recomputeDerived(x, content)
     const y = clone(x)
@@ -588,22 +579,28 @@ describe('ad focus (W3)', () => {
     expect(fresh.derived.cac).toBeCloseTo(base * 1.15, 6)
   })
 
-  it('focusPreview: null from a focused state matches the flat state estimate', () => {
+  it('focusPreview: 0 months is today\'s MRR; a month out on the current focus matches the per-product estimate', () => {
     const s = full(['game', 'api', 'ai'], 0)
-    const cur = focusPreview(s, s.projects[0]!.id)
-    const flat = focusPreview(s, null)
-    expect(Number.isFinite(cur) && Number.isFinite(flat)).toBe(true)
-    const f = full(['game', 'api', 'ai'], null)
-    // The ratios leave out the spend saturation's own small feedback through MRR: within 1%.
-    expect(Math.abs(focusPreview(f, null) / flat - 1)).toBeLessThan(0.01)
+    expect(focusPreview(s, s.projects[0]!.id, 0)).toBeCloseTo(s.finance.mrr, 6)
+    // Equal users and no modules: every product has the company's churn and its own category ARPU.
+    const ch = s.derived.channels
+    const n = s.projects.length
+    const arpuMix = s.projects.reduce((a, p) => a + B.CATEGORY_ARPU[p.category], 0) / n
+    const paidW = [B.AD_FOCUS_WEIGHT, 1, 1].map((w) => w / (B.AD_FOCUS_WEIGHT + 2))
+    const orgW = s.projects.map((p) => B.CATEGORY_ORGANIC[p.category])
+    const orgT = orgW.reduce((a, b) => a + b, 0)
+    let want = 0
+    s.projects.forEach((p, i) => {
+      const u = (s.stats.users / n) * (1 - s.stats.churn) + ch.paid * paidW[i]! + (ch.organic + ch.manual) * (orgW[i]! / orgT)
+      want += u * (s.stats.arpu * B.CATEGORY_ARPU[p.category]) / arpuMix
+    })
+    expect(focusPreview(s, s.projects[0]!.id, 1) / want).toBeCloseTo(1, 9)
   })
 
-  it('focusPreview: staying on the current focus reproduces the state\'s own next-month estimate (paid keeps the current CAC factor)', () => {
-    const s = full(['game', 'api', 'ai'], 0)
-    const ch = s.derived.channels
-    const own = s.stats.users * (1 - s.stats.churn) + ch.organic + ch.paid + ch.manual
-    const want = own * s.stats.arpu + s.finance.enterpriseCustomers.reduce((a, e) => a + e.mrr, 0)
-    expect(focusPreview(s, s.projects[0]!.id) / want).toBeCloseTo(1, 6)
+  it('focusPreview: promoting the higher-ARPU product earns more 3 months out than promoting the lower one', () => {
+    const s = full(['game', 'ai'], null)
+    // game ARPU 0.8, ai 1.2 (balance.CATEGORY_ARPU).
+    expect(focusPreview(s, s.projects[1]!.id, 3)).toBeGreaterThan(focusPreview(s, s.projects[0]!.id, 3))
   })
 
   it('save round-trip keeps the focus; a save without it derives the same', () => {

@@ -39,4 +39,5 @@ export { directorOf, playerPower, rivalStrengthTarget, segmentError, acquireErro
 export { downRoundOpen, roundRetryIn } from './round'
 export { loanAmount, loanMonthlyService } from './effects'
 export { policyError } from './actions'
+export { adPreview, adStepWarning, cacFactors, cacReason, CAC_FACTOR_ORDER, type AdPreview, type CacFactor, type CacFactorKey } from './ads'
 export { boardEquity, policyEquity } from './round'

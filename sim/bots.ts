@@ -965,12 +965,19 @@ function modules(c: Ctx, cfg: BotConfig): void {
   }
 }
 
-/** W3: switch the ad focus only when the best choice beats the current by this much, and not within FOCUS_MIN_DAYS of the last change. */
-const FOCUS_MIN_GAIN = 0.02
+/**
+ * W3: switch the ad focus only when the best choice beats the current by this much, and not within FOCUS_MIN_DAYS of the last change.
+ * A1 (0.02 → 0.003): the focus now routes paid users instead of tilting the whole mix at once, so the 3-month preview of a
+ * good switch reads +0.3–0.6% of MRR (vcRocket, days 600–2400); at 2% the bots never switched (0 setAdFocus in 18 runs)
+ * and vcRocket's Unicorn median went 88.5 → 93.5 dk (22/24). At 0.3% it is 85.4 dk (23/24, quick 24-seed check).
+ */
+const FOCUS_MIN_GAIN = 0.003
 const FOCUS_MIN_DAYS = 30
+/** A1: the focus is judged on the MRR 3 months out (the Growth panel's chip reads the same preview). */
+const FOCUS_MONTHS = 3
 
 /**
- * Ad focus: with 2+ launched products and ads running, the highest estimated MRR a month out (modules.focusPreview) wins;
+ * Ad focus: with 2+ launched products and ads running, the highest estimated MRR 3 months out (modules.focusPreview) wins;
  * stays on the current one (Şirket by default) when the gain is under FOCUS_MIN_GAIN.
  */
 function adFocus(c: Ctx): void {
@@ -980,11 +987,11 @@ function adFocus(c: Ctx): void {
   if (live.length < 2) return
   if (s.finance.adFocusDay !== undefined && s.time.day - s.finance.adFocusDay < FOCUS_MIN_DAYS) return
   const cur = moduleLib.adFocusProject(s)?.id ?? null
-  const base = moduleLib.focusPreview(s, cur)
+  const base = moduleLib.focusPreview(s, cur, FOCUS_MONTHS)
   let best: string | null = cur
   let bestMrr = base
   for (const id of [null, ...live.map((p) => p.id)]) {
-    const v = moduleLib.focusPreview(s, id)
+    const v = moduleLib.focusPreview(s, id, FOCUS_MONTHS)
     if (v > bestMrr) {
       bestMrr = v
       best = id

@@ -6,10 +6,10 @@ import * as E from './economy'
 import { evaluateConcepts } from './concepts'
 import { applyDefaultDecision, applyDueEffects, fireCalendar, maybeShowDecision } from './decisions'
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
-import { accrueMonth, amortizeTechDebt, checkGoals, checkPaydayDesk, checkReleases, payday } from './loop'
+import { accrueMonth, amortizeTechDebt, checkGoals, checkPaydayDesk, checkReleases, ledgerOf, payday } from './loop'
 import { dailyEndgame } from './endgame'
 import { completeFounderAction, dailyContracts, dailyFounder, regenEnergy } from './founder'
-import { updateSize } from './modules'
+import { flowProjectUsers, syncProjectUsers, updateSize } from './modules'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
 import { checkRoundWindow, progressRound } from './round'
@@ -49,10 +49,20 @@ function advance(s: GameState, content: EngineContent, rng: Rng, dt: number): vo
   s.time.day = prevDay + dt
   s.time.month = Math.floor(s.time.day / DAYS_PER_MONTH)
 
-  // Monthly values flow daily, pro rata.
+  // Monthly values flow daily, pro rata. A1: first every direct change since the last tick lands on the products, then
+  // each flow splits over them (paid by ad weight, organic by share, churn by users, revenue by users × ARPU).
+  syncProjectUsers(s)
+  const paid = (s.derived.channels.paid / DAYS_PER_MONTH) * dt
+  const organic = (s.derived.channels.organic / DAYS_PER_MONTH) * dt
   const inflow = ((s.derived.channels.organic + s.derived.channels.paid) / DAYS_PER_MONTH) * dt
   const lost = ((s.stats.users * s.stats.churn) / DAYS_PER_MONTH) * dt
   s.stats.users = Math.max(0, s.stats.users + inflow - lost)
+  const enterprise = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
+  flowProjectUsers(s, paid, organic, lost, (Math.max(0, s.finance.mrr - enterprise) / DAYS_PER_MONTH) * dt)
+  if (paid > 0) {
+    const l = ledgerOf(s)
+    l.adUsers = (l.adUsers ?? 0) + paid
+  }
   // Revenue flows into cash day by day; costs accrue and are paid in one lump on payday (docs/CORE_LOOP.md §5).
   accrueMonth(s, dt)
 

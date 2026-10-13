@@ -377,6 +377,24 @@ export interface Project {
   sprintUntil?: number
   /** No new sprint before this day. */
   sprintReadyDay?: number
+  /**
+   * A1: the company's users on this product (float; Σ over the launched ones = stats.users, tick.syncProjectUsers keeps
+   * it so). Missing = an old save or not launched yet: the first tick splits the users equally.
+   */
+  users?: number
+  /** A1: users acquired into it so far (organic + paid + release waves + manual finds), users churned from it, revenue from it ($). */
+  acq?: number
+  lost?: number
+  rev?: number
+  /** A1: the counters at the last PROJECT_SNAPS_MAX month ends (whole numbers), oldest first. */
+  snaps?: ProjectSnap[]
+}
+
+export interface ProjectSnap {
+  day: number
+  acq: number
+  lost: number
+  rev: number
 }
 
 export interface ProjectModule {
@@ -712,6 +730,8 @@ export interface MonthLedger {
   founder?: number
   /** Segment upkeep accrued (GAMEPLAY V2 §8.1; optional: older saves). Paid like ads: it cannot be deferred. */
   expansion?: number
+  /** A1: users the ads brought this month (paid channel); missing = none yet. */
+  adUsers?: number
 }
 
 /** GAMEPLAY V2 §6.1: what the payday desk does with each line of a month it cannot pay. Ads cannot be deferred. */
@@ -785,6 +805,8 @@ export interface MonthReceipt {
   adBudget?: number
   /** Users gained (or lost) over the month. */
   usersDelta?: number
+  /** A1: users the ads brought over the month ("Reklam: +n kullanıcı"); missing = no ads. */
+  adUsers?: number
   stage?: StageIndex
   burnMultiple?: number
   /** users / reachable market (0–1). */
@@ -977,9 +999,15 @@ export interface PersonEffort {
 }
 
 export interface ProjectMixView {
+  /** Weight in the company mix: (1 − MIX_SHARE_BLEND) / n + MIX_SHARE_BLEND × share. */
   weight: number
   mult: Partial<Record<ModuleEffectKind, number>>
   upkeep: number
+  /** A1: users on it (rounded), its share of the company's users, and the new users a month it draws today. */
+  users?: number
+  share?: number
+  paidPerMonth?: number
+  organicPerMonth?: number
 }
 
 /**

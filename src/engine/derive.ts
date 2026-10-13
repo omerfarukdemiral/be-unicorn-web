@@ -7,7 +7,7 @@ import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './f
 import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
-import { adFocusWarmup, moduleMult, projectMix, projectWeights, wMean } from './modules'
+import { adFocusWarmup, adWeights, moduleMult, projectMix, projectWeights, wMean } from './modules'
 import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
@@ -193,11 +193,13 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
 
   // GAMEPLAY V2 §8.2: the named rivals' share presses the price and takes from word of mouth (§4.3).
   const rivalShare = E.rivalShareTotal(s.rivals)
-  // W3: projectWeights tilts toward the ad focus; the CAC carries the focus change's warm-up.
-  // W2a: the category mix carries each project's modules (wMean over the launched ones; with no modules, categoryMix).
+  // A1: ARPU / churn / organic / TAM weigh each product by its user share (projectWeights); the CAC's module mix by the
+  // ad weights (the focused product's modules set it) and carries the focus change's warm-up.
+  // W2a: the category mix carries each project's modules (wMean over the launched ones; equal shares, no modules: categoryMix).
   const day = s.time.day
   const ws = projectWeights(s)
-  const mix = (kind: 'churn' | 'cac' | 'tam') => wMean(ws, (p) => moduleMult(p, kind, day))
+  const ads = adWeights(s)
+  const mix = (kind: 'churn' | 'cac' | 'tam') => wMean(kind === 'cac' ? ads : ws, (p) => moduleMult(p, kind, day))
   const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu') * wMean(ws, (p) => (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day))
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
@@ -228,7 +230,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const salaries = pay.paid
   const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent') * policyMult(s, content, 'rent')
   // W2a: the modules' upkeep is infra too (a payday 'infra: defer' defers it with the servers).
-  const mixView = projectMix(s, mrr, ws)
+  const mixView = projectMix(s, mrr, ws, paid, organic)
   let modulesUpkeep = 0
   for (const v of Object.values(mixView)) modulesUpkeep += v.upkeep
   const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep + modulesUpkeep
@@ -347,8 +349,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   if (crisis) s.derived.nextCrisis = crisis
   const moves = movesView(s)
   if (moves) s.derived.moves = moves
-  // Only once a project has a module: without, the mix is equal weights and no multipliers (and saves stay as small).
-  if (ws.some((x) => x.p.modules?.length)) s.derived.projectMix = mixView
+  // A1: once a product is live (its users, share and flows show on the project card).
+  if (ws.length) s.derived.projectMix = mixView
   // E1: after capacity / overload (the engineers' and ops' load read them).
   s.derived.people = peopleView(s)
   return o

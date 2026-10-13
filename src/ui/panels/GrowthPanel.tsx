@@ -9,7 +9,7 @@
 // Stage goals (☆) live in Yol haritası (RoadmapPanel). Explanations sit behind ⓘ, never under a number.
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { adBudgetSteps, nearestPriceStep, PRICE_STEPS } from '../../engine'
+import { adBudgetSteps, adPreview, adStepWarning, nearestPriceStep, PRICE_STEPS } from '../../engine'
 import type { ToolId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { t } from '../i18n'
@@ -22,7 +22,7 @@ import { centerSummary } from '../center/centerData'
 import { RoundSection } from './RoundSection'
 import { BoardRow } from './BoardRow'
 import { RenewalSection } from './RenewalSection'
-import { priceGate } from '../loopUi'
+import { cacReasonText, priceGate } from '../loopUi'
 import { openConceptCard } from '../uiActions'
 import { InfoTip } from '../InfoTip'
 import { AdFocusRow } from './AdFocus'
@@ -146,6 +146,7 @@ function ChannelSection() {
   const d = useGameStore(
     useShallow((s) => ({ budget: s.state.finance.adBudget, stage: s.state.stage, cac: s.state.derived.cac, ltvCac: s.state.derived.ltvCac, ch: s.state.derived.channels })),
   )
+  const reason = useGameStore((s) => (s.state.finance.adBudget > 0 ? cacReasonText(s.state) : null))
 
   return (
     <section>
@@ -161,9 +162,23 @@ function ChannelSection() {
               <AdStep key={st.key} label={t(`growth.adStep.${st.key}`)} amount={st.amount} budget={d.budget} />
             ))}
           </div>
+          {/* A1: what today's budget buys (the CAC with it), and the one factor that makes it expensive. */}
+          <div className="mt-2 flex flex-col gap-0.5" data-ad-return>
+            <div className="tabular inline-flex items-center gap-1 text-[13px] font-semibold text-ink">
+              <Icon name="coin" size={13} style={{ color: iconTone(WIDGET_COLOR.burnBreakdown) }} />
+              <span className="min-w-0">{t('ads.paidLine', { n: num(d.ch.paid), c: money(d.cac) })}</span>
+              <InfoTip title={t('growth.cac')} size={12}>
+                {t('growth.cacInfo')}
+              </InfoTip>
+            </div>
+            {reason && (
+              <div className="tabular text-[12px] font-medium text-ink-2" data-cac-reason>
+                {reason}
+              </div>
+            )}
+          </div>
           <AdFocusRow />
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Stat label={t('growth.cac')} icon="coin" color={WIDGET_COLOR.burnBreakdown} value={money(d.cac)} info={t('growth.cacInfo')} />
+          <div className="mt-2 grid grid-cols-2 gap-2 empty:hidden">
             {showLtv && (
               <Stat
                 label={t('hud.ltvCac')}
@@ -192,10 +207,16 @@ function ChannelSection() {
   )
 }
 
-/** One ad step: a commit button (the step, the monthly amount) with what it does to the runway under it. */
+/**
+ * One ad step: a commit button (the step, the monthly amount, the paid users it buys a month) with what it does to the
+ * runway under it. A1: a step up that leaves under a month of runway wears a red ring and "Runway bitiyor" (still a
+ * button: the choice stays the player's).
+ */
 function AdStep({ label, amount, budget }: { label: string; amount: number; budget: number }) {
   const dispatch = useGameStore((s) => s.dispatch)
   const preview = useSpendPreview(0, amount - budget)
+  const paid = useGameStore((s) => Math.round(adPreview(s.state, amount).paid))
+  const warn = useGameStore((s) => adStepWarning(s.state, amount))
   const on = amount === budget
   return (
     <div className="flex min-w-0 flex-col items-stretch gap-1">
@@ -208,12 +229,15 @@ function AdStep({ label, amount, budget }: { label: string; amount: number; budg
           // Soft option keys, no frames: the chosen step is the brand-soft key, the others plain surface keys.
           'ui-key ui-key-sm flex min-h-11 flex-col items-center justify-center rounded-control px-1 py-1',
           on ? 'ui-key-soft' : 'ui-key-routine',
+          warn && 'ring-2 ring-negative',
         )}
+        data-runway-warning={warn ? '' : undefined}
       >
         <span className="tabular text-[17px] font-semibold leading-none">{label}</span>
-        <span className="tabular mt-0.5 text-[11px] font-medium text-ink-2">{money(amount)}</span>
+        <span className="tabular mt-0.5 truncate text-[11px] font-medium text-ink-2">{amount > 0 ? t('ads.stepPaid', { v: money(amount), n: num(paid) }) : money(amount)}</span>
       </button>
       <CostPreview preview={preview} className="justify-center" />
+      {warn && <span className="text-center text-[11px] font-bold text-negative-ink">{t('ads.runwayEnds')}</span>}
     </div>
   )
 }

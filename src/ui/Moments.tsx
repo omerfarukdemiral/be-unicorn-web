@@ -9,7 +9,7 @@ import { moduleName } from '../content'
 import type { Panel } from '../store/types'
 import type { IconName } from './icons'
 import { t } from './i18n'
-import { fixed, money } from './format'
+import { fixed, money, num } from './format'
 import { cx } from './primitives'
 import { effectSummary, optionLabel, releaseName, useFreshEvents } from './loopUi'
 import { momentPanel } from './momentRules'
@@ -81,13 +81,19 @@ export function receiptRunway(r: Pick<MonthReceipt, 'month' | 'runwayBefore' | '
   return b === null ? null : months(r.runwayAfter)
 }
 
+/** A1: "Reklam: +n kullanıcı" when last month's ads brought anyone, else null. */
+export function adUsersText(r: Pick<MonthReceipt, 'adUsers'>): string | null {
+  return r.adUsers && r.adUsers >= 1 ? t('receipt.adUsers', { n: num(r.adUsers) }) : null
+}
+
 /** Plain one-line text of a moment (strip title attribute, screen readers). */
 export function momentText(m: Moment): string {
   switch (m.kind) {
     case 'receipt': {
       const r = m.receipt
       const runway = receiptRunway(r)
-      const line = t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: runway ? ` · ${t('receipt.runway')} ${runway}` : '' })
+      const ads = adUsersText(r)
+      const line = t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: (ads ? ` · ${ads}` : '') + (runway ? ` · ${t('receipt.runway')} ${runway}` : '') })
       return m.next ? `${line} · ${teaserText(m.next)}` : line
     }
     case 'release':
@@ -114,6 +120,7 @@ export function MomentLine({ m }: { m: Moment }) {
           <span className={sub}>
             {' · '}
             {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-ink')}>{sgn(r.net)}</span> · {t('strip.paid')} {neg(r.paid)}
+            {adUsersText(r) && ` · ${adUsersText(r)}`}
             {runway && ` · ${t('receipt.runway')} ${runway}`}
           </span>
           {m.next && <span className="font-semibold" style={{ color: 'var(--color-g-burn)' }}> · {teaserText(m.next)}</span>}

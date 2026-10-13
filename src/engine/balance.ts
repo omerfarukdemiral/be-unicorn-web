@@ -151,14 +151,31 @@ export const CAC_SPEND_EXP = 1.5
 export const CAC_SPEND_FLOOR: readonly number[] = [500, 2_000, 10_000, 50_000, 250_000, 1_000_000, 1_000_000]
 export const CAC_SATURATION_K = 3
 /**
- * [W3] Ad focus: the one company ad budget promotes one launched product. The focused project's weight in the mix is
- * 1 + AD_FOCUS_TILT × adIntensity (adIntensity = clamp01(ads / max(last month's MRR, CAC_SPEND_FLOOR)), the others stay 1),
- * so full ads on 3 products give 0.6 / 0.2 / 0.2. A change costs CAC × AD_FOCUS_WARMUP_CAC that fades linearly to 1 over
- * AD_FOCUS_WARMUP_DAYS (the new audience takes time to find).
+ * [W3 → A1] Ad focus: the one company ad budget promotes one launched product. Paid users split by ad weight:
+ * AD_FOCUS_WEIGHT for the focus, 1 for the others (equal without a focus), so two products split 75 / 25 (50 / 50
+ * without) and three 60 / 20 / 20. The CAC's module mix uses the same weights. A change costs CAC × AD_FOCUS_WARMUP_CAC
+ * that fades linearly to 1 over AD_FOCUS_WARMUP_DAYS (the new audience takes time to find).
+ * [A1 ≠ W3 tilt] W3 tilted the company mixes by 1 + 2 × ads / MRR; the focus moved a few % of ARPU and nobody's users
+ * (playtest: "satır gereksiz"). Now it routes paid users, and the shares move the mixes over the months.
  */
-export const AD_FOCUS_TILT = 2
+export const AD_FOCUS_WEIGHT = 3
 export const AD_FOCUS_WARMUP_DAYS = 14
 export const AD_FOCUS_WARMUP_CAC = 1.15
+/**
+ * [A1] Per-product users (p.users): organic users split by (share + ORGANIC_SHARE_FLOOR) × category organic × organic
+ * modules, so a new product still draws some word of mouth next to a big one.
+ */
+export const ORGANIC_SHARE_FLOOR = 0.15
+/**
+ * [A1] The company ARPU / churn / organic / TAM mixes weigh each launched product by (1 − b) / n + b × its user share
+ * (b = MIX_SHARE_BLEND): the product most users are on sets the company's numbers. 0 = the old flat mean.
+ */
+export const MIX_SHARE_BLEND = 1
+/** [A1] The CAC reason line names the biggest factor at or above CAC_REASON_MIN; a stage-up counts for CAC_STAGE_REASON_DAYS. */
+export const CAC_REASON_MIN = 1.15
+export const CAC_STAGE_REASON_DAYS = 60
+/** [A1] Month-end snapshots of a product's counters kept (acq / lost / rev; the measured module effect reads them). */
+export const PROJECT_SNAPS_MAX = 2
 export const ORGANIC_PEN_FLOOR = 0.1
 
 // ---------------------------------------------------------------------------

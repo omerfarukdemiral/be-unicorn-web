@@ -39,6 +39,12 @@ describe('save and modules', () => {
     for (const p of raw.state.projects) {
       delete p.modules
       delete p.build
+      // Nor the A1 per-product users (an older save never had them).
+      delete p.users
+      delete p.acq
+      delete p.lost
+      delete p.rev
+      delete p.snaps
     }
     delete raw.state.derived.projectMix
     const loaded = deserialize(JSON.stringify(raw))!
@@ -51,8 +57,10 @@ describe('save and modules', () => {
     const later = api.step(loaded, 30)
     expect(later.gameOver).toBeUndefined()
     expect(later.projects.every((p) => p.modules === undefined)).toBe(true)
-    expect(later.derived.projectMix).toBeUndefined()
+    // A1 (rule change on purpose): the mix view is written once a product is live, its weights are the user shares.
+    expect(Object.values(later.derived.projectMix!).every((x) => Object.keys(x.mult).length === 0 && x.upkeep === 0)).toBe(true)
     const withOne = withModules(later, 0, ['paywall'])
-    expect(Object.values(withOne.derived.projectMix!).map((x) => x.weight)).toEqual([0.5, 0.5])
+    const total = later.projects.reduce((a, p) => a + p.users!, 0)
+    expect(Object.values(withOne.derived.projectMix!).map((x) => x.weight)).toEqual(later.projects.map((p) => expect.closeTo(p.users! / total, 12)))
   })
 })

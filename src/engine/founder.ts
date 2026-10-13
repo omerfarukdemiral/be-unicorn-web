@@ -2,7 +2,8 @@
 import { ENTERPRISE_NAMES } from '../content/index'
 import * as B from './balance'
 import { clamp } from './economy'
-import { moduleMult, updateSize } from './modules'
+import { founderProject } from './effort'
+import { addProjectUsers, moduleMult, updateSize } from './modules'
 import type { Rng } from './rng'
 import { DAYS_PER_WEEK, type ActionErrorCode, type EnterpriseCustomer, type FindUsersPreview, type FounderActionKind, type FounderMoves, type GameState, type MovesView, type RenewalView, type RenewOffer, type SalesCallPreview } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
@@ -315,6 +316,9 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
       const n = Math.max(1, Math.round(rng.int(B.FIND_USERS_MIN, B.FIND_USERS_MAX) * pv.factor))
       s.flags[FIND_USES_FLAG] = Number(s.flags[FIND_USES_FLAG] ?? 0) + 1
       s.stats.users += n
+      // A1: the founder's own product takes them if it is live; otherwise the next sync splits them.
+      const own = founderProject(s)
+      if (own?.launched) addProjectUsers(own, n)
       s.flags['manualThisMonth'] = Number(s.flags['manualThisMonth'] ?? 0) + n
       incCounter(s, 'manualFinds')
       params.value = n

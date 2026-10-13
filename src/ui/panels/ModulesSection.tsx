@@ -4,18 +4,17 @@
 // are the engine's (moduleOffers, moduleHeadlines, buildStatus); this file only lays them out.
 import { useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import * as B from '../../engine/balance'
-import { actionEnergy } from '../../engine/founder'
-import { buildStatus, moduleHeadlines, moduleLock, moduleOffers, moduleStrength, moduleUpkeepHint, projectSlots, suggestModules, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
-import type { GameState, ModuleEffectKind, Project, ProjectModuleId } from '../../engine/types'
+import { buildStatus, moduleDef, moduleHeadlines, moduleLock, moduleOffers, moduleStrength, projectSlots, projectVersion, suggestModules, type ModuleOffer } from '../../engine/modules'
+import type { Project, ProjectModuleId } from '../../engine/types'
 import { MODULE_TEXT, moduleName } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { ChipRow, type Chip } from '../EffectChips'
-import { money, pct } from '../format'
+import { pct } from '../format'
 import { t } from '../i18n'
 import { Icon, type IconName } from '../icons'
 import { Button, cx, Ring, SectionTitle } from '../primitives'
 import { CATEGORY_COLOR } from './ProjectsPanel'
+import { buildChips, costChip, founderBuildCost, headlineChip, lockedChips, measuredLine, versionLine, type MeasuredLine } from './moduleView'
 
 /** One icon per module (no repeat inside core + one category; design §1.4). */
 export const MODULE_ICON: Record<ProjectModuleId, IconName> = {
@@ -86,48 +85,12 @@ export const MODULE_ICON: Record<ProjectModuleId, IconName> = {
   cityLaunch: 'pin',
 }
 
-const KIND_ICON: Record<ModuleEffectKind, IconName> = {
-  churn: 'leak',
-  arpu: 'coin',
-  organic: 'trend',
-  cac: 'magnet',
-  tam: 'globe',
-  wave: 'rocket',
-  updateWork: 'hourglass',
-  talk: 'chat',
-  infra: 'cloud',
-}
-
-/** A headline multiplier as a chip: "Kayıp −%6" (green), "Gelir −%5" (red). */
-function headlineChip(h: ModuleHeadline, title: string): Chip {
-  const text = h.mult < 1 ? `−${pct(1 - h.mult)}` : `+${pct(h.mult - 1)}`
-  return { icon: KIND_ICON[h.kind], label: t(`module.tag.${h.kind}`), text, good: h.good, title }
-}
-
-/** The module's chips for a build: main gain, main minus (or its monthly upkeep), cost with the days it takes. */
-export function buildChips(s: GameState, p: Project, offer: ModuleOffer): Chip[] {
-  const title = MODULE_TEXT[offer.id].line
-  const { gain, minus } = moduleHeadlines(offer.id, p.category)
-  const out: Chip[] = []
-  if (gain) out.push(headlineChip(gain, title))
-  if (minus) out.push(headlineChip(minus, title))
-  else {
-    const up = moduleUpkeepHint(s, p, offer.id)
-    if (up > 0) out.push({ icon: 'building', label: t('fx.tag.mod.rent'), text: `−${money(up)}`, tail: t('bubble.month'), good: false, title })
-  }
-  out.push(costChip(offer))
-  return out
-}
-
-/** Cash now, the days it takes as the tail. */
-export function costChip(offer: ModuleOffer): Chip {
-  return { icon: 'cash', label: t('fx.tag.cash'), text: `−${money(offer.cost)}`, ...(offer.days !== null ? { tail: t('module.daysEta', { d: offer.days }) } : {}), good: false, title: t('hud.cash') }
-}
-
 /** What a build costs the founder besides cash: one move, or 10 energy in the garage (no move budget there). */
 export function useBuildCost(): { icon: IconName; text: string } {
-  return useGameStore(useShallow((s) => (s.state.derived.moves ? { icon: 'flag' as const, text: '1' } : { icon: 'bolt' as const, text: String(actionEnergy(s.state, B.MODULE_ENERGY)) })))
+  return useGameStore(useShallow((s) => founderBuildCost(s.state)))
 }
+
+export { buildChips, costChip }
 
 /** A slot's strength bar colour: yellow while it slips, red once most of the gain is gone. */
 const strengthTone = (v: number) => (v >= 0.75 ? 'var(--color-positive)' : v >= 0.6 ? 'var(--color-energy)' : 'var(--color-negative)')
@@ -145,7 +108,7 @@ function useBuild(p: Project) {
 }
 
 export function ModulesSection({ project: p }: { project: Project }) {
-  const view = useGameStore(useShallow((s) => ({ ...projectSlots(s.state, p), day: Math.floor(s.state.time.day) })))
+  const view = useGameStore(useShallow((s) => ({ ...projectSlots(s.state, p), version: projectVersion(p), line: versionLine(s.state, p), day: Math.floor(s.state.time.day) })))
   const build = useBuild(p)
   const [pick, setPick] = useState<Pick>(null)
   const mods = p.modules ?? []
@@ -154,7 +117,17 @@ export function ModulesSection({ project: p }: { project: Project }) {
   const tile = 'relative grid size-14 shrink-0 place-items-center rounded-control border transition-colors'
   return (
     <section>
-      <SectionTitle right={<span className="tabular text-xs font-semibold text-ink-2">{`${view.used}/${view.total}`}</span>}>{t('detail.modules')}</SectionTitle>
+      <SectionTitle
+        right={
+          <span className="tabular flex items-center gap-1.5 text-xs font-semibold text-ink-2">
+            <span data-version-badge="" className="rounded-md bg-brand-soft px-1.5 py-0.5 text-brand-ink">{t('module.version', { v: view.version })}</span>
+            {t('module.slots', { used: view.used, total: view.total })}
+          </span>
+        }
+      >
+        {t('detail.modules')}
+      </SectionTitle>
+      <div data-version-line="" className="font-text mb-2 text-[11px] font-semibold text-ink-2">{view.line}</div>
       <div className="flex flex-wrap gap-2">
         {mods.map((m) => {
           const strength = moduleStrength(m, view.day)
@@ -195,10 +168,31 @@ export function ModulesSection({ project: p }: { project: Project }) {
           </button>
         ))}
       </div>
+      {pick === null && <LatestMeasured project={p} />}
       {pick === 'add' && <Suggestions project={p} onDone={() => setPick(null)} />}
       {pick === 'build' && build && <BuildRow project={p} />}
       {pick && pick !== 'add' && pick !== 'build' && <InstalledRow project={p} id={pick} onDone={() => setPick(null)} />}
     </section>
+  )
+}
+
+/** The newest module's measured result, always on show under the slots ("Davet sistemi · Son 12g: +27 kullanıcı (öncesi +11/30g)"). */
+function LatestMeasured({ project: p }: { project: Project }) {
+  const view = useGameStore(
+    useShallow((s) => {
+      const m = [...(p.modules ?? [])].reverse().find((x) => x.base)
+      const line = m ? measuredLine(s.state, p, m) : null
+      return m && line ? { id: m.id, ...line } : null
+    }),
+  )
+  if (!view) return null
+  return (
+    <div data-measured="" className={cx('font-text mt-2 flex items-start gap-1.5 text-[12px] font-semibold leading-snug', view.good === true ? 'text-positive-ink' : view.good === false ? 'text-negative-ink' : 'text-ink-2')}>
+      <Icon name={MODULE_ICON[view.id]} size={14} tone={CATEGORY_COLOR[p.category]} className="mt-px shrink-0" />
+      <span className="min-w-0">
+        {moduleName(view.id, p.category)} · {view.text}
+      </span>
+    </div>
   )
 }
 
@@ -211,7 +205,7 @@ function StrengthBar({ v }: { v: number }) {
 }
 
 /** The row shell: icon tile, name + one sentence, chips and the commit button under them. */
-function Row({ id, category, name, line, chips, action, reason, locked }: { id: ProjectModuleId; category: Project['category']; name: string; line: string; chips: readonly Chip[]; action?: ReactNode; reason?: string | null; locked?: boolean }) {
+function Row({ id, category, name, line, chips, action, reason, locked, measured }: { id: ProjectModuleId; category: Project['category']; name: string; line: string; chips: readonly Chip[]; action?: ReactNode; reason?: string | null; locked?: boolean; measured?: MeasuredLine | null }) {
   return (
     <li className={cx('flex flex-col gap-2 rounded-control border border-border p-2.5', locked && 'bg-surface-2/40 opacity-70')}>
       <div className="flex items-start gap-2.5">
@@ -225,6 +219,12 @@ function Row({ id, category, name, line, chips, action, reason, locked }: { id: 
         {action}
       </div>
       <ChipRow chips={chips} />
+      {measured && (
+        <span data-measured="" className={cx('font-text flex items-center gap-1 text-[12px] font-semibold', measured.good === true ? 'text-positive-ink' : measured.good === false ? 'text-negative-ink' : 'text-ink-2')}>
+          <Icon name="trend" size={12} />
+          {measured.text}
+        </span>
+      )}
       {reason && <span className="font-text flex items-center gap-1 text-[11px] font-semibold text-negative-ink"><Icon name="warning" size={12} />{reason}</span>}
     </li>
   )
@@ -279,26 +279,40 @@ export function Suggestions({ project: p, onDone }: { project: Project; onDone: 
             {t('module.all')}
             <Icon name={all ? 'chevronUp' : 'chevronDown'} size={16} />
           </button>
-          {all && (
-            <ul className="flex flex-col gap-2">
-              {rest.map((o) => (
-                <OfferRow key={o.id} project={p} offer={o} onDone={onDone} />
-              ))}
-            </ul>
-          )}
+          {all && <TierGroups project={p} rest={rest} onDone={onDone} />}
         </>
       )}
     </div>
   )
 }
 
+/** The folded list, grouped by the version that opens each tier ("v2 modülleri"); open modules first inside a group. */
+export function TierGroups({ project: p, rest, onDone }: { project: Project; rest: ModuleOffer[]; onDone: () => void }) {
+  const tiers = [...new Set(rest.map((o) => moduleDef(o.id)?.tier ?? 1))].sort((a, b) => a - b)
+  return (
+    <div className="flex flex-col gap-3">
+      {tiers.map((tier) => (
+        <div key={tier} className="flex flex-col gap-2" data-tier={tier}>
+          <span className="px-1 text-[11px] font-semibold tracking-wide text-ink-3">{t('module.allTier', { v: tier })}</span>
+          <ul className="flex flex-col gap-2">
+            {rest
+              .filter((o) => (moduleDef(o.id)?.tier ?? 1) === tier)
+              .sort((a, b) => Number(a.error === 'notUnlocked') - Number(b.error === 'notUnlocked'))
+              .map((o) => (
+                <OfferRow key={o.id} project={p} offer={o} onDone={onDone} />
+              ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function OfferRow({ project: p, offer, onDone }: { project: Project; offer: ModuleOffer; onDone: () => void }) {
   const st = useGameStore((s) => s.state)
-  // MV2a: a module's tier opens at a version (MV2c draws the full lock chips: prerequisites, forks).
-  const lock = offer.error === 'notUnlocked' ? moduleLock(st, p, offer.id) : null
-  const locked = lock?.kind === 'version'
-  const lockText = locked ? t('module.lockVersion', { v: lock.v }) : ''
-  const chips = locked ? [{ icon: 'lock' as const, label: '', text: lockText, good: null, title: lockText }] : buildChips(st, p, offer)
+  // A module not open yet (its version, a prerequisite) shows the lock instead of a button.
+  const locked = offer.error === 'notUnlocked' && moduleLock(st, p, offer.id) !== null
+  const chips = locked ? lockedChips(st, p, offer.id) : buildChips(st, p, offer)
   return (
     <Row
       id={offer.id}
@@ -357,6 +371,7 @@ function InstalledRow({ project: p, id, onDone }: { project: Project; id: Projec
     if (gain) chips.push(headlineChip(gain, title))
     if (minus) chips.push(headlineChip(minus, title))
   }
+  const measured = m ? measuredLine(st, p, m) : null
   return (
     <ul className="mt-3">
       <Row
@@ -366,6 +381,7 @@ function InstalledRow({ project: p, id, onDone }: { project: Project; id: Projec
         line={MODULE_TEXT[id].line}
         chips={chips}
         reason={strength < 1 ? reasonOf(offer.error) : null}
+        measured={measured}
         action={strength < 1 ? <BuildButton id={id} project={p} refresh offer={offer} onDone={onDone} /> : undefined}
       />
     </ul>
@@ -398,6 +414,7 @@ export function ModuleStrip({ project: p }: { project: Project }) {
           <span className="size-2 rounded-full bg-border-strong/60" />
         </span>
       ))}
+      <span data-slot-count="" className="tabular ml-auto pr-1 text-xs font-semibold text-ink-2">{t('module.slots', { used: mods.length + (build && !build.refresh ? 1 : 0), total })}</span>
     </button>
   )
 }

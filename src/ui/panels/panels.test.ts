@@ -439,7 +439,8 @@ describe('project modules (W2c)', () => {
     const rows = html.split('<li').slice(1)
     expect(rows).toHaveLength(3)
     for (const r of rows) {
-      expect((r.match(/data-chip=""/g) ?? []).length).toBeLessThanOrEqual(3)
+      // MV2c (rule changed on purpose): gain, minus / rent, cost, plus the optional synergy chip.
+      expect((r.match(/data-chip=""/g) ?? []).length).toBeLessThanOrEqual(4)
       expect(r).toContain('>Ekle<')
     }
     expect(html).toContain('Tüm modüller')

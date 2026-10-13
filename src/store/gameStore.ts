@@ -76,7 +76,7 @@ export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
 /**
  * True when `next` brought an event that should slow 4× down to 1× (see IMPORTANT_EVENT_KINDS), with two edges so
  * 4× is not dropped every ~25 s (review fix):
- * - a release only for a new version, not for the updates after 1.0;
+ * - a release only for a new version or a module, not for the updates after 1.0;
  * - a payday only when runway CROSSES below PAYDAY_SLOW_RUNWAY_MONTHS, not on every tight month.
  * Every decision card counts (the card budget keeps them rare, docs/GAMEPLAY_V2.md §3.11).
  */
@@ -85,7 +85,9 @@ export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   for (const e of next.events) {
     if (e.id <= since) continue
     if (e.kind === 'release') {
-      if (next.releases?.find((r) => r.id === e.refId)?.update === undefined) return true
+      // A module delivery, the first 1.0 and a version release (a version without a minor) count; a plain update does not.
+      const r = next.releases?.find((x) => x.id === e.refId)
+      if (r?.update === undefined || (r.version !== undefined && r.minor === undefined)) return true
       continue
     }
     if (IMPORTANT_EVENT_KINDS.has(e.kind)) return true

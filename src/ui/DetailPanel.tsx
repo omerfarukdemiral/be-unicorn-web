@@ -19,7 +19,7 @@ import { moraleTone } from './theme'
 import { useIsMobile, useTwoStep } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AdFocusToggle } from './panels/AdFocus'
-import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar, ProductUsers } from './panels/ProjectsPanel'
+import { AssignList, CATEGORY_COLOR, CATEGORY_ICON, MaturityBar, ProductUsers, VersionBadge } from './panels/ProjectsPanel'
 import { ModulesSection } from './panels/ModulesSection'
 import { ChipRow } from './EffectChips'
 import { fatigueGood, fitChips, hiddenLossChip, LeadLine, loadChip, personLabel, PersonEffortRows, SprintRow, TeamOf } from './effort'
@@ -399,6 +399,7 @@ function ProjectDetail({ id }: { id: string }) {
         <section className="flex items-center gap-2">
           <Dot color="var(--color-positive)" size={7} />
           <span className="text-xs font-semibold text-ink-2">{t('detail.live')}</span>
+          <VersionBadge project={p as Project} />
           <Bar value={1} color={CATEGORY_COLOR[p.category]} height={3} className="flex-1" />
           <ProductUsers projectId={p.id} className="shrink-0" />
         </section>

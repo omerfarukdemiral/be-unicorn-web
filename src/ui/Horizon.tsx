@@ -75,7 +75,7 @@ export function horizonLabel(h: HorizonItem, projectName: (id: string | undefine
       return label ? t('horizon.delayed', { v: label }) : t('horizon.delayedNote')
     }
     case 'release':
-      return t('horizon.release', { project: projectName(h.projectId), level: releaseName(h.level ?? 1, h.update) })
+      return t('horizon.release', { project: projectName(h.projectId), level: releaseName(h.level ?? 1, h.update, undefined, h.version, h.minor) })
     case 'roundClose':
       return t('horizon.roundClose')
     case 'roundReady':
@@ -104,6 +104,7 @@ function crisisName(h: HorizonItem): string {
 
 export function horizonItemText(h: HorizonItem, days: number, short = false): string {
   if (h.kind === 'payday' && h.due) return t('horizon.item.paydayDue', { d: whenLabel(days, short) })
+  if (h.kind === 'release' && h.version !== undefined) return t('horizon.item.releaseV', { v: releaseName(h.level ?? 1, h.update, undefined, h.version, h.minor), d: whenLabel(days, short) })
   const v = h.kind === 'crisis' ? crisisName(h) : h.kind === 'board' ? money(h.amount ?? 0) : undefined
   return t(`horizon.item.${h.kind}`, { d: whenLabel(days, short), ...(v !== undefined ? { v } : {}) })
 }

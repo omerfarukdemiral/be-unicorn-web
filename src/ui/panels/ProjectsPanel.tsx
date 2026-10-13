@@ -15,6 +15,8 @@ import { Bar, Button, cx, IconBadge, Pill, SectionTitle } from '../primitives'
 import { Avatar, DeptPill } from './TeamPanel'
 import { InfoTip } from '../InfoTip'
 import { ModuleStrip } from './ModulesSection'
+import { previewLine, versionLine } from './moduleView'
+import { displayMaturity, projectVersion } from '../../engine/modules'
 import { AdFocusMark } from './AdFocus'
 import { LeadLine, SprintRow, TeamOf } from '../effort'
 
@@ -161,6 +163,22 @@ export function MaturityBar({ value, color = 'var(--color-brand)' }: { value: nu
   )
 }
 
+/** "v2": the version a finished product is on. */
+export function VersionBadge({ project: p }: { project: Project }) {
+  return <span data-version-badge="" className="tabular rounded-md bg-brand-soft px-1.5 py-0.5 text-xs font-bold text-brand-ink">{t('module.version', { v: projectVersion(p) })}</span>
+}
+
+/** The version line of a finished product: the bar restarts at 60 % per version; the text says the next version and how far, or the module in the making. */
+export function VersionBar({ project: p }: { project: Project }) {
+  const view = useGameStore(useShallow((s) => ({ value: Math.round(displayMaturity(s.state, p) * 100) / 100, line: versionLine(s.state, p) })))
+  return (
+    <div data-version-bar="">
+      <Bar value={view.value} color={CATEGORY_COLOR[p.category]} height={4} />
+      <div className="tabular mt-1 text-[11px] font-semibold text-ink-2">{view.line}</div>
+    </div>
+  )
+}
+
 function ProjectCard({ project: p }: { project: Project }) {
   const [open, setOpen] = useState(false)
   const select = useGameStore((s) => s.select)
@@ -175,17 +193,20 @@ function ProjectCard({ project: p }: { project: Project }) {
         </button>
         <AdFocusMark projectId={p.id} />
         {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
-        {!finished && <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>}
+        {finished ? <VersionBadge project={p} /> : <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>}
       </div>
       {p.launched && <ProductUsers projectId={p.id} />}
       {/* At 1.0 the bar has nothing left to say: the card shows what the product grew into (modules, GAMEPLAY V2). */}
       {finished ? (
         <div className="mt-2">
+          <VersionBar project={p} />
           <ModuleStrip project={p} />
         </div>
       ) : (
         <div className="mt-4">
           <MaturityBar value={p.maturity} color={CATEGORY_COLOR[p.category]} />
+          {/* Before v1 the card says what 1.0 opens. */}
+          {p.launched && <div data-version-preview="" className="font-text mt-1.5 text-[11px] font-semibold text-ink-2">{previewLine(p)}</div>}
         </div>
       )}
       <div className="mt-2 flex items-center justify-between gap-2">

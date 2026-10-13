@@ -3,7 +3,7 @@
 import * as B from './balance'
 import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
 import { effortOn, ledMember, onLeave } from './effort'
-import { updateSize } from './modules'
+import { projectVersion, updateSize, versionUpdates } from './modules'
 import { diligenceNow, offerFactor, priceRatio } from './round'
 import { modifierMult } from './util'
 import { rivalOut } from './world'
@@ -247,7 +247,14 @@ export function horizon(s: GameState): HorizonItem[] {
       if (p.build) continue
       // The next update: its work left at today's speed, but not before the update cool-down ends.
       const eta = Math.max(now + Math.max(0, updateSize(p, now) - (p.updateProgress ?? 0)) / rate, lastUpdateDay(s, p.id) + B.RELEASE_UPDATE_MIN_DAYS * (s.derived.policies?.mult.releaseGap ?? 1))
-      if (eta <= end) out.push({ kind: 'release', day: eta, projectId: p.id, level: B.RELEASE_THRESHOLDS.length, update: (p.updates ?? 0) + 1 })
+      // MV2c: the update names its version ("v2.1"), and the one that fills the line is the next version ("v3").
+      const v = projectVersion(p)
+      const left = Math.max(1, versionUpdates(v) - (p.lineUpdates ?? 0))
+      const per = Math.max(updateSize(p, now) / rate, B.RELEASE_UPDATE_MIN_DAYS * (s.derived.policies?.mult.releaseGap ?? 1))
+      const base = { kind: 'release' as const, projectId: p.id, level: B.RELEASE_THRESHOLDS.length }
+      if (eta <= end) out.push({ ...base, day: eta, update: (p.updates ?? 0) + 1, ...(left === 1 ? { version: v + 1 } : { version: v, minor: (p.lineUpdates ?? 0) + 1 }) })
+      const versionEta = eta + (left - 1) * per
+      if (left > 1 && versionEta <= end) out.push({ ...base, day: versionEta, update: (p.updates ?? 0) + left, version: v + 1 })
       continue
     }
     const lvl = B.RELEASE_THRESHOLDS.findIndex((t) => p.maturity < t - 1e-9)

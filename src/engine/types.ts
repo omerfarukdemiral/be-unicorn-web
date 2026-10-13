@@ -1293,6 +1293,9 @@ export interface HorizonItem {
   level?: number
   /** Update number (after 1.0), when the release is an update. */
   update?: number
+  /** MV2c: the version the release is (without `minor`) or the line it belongs to (with it: v{version}.{minor}). */
+  version?: number
+  minor?: number
   /** Crisis: its id once revealed. */
   crisisId?: CrisisId
   /** Crisis: the date is known but not what it is yet ("?"). */

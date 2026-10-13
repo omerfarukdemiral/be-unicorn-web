@@ -99,9 +99,13 @@ export function releaseGain(v: ValuationBreakdown | undefined, stage: number): n
   return v && v.releases < B.VAL_RELEASE_MAX ? preGain(v, stage, B.VAL_PER_RELEASE) : 0
 }
 
-/** Version name, "güncelleme N" for an update after 1.0, or "{module} yayında" for a module delivery (name already resolved). */
-export function releaseName(level: number, update?: number, module?: string): string {
+/**
+ * Version name ("MVP", "v0.4"… "v1"), "v2" for a version release, "v2.1" for an update inside a line (MV2c; saves from
+ * before it: "güncelleme N"), or "{module} yayında" for a module delivery (name already resolved).
+ */
+export function releaseName(level: number, update?: number, module?: string, version?: number, minor?: number): string {
   if (module) return t('release.module', { module })
+  if (version !== undefined && (level >= 5 || minor !== undefined)) return minor !== undefined ? t('release.minor', { v: version, m: minor }) : t('module.version', { v: version })
   return update !== undefined && update > 0 ? t('release.update', { n: update }) : releaseLevelName(level)
 }
 

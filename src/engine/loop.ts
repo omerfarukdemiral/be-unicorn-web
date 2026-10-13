@@ -492,7 +492,7 @@ function ship(s: GameState, content: EngineContent, p: Project, level: number, u
   if (update !== undefined && s.stage >= B.TECH_DEBT_MIN_STAGE) s.techDebt = (s.techDebt ?? 0) + B.TECH_DEBT_PER_UPDATE
   if (extra?.module) pushActivity(s, 'moduleShipped', { project: p.name, id: p.id, module: extra.module, users, mrr: Math.round(entry.mrr) })
   else if (extra?.version !== undefined && extra.minor === undefined && extra.version > 1) pushActivity(s, 'versionShipped', { project: p.name, id: p.id, version: extra.version, users })
-  else pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0 })
+  else pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0, ...(extra?.version !== undefined && extra.minor !== undefined ? { version: extra.version, minor: extra.minor } : {}) })
   pushEvent(s, { kind: 'release', refId: entry.id, value: level })
 }
 

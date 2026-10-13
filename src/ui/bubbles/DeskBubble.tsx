@@ -10,7 +10,7 @@ import * as B from '../../engine/balance'
 import { ledgerCosts } from '../../engine/economy'
 import { autoPaydayChoice } from '../../engine'
 import { actionEnergy } from '../../engine/founder'
-import { moduleAsk, moduleOffers } from '../../engine/modules'
+import { moduleAsk, moduleOffers, projectVersion } from '../../engine/modules'
 import { FOUNDER_ACTIONS, PROJECT_CATEGORIES, ROUND_SIZES, type ActionErrorCode, type PaydayChoice, type PitchOption } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { renewalRows, type RenewalRow } from '../center/centerData'
@@ -363,11 +363,12 @@ function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string 
     const p = st.projects.find((x) => x.id === refId)
     if (!key || !a || !p) return null
     const offer = moduleOffers(st, p).find((x) => x.id === a.moduleId && x.refresh === a.stale)
-    return offer ? { p, offer, stale: a.stale, chips: buildChips(st, p, offer) } : null
+    return offer ? { p, offer, stale: a.stale, chips: buildChips(st, p, offer, false) } : null
   }, [key, refId])
   if (!view) return null
   const { p, offer, stale } = view
   const name = moduleName(offer.id, p.category)
+  const version = projectVersion(p)
   const openProject = () => useGameStore.getState().openPanel({ kind: 'detail', selection: { kind: 'project', id: p.id } })
   // A refresh shows its price and days only (the gain is already installed); a new module shows gain, minus and cost.
   const chips = stale ? view.chips.filter((c) => c.icon === 'cash') : view.chips
@@ -378,7 +379,7 @@ function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string 
       face="founder"
       mark={{ icon: MODULE_ICON[offer.id], color: CATEGORY_COLOR[p.category] }}
       speaker={t('founder.you')}
-      line={t(stale ? 'module.stale' : 'bubble.module', { project: p.name, module: name })}
+      line={stale ? t('module.stale', { project: p.name, module: name }) : version >= 2 ? t('bubble.moduleVersion', { project: p.name, v: version, n: B.MODULE_SLOTS_PER_VERSION, module: name }) : t('bubble.module', { project: p.name, module: name })}
       detail={openProject}
     >
       <div className="flex flex-col gap-1.5 rounded-control bg-surface-2/60 px-2.5 py-2">

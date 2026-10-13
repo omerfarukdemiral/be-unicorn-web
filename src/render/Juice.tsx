@@ -1,5 +1,6 @@
 // Scene juice for the core loop beats (docs/CORE_LOOP.md §7), kept apart from Office/Npc/Character:
-// - release moment: a banner over the founder desk (version name only, the numbers are in the strip), a light pulse,
+// - release moment: a banner over the founder desk (version name; a module or a version also names itself and its wave,
+//   with the wave as a "+N" float), a light pulse,
 //   confetti (from v1 on; MVP already celebrates via projectLaunched) and a wave of simple user figures walking in;
 // - payday: a short warm-red light pulse over the office, and the amount paid rising over the desk;
 // - a manual user hunt (founder action): a few figures walk in through the door and "+N" rises over the desk
@@ -11,7 +12,8 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { GameState, ReleaseEntry } from '../engine/types'
-import { UI_TEXT } from '../content'
+import { UI_TEXT, moduleName } from '../content'
+import { MODULE_SLOTS_PER_VERSION } from '../engine/balance'
 import { CELL } from './constants'
 import { Confetti } from './Effects'
 import { pathFromDoor, type XZ } from './layout'
@@ -88,6 +90,8 @@ export function JuiceLayer() {
         const id = e.id
         later(WAVE_MS, () => setWave((w) => (w?.id === id ? null : w)))
         pulse.current = { at: sceneMs(), color: new THREE.Color('#ffe7a8') }
+        // MV2c: a module or a version brings its wave as a "+N" over the desk too (the banner names the moment).
+        if ((r.module || (r.version !== undefined && r.version > 1 && r.minor === undefined)) && r.users >= 1) addFloat({ id: e.id, text: `+${Math.round(r.users)}`, tone: 'users', started: sceneMs() })
         if (r.level >= 2) {
           setConfetti((n) => n + 1)
           celebrate(2000)
@@ -224,7 +228,18 @@ function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boole
   useEffect(() => later(BANNER_MS, () => setOn(false)), [later])
   if (!on) return null
   const r = wave.release
+  const category = useGS((s) => s.projects.find((p) => p.id === r.projectId)?.category)
   const level = UI_TEXT[`release.level.${Math.max(1, Math.min(5, r.level))}`] ?? String(r.level)
+  // MV2c: a module delivery names the module, a version release the version and its new slots; the rest keeps "Yayında! v1".
+  const isVersion = r.version !== undefined && r.version > 1 && r.minor === undefined && !r.module
+  const line = r.module
+    ? text('release.module', { module: moduleName(r.module, category) })
+    : isVersion
+      ? text('release.version', { project: r.projectName, v: r.version!, n: MODULE_SLOTS_PER_VERSION })
+      : r.version !== undefined && r.minor !== undefined
+        ? text('release.banner', { level: text('release.minor', { v: r.version, m: r.minor }) })
+        : text('release.banner', { level })
+  const sub = (r.module || isVersion) && r.users >= 1 ? text('release.moduleUsersSub', { u: Math.round(r.users) }) : ''
   return (
     <Html portal={portal} position={[at[0], 3.0, at[1]]} center zIndexRange={[15, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
       {/* The yield (translate + fade) sits on this wrapper: pop-in's `both` fill owns the inner box's opacity, so a fade
@@ -235,7 +250,8 @@ function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boole
           style={{ background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', animationPlayState: play }}
         >
           {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
-          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>{text('release.banner', { level })}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>{line}</div>
+          {sub && <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>{sub}</div>}
         </div>
       </div>
     </Html>

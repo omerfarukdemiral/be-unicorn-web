@@ -78,11 +78,12 @@ export const LOOP_TEXT: Record<string, string> = {
 
   // Release moment (sürüm anı)
   'release.level.1': 'MVP',
-  'release.level.2': 'v1',
-  'release.level.3': 'v2',
-  'release.level.4': 'v3',
-  'release.level.5': 'tam sürüm',
+  'release.level.2': 'v0.4',
+  'release.level.3': 'v0.6',
+  'release.level.4': 'v0.8',
+  'release.level.5': 'v1',
   'release.update': 'güncelleme {n}',
+  'release.minor': 'v{v}.{m}',
   'release.title': 'Yayında! {project} {level}',
   'release.wave': '+{u} kullanıcı · MRR +{m}',
   'release.banner': 'Yayında! {level}',

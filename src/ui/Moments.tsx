@@ -4,6 +4,7 @@
 // They are items of the ONE notification strip: `useMomentSource` turns fresh engine events into moments,
 // `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
 // The receipt ends on one teaser: the next storm on the horizon, "→ 12g · Yatırımcı kışı" ("?" until revealed, §5.1).
+import * as B from '../engine/balance'
 import type { GameState, MonthReceipt } from '../engine/types'
 import { moduleName } from '../content'
 import type { Panel } from '../store/types'
@@ -16,7 +17,7 @@ import { momentPanel } from './momentRules'
 
 export type Moment =
   | { key: number; kind: 'receipt'; receipt: MonthReceipt; next?: ReceiptTeaser }
-  | { key: number; kind: 'release'; project: string; level: number; update?: number; module?: string; users: number; mrr: number }
+  | { key: number; kind: 'release'; project: string; level: number; update?: number; version?: number; minor?: number; module?: string; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
 
 /** The receipt's teaser: days to the next crisis on the horizon and its name ("?" while hidden). */
@@ -46,7 +47,7 @@ export function useMomentSource(onMoments: (add: Moment[]) => void): void {
       } else if (e.kind === 'release') {
         const r = s.releases?.find((x) => x.id === e.refId)
         const mod = r?.module ? moduleName(r.module, s.projects.find((p) => p.id === r.projectId)?.category) : undefined
-        if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), ...(mod ? { module: mod } : {}), users: r.users, mrr: r.mrr })
+        if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), ...(r.version !== undefined ? { version: r.version } : {}), ...(r.minor !== undefined ? { minor: r.minor } : {}), ...(mod ? { module: mod } : {}), users: r.users, mrr: r.mrr })
       } else if (e.kind === 'delayedEffect') {
         const o = [...(s.decisions.outcomes ?? [])].reverse().find((x) => x.cardId === e.refId)
         if (o) add.push({ key: e.id, kind: 'outcome', option: optionLabel(o.cardId, o.optionIndex) ?? '', effects: effectSummary(o.effects) })
@@ -68,6 +69,9 @@ export function momentLook(m: Moment): { icon: IconName; color: string; panel: P
       return { icon: 'hourglass', color: 'var(--color-kind-decision)', panel }
   }
 }
+
+/** A version release past the first 1.0 (design §2.3): "{project} v2 yayında · +3 slot". */
+const isVersionRelease = (m: { version?: number; minor?: number; module?: string }): boolean => m.version !== undefined && m.version > 1 && m.minor === undefined && !m.module
 
 const neg = (v: number) => (v > 0.5 ? `−${money(v)}` : money(0))
 const sgn = (v: number) => (v >= 0 ? `+${money(v)}` : `−${money(-v)}`)
@@ -98,8 +102,9 @@ export function momentText(m: Moment): string {
     }
     case 'release':
       // A module delivery: "Proje: Modül yayında" (a refresh brings no users, so no wave).
-      if (m.module) return `${m.project}: ${releaseName(m.level, m.update, m.module)}${m.users > 0 ? ` · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}` : ''}`
-      return t('strip.release', { project: m.project, level: releaseName(m.level, m.update), u: Math.round(m.users), m: money(m.mrr) })
+      if (m.module) return `${m.project}: ${t('release.module', { module: m.module })}${m.users > 0 ? ` · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}` : ''}`
+      if (isVersionRelease(m)) return `${t('release.version', { project: m.project, v: m.version!, n: B.MODULE_SLOTS_PER_VERSION })} · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}`
+      return t('strip.release', { project: m.project, level: releaseName(m.level, m.update, undefined, m.version, m.minor), u: Math.round(m.users), m: money(m.mrr) })
     case 'outcome':
       return t('outcome.line', { option: m.option, effects: m.effects })
   }
@@ -130,7 +135,13 @@ export function MomentLine({ m }: { m: Moment }) {
     case 'release':
       return (
         <span className="tabular">
-          <span className={main}>{m.module ? `${m.project}: ${releaseName(m.level, m.update, m.module)}` : t('release.title', { project: m.project, level: releaseName(m.level, m.update) })}</span>
+          <span className={main}>
+            {m.module
+              ? `${m.project}: ${releaseName(m.level, m.update, m.module)}`
+              : isVersionRelease(m)
+                ? t('release.version', { project: m.project, v: m.version!, n: B.MODULE_SLOTS_PER_VERSION })
+                : t('release.title', { project: m.project, level: releaseName(m.level, m.update, undefined, m.version, m.minor) })}
+          </span>
           {(!m.module || m.users > 0) && <span className="font-medium text-positive-ink"> · {t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}</span>}
         </span>
       )

@@ -4,6 +4,7 @@
 // formula; RightPanel formats and draws them behind a one-word label, since each panel's figure means something else.
 import { CONCEPT_IDS, type GameState } from '../engine/types'
 import type { Panel } from '../store/types'
+import { displayMaturity } from '../engine/modules'
 import { cashFlow } from './cashflow'
 
 /** How the number prints: money ($12K), Kasa in the HUD chip's own format ($15,098), money per month (−$4.2K/ay),
@@ -60,7 +61,7 @@ export function panelHeadline(s: GameState, panel: Panel): PanelHeadline | null 
       }
       if (sel.kind === 'project') {
         const p = s.projects.find((x) => x.id === sel.id)
-        return p ? { label: 'detail.maturity', value: p.maturity, unit: 'pct' } : null
+        return p ? { label: 'detail.maturity', value: p.launched && p.maturity >= 1 ? displayMaturity(s, p) : p.maturity, unit: 'pct' } : null
       }
       if (sel.kind === 'founder') return { label: 'founder.energy', value: s.founder.energy, unit: 'energy' }
       return null

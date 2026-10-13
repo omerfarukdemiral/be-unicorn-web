@@ -719,6 +719,7 @@ export const UI_TEXT: Record<string, string> = {
   'module.measured.infra': 'Altyapı ≈ −{x}/ay',
   'module.measured.every': 'Güncelleme {a}g\'de bir (öncesi {b}g)',
   'module.measured.every1': 'Güncelleme {a}g\'de bir',
+  'release.moduleUsersSub': '+{u} kullanıcı',
   'release.moduleUsers': '{module} yayında · +{u} kullanıcı',
   'release.version': '{project} v{v} yayında · +{n} slot',
   'bubble.moduleVersion': '{project} v{v} yayında, {n} yeni slot. Sıradaki: {module}?',

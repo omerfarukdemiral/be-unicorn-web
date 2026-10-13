@@ -4,7 +4,7 @@
 // way every run. Anything in front of the open sides (+x / +z) stays low near the floor so it never hides a desk.
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { CELL, hash01 } from './constants'
+import { CELL, hash01, renderBudget } from './constants'
 import type { Box, OfficeLayout } from './layout'
 import { PROP_COLORS, SURROUND, stagePalette } from './palette'
 import { GEO, mat } from './resources'
@@ -177,7 +177,7 @@ export function Surroundings({ lowPower = false }: { lowPower?: boolean }) {
       {/* kerb between the near pavement and the carriageway */}
       <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z1} maxZ={road.z1 + ROAD_GAP} y={-0.1} color={SURROUND.pavement} />
       <instancedMesh ref={dashRef} args={[GEO.box, mat(SURROUND.marking), dashes.length]} />
-      <Street road={road} farWalk={farWalk} nearWalkZ={road.z1 + ROAD_GAP * 0.55} x0={apron.minX - SHOP_REACH} x1={apron.maxX + SHOP_REACH} seed={`street:${layout.stage}`} thin={lowPower && layout.stage >= 4} />
+      <Street road={road} farWalk={farWalk} nearWalkZ={road.z1 + ROAD_GAP * 0.55} x0={apron.minX - SHOP_REACH} x1={apron.maxX + SHOP_REACH} seed={`street:${layout.stage}`} traffic={renderBudget(lowPower, layout.stage).traffic} />
       <Plants items={plan.trees} kind="tree" />
       <Plants items={plan.bushes} kind="bush" />
     </group>

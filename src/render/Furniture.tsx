@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import { CONCEPTS } from '../content'
 import type { PrimitiveHint } from '../content'
 import { FOUNDER_SLOT_ID, type GameState, type Slot } from '../engine/types'
+import { useBake } from './bake'
 import { CELL } from './constants'
 import type { StageBand } from '../content/stageBand'
 import { resolveFurniture, type ResolvedFurniture } from './furnitureCatalog'
@@ -478,8 +479,12 @@ export const FurnitureModel = memo(function FurnitureModel({ resolved, span = fa
         body = <Generic colors={colors} />
     }
   }
+  // One draw call per piece (plus its glow parts) instead of one per primitive: everything here is a pure function
+  // of these props (the server rack's LED material animates but is not bakeable, so it stays its own mesh).
+  const root = useRef<THREE.Group>(null)
+  useBake(root, [resolved, span, books, overload], { shadow: 'all' })
   return (
-    <group scale={[CELL, CELL, CELL]}>
+    <group ref={root} scale={[CELL, CELL, CELL]}>
       {body}
       {resolved.extras.length > 0 && <Primitives hints={resolved.extras} colors={colors} />}
     </group>

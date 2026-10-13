@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import type { GameState } from '../engine/types'
 import type { Selection, ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
-import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp } from './constants'
+import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp, renderBudget } from './constants'
 import { fitOutline, gapCenterY, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
 import { DeskBadges } from './DeskBadges'
 import { EffectsLayer } from './Effects'
@@ -209,7 +209,8 @@ function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
     l.target.updateMatrixWorld()
     l.shadow.needsUpdate = true
   }, [r, cx, cz])
-  const mapSize = lowPower ? 1024 : 2048
+  const budget = renderBudget(lowPower, layout.stage)
+  const mapSize = budget.shadowMapSize
   // The sun's colour and blur follow the company's size (G2); it snaps with the stage pop, hidden by it.
   const sun = sunFor(band, lowPower)
   return (
@@ -223,7 +224,7 @@ function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
         position={[layout.center[0] - 8, 16, layout.center[1] + 10]}
         intensity={1.6}
         color={sun.color}
-        castShadow
+        castShadow={budget.shadows}
         shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.02}
@@ -276,16 +277,31 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
       <CameraRig zoomLevel={zoom ?? uiZoom} />
       <Lights lowPower={lowPower} band={band} />
       <StageTransition>
-        <Surroundings lowPower={lowPower} />
-        <Office lowPower={lowPower} />
-        <SlotsLayer />
-        <FurnitureLayer band={band} lowPower={lowPower} />
-        <People band={band} />
-        <DeskBadges />
+        {/* Layer names: perf probes group meshes and draw calls by them. */}
+        <group name="surroundings">
+          <Surroundings lowPower={lowPower} />
+        </group>
+        <group name="office">
+          <Office lowPower={lowPower} />
+        </group>
+        <group name="slots">
+          <SlotsLayer />
+        </group>
+        <group name="furniture">
+          <FurnitureLayer band={band} lowPower={lowPower} />
+        </group>
+        <group name="people">
+          <People band={band} />
+        </group>
+        <group name="badges">
+          <DeskBadges />
+        </group>
       </StageTransition>
-      <EffectsLayer />
-      {/* Core loop beats: release banner + user wave, payday light (docs/CORE_LOOP.md §7). */}
-      <JuiceLayer />
+      <group name="effects">
+        <EffectsLayer />
+        {/* Core loop beats: release banner + user wave, payday light (docs/CORE_LOOP.md §7). */}
+        <JuiceLayer />
+      </group>
       <WorldBubbles renderBubble={renderBubble} ambient={ambientBubbles} />
     </>
   )

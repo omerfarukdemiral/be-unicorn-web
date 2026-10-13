@@ -7,6 +7,7 @@ import type { StageIndex } from '../engine/types'
 import { CELL, WALL_HEIGHT, WALL_THICKNESS, hash01 } from './constants'
 import type { Box, OfficeLayout, RingBand } from './layout'
 import { LOCKED_OPACITY, PASTEL, PROP_COLORS, stagePalette, type StagePalette } from './palette'
+import { useBake } from './bake'
 import { GEO, glassMat, glowMat, mat } from './resources'
 import { mood, useLayout } from './sceneRegistry'
 import { seedDecorPlan } from './stageLook'
@@ -452,8 +453,10 @@ function Dust({ rects, count, color, rising }: { rects: Box[]; count: number; co
 }
 
 function Clutter({ rects, color }: { rects: Box[]; color: string }) {
+  const root = useRef<THREE.Group>(null)
+  useBake(root, [rects, color])
   return (
-    <>
+    <group ref={root}>
       {rects.map((r, i) => {
         const w = r.maxX - r.minX
         const d = r.maxZ - r.minZ
@@ -468,7 +471,7 @@ function Clutter({ rects, color }: { rects: Box[]; color: string }) {
           </group>
         )
       })}
-    </>
+    </group>
   )
 }
 
@@ -550,15 +553,20 @@ export function Office({ lowPower = false }: { lowPower?: boolean }) {
   const pal = stagePalette(layout.stage as StageIndex)
   const lockedIdx = layout.bands.findIndex((b) => !b.unlocked)
   const tapeBox = lockedIdx > 0 ? layout.bands[lockedIdx - 1]!.box : null
+  // Floor, walls, decor and tape are a pure function of the layout: baked into a few draw calls (bake.ts).
+  const statics = useRef<THREE.Group>(null)
+  useBake(statics, [layout, lowPower])
   return (
     <group>
-      <Floor layout={layout} pal={pal} />
-      {layout.stage !== 6 && <Walls layout={layout} pal={pal} />}
-      <StageDecor layout={layout} pal={pal} lowPower={lowPower} />
+      <group ref={statics}>
+        <Floor layout={layout} pal={pal} />
+        {layout.stage !== 6 && <Walls layout={layout} pal={pal} />}
+        <StageDecor layout={layout} pal={pal} lowPower={lowPower} />
+        {tapeBox && <LockTape box={tapeBox} />}
+      </group>
       {layout.bands.map((band) => (
         <RingBandView key={`${layout.stage}:${band.ring}`} band={band} pal={pal} />
       ))}
-      {tapeBox && <LockTape box={tapeBox} />}
     </group>
   )
 }

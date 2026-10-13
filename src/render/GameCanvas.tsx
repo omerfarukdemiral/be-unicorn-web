@@ -1,6 +1,6 @@
 // Render lane entry point: full-size <Canvas> with the isometric office.
 // Desktop: click = select/place, wheel = zoom step, right-click = cancel. Keyboard lives in ui/shortcuts.ts.
-// Touch: tap = select, pinch = zoom step. DPR capped at 2, cheaper shadows in low-power mode.
+// Touch: tap = select, pinch = zoom step. DPR capped at 2; low-power mode follows renderBudget (no shadow pass).
 import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 import { useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
@@ -8,7 +8,7 @@ import { NeutralToneMapping } from 'three'
 import type { GameState } from '../engine/types'
 import type { ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
-import { detectLowPower } from './constants'
+import { detectLowPower, renderBudget } from './constants'
 import { OfficeScene } from './OfficeScene'
 import { RenderStateProvider, storeApi } from './source'
 
@@ -77,6 +77,8 @@ const FORCE_FULL_POWER = import.meta.env.DEV && new URLSearchParams(location.sea
 export function GameCanvas({ renderBubble, mockState, className, ambientBubbles = true }: GameCanvasProps = {}) {
   const [lowPower, setLowPower] = useState(() => !FORCE_FULL_POWER && detectLowPower())
   const gestures = useZoomGestures()
+  // Canvas-level settings do not depend on the stage (only the street traffic does, read in the scene).
+  const budget = renderBudget(lowPower, 0)
 
   return (
     <div
@@ -98,14 +100,16 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
     >
       <Canvas
         shadows={lowPower ? 'basic' : 'percentage'}
-        dpr={lowPower ? [1, 1.5] : [1, 2]}
-        gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
+        dpr={budget.dpr}
+        gl={{ antialias: budget.antialias, powerPreference: 'high-performance' }}
         // R3F's wrapper is overflow:hidden (scrollable by script); bubbles portal into it (htmlPortal), so clip it too.
         style={{ overflow: 'clip' }}
         // Neutral (Khronos PBR Neutral) instead of R3F's default ACES: ACES greys out light pastels (the warm
         // ground rendered khaki, pastel walls grey). Neutral keeps hue and saturation of the palette.ts colours.
-        onCreated={({ gl }) => {
-          gl.toneMapping = NeutralToneMapping
+        onCreated={(state) => {
+          state.gl.toneMapping = NeutralToneMapping
+          // Dev only: perf probes (draw calls, mesh counts) read the renderer and scene from here.
+          if (import.meta.env.DEV) (window as unknown as { __r3f?: unknown }).__r3f = state
         }}
         onPointerMissed={(e) => {
           if (e.button !== 0) return

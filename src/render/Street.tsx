@@ -5,6 +5,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { useBake } from './bake'
 import { hash01 } from './constants'
 import { PASTEL } from './palette'
 import { GEO, glowMat, mat } from './resources'
@@ -109,14 +110,16 @@ const CARS: readonly Mover[] = [
   { lane: 1, speed: 2.1, offset: 66, color: '#6b4ef0' },
 ]
 
-/** lowPower from stage 4: every other car and walker (the street is backdrop at that point). */
+/** traffic 'thin' (lowPower): every other car and walker. */
 const THIN_CARS = CARS.filter((_, i) => i % 2 === 0)
 
 function Vehicle({ m }: { m: Mover }) {
   const len = m.bus ? 3.2 : 1.5
   const h = m.bus ? 1.0 : 0.4
+  const root = useRef<THREE.Group>(null)
+  useBake(root, [m])
   return (
-    <group>
+    <group ref={root}>
       <mesh geometry={GEO.box} material={mat(m.color)} scale={[len, h, 0.78]} position={[0, 0.14 + h / 2, 0]} />
       {m.bus ? (
         <mesh geometry={GEO.box} material={mat('#bfe3ff')} scale={[len * 0.86, 0.3, 0.8]} position={[0.05, 0.86, 0]} />
@@ -146,8 +149,10 @@ const WALKERS: readonly { side: 0 | 1; speed: number; offset: number; color: str
 const THIN_WALKERS = WALKERS.filter((_, i) => i % 2 === 0)
 
 function Walker({ color }: { color: string }) {
+  const root = useRef<THREE.Group>(null)
+  useBake(root, [color])
   return (
-    <group>
+    <group ref={root}>
       <mesh geometry={GEO.cyl} material={mat(color)} scale={[0.26, 0.55, 0.2]} position={[0, 0.5, 0]} />
       <mesh geometry={GEO.cyl} material={mat('#3e3c48')} scale={[0.2, 0.25, 0.16]} position={[0, 0.13, 0]} />
       <mesh geometry={GEO.sphere} material={mat('#f0c39b')} scale={[0.22, 0.22, 0.22]} position={[0, 0.9, 0]} />
@@ -216,11 +221,11 @@ export interface StreetProps {
   x0: number
   x1: number
   seed: string
-  /** Halve cars and walkers (lowPower at stage >= 4). */
-  thin?: boolean
+  /** Cars and walkers (renderBudget): all, every other one, or none. */
+  traffic?: 'full' | 'thin' | 'none'
 }
 
-export function Street({ road, farWalk, nearWalkZ, x0, x1, seed, thin = false }: StreetProps) {
+export function Street({ road, farWalk, nearWalkZ, x0, x1, seed, traffic = 'full' }: StreetProps) {
   const row = useMemo(() => streetRow(x0, x1, seed), [x0, x1, seed])
   const lamps = useMemo(() => {
     const out: number[] = []
@@ -229,15 +234,20 @@ export function Street({ road, farWalk, nearWalkZ, x0, x1, seed, thin = false }:
   }, [x0, x1])
   const zFront = farWalk.z0 - 0.25
   const laneW = (road.z1 - road.z0) / 4
+  // Shop bodies, roofs and lamps: one baked mesh (the facades keep their own textured planes).
+  const statics = useRef<THREE.Group>(null)
+  useBake(statics, [row, lamps, zFront, road.z1])
   return (
     <group>
-      {row.map((p, i) => (
-        <Building key={i} {...p} zFront={zFront} />
-      ))}
-      {lamps.map((x) => (
-        <Lamp key={x} x={x} z={road.z1 + 0.25} />
-      ))}
-      <Flow lanes={[road.z1 - laneW, road.z0 + laneW]} walks={[(farWalk.z0 + farWalk.z1) / 2, nearWalkZ]} x0={x0} x1={x1} thin={thin} />
+      <group ref={statics}>
+        {row.map((p, i) => (
+          <Building key={i} {...p} zFront={zFront} />
+        ))}
+        {lamps.map((x) => (
+          <Lamp key={x} x={x} z={road.z1 + 0.25} />
+        ))}
+      </group>
+      {traffic !== 'none' && <Flow lanes={[road.z1 - laneW, road.z0 + laneW]} walks={[(farWalk.z0 + farWalk.z1) / 2, nearWalkZ]} x0={x0} x1={x1} thin={traffic === 'thin'} />}
     </group>
   )
 }

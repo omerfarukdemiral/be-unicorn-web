@@ -77,7 +77,7 @@ export interface PowerEnv {
 }
 
 /**
- * Cheaper rendering (DPR clamp, no antialias, basic shadows, thinner street traffic from stage 4). Few cores always;
+ * Cheaper rendering (renderBudget: DPR clamp, no antialias, no shadow map, thinner street traffic). Few cores always;
  * a touch device only when it also reports little memory or few cores: a recent 6-core phone keeps the full look and
  * PerformanceMonitor drops it to lowPower if the frame rate says otherwise.
  */
@@ -89,4 +89,25 @@ export function detectLowPower(): boolean {
   if (typeof window === 'undefined') return false
   const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined
   return lowPowerFrom({ coarse: window.matchMedia?.('(pointer: coarse)').matches ?? false, cores: nav?.hardwareConcurrency, memory: nav?.deviceMemory })
+}
+
+export interface RenderBudget {
+  /** Device pixel ratio range for the canvas. */
+  dpr: [number, number]
+  antialias: boolean
+  /** The sun casts a shadow map (the whole scene is drawn a second time into it). */
+  shadows: boolean
+  shadowMapSize: number
+  /** Street cars and walkers: all, every other one, or none. */
+  traffic: 'full' | 'thin' | 'none'
+}
+
+/**
+ * What the scene may spend. Full power keeps the whole look; lowPower is the real fallback: no shadow pass (about a
+ * fifth of the draw calls), a lower DPR, no MSAA, and the street traffic thinned (none from stage 4, where the street
+ * is backdrop). The office, people, desks and bubbles are never cut.
+ */
+export function renderBudget(lowPower: boolean, stage: number): RenderBudget {
+  if (!lowPower) return { dpr: [1, 2], antialias: true, shadows: true, shadowMapSize: 2048, traffic: 'full' }
+  return { dpr: [1, 1.5], antialias: false, shadows: false, shadowMapSize: 1024, traffic: stage >= 4 ? 'none' : 'thin' }
 }

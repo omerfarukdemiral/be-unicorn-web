@@ -1,9 +1,10 @@
 // Low-poly person: body + head + limbs, department colour, small accessories.
 // World units, feet at y=0, facing +z. Animated by Character/Npc through the `rig` object.
 import { useFrame } from '@react-three/fiber'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { EmployeeStatus } from '../engine/types'
+import { bakeSkinned } from './bake'
 import { GEO, glowMat, mat, torusGeo } from './resources'
 import { STATUS_COLORS } from './palette'
 import { damp } from './constants'
@@ -44,11 +45,23 @@ const EYE = '#2b2a33'
 export const LEAD_STAR = '#f5c542'
 
 export const CharacterModel = memo(function CharacterModel({ look, rig, lead }: { look: CharacterLook; rig?: Rig; lead?: boolean }) {
-  const r = rig ?? createRig()
+  const own = useRef<Rig | null>(null)
+  const r = rig ?? (own.current ??= createRig())
   const legs = look.legs ?? '#5b5866'
   const acc = look.accessories
+  // One skinned draw call per person instead of ~14 meshes: every part rides on its rig group (bake.ts). The cup
+  // toggles its own visibility, so it stays out of the bake.
+  const root = useRef<THREE.Group>(null)
+  const lookKey = JSON.stringify(look)
+  useLayoutEffect(() => {
+    const g = root.current
+    if (!g) return
+    const bones = [g, r.legL, r.legR, r.body, r.armL, r.armR, r.head].filter((b): b is THREE.Group => !!b)
+    return bakeSkinned(g, bones, { shadow: 'all' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookKey, lead, r])
   return (
-    <group scale={look.scale ?? 1}>
+    <group ref={root} scale={look.scale ?? 1}>
       <group ref={(o) => void (r.legL = o)} position={[-0.08, 0.3, 0]}>
         <mesh geometry={GEO.box} material={mat(legs)} scale={[0.1, 0.3, 0.11]} position={[0, -0.15, 0]} />
       </group>
@@ -66,7 +79,7 @@ export const CharacterModel = memo(function CharacterModel({ look, rig, lead }: 
         <group ref={(o) => void (r.armR = o)} position={[0.22, 0.63, 0]}>
           <mesh geometry={GEO.box} material={mat(look.body)} scale={[0.08, 0.28, 0.09]} position={[0, -0.13, 0]} />
           <mesh geometry={GEO.sphere} material={mat(look.skin)} scale={[0.08, 0.08, 0.08]} position={[0, -0.28, 0]} />
-          <group ref={(o) => void (r.cup = o)} position={[0, -0.3, 0.05]} visible={false}>
+          <group ref={(o) => void (r.cup = o)} position={[0, -0.3, 0.05]} visible={false} userData={{ noBake: true }}>
             <mesh geometry={GEO.cyl} material={mat('#fbf8f2')} scale={[0.07, 0.09, 0.07]} />
             <mesh geometry={GEO.cyl} material={mat('#7a5230')} scale={[0.06, 0.01, 0.06]} position={[0, 0.045, 0]} />
           </group>

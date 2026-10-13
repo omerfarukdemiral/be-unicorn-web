@@ -95,12 +95,19 @@ export function capsuleGeo(radius: number, length: number): THREE.BufferGeometry
 
 const matCache = new Map<string, THREE.Material>()
 
+/**
+ * Materials a bake (bake.ts) may merge: 'color' parts fold into one vertex-coloured mesh (mat(): every one is the
+ * same flat standard material but for its colour), 'same' parts merge only with parts of the same material (glow).
+ */
+export const BAKE_KIND = new WeakMap<THREE.Material, 'color' | 'same'>()
+
 /** Flat-shaded pastel standard material, cached by colour. */
 export function mat(color: string): THREE.MeshStandardMaterial {
   const key = `std:${color}`
   let m = matCache.get(key)
   if (!m) {
     m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0 })
+    BAKE_KIND.set(m, 'color')
     matCache.set(key, m)
   }
   return m as THREE.MeshStandardMaterial
@@ -112,6 +119,7 @@ export function glowMat(color: string, intensity = 1): THREE.MeshStandardMateria
   let m = matCache.get(key)
   if (!m) {
     m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, flatShading: true, roughness: 0.4 })
+    BAKE_KIND.set(m, 'same')
     matCache.set(key, m)
   }
   return m as THREE.MeshStandardMaterial
@@ -139,5 +147,8 @@ export function glassMat(color = '#cfe8f5', opacity = 0.35): THREE.MeshStandardM
   return m as THREE.MeshStandardMaterial
 }
 
-/** Invisible but raycastable material for hit areas. */
-export const HIT_MAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+/**
+ * Invisible but raycastable material for hit areas. material.visible = false keeps the mesh out of the render lists
+ * (an opacity-0 mesh still costs a draw call) while three's raycaster, which ignores visibility, still hits it.
+ */
+export const HIT_MAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, visible: false })

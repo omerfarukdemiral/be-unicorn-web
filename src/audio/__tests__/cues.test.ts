@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GameEvent, GameEventKind } from '../../engine/types'
 import { cueForEvents } from '../index'
+import { playCue } from '../synth'
 
 const ev = (kind: GameEventKind, id = 1): GameEvent => ({ id, day: 0, kind })
 
@@ -19,5 +20,14 @@ describe('sound cues', () => {
   it('plays only the most important cue of a batch', () => {
     expect(cueForEvents([ev('visitorArrived', 1), ev('stageUp', 2), ev('hired', 3)])).toBe('stageUp')
     expect(cueForEvents([ev('founderActionDone', 1), ev('milestone', 2)])).toBe('milestone')
+  })
+})
+
+describe('stage band sound', () => {
+  it('playCue is a no-op without an AudioContext for every band', () => {
+    for (const band of [0, 1, 2, 3]) {
+      expect(() => playCue('stageUp', band)).not.toThrow()
+      expect(() => playCue('hired', band)).not.toThrow()
+    }
   })
 })

@@ -78,9 +78,9 @@ export const PROJECT_CATEGORY_TEXT: ProjectCategoryTextTable = {
 export const NPC_TEXT: NpcTextTable = {
   mentor: { name: 'Nevin', title: 'Mentor' },
   cofounder: { name: 'Can', title: 'Kurucu ortak' },
-  accountant: { name: 'Hakan', title: 'Muhasebeci' },
-  engineer: { name: 'Elif', title: 'Mühendis' },
+  accountant: { name: 'Hakan', title: 'Muhasebeci', titleBy: { 2: 'Mali işler', 3: 'CFO' } },
+  engineer: { name: 'Elif', title: 'Mühendis', titleBy: { 2: 'Baş mühendis', 3: 'CTO' } },
   investor: { name: 'Bora', title: 'Yatırımcı' },
-  customer: { name: 'Aylin', title: 'Müşteri' },
-  journalist: { name: 'Tuna', title: 'Gazeteci' },
+  customer: { name: 'Aylin', title: 'Müşteri', titleBy: { 2: 'Kurumsal müşteri' } },
+  journalist: { name: 'Tuna', title: 'Gazeteci', titleBy: { 2: 'Teknoloji muhabiri' } },
 }

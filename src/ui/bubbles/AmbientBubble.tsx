@@ -2,6 +2,7 @@
 // speak, at most one line a game day, from the strip's daily budget (docs/GAMEPLAY_V2.md §9.4).
 import { useShallow } from 'zustand/react/shallow'
 import { OFFICE_LINES } from '../../content'
+import { lineText } from '../../content/stageBand'
 import { useGameStore } from '../../store/gameStore'
 import { admitOfficeLine, sharedBudget } from '../layout/stripRules'
 import { cx } from '../primitives'
@@ -49,6 +50,7 @@ export function AmbientBubbleView({ text, speaker, className, tail, large }: { t
 export function AmbientBubbles({ max = 2 }: { max?: number }) {
   const bubbles = useGameStore(useShallow((s) => s.state.bubbles))
   const day = useGameStore((s) => s.state.time.day)
+  const stage = useGameStore((s) => s.state.stage)
   const names = useGameStore(
     useShallow((s) => s.state.bubbles.slice(-max).map((b) => speakerName(s.state, b.speakerId))),
   )
@@ -59,7 +61,7 @@ export function AmbientBubbles({ max = 2 }: { max?: number }) {
         if (b.untilDay < day || !officeLineShown(b.id, b.lineId)) return null
         const line = OFFICE_LINES.find((l) => l.id === b.lineId)
         if (!line) return null
-        return <AmbientBubbleView key={b.id} text={line.text} speaker={names[i]} />
+        return <AmbientBubbleView key={b.id} text={lineText(line, stage)} speaker={names[i]} />
       })}
     </div>
   )

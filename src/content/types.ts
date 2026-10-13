@@ -1,5 +1,6 @@
 // Be Unicorn — content contract types. All player-facing text is Turkish and lives in content/.
 // Ownership: content lane. Changes after scaffold must be ADDITIVE.
+import type { StageBand } from './stageBand'
 import type {
   ActivityKind,
   Archetype,
@@ -97,6 +98,8 @@ export interface DecisionCard {
   speaker: NpcRole
   /** ≤ 2 sentences. */
   question: string
+  /** Same question, same meaning and numbers, in a bigger company's voice (only for cards spanning 2+ bands). */
+  questionBy?: Partial<Record<StageBand, string>>
   /** 2 options, sometimes 3. */
   options: DecisionOption[]
   /** Extra gating on top of stage. */
@@ -284,8 +287,10 @@ export interface OfficeLine {
   trigger: OfficeLineTrigger
   /** Who says it: an NPC role, an employee of a dept, 'anyEmployee' or 'founder'. */
   speaker: NpcRole | Dept | 'anyEmployee' | 'founder'
-  /** ≤ 12 words. */
+  /** ≤ 12 words. Band 1 (Pre-seed / Seed) text; every band without a variant says this. */
   text: string
+  /** Same line in the voice of a bigger company (stageBand.ts); ≤ 12 words each. Cosmetic: no rng, no trigger. */
+  variants?: Partial<Record<StageBand, string>>
   /** For 'milestone' lines. */
   milestone?: MilestoneId
   minStage?: StageIndex
@@ -342,7 +347,7 @@ export type PostMortemTextTable = Record<PostMortemCode, string>
 
 export type DeptTextTable = Record<Dept, { name: string; short: string }>
 export type ProjectCategoryTextTable = Record<ProjectCategory, { name: string; description: string }>
-export type NpcTextTable = Record<NpcRole, { name: string; title: string }>
+export type NpcTextTable = Record<NpcRole, { name: string; title: string; /** Title once the company is bigger (stageBand.ts). */ titleBy?: Partial<Record<StageBand, string>> }>
 
 /** Everything the content lane exports from src/content/index.ts. */
 /** Optional stage goal (☆, docs/CORE_LOOP.md §4.3). The ★ goal is always the next stage's valuation. */

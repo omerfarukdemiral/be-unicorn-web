@@ -1,6 +1,7 @@
 // Wires sound cues to the game: engine events (own cursor over state.events), panel / center board changes, the payday desk,
 // speed/pause, action errors, game over, the Kazanımlar badge growing — plus a soft tap for any UI button press.
 import type { GameEvent, GameEventKind, GameState } from '../engine/types'
+import { stageBand } from '../content/stageBand'
 import { achievementsBadge, blockingOverlay, centerOpen, useGameStore } from '../store/gameStore'
 import type { GameStore } from '../store/types'
 import { usePrefs } from '../ui/hooks'
@@ -67,12 +68,12 @@ export function cueForEvents(events: readonly GameEvent[]): CueId | null {
 // A button tap waits a moment; any meaningful cue triggered by the same press replaces it.
 let pendingTap = 0
 
-function cue(id: CueId): void {
+function cue(id: CueId, band?: number): void {
   if (pendingTap) {
     window.clearTimeout(pendingTap)
     pendingTap = 0
   }
-  playCue(id)
+  playCue(id, band)
 }
 
 const TAPPABLE = 'button, [role="button"], a[href], input[type="checkbox"], summary'
@@ -115,7 +116,8 @@ function onStore(next: GameStore, prev: GameStore): void {
     const fresh = s.events.filter((e) => e.id > cursor)
     cursor = Math.max(cursor, maxEventId(s))
     const c = cueForEvents(fresh)
-    if (c) cue(c)
+    // The stage-up event comes with the new stage already in state: the cue sounds the company it just became.
+    if (c) cue(c, stageBand(s.stage))
   }
 
   if (s.projects.length > p.projects.length) cue('projectStarted')

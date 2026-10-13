@@ -3,6 +3,7 @@
 // the question and one row per option with its labelled chips (the trade-off sentence is the row's tooltip). Choosing
 // dispatches answerDecision; the store closes the bubble and time resumes. Detay opens the card in the panel.
 import type { DecisionCardId, NpcRole } from '../../engine/types'
+import { cardQuestion } from '../../content/stageBand'
 import { useGameStore } from '../../store/gameStore'
 import { OptionEffects } from '../EffectChips'
 import { decisionById } from './DecisionBubble'
@@ -20,10 +21,12 @@ export function pillLine(question: string): string {
 
 export function DecisionWorldBubble({ bubbleKey, cardId, role }: { bubbleKey: string; cardId: DecisionCardId; role: NpcRole }) {
   const cast = useGameStore((s) => s.state.cast)
+  const stage = useGameStore((s) => s.state.stage)
   const dispatch = useGameStore((s) => s.dispatch)
   const card = decisionById(cardId)
   if (!card) return null
   const crisis = card.category === 'crisis'
+  const question = cardQuestion(card, stage)
   return (
     <Expandable
       bubbleKey={bubbleKey}
@@ -33,10 +36,10 @@ export function DecisionWorldBubble({ bubbleKey, cardId, role }: { bubbleKey: st
       face={role}
       mark={crisis ? { icon: 'warning', color: 'var(--color-negative)' } : { icon: 'chat', color: 'var(--color-kind-decision)' }}
       speaker={castName({ cast }, role)}
-      line={pillLine(card.question)}
+      line={pillLine(question)}
       detail={() => useGameStore.getState().openPanel({ kind: 'decision', cardId })}
     >
-      <BubbleText className="pb-0.5">{card.question}</BubbleText>
+      <BubbleText className="pb-0.5">{question}</BubbleText>
       {card.options.map((o, i) => (
         <ChoiceRow
           key={i}

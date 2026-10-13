@@ -19,7 +19,7 @@ import { Icon } from '../icons'
 import { FOUNDER_COLOR, FOUNDER_ICON } from '../theme'
 import { useFounderActions } from '../FounderActions'
 import { money, pct } from '../format'
-import { t } from '../i18n'
+import { stageText, t } from '../i18n'
 import { requestOverlay } from '../modalQueue'
 import { PAYDAY_LINES, paydayView, type PaydayDesk } from '../overlays/paydayView'
 import { buildChips, MODULE_ICON, useBuildCost } from '../panels/ModulesSection'
@@ -111,6 +111,7 @@ function paydayChips(d: PaydayDesk): Chip[] {
 
 function PaydayBubble({ bubbleKey }: { bubbleKey: string }) {
   const dispatch = useGameStore((s) => s.dispatch)
+  const stage = useGameStore((s) => s.state.stage)
   // paydayView runs the engine on a copy: recompute only when the month or the till moves, never every frame.
   const key = useGameStore((s) => {
     const p = s.state.finance.pendingPayday
@@ -141,7 +142,7 @@ function PaydayBubble({ bubbleKey }: { bubbleKey: string }) {
     ...(other >= 1 ? [{ icon: 'cash' as const, label: t('fx.tag.other'), text: `−${money(other)}`, good: false, title: t('desk.title') }] : []),
   ]
   return (
-    <Expandable bubbleKey={bubbleKey} kind="desk" face="founder" mark={{ icon: 'cash', color: 'var(--color-g-burn)' }} speaker={t('founder.you')} line={t('bubble.payday', { v: money(v.total) })} detail={openDesk}>
+    <Expandable bubbleKey={bubbleKey} kind="desk" face="founder" mark={{ icon: 'cash', color: 'var(--color-g-burn)' }} speaker={t('founder.you')} line={stageText('bubble.payday', stage, { v: money(v.total) })} detail={openDesk}>
       <ChipRow chips={chips} />
       {v.rows.map((r, i) => (
         <ChoiceRow

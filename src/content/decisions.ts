@@ -208,6 +208,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'accountant',
     question: 'Fiyatı %20 artırmayı düşünüyoruz. Bazı kullanıcılar gidebilir.',
+    questionBy: { 2: 'Fiyatı %20 artırmayı planlıyoruz. Bazı müşteriler ayrılabilir.' },
     options: [
       {
         label: 'Herkes için artır',
@@ -256,6 +257,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'cofounder',
     question: 'Şirket değerlerini yazıya dökmenin zamanı geldi mi?',
+    questionBy: { 2: 'Kurumsal değerleri yazıya dökmenin zamanı geldi mi?' },
     options: [
       {
         label: 'Ekiple birlikte yazalım',
@@ -385,6 +387,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'accountant',
     question: 'Veri koruma denetimi kapıda. Hazır mıyız?',
+    questionBy: { 3: 'KVKK ve GDPR denetimi kapıda. Hazır mıyız?' },
     options: [
       {
         label: 'Danışman tut, hazırlan',
@@ -410,6 +413,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'engineer',
     question: 'Bu ayki bulut faturası iki katına çıktı.',
+    questionBy: { 3: 'Bulut harcaması bu ay iki katına çıktı.' },
     options: [
       {
         label: 'Optimizasyona ekip ayır',
@@ -466,6 +470,7 @@ export const DECISIONS: readonly DecisionCard[] = [
     category: 'normal',
     speaker: 'investor',
     question: 'Yurt dışına açılma zamanı mı? Yeni pazar, yeni dertler demek.',
+    questionBy: { 3: 'Yeni ülkelere açılma zamanı mı? Yeni pazar, yeni dertler.' },
     options: [
       {
         label: 'Yurt dışına açıl',

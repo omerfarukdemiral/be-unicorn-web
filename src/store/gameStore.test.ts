@@ -1206,6 +1206,10 @@ describe('cast and horizon (§9.1, §5.1)', () => {
     expect(speakerName(s, 'mentor')).toBe('Suna')
     expect(castName(s, 'investor')).toBe(a.cast!.investor)
     expect(npcLabel('mentor', cast)).toBe(`Suna · ${NPC_TEXT.mentor.title}`)
+    // The title grows with the company (G1); the mentor has none, the accountant does.
+    expect(npcLabel('mentor', cast, 5)).toBe(`Suna · ${NPC_TEXT.mentor.title}`)
+    expect(npcLabel('accountant', cast, 1)).toBe(`${cast.accountant} · Muhasebeci`)
+    expect(npcLabel('accountant', cast, 5)).toBe(`${cast.accountant} · CFO`)
     // An older save without a cast falls back to the role's default name.
     expect(castName({}, 'mentor')).toBe(NPC_TEXT.mentor.name)
   })

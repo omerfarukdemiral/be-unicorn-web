@@ -132,7 +132,8 @@ function arp(notes: number[], step: number, dur: number, o: ToneOpts = {}, at = 
   notes.forEach((f, i) => tone(f, at + i * step, dur, o))
 }
 
-const CUES: Record<CueId, () => void> = {
+/** A bigger company sounds a little fuller (stageBand 0–3); only stageUp and hired listen. */
+const CUES: Record<CueId, (band: number) => void> = {
   tap: () => {
     tone(N.E6, 0, 0.035, { type: 'triangle', gain: 0.035, detune: (Math.random() - 0.5) * 30 })
     noise(0, 0.02, 3200, 0.02)
@@ -158,7 +159,12 @@ const CUES: Record<CueId, () => void> = {
     arp([N.C5, N.E5, N.G5, N.C6], 0.08, 0.3, { type: 'triangle', gain: 0.07 })
     ;[N.C5, N.E5, N.G5].forEach((f) => tone(f, 0.34, 0.7, { gain: 0.035, attack: 0.03 }))
   },
-  hired: () => arp([N.C5, N.E5, N.G5], 0.07, 0.3, { type: 'triangle', gain: 0.07 }),
+  // From band 2 the welcome is a rounder sine with a bright top note.
+  hired: (band) => {
+    if (band < 2) return arp([N.C5, N.E5, N.G5], 0.07, 0.3, { type: 'triangle', gain: 0.07 })
+    arp([N.C5, N.E5, N.G5], 0.07, 0.34, { gain: 0.06 })
+    tone(N.C6, 0.21, 0.5, { gain: 0.03, attack: 0.02 })
+  },
   left: () => arp([N.D5, N.A4], 0.12, 0.35, { gain: 0.05 }),
   itemPlaced: () => {
     noise(0, 0.06, 420, 0.12, 260, 2)
@@ -177,9 +183,16 @@ const CUES: Record<CueId, () => void> = {
     arp([N.E6, N.G6, N.E6, N.G6], 0.045, 0.1, { type: 'triangle', gain: 0.035 })
     ;[N.C5, N.E5, N.G5].forEach((f) => tone(f, 0.18, 0.8, { gain: 0.04, attack: 0.02 }))
   },
-  stageUp: () => {
+  // Band 0 is the arpeggio and its pad; each band adds: 1 a second-octave run, 2 a wider pad, 3 the full chord and a low pedal.
+  stageUp: (band) => {
     arp([N.G4, N.C5, N.E5, N.G5, N.C6], 0.09, 0.35, { type: 'triangle', gain: 0.07 })
     ;[N.C5, N.E5, N.G5, N.C6].forEach((f) => tone(f, 0.5, 1.4, { gain: 0.035, attack: 0.08 }))
+    if (band >= 1) arp([N.E6, N.G6], 0.09, 0.4, { type: 'triangle', gain: 0.03 }, 0.5)
+    if (band >= 2) [N.E4, N.G4, N.D5].forEach((f) => tone(f, 0.5, 1.8, { gain: 0.03, attack: 0.12 }))
+    if (band >= 3) {
+      ;[N.E5, N.A5, N.D6].forEach((f) => tone(f, 0.6, 2, { gain: 0.025, attack: 0.15 }))
+      tone(N.G3 / 2, 0.45, 2.2, { gain: 0.07, attack: 0.1 })
+    }
   },
   conceptQueued: () => tone(N.D5, 0, 0.07, { gain: 0.045, to: N.A5 }),
   conceptLearned: () => {
@@ -201,7 +214,7 @@ const CUES: Record<CueId, () => void> = {
   },
   gameOver: () => arp([N.G4, N.E4, N.D4, N.C4], 0.28, 0.7, { gain: 0.06, attack: 0.02 }),
   victory: () => {
-    CUES.stageUp()
+    CUES.stageUp(0)
     arp([N.C6, N.E6, N.G6, N.E6, N.G6], 0.07, 0.2, { type: 'triangle', gain: 0.03 }, 0.9)
   },
 }
@@ -210,7 +223,8 @@ const CUES: Record<CueId, () => void> = {
 const COOLDOWN: Partial<Record<CueId, number>> = { tap: 35, confirm: 60, visitor: 20_000, conceptQueued: 4000, decisionShown: 4000, speed: 80, desk: 4000 }
 const lastPlayed = new Map<CueId, number>()
 
-export function playCue(id: CueId): void {
+/** `band` is stageBand(state.stage) (0–3): a bigger company sounds fuller. Default 1 = today's sound. */
+export function playCue(id: CueId, band = 1): void {
   if (!enabled) return
   const c = ensure()
   if (!c || c.state !== 'running') return
@@ -223,5 +237,5 @@ export function playCue(id: CueId): void {
     const w = window as unknown as { __cues?: string[] }
     ;(w.__cues ??= []).push(id)
   }
-  CUES[id]()
+  CUES[id](band)
 }

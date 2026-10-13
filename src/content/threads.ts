@@ -77,6 +77,7 @@ export const THREAD_CARDS: readonly DecisionCard[] = [
     speaker: 'mentor',
     thread: { id: 'mentor', step: 3 },
     question: 'Ekip büyüyor. Kimi işe almayacağını biliyor musun?',
+    questionBy: { 2: 'Şirket büyüyor. Kimi işe almayacağını biliyor musun?' },
     options: [
       {
         label: 'Çıtayı yaz',
@@ -127,6 +128,7 @@ export const THREAD_CARDS: readonly DecisionCard[] = [
     speaker: 'mentor',
     thread: { id: 'mentor', step: 5 },
     question: 'Ürününü en son ne zaman kendin kullandın?',
+    questionBy: { 3: 'Ürününü en son ne zaman bizzat kullandın?' },
     options: [
       {
         label: 'Bir gün kullan',
@@ -360,6 +362,7 @@ export const THREAD_CARDS: readonly DecisionCard[] = [
     speaker: 'customer',
     thread: { id: 'customer', step: 4 },
     question: 'Sözleşmem bitiyor. Bir yıl daha kalayım mı, düşünüyorum.',
+    questionBy: { 3: 'Sözleşmemiz bitiyor. Bir yıl daha uzatalım mı, düşünüyoruz.' },
     options: [
       {
         label: 'Yanına git, dinle',

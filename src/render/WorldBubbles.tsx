@@ -6,6 +6,7 @@
 // → capBubbles (≤ MAX_ACTIONABLE, one per anchor, priority order) → BubbleAnchor (layout + fade).
 import { useEffect, useMemo, useState } from 'react'
 import { DECISIONS, OFFICE_LINES } from '../content'
+import { cardQuestion, lineText } from '../content/stageBand'
 import * as B from '../engine/balance'
 import type { DecisionCardId, GameState, NpcRole } from '../engine/types'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
@@ -351,10 +352,19 @@ export class BubbleTimeline {
 // Scene
 // ---------------------------------------------------------------------------
 
-function toBubble(l: RoutedLine): WorldBubble | null {
+const lineOf = (id: string | undefined, stage: number): string => {
+  const line = OFFICE_LINES.find((x) => x.id === id)
+  return line ? lineText(line, stage) : '…'
+}
+const questionOf = (id: DecisionCardId, stage: number): string => {
+  const card = DECISIONS.find((d) => d.id === id)
+  return card ? cardQuestion(card, stage) : '…'
+}
+
+function toBubble(l: RoutedLine, stage: number): WorldBubble | null {
   switch (l.kind) {
     case 'ambient':
-      return { kind: 'ambient', key: l.key, bubbleId: l.ref, lineId: l.extra ?? '', speakerId: l.speakerId, text: OFFICE_LINES.find((x) => x.id === l.extra)?.text ?? '…' }
+      return { kind: 'ambient', key: l.key, bubbleId: l.ref, lineId: l.extra ?? '', speakerId: l.speakerId, text: lineOf(l.extra, stage) }
     case 'decision': {
       const cardId = l.ref
       return {
@@ -363,7 +373,7 @@ function toBubble(l: RoutedLine): WorldBubble | null {
         cardId,
         role: decisionRole(cardId),
         speakerId: l.speakerId,
-        text: DECISIONS.find((d) => d.id === cardId)?.question ?? '…',
+        text: questionOf(cardId, stage),
         onOpen: () => storeApi().openPanel({ kind: 'decision', cardId }),
       }
     }
@@ -387,6 +397,7 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
   const key = useGS((s) => selectBubbleKey(s, bubbleOpen))
   const layout = useLayout()
   const mock = useMockState()
+  const stage = useGS((s) => s.stage)
 
   const [timeline] = useState(() => new BubbleTimeline())
   const [wakeups, setWakeups] = useState(0)
@@ -408,7 +419,7 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
     if (bubbleOpen !== null && !step.lines.some((l) => l.key === bubbleOpen && !l.exiting)) storeApi().setBubbleOpen(null)
   }, [step, bubbleOpen])
 
-  const list = useMemo(() => step.lines.map((l) => ({ b: toBubble(l), exiting: !!l.exiting })), [step])
+  const list = useMemo(() => step.lines.map((l) => ({ b: toBubble(l, stage), exiting: !!l.exiting })), [step, stage])
 
   // Overlaps (same or different speakers) are resolved in screen space by the layout driver.
   const [registry] = useState(() => new BubbleLayoutRegistry())

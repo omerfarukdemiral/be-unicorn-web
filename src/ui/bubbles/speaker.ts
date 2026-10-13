@@ -3,6 +3,7 @@
 import type { GameState, NpcRole } from '../../engine/types'
 import { NPC_ROLES } from '../../engine/types'
 import { NPC_TEXT } from '../../content'
+import { npcTitle } from '../../content/stageBand'
 import { t } from '../i18n'
 
 /** The run's name for an NPC role (same seed → same name). */
@@ -21,6 +22,6 @@ export function speakerName(s: GameState, speakerId: string): string {
 }
 
 /** "Nevin · Mentor": the cast name and the role's title. */
-export function npcLabel(role: NpcRole, cast?: GameState['cast']): string {
-  return `${castName({ cast }, role)} · ${NPC_TEXT[role].title}`
+export function npcLabel(role: NpcRole, cast?: GameState['cast'], stage = 1): string {
+  return `${castName({ cast }, role)} · ${npcTitle(role, stage)}`
 }

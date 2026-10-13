@@ -1,5 +1,6 @@
 // Keyed UI text. Source of truth is content's UI_TEXT.
 import { UI_TEXT } from '../content'
+import { STAGE_TEXT, stageBand } from '../content/stageBand'
 
 export type TextParams = Record<string, string | number>
 
@@ -24,4 +25,10 @@ export function t(key: string, params?: TextParams): string {
     return key
   }
   return fill(text, params)
+}
+
+/** t(key) in the voice of the company's size: STAGE_TEXT overrides a band, anything else is the key's own text. */
+export function stageText(key: string, stage: number, params?: TextParams): string {
+  const v = STAGE_TEXT[key]?.[stageBand(stage)]
+  return v === undefined ? t(key, params) : fill(v, params)
 }

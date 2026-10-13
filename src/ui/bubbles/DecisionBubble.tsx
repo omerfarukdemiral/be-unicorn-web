@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { DecisionCardId, NpcRole } from '../../engine/types'
 import { DECISIONS, type DecisionCard } from '../../content'
+import { cardQuestion } from '../../content/stageBand'
 import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
@@ -27,6 +28,7 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
   const crisis = card.category === 'crisis'
   // The run's cast speaks (GAMEPLAY V2 §9.1): a thread card's role becomes this run's name.
   const cast = useGameStore((s) => s.state.cast)
+  const stage = useGameStore((s) => s.state.stage)
   const memory = useGameStore((s) => lastWith(s.state.decisions.history, card))
   return (
     <div className="flex flex-col gap-3">
@@ -44,7 +46,7 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
         </span>
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="ui-label">{npcLabel(card.speaker, cast)}</span>
+            <span className="ui-label">{npcLabel(card.speaker, cast, stage)}</span>
             {/* They remember: the last thing you chose with them, as a short tag (no sentence). */}
             {memory && (
               <span title={t('decision.memoryTitle', { v: memory })} className="inline-flex max-w-[180px] items-center gap-0.5 rounded-md bg-surface-2 px-1.5 py-px text-[10.5px] font-semibold text-ink-2">
@@ -53,7 +55,7 @@ export function DecisionCardView({ card, onChoose, dense, stacked }: { card: Dec
               </span>
             )}
           </div>
-          <p className={cx('font-text mt-0.5 font-semibold leading-snug text-ink', dense ? 'text-sm' : 'text-base')}>{card.question}</p>
+          <p className={cx('font-text mt-0.5 font-semibold leading-snug text-ink', dense ? 'text-sm' : 'text-base')}>{cardQuestion(card, stage)}</p>
         </div>
       </div>
       <div className={cx('grid gap-2', !stacked && (card.options.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'))}>
@@ -151,6 +153,7 @@ export function DecisionBubble() {
   const dispatch = useGameStore((s) => s.dispatch)
   const panel = useGameStore((s) => s.ui.panel)
   const mobile = useIsMobile()
+  const stage = useGameStore((s) => s.state.stage)
   const setDecisionExpanded = useGameStore((s) => s.setDecisionExpanded)
   const [expanded, setExpanded] = useState(false)
   const [reflection, setReflection] = useState<{ cardId: string; optionIndex: number; key: string } | null>(null)
@@ -191,7 +194,7 @@ export function DecisionBubble() {
         ) : (
           <button type="button" onClick={() => setExpanded(true)} className="flex min-h-11 w-full items-center gap-2 text-left">
             <IconBadge icon={card.category === 'crisis' ? 'warning' : 'chat'} size={28} color={card.category === 'crisis' ? 'var(--color-negative)' : 'var(--color-kind-decision)'} />
-            <span className="font-text min-w-0 flex-1 truncate text-sm font-semibold text-ink">{card.question}</span>
+            <span className="font-text min-w-0 flex-1 truncate text-sm font-semibold text-ink">{cardQuestion(card, stage)}</span>
             <Icon name="chevronDown" size={16} className="shrink-0 text-ink-2" />
           </button>
         )}

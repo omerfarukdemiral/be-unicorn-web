@@ -6,7 +6,8 @@ import { PROJECT_NAME_MAX } from '../engine/balance'
 import { effortOn } from '../engine/effort'
 import { nameKey } from '../engine/names'
 import { FOUNDER_SLOT_ID, type Employee, type Project, type Slot } from '../engine/types'
-import { DEPT_TEXT, FURNITURE, NPC_TEXT, PROJECT_CATEGORY_TEXT } from '../content'
+import { DEPT_TEXT, FURNITURE, PROJECT_CATEGORY_TEXT } from '../content'
+import { founderSub, npcTitle } from '../content/stageBand'
 import { useGameStore } from '../store/gameStore'
 import type { Selection } from '../store/types'
 import { Icon, type IconName } from './icons'
@@ -77,10 +78,10 @@ export function DetailHeader({ selection }: { selection: Selection }) {
         }
         case 'visitor': {
           const v = st.visitors.find((x) => x.id === selection.id)
-          return { title: v ? castName(st, v.role) : '—', sub: v ? NPC_TEXT[v.role].title : '' }
+          return { title: v ? castName(st, v.role) : '—', sub: v ? npcTitle(v.role, st.stage) : '' }
         }
         case 'founder':
-          return { title: t('founder.you'), sub: t('detail.founderSub') }
+          return { title: t('founder.you'), sub: founderSub(st.stage) }
       }
     }),
   )

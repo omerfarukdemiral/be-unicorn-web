@@ -420,14 +420,15 @@ describe('project modules (W2c)', () => {
     s.projects[0]!.modules = [{ id: 'feedback', day: s.time.day }]
     const html = detail(s)
     expect(html).toContain('Modüller')
-    expect(html).toContain('1/2')
+    // MV2a (rule change on purpose): slots come by version, v1 opens 3 (was 2 at Seed).
+    expect(html).toContain('1/3')
     expect(html).toContain('Yayında')
     expect(html).toContain('Kapsam')
     expect(html).not.toContain('Büyüklük')
     expect(html).not.toContain('%100')
     expect(html).not.toContain('MVP')
-    // Two slots: the installed icon and one "+" (≥ 56px squares).
-    expect((html.match(/size-14/g) ?? []).length).toBe(2)
+    // Three slots: the installed icon and two "+" (≥ 56px squares).
+    expect((html.match(/size-14/g) ?? []).length).toBe(3)
     expect(html).toContain('aria-label="Modül ekle"')
   })
 
@@ -469,10 +470,11 @@ describe('project modules (W2c)', () => {
     const r = applyAction(s, { type: 'buildModule', projectId: s.projects[0]!.id, moduleId: 'feedback' })
     if (!r.ok) throw new Error('build')
     const html = detail(r.state)
-    expect(html).toContain('1/2')
+    // MV2a: 3 slots at v1 (was 2 at Seed).
+    expect(html).toContain('1/3')
     expect(html).toContain('aria-label="Geliştiriliyor"')
     expect(html).toMatch(/≈\d+g/)
-    expect((html.match(/aria-label="Modül ekle"/g) ?? []).length).toBe(1)
+    expect((html.match(/aria-label="Modül ekle"/g) ?? []).length).toBe(2)
   })
 
   it('the card: modules replace the percent bar at 1.0', () => {

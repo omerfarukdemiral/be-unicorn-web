@@ -35,11 +35,33 @@ export type Dept = (typeof DEPTS)[number]
 export const PROJECT_CATEGORIES = ['mobile', 'web', 'ai', 'api', 'game', 'marketplace'] as const
 export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number]
 
-/** What a finished (1.0) product grows into (engine/modules.ts MODULES; balance MODULE_*). */
-export const PROJECT_MODULE_IDS = ['feedback', 'referral', 'paywall', 'onboarding', 'analytics', 'freemium', 'openApi', 'localization', 'aiAssistant'] as const
+/**
+ * What a finished (1.0) product grows into (engine/modules.ts MODULES; balance MODULE_*). The 9 round-2 ids first (save
+ * compatibility), then MV2a's shared core and the category catalogues in table order.
+ */
+export const PROJECT_MODULE_IDS = [
+  'feedback', 'referral', 'paywall', 'onboarding', 'analytics', 'freemium', 'openApi', 'localization', 'aiAssistant',
+  // Core (MV2a)
+  'notifications', 'support', 'cicd', 'abTest', 'security', 'sso',
+  // Mobil
+  'aso', 'crashReports', 'deepLinks', 'offlineMode', 'inAppPurchase', 'widgets', 'tabletApp', 'watchApp',
+  // Web
+  'seo', 'landingPages', 'templates', 'teamPlans', 'integrations', 'adminPanel', 'pwa', 'auditLog',
+  // Yapay Zekâ (usagePricing is shared with api)
+  'evals', 'usagePricing', 'rag', 'modelRouter', 'guardrails', 'voiceMode', 'fineTune', 'agents',
+  // API
+  'docs', 'rateLimit', 'sdks', 'webhooks', 'sandbox', 'usageDashboard', 'slaPlans', 'multiRegion',
+  // Oyun
+  'leaderboard', 'dailyRewards', 'liveEvents', 'shop', 'battlePass', 'guilds', 'ugcEditor', 'crossPlay', 'esports',
+  // Pazar Yeri
+  'reviews', 'payments', 'sellerDashboard', 'search', 'promotedListings', 'buyerProtection', 'shipping', 'recommendations', 'cityLaunch',
+] as const
 export type ProjectModuleId = (typeof PROJECT_MODULE_IDS)[number]
-/** What a module multiplies: company mix (churn…tam, weighted over the projects) or its own project (wave, updateWork, talk). */
-export type ModuleEffectKind = 'churn' | 'arpu' | 'organic' | 'cac' | 'tam' | 'wave' | 'updateWork' | 'talk'
+/**
+ * What a module multiplies: company mix (churn…tam and infra, weighted over the projects) or its own project (wave,
+ * updateWork, talk).
+ */
+export type ModuleEffectKind = 'churn' | 'arpu' | 'organic' | 'cac' | 'tam' | 'wave' | 'updateWork' | 'talk' | 'infra'
 
 export const SLOT_TYPES = ['desk', 'common', 'room', 'special'] as const
 export type SlotType = (typeof SLOT_TYPES)[number]
@@ -388,6 +410,12 @@ export interface Project {
   rev?: number
   /** A1: the counters at the last PROJECT_SNAPS_MAX month ends (whole numbers), oldest first. */
   snaps?: ProjectSnap[]
+  /**
+   * MV2a: the version shipped (1 = the first 1.0, then 2, 3 … as the version line fills) and the updates shipped in the
+   * current line. Missing = an old save: modules.projectVersion reads max(1, ceil(modules / 3)) once at 1.0, line 0.
+   */
+  version?: number
+  lineUpdates?: number
 }
 
 export interface ProjectSnap {
@@ -400,6 +428,25 @@ export interface ProjectSnap {
 export interface ProjectModule {
   id: ProjectModuleId
   day: number
+  /**
+   * MV2a measured effect: the product's counters (acq / lost / rev, whole numbers) on the delivery day of a new build
+   * and their 30-day rate before it (null: no month-end snapshot ≥ MODULE_MEASURE_MIN_DAYS old). Missing = built before
+   * MV2a (nothing to compare).
+   */
+  base?: ModuleMeasureBase
+  /** The counters frozen MODULE_MEASURE_DAYS after base.day (loop.freezeModuleMeasures). */
+  after?: ModuleCounters
+}
+
+export interface ModuleCounters {
+  acq: number
+  lost: number
+  rev: number
+}
+
+export interface ModuleMeasureBase extends ModuleCounters {
+  day: number
+  rate: ModuleCounters | null
 }
 
 export interface ModuleBuild {
@@ -1267,6 +1314,12 @@ export interface ReleaseEntry {
   update?: number
   /** A module delivery (level stays 5; a refresh brings no users). */
   module?: ProjectModuleId
+  /**
+   * MV2a: the version this release belongs to. Without `minor` it is a version release (1 = the first 1.0, then 2, 3 …
+   * when the version line fills); with `minor` an update inside that line: v{version}.{minor}.
+   */
+  version?: number
+  minor?: number
   users: number
   mrr: number
 }
@@ -1371,7 +1424,7 @@ export interface AmbientBubble {
 export type ActivityKind =
   | 'hired' | 'fired' | 'resigned' | 'resignWarning' | 'retained'
   | 'itemPlaced' | 'itemSold' | 'itemMoved' | 'ringOpened'
-  | 'projectStarted' | 'projectLaunched' | 'projectRenamed' | 'moduleStarted' | 'moduleShipped' | 'adFocusChanged'
+  | 'projectStarted' | 'projectLaunched' | 'projectRenamed' | 'moduleStarted' | 'moduleShipped' | 'versionShipped' | 'adFocusChanged'
   | 'founderActionStarted' | 'founderActionDone'
   | 'roundStarted' | 'roundProgress' | 'roundClosed' | 'roundShrunk'
   | 'stageUp' | 'milestone' | 'delayedEffect' | 'bankruptWarning' | 'enterpriseWon' | 'enterpriseLost'

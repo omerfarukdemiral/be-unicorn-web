@@ -959,7 +959,14 @@ function modules(c: Ctx, cfg: BotConfig): void {
     if (!p.launched || p.maturity < 1 || p.build) continue
     const offers = moduleLib.moduleOffers(c.s, p)
     const stale = offers.find((o) => o.refresh && o.error === null && moduleStrengthOf(c.s, p, o.id) < REFRESH_BELOW)
-    const pick = stale ?? cfg.modules.map((id) => offers.find((o) => o.id === id && !o.refresh && o.error === null)).find((o) => o !== undefined)
+    // MV2a bridge (until MV2d's kind-weight plans): the 65-module catalogue opens 3 slots per version, so a 4–5 id list
+    // runs out by Series A; boredom relief ("let modules() build now") then takes the engine's own suggestion.
+    const relief = c.s.time.day - (c.mem.bored ?? -99) <= 1
+    const suggested = relief ? moduleLib.suggestModule(c.s, p) : null
+    const pick =
+      stale ??
+      cfg.modules.map((id) => offers.find((o) => o.id === id && !o.refresh && o.error === null)).find((o) => o !== undefined) ??
+      (suggested ? offers.find((o) => o.id === suggested) : undefined)
     if (!pick || !affordsWithRunway(c.s, pick.cost, moduleUpkeepOf(c.s, pick.id), MODULE_RUNWAY)) continue
     if (c.act({ type: pick.refresh ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: pick.id })) return
   }

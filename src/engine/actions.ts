@@ -9,7 +9,7 @@ import { actionEnergy, movesError, renewContract, renewError, spendMoves, startF
 import { checkSale } from './endgame'
 import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
-import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag } from './modules'
+import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag, projectVersion } from './modules'
 import { checkName, nameKey } from './names'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
@@ -465,10 +465,11 @@ function startModule(s: GameState, projectId: string, moduleId: string, refresh:
   s.founder.energy -= actionEnergy(s, B.MODULE_ENERGY)
   spendMoves(s, refresh ? B.MOVE_COST.refreshModule : B.MOVE_COST.buildModule)
   p.build = { id: moduleId, progress: 0, startDay: s.time.day, ...(refresh ? { refresh: true as const } : {}) }
-  // The desk bubble asks once per stage (a new module) and once per age of an installed one: any build answers it.
+  // The desk bubble asks once per version (a new module; MV2a, was per stage) and once per age of an installed one:
+  // any build answers it.
   const installed = p.modules?.find((m) => m.id === moduleId)
   if (refresh && installed) s.flags[moduleStaleFlag(p.id, moduleId)] = installed.day
-  else s.flags[modulePromptFlag(p.id)] = s.stage
+  else s.flags[modulePromptFlag(p.id)] = projectVersion(p)
   pushActivity(s, 'moduleStarted', { project: p.name, id: p.id, module: moduleId, refresh: refresh ? 1 : 0 })
   return null
 }

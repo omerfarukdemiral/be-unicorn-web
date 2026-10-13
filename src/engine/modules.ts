@@ -3,7 +3,9 @@
 // A1: every product holds its share of the company's users (p.users); the gains are multipliers on its own numbers and
 // the company mixes weigh the products by those shares.
 import * as B from './balance'
+import { recomputeDerived } from './derive'
 import { actionEnergy, movesError } from './founder'
+import { updateWave } from './loop'
 import {
   PROJECT_MODULE_IDS,
   type ActionErrorCode,
@@ -12,23 +14,39 @@ import {
   type Project,
   type ProjectCategory,
   type ProjectMixView,
+  type ModuleCounters,
+  type ModuleMeasureBase,
   type ProjectModule,
   type ProjectId,
   type ProjectModuleId,
-  type StageIndex,
 } from './types'
+import { clone, type EngineContent } from './util'
 
 type Mults = Partial<Record<ModuleEffectKind, number>>
 
-export const MODULE_KINDS: readonly ModuleEffectKind[] = ['churn', 'arpu', 'organic', 'cac', 'tam', 'wave', 'updateWork', 'talk']
+export const MODULE_KINDS: readonly ModuleEffectKind[] = ['churn', 'arpu', 'organic', 'cac', 'tam', 'wave', 'updateWork', 'talk', 'infra']
+
+/** A module's tier: it opens at that version of the project (MV2a; MODULE_TIER_MAX). */
+export type ModuleTier = 1 | 2 | 3 | 4 | 5
+
+/** While `with` sits on the same project, this module's gain on `kind` is 1 + (x − 1) × (1 + k) (before staleness and caps). */
+export interface ModuleSynergy {
+  with: ProjectModuleId
+  kind: ModuleEffectKind
+  k: number
+}
 
 export interface ModuleDef {
   id: ProjectModuleId
-  minStage: StageIndex
+  /** Opens at this version of the project (v1 = the first 1.0). */
+  tier: ModuleTier
   /** Only on these categories (none = any). */
   categories?: readonly ProjectCategory[]
   /** Cannot sit on the same project. */
   excludes?: readonly ProjectModuleId[]
+  /** Must already be installed on the project. */
+  requires?: readonly ProjectModuleId[]
+  synergies?: readonly ModuleSynergy[]
   /** Maturity-equivalent work at the category's base size. */
   work: number
   /** Cash at stage 0; × MODULE_COST_GROWTH^stage. */
@@ -42,37 +60,122 @@ export interface ModuleDef {
   /** Monthly upkeep (infra) at the project's weight in the mix, on this month's MRR. */
   upkeep?: (s: GameState, weight: number, mrr: number) => number
   sizeAdd: number
+  /** Tech debt on delivery; negative pays debt off (techDebt stays ≥ 0). */
   debt: number
 }
 
 const stageScaled = (base: number) => (s: GameState) => base * B.MODULE_COST_GROWTH ** s.stage
+const syn = (w: ProjectModuleId, kind: ModuleEffectKind, k: number): ModuleSynergy => ({ with: w, kind, k })
 
-/** Every module has a minus (upkeep, debt, a negative multiplier or heavier updates); the garage opens three axes. */
+/**
+ * The catalogue (MV2a, design §1.4): a shared core of 15 (the 9 round-2 ids kept) plus 8–9 per category, tiers 1–5,
+ * prerequisites, synergies and two forks (paywall ↔ freemium, paywall ↔ usagePricing). Every module has a minus
+ * (upkeep, debt, a negative multiplier, heavier updates or a prerequisite that costs a slot).
+ */
 export const MODULES: readonly ModuleDef[] = [
-  { id: 'feedback', minStage: 0, work: 0.1, cashBase: 600, gains: { churn: 0.94, wave: 1.25, talk: 1.5 }, minus: { updateWork: 1.25 }, sizeAdd: 0, debt: 0 },
-  { id: 'referral', minStage: 0, work: 0.12, cashBase: 800, gains: { organic: 1.22 }, minus: { arpu: 0.95 }, catBoost: { game: 1.4, mobile: 1.4, marketplace: 1.4 }, sizeAdd: 1, debt: 0 },
-  { id: 'paywall', minStage: 0, excludes: ['freemium'], work: 0.1, cashBase: 600, gains: { arpu: 1.15 }, minus: { organic: 0.85, churn: 1.04 }, sizeAdd: 0, debt: 0 },
-  { id: 'onboarding', minStage: 1, work: 0.15, cashBase: 1_000, gains: { churn: 0.9, cac: 0.95 }, upkeep: stageScaled(100), sizeAdd: 1, debt: 1 },
-  { id: 'analytics', minStage: 1, work: 0.12, cashBase: 1_500, gains: { cac: 0.88, organic: 1.05 }, upkeep: stageScaled(150), sizeAdd: 0, debt: 0 },
+  // Core: the round-2 nine (same ids and effects; onboarding's upkeep 100 → 60, tiers instead of stages).
+  { id: 'feedback', tier: 1, synergies: [syn('support', 'churn', 0.5)], work: 0.1, cashBase: 600, gains: { churn: 0.94, wave: 1.25, talk: 1.5 }, minus: { updateWork: 1.25 }, sizeAdd: 0, debt: 0 },
+  { id: 'referral', tier: 1, synergies: [syn('onboarding', 'organic', 0.5)], work: 0.12, cashBase: 800, gains: { organic: 1.22 }, minus: { arpu: 0.95 }, catBoost: { game: 1.4, mobile: 1.4, marketplace: 1.4 }, sizeAdd: 1, debt: 0 },
+  { id: 'paywall', tier: 1, excludes: ['freemium', 'usagePricing'], synergies: [syn('abTest', 'arpu', 0.5)], work: 0.1, cashBase: 600, gains: { arpu: 1.15 }, minus: { organic: 0.85, churn: 1.04 }, sizeAdd: 0, debt: 0 },
+  { id: 'onboarding', tier: 2, synergies: [syn('referral', 'churn', 0.3)], work: 0.15, cashBase: 1_000, gains: { churn: 0.9, cac: 0.95 }, upkeep: stageScaled(60), sizeAdd: 1, debt: 1 },
+  { id: 'analytics', tier: 1, synergies: [syn('landingPages', 'cac', 0.5)], work: 0.12, cashBase: 1_500, gains: { cac: 0.88, organic: 1.05 }, upkeep: stageScaled(150), sizeAdd: 0, debt: 0 },
   {
-    id: 'freemium', minStage: 2, excludes: ['paywall'], work: 0.15, cashBase: 1_500, gains: { organic: 1.35 }, minus: { arpu: 0.85 },
+    id: 'freemium', tier: 2, excludes: ['paywall'], synergies: [syn('referral', 'organic', 0.3)], work: 0.15, cashBase: 1_500, gains: { organic: 1.35 }, minus: { arpu: 0.85 },
     upkeep: (s, w) => (s.stats.users / 1000) * w * 0.5 * (B.INFRA_PER_1000_BY_STAGE[s.stage] ?? 0), sizeAdd: 0, debt: 0,
   },
-  { id: 'openApi', minStage: 3, work: 0.3, cashBase: 6_000, gains: { churn: 0.88, tam: 1.1 }, catBoost: { api: 1.5 }, sizeAdd: 2, debt: 3 },
-  { id: 'localization', minStage: 3, work: 0.25, cashBase: 8_000, gains: { tam: 1.25 }, minus: { cac: 1.08 }, upkeep: stageScaled(300), sizeAdd: 0, debt: 0 },
-  { id: 'aiAssistant', minStage: 4, work: 0.35, cashBase: 15_000, gains: { arpu: 1.12, churn: 0.95 }, catBoost: { ai: 1.5 }, upkeep: (_s, w, mrr) => mrr * w * 0.06, sizeAdd: 0, debt: 3 },
+  { id: 'openApi', tier: 3, synergies: [syn('webhooks', 'churn', 0.5), syn('integrations', 'churn', 0.5)], work: 0.3, cashBase: 6_000, gains: { churn: 0.88, tam: 1.1 }, catBoost: { api: 1.5 }, sizeAdd: 2, debt: 3 },
+  { id: 'localization', tier: 4, synergies: [syn('cityLaunch', 'tam', 0.3), syn('multiRegion', 'tam', 0.3)], work: 0.25, cashBase: 8_000, gains: { tam: 1.25 }, minus: { cac: 1.08 }, upkeep: stageScaled(300), sizeAdd: 0, debt: 0 },
+  { id: 'aiAssistant', tier: 4, synergies: [syn('rag', 'arpu', 0.3)], work: 0.35, cashBase: 15_000, gains: { arpu: 1.12, churn: 0.95 }, catBoost: { ai: 1.5 }, upkeep: (_s, w, mrr) => mrr * w * 0.06, sizeAdd: 0, debt: 3 },
+  // Core, new in MV2a.
+  { id: 'notifications', tier: 2, synergies: [syn('dailyRewards', 'churn', 0.5)], work: 0.1, cashBase: 1_200, gains: { churn: 0.93, wave: 1.15 }, upkeep: stageScaled(80), sizeAdd: 0, debt: 0 },
+  { id: 'support', tier: 2, synergies: [syn('feedback', 'churn', 0.3)], work: 0.08, cashBase: 1_500, gains: { churn: 0.92, talk: 1.3 }, upkeep: stageScaled(150), sizeAdd: 0, debt: 0 },
+  { id: 'cicd', tier: 2, synergies: [syn('feedback', 'updateWork', 0.5)], work: 0.15, cashBase: 1_200, gains: { updateWork: 0.85 }, upkeep: stageScaled(60), sizeAdd: 0, debt: -1 },
+  { id: 'abTest', tier: 3, requires: ['analytics'], synergies: [syn('paywall', 'arpu', 0.5)], work: 0.12, cashBase: 3_000, gains: { arpu: 1.06, cac: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'security', tier: 3, work: 0.15, cashBase: 5_000, gains: { churn: 0.96, tam: 1.06 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: -4 },
+  { id: 'sso', tier: 5, categories: ['web', 'api', 'ai', 'marketplace'], requires: ['security'], work: 0.2, cashBase: 20_000, gains: { tam: 1.08, arpu: 1.06 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 2 },
+  // Mobil
+  { id: 'aso', tier: 1, categories: ['mobile'], work: 0.06, cashBase: 600, gains: { organic: 1.12 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'crashReports', tier: 1, categories: ['mobile'], synergies: [syn('feedback', 'churn', 0.5)], work: 0.06, cashBase: 500, gains: { churn: 0.95 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
+  { id: 'deepLinks', tier: 2, categories: ['mobile'], synergies: [syn('referral', 'organic', 0.5)], work: 0.1, cashBase: 1_000, gains: { organic: 1.08 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'offlineMode', tier: 2, categories: ['mobile'], work: 0.15, cashBase: 1_500, gains: { churn: 0.92 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 1 },
+  { id: 'inAppPurchase', tier: 2, categories: ['mobile'], work: 0.12, cashBase: 1_500, gains: { arpu: 1.12 }, minus: { organic: 0.96 }, sizeAdd: 0, debt: 0 },
+  { id: 'widgets', tier: 3, categories: ['mobile'], synergies: [syn('notifications', 'churn', 0.3)], work: 0.12, cashBase: 3_000, gains: { churn: 0.94, wave: 1.1 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'tabletApp', tier: 3, categories: ['mobile'], work: 0.2, cashBase: 4_000, gains: { tam: 1.1 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
+  { id: 'watchApp', tier: 4, categories: ['mobile'], requires: ['widgets'], work: 0.2, cashBase: 8_000, gains: { churn: 0.95, tam: 1.04 }, minus: { updateWork: 1.2 }, sizeAdd: 1, debt: 0 },
+  // Web
+  { id: 'seo', tier: 1, categories: ['web'], synergies: [syn('templates', 'organic', 0.5)], work: 0.08, cashBase: 600, gains: { organic: 1.15 }, upkeep: stageScaled(80), sizeAdd: 0, debt: 0 },
+  { id: 'landingPages', tier: 1, categories: ['web'], synergies: [syn('analytics', 'cac', 0.5)], work: 0.06, cashBase: 600, gains: { cac: 0.92 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
+  { id: 'templates', tier: 2, categories: ['web'], work: 0.1, cashBase: 1_200, gains: { organic: 1.08, churn: 0.96 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'teamPlans', tier: 2, categories: ['web'], synergies: [syn('paywall', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.12 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
+  { id: 'integrations', tier: 3, categories: ['web'], synergies: [syn('openApi', 'churn', 0.5)], work: 0.2, cashBase: 4_000, gains: { churn: 0.92, tam: 1.04 }, sizeAdd: 1, debt: 2 },
+  { id: 'adminPanel', tier: 3, categories: ['web'], requires: ['teamPlans'], work: 0.15, cashBase: 4_000, gains: { arpu: 1.06, churn: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'pwa', tier: 4, categories: ['web'], work: 0.2, cashBase: 7_000, gains: { tam: 1.12 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
+  { id: 'auditLog', tier: 5, categories: ['web'], requires: ['adminPanel'], work: 0.2, cashBase: 15_000, gains: { tam: 1.08, churn: 0.95 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 2 },
+  // Yapay Zekâ (usagePricing is shared with api)
+  { id: 'evals', tier: 1, categories: ['ai'], work: 0.08, cashBase: 700, gains: { churn: 0.95, wave: 1.1 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
+  { id: 'usagePricing', tier: 1, categories: ['ai', 'api'], excludes: ['paywall'], work: 0.08, cashBase: 800, gains: { arpu: 1.12 }, minus: { churn: 1.04 }, sizeAdd: 0, debt: 0 },
+  { id: 'rag', tier: 2, categories: ['ai'], synergies: [syn('evals', 'churn', 0.5)], work: 0.15, cashBase: 1_500, gains: { churn: 0.9 }, upkeep: stageScaled(120), sizeAdd: 1, debt: 0 },
+  { id: 'modelRouter', tier: 2, categories: ['ai'], work: 0.12, cashBase: 1_500, gains: { infra: 0.85 }, minus: { churn: 1.02 }, sizeAdd: 0, debt: 0 },
+  { id: 'guardrails', tier: 3, categories: ['ai'], synergies: [syn('evals', 'tam', 0.3)], work: 0.15, cashBase: 4_000, gains: { tam: 1.1, churn: 0.97 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'voiceMode', tier: 3, categories: ['ai'], work: 0.2, cashBase: 5_000, gains: { organic: 1.1, tam: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
+  { id: 'fineTune', tier: 4, categories: ['ai'], requires: ['evals'], work: 0.3, cashBase: 10_000, gains: { arpu: 1.1, churn: 0.93 }, upkeep: stageScaled(400), sizeAdd: 1, debt: 2 },
+  { id: 'agents', tier: 5, categories: ['ai'], requires: ['rag'], work: 0.35, cashBase: 20_000, gains: { arpu: 1.12, organic: 1.08 }, minus: { infra: 1.15 }, sizeAdd: 2, debt: 3 },
+  // API
+  { id: 'docs', tier: 1, categories: ['api'], work: 0.06, cashBase: 500, gains: { cac: 0.9, churn: 0.96 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'rateLimit', tier: 1, categories: ['api'], work: 0.06, cashBase: 600, gains: { infra: 0.85 }, minus: { churn: 1.03 }, sizeAdd: 0, debt: 0 },
+  { id: 'sdks', tier: 2, categories: ['api'], synergies: [syn('docs', 'organic', 0.5)], work: 0.15, cashBase: 1_500, gains: { organic: 1.12, churn: 0.95 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
+  { id: 'webhooks', tier: 2, categories: ['api'], work: 0.1, cashBase: 1_200, gains: { churn: 0.92 }, sizeAdd: 0, debt: 1 },
+  { id: 'sandbox', tier: 2, categories: ['api'], work: 0.1, cashBase: 1_200, gains: { cac: 0.9, organic: 1.05 }, upkeep: stageScaled(80), sizeAdd: 0, debt: 0 },
+  { id: 'usageDashboard', tier: 3, categories: ['api'], synergies: [syn('usagePricing', 'churn', 0.5)], work: 0.12, cashBase: 3_000, gains: { churn: 0.94, arpu: 1.03 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'slaPlans', tier: 3, categories: ['api'], synergies: [syn('multiRegion', 'arpu', 0.3)], work: 0.1, cashBase: 4_000, gains: { arpu: 1.1, tam: 1.05 }, upkeep: stageScaled(200), sizeAdd: 0, debt: 0 },
+  { id: 'multiRegion', tier: 4, categories: ['api'], requires: ['rateLimit'], work: 0.3, cashBase: 10_000, gains: { tam: 1.12, churn: 0.95 }, upkeep: stageScaled(500), sizeAdd: 1, debt: 2 },
+  // Oyun
+  { id: 'leaderboard', tier: 1, categories: ['game'], synergies: [syn('guilds', 'churn', 0.5)], work: 0.06, cashBase: 500, gains: { churn: 0.94, organic: 1.06 }, minus: { infra: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'dailyRewards', tier: 1, categories: ['game'], synergies: [syn('notifications', 'churn', 0.5)], work: 0.06, cashBase: 600, gains: { churn: 0.9 }, minus: { arpu: 0.97 }, sizeAdd: 0, debt: 0 },
+  { id: 'liveEvents', tier: 2, categories: ['game'], work: 0.1, cashBase: 1_200, gains: { wave: 1.3, churn: 0.96 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
+  { id: 'shop', tier: 2, categories: ['game'], synergies: [syn('battlePass', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.15 }, minus: { organic: 0.94 }, sizeAdd: 0, debt: 0 },
+  { id: 'battlePass', tier: 3, categories: ['game'], requires: ['shop'], work: 0.15, cashBase: 3_500, gains: { arpu: 1.1, churn: 0.95 }, minus: { updateWork: 1.2 }, sizeAdd: 0, debt: 0 },
+  { id: 'guilds', tier: 3, categories: ['game'], work: 0.2, cashBase: 4_000, gains: { churn: 0.9, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
+  { id: 'ugcEditor', tier: 4, categories: ['game'], work: 0.25, cashBase: 8_000, gains: { organic: 1.1, churn: 0.94 }, sizeAdd: 1, debt: 2 },
+  { id: 'crossPlay', tier: 4, categories: ['game'], work: 0.3, cashBase: 9_000, gains: { tam: 1.15 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 3 },
+  { id: 'esports', tier: 5, categories: ['game'], requires: ['leaderboard', 'guilds'], work: 0.25, cashBase: 18_000, gains: { organic: 1.12, tam: 1.05 }, upkeep: stageScaled(300), sizeAdd: 0, debt: 0 },
+  // Pazar Yeri
+  { id: 'reviews', tier: 1, categories: ['marketplace'], synergies: [syn('search', 'organic', 0.3)], work: 0.08, cashBase: 600, gains: { organic: 1.1, churn: 0.96 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'payments', tier: 1, categories: ['marketplace'], synergies: [syn('buyerProtection', 'churn', 0.3)], work: 0.1, cashBase: 800, gains: { churn: 0.92, arpu: 1.05 }, upkeep: stageScaled(100), sizeAdd: 0, debt: 0 },
+  { id: 'sellerDashboard', tier: 2, categories: ['marketplace'], work: 0.15, cashBase: 1_500, gains: { tam: 1.1, churn: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 0 },
+  { id: 'search', tier: 2, categories: ['marketplace'], synergies: [syn('reviews', 'arpu', 0.5)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.06, cac: 0.95 }, minus: { infra: 1.08 }, sizeAdd: 0, debt: 0 },
+  { id: 'promotedListings', tier: 2, categories: ['marketplace'], work: 0.08, cashBase: 1_200, gains: { arpu: 1.12 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
+  { id: 'buyerProtection', tier: 3, categories: ['marketplace'], requires: ['payments'], work: 0.1, cashBase: 3_000, gains: { churn: 0.9 }, minus: { arpu: 0.97 }, sizeAdd: 0, debt: 0 },
+  { id: 'shipping', tier: 3, categories: ['marketplace'], synergies: [syn('sellerDashboard', 'tam', 0.3)], work: 0.2, cashBase: 4_000, gains: { tam: 1.1, churn: 0.95 }, upkeep: stageScaled(150), sizeAdd: 1, debt: 1 },
+  { id: 'recommendations', tier: 4, categories: ['marketplace'], requires: ['search'], work: 0.25, cashBase: 9_000, gains: { arpu: 1.08, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
+  { id: 'cityLaunch', tier: 5, categories: ['marketplace'], synergies: [syn('localization', 'tam', 0.3)], work: 0.2, cashBase: 15_000, gains: { tam: 1.15 }, minus: { cac: 1.06 }, sizeAdd: 0, debt: 0 },
 ]
 
+const MODULE_BY_ID = new Map<string, ModuleDef>(MODULES.map((m) => [m.id, m]))
+
 export function moduleDef(id: ProjectModuleId | string): ModuleDef | undefined {
-  return MODULES.find((m) => m.id === id)
+  return MODULE_BY_ID.get(id)
+}
+
+/** The module can sit on a project of this category (core ones everywhere unless they name categories). */
+export function moduleOnCategory(def: ModuleDef, category: ProjectCategory): boolean {
+  return !def.categories || def.categories.includes(category)
+}
+
+/** The catalogue a project of this category sees, in catalogue order. */
+export function categoryModules(category: ProjectCategory): ModuleDef[] {
+  return MODULES.filter((m) => moduleOnCategory(m, category))
 }
 
 export function isModuleId(id: unknown): id is ProjectModuleId {
   return typeof id === 'string' && (PROJECT_MODULE_IDS as readonly string[]).includes(id)
 }
 
-/** Flags the desk bubble (W2c) keeps: the last stage a project was asked about, and a stale module already asked about. */
-export const modulePromptFlag = (projectId: string) => `modulePrompt:${projectId}`
+/**
+ * Flags the desk bubble (W2c) keeps: the last version a project was asked about (MV2a: once per version; a new key, so
+ * a round-2 save's stage-valued `modulePrompt:` flag does not silence it), and a stale module already asked about.
+ */
+export const modulePromptFlag = (projectId: string) => `modulePromptV:${projectId}`
 export const moduleStaleFlag = (projectId: string, moduleId: ProjectModuleId) => `moduleStale:${projectId}:${moduleId}`
 
 /** 1 while fresh, then linear to MODULE_STALE_FLOOR between MODULE_FRESH_DAYS and MODULE_STALE_DAYS of age. */
@@ -97,15 +200,29 @@ function capped(kind: ModuleEffectKind, v: number): number {
   return B.MODULE_MULT_FLOOR_KINDS.includes(kind) ? Math.max(cap, v) : Math.min(cap, v)
 }
 
-/** The capped product of a project's modules for one kind on `day` (gains faded by staleness, minuses fixed). 1 with none. */
+/** Σ k of a module's synergies on `kind` whose partner is in `modules` (0 = none active). */
+export function synergyK(def: ModuleDef, kind: ModuleEffectKind, modules: readonly { id: ProjectModuleId }[]): number {
+  let k = 0
+  for (const x of def.synergies ?? []) if (x.kind === kind && modules.some((m) => m.id === x.with)) k += x.k
+  return k
+}
+
+/**
+ * The capped product of a project's modules for one kind on `day` (gains faded by staleness, minuses fixed). 1 with none.
+ * MV2a: a gain whose synergy partner sits in `modules` is 1 + (x − 1) × (1 + k), before staleness and the cap.
+ */
 export function moduleMult(p: Project, kind: ModuleEffectKind, day: number, modules: readonly ProjectModule[] | undefined = p.modules): number {
   if (!modules?.length) return 1
   let v = 1
   for (const m of modules) {
     const def = moduleDef(m.id)
     if (!def) continue
-    const gain = moduleGain(def, kind, p.category)
-    if (gain !== 1) v *= 1 + (gain - 1) * moduleStrength(m, day)
+    let gain = moduleGain(def, kind, p.category)
+    if (gain !== 1) {
+      const k = def.synergies ? synergyK(def, kind, modules) : 0
+      if (k !== 0) gain = 1 + (gain - 1) * (1 + k)
+      v *= 1 + (gain - 1) * moduleStrength(m, day)
+    }
     const minus = def.minus?.[kind]
     if (minus !== undefined) v *= minus
   }
@@ -370,11 +487,64 @@ export function projectMix(s: GameState, mrr = s.finance.mrr, ws = projectWeight
   return out
 }
 
-/** Slots on a project at the current stage: used (installed + a new build) of total. */
-export function projectSlots(s: GameState, p: Project): { used: number; total: number } {
-  const total = B.MODULE_SLOTS_BY_STAGE[Math.min(B.MODULE_SLOTS_BY_STAGE.length - 1, s.stage)] ?? 0
+// MV2a version cycle ----------------------------------------------------------------------------------------------
+
+/**
+ * The project's version: 0 before its first 1.0, then 1, 2 … (checkReleases writes p.version). An old save at 1.0
+ * without the field reads as max(1, ceil(modules / MODULE_SLOTS_PER_VERSION)), so its modules always fit.
+ */
+export function projectVersion(p: Project): number {
+  if (p.version !== undefined) return p.version
+  if (!p.launched || p.maturity < 1) return 0
+  return Math.max(1, Math.ceil((p.modules?.length ?? 0) / B.MODULE_SLOTS_PER_VERSION))
+}
+
+/** Updates the line after version v needs: min(VERSION_UPDATES_MAX, VERSION_UPDATES_BASE^v) (v1 → v2: 2). */
+export function versionUpdates(v: number): number {
+  return Math.min(B.VERSION_UPDATES_MAX, B.VERSION_UPDATES_BASE ** Math.max(0, v))
+}
+
+/** 0–1 through the current version line: (lineUpdates + updateProgress / updateSize) / versionUpdates(v). 0 for v 0. */
+export function versionProgress(s: GameState, p: Project): number {
+  const v = projectVersion(p)
+  if (v === 0) return 0
+  const size = updateSize(p, s.time.day)
+  const part = size > 0 ? Math.min(1, Math.max(0, p.updateProgress ?? 0) / size) : 0
+  return Math.min(1, ((p.lineUpdates ?? 0) + part) / versionUpdates(v))
+}
+
+/** What the project bar shows: p.maturity before v1, then VERSION_FLOOR + (1 − VERSION_FLOOR) × versionProgress. */
+export function displayMaturity(s: GameState, p: Project): number {
+  if (projectVersion(p) === 0) return p.maturity
+  return B.VERSION_FLOOR + (1 - B.VERSION_FLOOR) * versionProgress(s, p)
+}
+
+/** Slots on a project: used (installed + a new build) of total (MODULE_SLOTS_PER_VERSION × version). */
+export function projectSlots(_s: GameState, p: Project): { used: number; total: number } {
+  const total = B.MODULE_SLOTS_PER_VERSION * projectVersion(p)
   const used = (p.modules?.length ?? 0) + (p.build && !p.build.refresh ? 1 : 0)
   return { used, total }
+}
+
+/** Why a module is not open on this project yet (or never): the UI names it ("v3'te", "Önce Analitik", "Paywall ile olmaz"). */
+export type ModuleLock = { kind: 'version'; v: number } | { kind: 'requires'; ids: ProjectModuleId[] } | { kind: 'excluded'; by: ProjectModuleId }
+
+/**
+ * The lock on a module for this project, or null (open, or installed). Order: excluded by an installed module (for
+ * good), the version its tier needs, then the prerequisites still missing. Category is not a lock: other categories'
+ * modules are simply not offered.
+ */
+export function moduleLock(_s: GameState, p: Project, id: ProjectModuleId): ModuleLock | null {
+  const def = moduleDef(id)
+  if (!def) return null
+  const mods = p.modules ?? []
+  if (mods.some((m) => m.id === id)) return null
+  const by = mods.find((m) => def.excludes?.includes(m.id) || moduleDef(m.id)?.excludes?.includes(id))
+  if (by) return { kind: 'excluded', by: by.id }
+  if (projectVersion(p) < def.tier) return { kind: 'version', v: def.tier }
+  const missing = (def.requires ?? []).filter((r) => !mods.some((m) => m.id === r))
+  if (missing.length) return { kind: 'requires', ids: missing }
+  return null
 }
 
 export function moduleCost(s: GameState, def: ModuleDef, refresh = false): number {
@@ -388,8 +558,9 @@ export function moduleWork(p: Project, def: ModuleDef, refresh = false): number 
 
 /**
  * Why buildModule (refresh = false) or refreshModule cannot start now, or null. Order: notFound (refresh: not on the
- * project), invalid (unknown, wrong category, already there, excluded), notUnlocked (not live and 1.0, stage), slotOccupied
- * (a build runs), noFreeSlot (build only), insufficientCash, noEnergy (garage) / noMoves. Pure: offers and actions share it.
+ * project), invalid (unknown, wrong category, already there, excluded), notUnlocked (not live and 1.0; a new build also
+ * below its tier's version or with a prerequisite missing), slotOccupied (a build runs), noFreeSlot (build only),
+ * insufficientCash, noEnergy (garage) / noMoves. Pure: offers and actions share it.
  */
 export function moduleError(s: GameState, p: Project | undefined, id: ProjectModuleId, refresh = false): ActionErrorCode | null {
   if (!p) return 'notFound'
@@ -400,11 +571,13 @@ export function moduleError(s: GameState, p: Project | undefined, id: ProjectMod
     if (!def || !has) return 'notFound'
   } else {
     if (!def) return 'invalid'
-    if (def.categories && !def.categories.includes(p.category)) return 'invalid'
+    if (!moduleOnCategory(def, p.category)) return 'invalid'
     if (has) return 'invalid'
     if (mods.some((m) => def.excludes?.includes(m.id) || moduleDef(m.id)?.excludes?.includes(id))) return 'invalid'
   }
-  if (!p.launched || p.maturity < 1 || s.stage < def.minStage) return 'notUnlocked'
+  if (!p.launched || p.maturity < 1 || projectVersion(p) < 1) return 'notUnlocked'
+  // An installed module refreshes whatever its tier (an old save may hold one above its version).
+  if (!refresh && (projectVersion(p) < def.tier || def.requires?.some((r) => !mods.some((m) => m.id === r)))) return 'notUnlocked'
   if (p.build) return 'slotOccupied'
   if (!refresh && mods.length >= projectSlots(s, p).total) return 'noFreeSlot'
   if (s.stats.cash < moduleCost(s, def, refresh)) return 'insufficientCash'
@@ -422,11 +595,11 @@ export interface ModuleOffer {
   error: ActionErrorCode | null
 }
 
-/** Every module for a project: the ones it lacks (build) and the ones it has (refresh), each priced and checked. */
+/** Every module of the project's category: the ones it lacks (build) and the ones it has (refresh), each priced and checked. */
 export function moduleOffers(s: GameState, p: Project): ModuleOffer[] {
   const rate = s.derived.maturityPerDay?.[p.id] ?? 0
   const has = new Set((p.modules ?? []).map((m) => m.id))
-  return MODULES.map((def) => {
+  return categoryModules(p.category).map((def) => {
     const refresh = has.has(def.id)
     const work = moduleWork(p, def, refresh)
     return { id: def.id, refresh, cost: moduleCost(s, def, refresh), days: rate > 0 ? Math.ceil(work / rate) : null, error: moduleError(s, p, def.id, refresh) }
@@ -445,13 +618,16 @@ function moduleScore(s: GameState, p: Project, id: ProjectModuleId, cost: number
   const day = s.time.day
   const after = [...(p.modules ?? []), { id, day }]
   const d = (kind: ModuleEffectKind) => moduleMult(p, kind, day, after) / moduleMult(p, kind, day)
-  const gain = (d('arpu') - 1) + 1.5 * (1 - d('churn')) + 0.5 * (d('organic') - 1) + ads * (1 - d('cac')) + pen * (d('tam') - 1)
+  // MV2a: the servers' share of the MRR prices an infra module.
+  const servers = Math.min(1, (s.finance.burnBreakdown?.infra ?? 0) / Math.max(mrr, 1))
+  const gain = (d('arpu') - 1) + 1.5 * (1 - d('churn')) + 0.5 * (d('organic') - 1) + ads * (1 - d('cac')) + pen * (d('tam') - 1) + servers * (1 - d('infra'))
   return (weight * gain) / (cost / Math.max(mrr, 1))
 }
 
 /**
  * The one module the desk suggests for a project (a hint, not a rule): among those it can build now, the best
- * weight × [(arpu − 1) + 1.5 (1 − churn) + 0.5 (organic − 1) + ads (1 − cac) + pen (tam − 1)] per month of MRR it costs,
+ * weight × [(arpu − 1) + 1.5 (1 − churn) + 0.5 (organic − 1) + ads (1 − cac) + pen (tam − 1) + servers (1 − infra)] per
+ * month of MRR it costs,
  * each term the change it makes to the project's capped multiplier. null when none helps.
  */
 export function suggestModule(s: GameState, p: Project): ProjectModuleId | null {
@@ -494,7 +670,7 @@ export interface ModuleHeadline {
   good: boolean
 }
 
-const LOWER_IS_BETTER: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork']
+const LOWER_IS_BETTER: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork', 'infra']
 
 function headline(entries: [ModuleEffectKind, number][]): ModuleHeadline | undefined {
   let best: ModuleHeadline | undefined
@@ -532,8 +708,8 @@ export const MODULE_ASK_STRENGTH = 0.75
 
 /**
  * The one module question the desk asks now (oldest project first; a stale module before a new one): a launched
- * product at 1.0 with a free slot, no build running and a module the till affords, not asked yet this stage
- * (flags modulePrompt:{id} < stage), or an installed module under MODULE_ASK_STRENGTH not asked about at this build
+ * product at 1.0 with a free slot, no build running and a module the till affords, not asked yet at this version
+ * (flags modulePromptV:{id} < version; MV2a: was once per stage), or an installed module under MODULE_ASK_STRENGTH not asked about at this build
  * (flags moduleStale:{id}:{module} ≠ its day). Pure: the world bubble and its content both read it.
  */
 export function moduleAsk(s: GameState): ModuleAsk | null {
@@ -543,7 +719,7 @@ export function moduleAsk(s: GameState): ModuleAsk | null {
       if (moduleStrength(m, s.time.day) >= MODULE_ASK_STRENGTH || s.flags[moduleStaleFlag(p.id, m.id)] === m.day) continue
       if (!moduleError(s, p, m.id, true)) return { projectId: p.id, moduleId: m.id, stale: true }
     }
-    if (Number(s.flags[modulePromptFlag(p.id)] ?? -1) >= s.stage) continue
+    if (Number(s.flags[modulePromptFlag(p.id)] ?? -1) >= projectVersion(p)) continue
     if ((p.modules?.length ?? 0) >= projectSlots(s, p).total) continue
     const id = suggestModule(s, p)
     if (id) return { projectId: p.id, moduleId: id, stale: false }
@@ -567,4 +743,180 @@ export function moduleUpkeepHint(s: GameState, p: Project, id: ProjectModuleId):
   const total = ws.reduce((a, x) => a + x.w, 0)
   const weight = total > 0 ? (ws.find((x) => x.p.id === p.id)?.w ?? 0) / total : 0
   return Math.round(moduleDef(id)?.upkeep?.(s, weight, s.finance.mrr) ?? 0)
+}
+
+// MV2a estimate (§2.1) --------------------------------------------------------------------------------------------
+
+/** What a module would do to the company now: the offer card's numbers (design §2.1). */
+export interface ModuleEstimate {
+  /** Users per month gained (organic + paid change + users kept by lower churn). Negative = lost. */
+  users: number
+  /** MRR change now (ARPU change on today's users), $ per month. */
+  mrr: number
+  /** Infra saved (+) or added (−), $ per month, without the module's own upkeep. */
+  infra: number
+  /** Market size change, people. */
+  tam: number
+  /** Users per update wave on this project. */
+  wave: number
+  /** Monthly upkeep it adds. */
+  upkeep: number
+  /** users × ARPU + mrr + infra − upkeep: the one $ figure the player compares. */
+  net: number
+  /** Why the headline gain is ~0 right now, if it is. */
+  zero?: 'organicZero' | 'noAds' | 'capped' | 'noUsers' | 'gapBound'
+  /** Points a synergy adds (for "X ile +%N"), and the partner (installed first, else one the category offers). */
+  synergy?: { with: ProjectModuleId; pct: number }
+}
+
+interface EstimateBase {
+  s: GameState
+  memo: Map<string, ModuleEstimate>
+}
+
+/** Per state object: the recomputed base clone and the estimates already made (the key carries what they read). */
+const ESTIMATES = new WeakMap<GameState, { key: string; base: EstimateBase }>()
+
+function estimateKey(s: GameState): string {
+  const mods = s.projects.map((p) => `${p.id}:${(p.modules ?? []).map((m) => `${m.id}@${m.day}`).join(',')}:${p.users ?? ''}:${p.updateProgress ?? ''}`).join('|')
+  return `${s.time.day}|${s.stats.users}|${s.finance.adBudget}|${s.finance.adFocus ?? ''}|${s.stage}|${mods}`
+}
+
+function estimateBase(s: GameState, content: EngineContent): EstimateBase {
+  const key = estimateKey(s)
+  const hit = ESTIMATES.get(s)
+  if (hit && hit.key === key) return hit.base
+  const b = clone(s)
+  recomputeDerived(b, content)
+  const base = { s: b, memo: new Map<string, ModuleEstimate>() }
+  ESTIMATES.set(s, { key, base })
+  return base
+}
+
+/** The synergy chip for a module on this project: an installed partner first, else the first one its category offers. */
+function estimateSynergy(p: Project, def: ModuleDef): ModuleEstimate['synergy'] {
+  let pick: ModuleSynergy | undefined
+  for (const x of def.synergies ?? []) {
+    const partner = moduleDef(x.with)
+    if (!partner || !moduleOnCategory(partner, p.category)) continue
+    if (p.modules?.some((m) => m.id === x.with)) {
+      pick = x
+      break
+    }
+    pick ??= x
+  }
+  if (!pick) return undefined
+  const x = moduleGain(def, pick.kind, p.category)
+  return { with: pick.with, pct: Math.max(1, Math.round(Math.abs(x - 1) * pick.k * 100)) }
+}
+
+/**
+ * The counterfactual (design §2.1): the company recomputed with the module on this project against the company without
+ * it, both on clones (recomputeDerived; nothing ticks). A module the project lacks is added today; an installed one is
+ * taken out of the "before" side, so the slot can show what it does now (the infra line). users = Δ(organic + paid) +
+ * users × −Δchurn, mrr = users × ΔARPU, infra = −Δ servers (the module's own upkeep apart), tam = ΔTAM, wave =
+ * Δ updateWave on this project. `zero` names why the headline gain is ~0 (only when |users| < 0.5 and
+ * |net + upkeep| < $1). Memoized per state.
+ */
+export function moduleEstimate(s: GameState, p: Project, id: ProjectModuleId, content: EngineContent): ModuleEstimate {
+  const base = estimateBase(s, content)
+  const memoKey = `${p.id}|${id}`
+  const hit = base.memo.get(memoKey)
+  if (hit) return hit
+  const def = moduleDef(id)
+  const cur = base.s
+  const cp = cur.projects.find((x) => x.id === p.id)
+  if (!cp || !def) {
+    const none: ModuleEstimate = { users: 0, mrr: 0, infra: 0, tam: 0, wave: 0, upkeep: 0, net: 0 }
+    base.memo.set(memoKey, none)
+    return none
+  }
+  const installed = cp.modules?.some((m) => m.id === id) === true
+  const other = clone(cur)
+  const op = other.projects.find((x) => x.id === p.id)!
+  if (installed) op.modules = op.modules!.filter((m) => m.id !== id)
+  else (op.modules ??= []).push({ id, day: other.time.day })
+  recomputeDerived(other, content)
+  const [b, bp, a, ap] = installed ? [other, op, cur, cp] : [cur, cp, other, op]
+  const users = b.stats.users
+  const flow = (x: GameState) => x.derived.channels.organic + x.derived.channels.paid
+  const dUsers = flow(a) - flow(b) + users * (b.stats.churn - a.stats.churn)
+  const mrr = users * (a.stats.arpu - b.stats.arpu)
+  const weight = a.derived.projectMix?.[p.id]?.weight ?? 0
+  const upkeep = def.upkeep?.(a, weight, a.finance.mrr) ?? 0
+  const infra = b.finance.burnBreakdown.infra - (a.finance.burnBreakdown.infra - upkeep)
+  const tam = (a.derived.tam ?? 0) - (b.derived.tam ?? 0)
+  const wave = updateWave(a, ap) - updateWave(b, bp)
+  const net = dUsers * b.stats.arpu + mrr + infra - upkeep
+  const out: ModuleEstimate = { users: dUsers, mrr, infra, tam, wave, upkeep, net }
+  if (Math.abs(dUsers) < 0.5 && Math.abs(net + upkeep) < 1) {
+    const zero = estimateZero(b, bp, def, ap.modules ?? [])
+    if (zero) out.zero = zero
+  }
+  const synergy = estimateSynergy(bp, def)
+  if (synergy) out.synergy = synergy
+  base.memo.set(memoKey, out)
+  return out
+}
+
+/** First match: organic with no word of mouth, cac with no ads, a product with < 1% of the users, a capped kind, an update gap. */
+function estimateZero(s: GameState, p: Project, def: ModuleDef, after: readonly ProjectModule[]): ModuleEstimate['zero'] {
+  const kind = moduleHeadlines(def.id, p.category).gain?.kind
+  if (!kind) return undefined
+  if (kind === 'organic' && s.derived.channels.organic < 0.5) return 'organicZero'
+  if (kind === 'cac' && !(s.finance.adBudget > 0)) return 'noAds'
+  const share = projectShares(s).shares.find((x) => x.p.id === p.id)?.share ?? 0
+  if (s.stats.users <= 0 || share < 0.01) return 'noUsers'
+  const day = s.time.day
+  const now = moduleMult(p, kind, day)
+  if (Math.abs(moduleMult(p, kind, day, after) - now) < 0.001 * now) return 'capped'
+  if (kind === 'updateWork' && (p.updateProgress ?? 0) >= updateSize(p, day) - 1e-9) return 'gapBound'
+  return undefined
+}
+
+// MV2a measured effect (§2.2) ----------------------------------------------------------------------------------------
+
+const round2 = (v: number) => Math.round(v * 100) / 100
+
+/**
+ * A new build's "before" (finishModule): the product's counters today (whole numbers) and their 30-day rate from the
+ * oldest month-end snapshot at least MODULE_MEASURE_MIN_DAYS old (null when the product is too young for one).
+ */
+export function moduleMeasureBase(s: GameState, p: Project): ModuleMeasureBase {
+  const day = Math.floor(s.time.day)
+  const now: ModuleCounters = { acq: Math.round(p.acq ?? 0), lost: Math.round(p.lost ?? 0), rev: Math.round(p.rev ?? 0) }
+  let rate: ModuleCounters | null = null
+  for (const snap of p.snaps ?? []) {
+    const span = day - snap.day
+    if (span < B.MODULE_MEASURE_MIN_DAYS) continue
+    const k = B.MODULE_MEASURE_DAYS / span
+    rate = { acq: round2((now.acq - snap.acq) * k), lost: round2((now.lost - snap.lost) * k), rev: round2((now.rev - snap.rev) * k) }
+    break
+  }
+  return { day, ...now, rate }
+}
+
+/** What the slot shows (MV2c): the counters gained since delivery (frozen after MODULE_MEASURE_DAYS) and the rate before. */
+export interface ModuleMeasured {
+  /** 'live' inside the first MODULE_MEASURE_DAYS, 'frozen' after. */
+  phase: 'live' | 'frozen'
+  /** Days measured so far (MODULE_MEASURE_DAYS once frozen). */
+  days: number
+  /** Users acquired, users lost and revenue ($) since delivery. */
+  delta: ModuleCounters
+  /** The 30-day rate before delivery, or null (too young: drop "öncesi"). */
+  before: ModuleCounters | null
+}
+
+/** null for a module without a base (built before MV2a, or a refresh-only history). */
+export function moduleMeasured(s: GameState, p: Project, m: ProjectModule): ModuleMeasured | null {
+  const base = m.base
+  if (!base) return null
+  const at = m.after ?? { acq: p.acq ?? 0, lost: p.lost ?? 0, rev: p.rev ?? 0 }
+  return {
+    phase: m.after ? 'frozen' : 'live',
+    days: m.after ? B.MODULE_MEASURE_DAYS : Math.max(0, Math.min(B.MODULE_MEASURE_DAYS, Math.floor(s.time.day) - base.day)),
+    delta: { acq: Math.round(at.acq - base.acq), lost: Math.round(at.lost - base.lost), rev: Math.round(at.rev - base.rev) },
+    before: base.rate,
+  }
 }

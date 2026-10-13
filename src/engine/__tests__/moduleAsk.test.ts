@@ -1,7 +1,7 @@
 // The desk's module question (W2c): when it asks, once per stage / per age, oldest project first; the panel's rows.
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
-import { buildStatus, moduleAsk, moduleHeadlines, moduleOffers, modulePromptFlag, moduleStaleFlag, suggestModule, suggestModules } from '../modules'
+import { buildStatus, moduleAsk, projectSlots, moduleHeadlines, moduleOffers, modulePromptFlag, moduleStaleFlag, suggestModule, suggestModules } from '../modules'
 import { clone } from '../util'
 import { api, build, company, withModules } from './moduleFixtures'
 
@@ -20,7 +20,7 @@ describe('moduleAsk: new module', () => {
     const idea = clone(base)
     idea.projects[0]!.launched = false
     expect(moduleAsk(idea)).toBeNull()
-    const full = withModules(base, 0, ['feedback', 'referral'])
+    const full = withModules(base, 0, ['feedback', 'referral', 'analytics'])
     expect(projectSlotsFull(full)).toBe(true)
     expect(moduleAsk(full)).toBeNull()
     const busy = build(base, 0, 'feedback')
@@ -31,19 +31,28 @@ describe('moduleAsk: new module', () => {
     expect(moduleAsk(broke)).toBeNull()
   })
 
-  it('asks once per stage: a build marks the stage, the next stage asks again', () => {
+  // MV2a (rule change on purpose): once per version, no longer once per stage.
+  it('asks once per version: a build marks the version, a stage-up does not ask again, the next version does', () => {
     const s = company(['web'], 2)
     const r = build(s, 0, 'feedback')
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.state.flags[modulePromptFlag(s.projects[0]!.id)]).toBe(2)
-    // Built and shipped; a free slot is left (2 at Seed) but this stage has been asked.
+    expect(r.state.flags[modulePromptFlag(s.projects[0]!.id)]).toBe(1)
+    // Built and shipped; free slots are left (3 at v1) but this version has been asked.
     const done = clone(r.state)
     delete done.projects[0]!.build
     done.projects[0]!.modules = [{ id: 'feedback', day: done.time.day }]
     expect(moduleAsk(done)).toBeNull()
     done.stage = 3
+    expect(moduleAsk(done)).toBeNull()
+    done.projects[0]!.version = 2
     expect(moduleAsk(done)?.stale).toBe(false)
+  })
+
+  it('a round-2 save\'s stage-valued prompt flag does not silence the version question', () => {
+    const s = company(['web'], 4)
+    s.flags[`modulePrompt:${s.projects[0]!.id}`] = 4
+    expect(moduleAsk(s)?.projectId).toBe(s.projects[0]!.id)
   })
 
   it('oldest project first: the second project is asked only once the first is settled', () => {
@@ -95,10 +104,11 @@ describe('panel rows', () => {
     expect(sad.every((o) => o.error === 'insufficientCash')).toBe(true)
   })
 
-  it('stage-locked modules stay out of the suggestions', () => {
+  // MV2a (rule change on purpose): tiers by version replace the stage gate; the web catalogue has 6 tier-1 modules.
+  it('tier-locked modules stay out of the suggestions', () => {
     const s = company(['web'], 0)
-    const ids = suggestModules(s, s.projects[0]!, 9).map((o) => o.id)
-    expect(ids.sort()).toEqual(['feedback', 'paywall', 'referral'])
+    const ids = suggestModules(s, s.projects[0]!, 30).map((o) => o.id)
+    expect(ids.sort()).toEqual(['analytics', 'feedback', 'landingPages', 'paywall', 'referral', 'seo'])
     expect(moduleOffers(s, s.projects[0]!).filter((o) => o.error === 'notUnlocked').length).toBeGreaterThan(0)
   })
 
@@ -121,5 +131,6 @@ describe('panel rows', () => {
 })
 
 function projectSlotsFull(s: ReturnType<typeof company>): boolean {
-  return (s.projects[0]!.modules?.length ?? 0) >= (B.MODULE_SLOTS_BY_STAGE[s.stage] ?? 0)
+  const { used, total } = projectSlots(s, s.projects[0]!)
+  return used >= total
 }

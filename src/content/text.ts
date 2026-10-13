@@ -31,6 +31,7 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   projectRenamed: '{from} artık {to}',
   moduleStarted: '{project}: {module} kuruluyor',
   moduleShipped: '{project}: {module} yayında',
+  versionShipped: '{project} v{version} yayında: +{users} kullanıcı',
   adFocusChanged: 'Reklamlar artık {project} için',
   roundWindow: '{stage} turu için pencere açıldı: şimdi mi, biraz daha mı?',
   roundOffer: 'Tur haftası {done}/{total}: teklif {from} → {amount}.',

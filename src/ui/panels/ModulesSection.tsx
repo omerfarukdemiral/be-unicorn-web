@@ -6,9 +6,9 @@ import { useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import * as B from '../../engine/balance'
 import { actionEnergy } from '../../engine/founder'
-import { buildStatus, moduleDef, moduleHeadlines, moduleOffers, moduleStrength, moduleUpkeepHint, projectSlots, suggestModules, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
+import { buildStatus, moduleHeadlines, moduleLock, moduleOffers, moduleStrength, moduleUpkeepHint, projectSlots, suggestModules, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
 import type { GameState, ModuleEffectKind, Project, ProjectModuleId } from '../../engine/types'
-import { MODULE_TEXT, moduleName, STAGES } from '../../content'
+import { MODULE_TEXT, moduleName } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { ChipRow, type Chip } from '../EffectChips'
 import { money, pct } from '../format'
@@ -17,6 +17,7 @@ import { Icon, type IconName } from '../icons'
 import { Button, cx, Ring, SectionTitle } from '../primitives'
 import { CATEGORY_COLOR } from './ProjectsPanel'
 
+/** One icon per module (no repeat inside core + one category; design §1.4). */
 export const MODULE_ICON: Record<ProjectModuleId, IconName> = {
   feedback: 'chat',
   referral: 'handshake',
@@ -27,6 +28,62 @@ export const MODULE_ICON: Record<ProjectModuleId, IconName> = {
   openApi: 'network',
   localization: 'globe',
   aiAssistant: 'sparkle',
+  notifications: 'mail',
+  support: 'phone',
+  cicd: 'check',
+  abTest: 'branch',
+  security: 'key',
+  sso: 'building',
+  aso: 'star',
+  crashReports: 'bug',
+  deepLinks: 'pin',
+  offlineMode: 'cloud',
+  inAppPurchase: 'bag',
+  widgets: 'grid',
+  tabletApp: 'desk',
+  watchApp: 'timer',
+  seo: 'search',
+  landingPages: 'flag',
+  templates: 'book',
+  teamPlans: 'users',
+  integrations: 'move',
+  adminPanel: 'gear',
+  pwa: 'cloud',
+  auditLog: 'save',
+  evals: 'star',
+  usagePricing: 'coin',
+  rag: 'book',
+  modelRouter: 'compass',
+  guardrails: 'flag',
+  voiceMode: 'sound',
+  fineTune: 'bolt',
+  agents: 'rocket',
+  docs: 'book',
+  rateLimit: 'scale',
+  sdks: 'keyboard',
+  webhooks: 'arrowRight',
+  sandbox: 'refresh',
+  usageDashboard: 'pie',
+  slaPlans: 'trophy',
+  multiRegion: 'cloud',
+  leaderboard: 'trophy',
+  dailyRewards: 'coffee',
+  liveEvents: 'flame',
+  shop: 'bag',
+  battlePass: 'star',
+  guilds: 'users',
+  ugcEditor: 'pencil',
+  crossPlay: 'move',
+  esports: 'flag',
+  reviews: 'star',
+  payments: 'cash',
+  sellerDashboard: 'desk',
+  search: 'search',
+  promotedListings: 'megaphone',
+  buyerProtection: 'heart',
+  shipping: 'arrowRight',
+  recommendations: 'trend',
+  cityLaunch: 'pin',
 }
 
 const KIND_ICON: Record<ModuleEffectKind, IconName> = {
@@ -38,6 +95,7 @@ const KIND_ICON: Record<ModuleEffectKind, IconName> = {
   wave: 'rocket',
   updateWork: 'hourglass',
   talk: 'chat',
+  infra: 'cloud',
 }
 
 /** A headline multiplier as a chip: "Kayıp −%6" (green), "Gelir −%5" (red). */
@@ -236,9 +294,11 @@ export function Suggestions({ project: p, onDone }: { project: Project; onDone: 
 
 function OfferRow({ project: p, offer, onDone }: { project: Project; offer: ModuleOffer; onDone: () => void }) {
   const st = useGameStore((s) => s.state)
-  const def = moduleDef(offer.id)!
-  const locked = offer.error === 'notUnlocked' && st.stage < def.minStage
-  const chips = locked ? [{ icon: 'lock' as const, label: '', text: t('module.lockStage', { stage: STAGES[def.minStage]?.name ?? '' }), good: null, title: t('module.lockStage', { stage: STAGES[def.minStage]?.name ?? '' }) }] : buildChips(st, p, offer)
+  // MV2a: a module's tier opens at a version (MV2c draws the full lock chips: prerequisites, forks).
+  const lock = offer.error === 'notUnlocked' ? moduleLock(st, p, offer.id) : null
+  const locked = lock?.kind === 'version'
+  const lockText = locked ? t('module.lockVersion', { v: lock.v }) : ''
+  const chips = locked ? [{ icon: 'lock' as const, label: '', text: lockText, good: null, title: lockText }] : buildChips(st, p, offer)
   return (
     <Row
       id={offer.id}

@@ -137,8 +137,8 @@ describe('staleness', () => {
   it('refreshModule: 40% of the cash and work, no slot check, no wave, the day starts over', () => {
     let s = company(['web'], 1)
     s = withModules(s, 0, ['feedback'], s.time.day - 600)
-    s.projects[0]!.modules!.length = 1
-    // The only Pre-seed slot is full: a new build is refused, the refresh is not.
+    s.projects[0]!.modules!.push({ id: 'referral', day: s.time.day }, { id: 'analytics', day: s.time.day })
+    // MV2a: v1's three slots are full: a new build is refused, the refresh is not.
     expect(build(s, 0, 'paywall').error).toBe('noFreeSlot')
     const cash = s.stats.cash
     const r = api.applyAction(s, { type: 'refreshModule', projectId: s.projects[0]!.id, moduleId: 'feedback' })
@@ -152,7 +152,7 @@ describe('staleness', () => {
     const users = t.stats.users
     const sizeBefore = p.size
     checkReleases(t, content)
-    expect(p.modules).toEqual([{ id: 'feedback', day: t.time.day }])
+    expect(p.modules![0]).toEqual({ id: 'feedback', day: t.time.day })
     expect(p.build).toBeUndefined()
     expect(p.size).toBe(sizeBefore)
     expect(t.stats.users).toBe(users)
@@ -184,7 +184,7 @@ describe('buildModule errors', () => {
     const busy = clone(s)
     busy.projects[0]!.build = { id: 'feedback', progress: 0, startDay: 0 }
     add(busy, { type: 'buildModule', projectId: pid, moduleId: 'paywall' }, 'slotOccupied')
-    add(withModules(s, 0, ['feedback', 'referral']), { type: 'buildModule', projectId: pid, moduleId: 'paywall' }, 'noFreeSlot')
+    add(withModules(s, 0, ['feedback', 'referral', 'analytics']), { type: 'buildModule', projectId: pid, moduleId: 'paywall' }, 'noFreeSlot')
     const poor = clone(s)
     poor.stats.cash = moduleCost(s, moduleDef('feedback')!) - 1
     add(poor, { type: 'buildModule', projectId: pid, moduleId: 'feedback' }, 'insufficientCash')
@@ -214,13 +214,16 @@ describe('buildModule errors', () => {
   it('success: cash − cashBase × 2^stage, one move, the build written, moduleStarted', () => {
     const s = company(['web'], 2)
     const left = s.founder.moves!.left
+    // MV2a: freemium is tier 2, so the product is at v2 here.
+    s.projects[0]!.version = 2
     const r = build(s, 0, 'freemium')
     expect(r.ok).toBe(true)
     expect(s.stats.cash - r.state.stats.cash).toBe(1_500 * 4)
     expect(r.state.founder.moves!.left).toBe(left - 1)
     expect(r.state.projects[0]!.build).toEqual({ id: 'freemium', progress: 0, startDay: s.time.day })
     expect(r.state.activity.at(-1)!.kind).toBe('moduleStarted')
-    expect(projectSlots(r.state, r.state.projects[0]!)).toEqual({ used: 1, total: 2 })
+    // MV2a: slots by version, 3 each, whatever the stage (was 2 at Seed).
+    expect(projectSlots(r.state, r.state.projects[0]!)).toEqual({ used: 1, total: 6 })
   })
 
   it('cancelModule drops the build, no refund, no move; nothing to cancel → notFound', () => {
@@ -260,7 +263,10 @@ describe('build and delivery', () => {
   })
 
   it('delivery: installed, build gone, size and debt up, a release with the module, × 1.3 wave, no update that day', () => {
-    const s = build(company(['web'], 3), 0, 'openApi').state
+    const c = company(['web'], 3)
+    // MV2a: openApi is tier 3, so the product is at v3.
+    c.projects[0]!.version = 3
+    const s = build(c, 0, 'openApi').state
     const p = s.projects[0]!
     const def = moduleDef('openApi')!
     p.build!.progress = moduleWork(p, def) - 1e-12
@@ -275,7 +281,7 @@ describe('build and delivery', () => {
     const size = q.size
     const releases = t.releases?.length ?? 0
     checkReleases(t, content)
-    expect(q.modules).toEqual([{ id: 'openApi', day: t.time.day }])
+    expect(q.modules).toEqual([{ id: 'openApi', day: t.time.day, base: { day: Math.floor(t.time.day), acq: Math.round(q.acq ?? 0) - wave, lost: Math.round(q.lost ?? 0), rev: Math.round(q.rev ?? 0), rate: null } }])
     expect(q.build).toBeUndefined()
     expect(q.size).toBe(size + 2)
     expect(t.techDebt).toBe(debt + 3)
@@ -358,11 +364,12 @@ describe('upkeep', () => {
     const s = withModules(company(['web', 'mobile'], 3), 0, ['freemium', 'onboarding', 'analytics'])
     const mix = s.derived.projectMix![s.projects[0]!.id]!
     const freemium = (s.stats.users / 1000) * 0.5 * 0.5 * B.INFRA_PER_1000_BY_STAGE[3]!
-    expect(mix.upkeep).toBeCloseTo(freemium + (100 + 150) * 8, 9)
+    // MV2a (rule change on purpose): onboarding's upkeep 100 → 60 × 2^stage.
+    expect(mix.upkeep).toBeCloseTo(freemium + (60 + 150) * 8, 9)
     const more = clone(s)
     more.stats.users *= 2
     recomputeDerived(more, content)
-    expect(more.derived.projectMix![s.projects[0]!.id]!.upkeep).toBeCloseTo(2 * freemium + 250 * 8, 9)
+    expect(more.derived.projectMix![s.projects[0]!.id]!.upkeep).toBeCloseTo(2 * freemium + 210 * 8, 9)
   })
 
   it('a payday infra deferral defers the module upkeep with it', () => {
@@ -387,7 +394,8 @@ describe('offers and suggestion', () => {
   it('every module is offered: its price, its days at today\'s speed, why not', () => {
     const s = withModules(company(['web'], 2), 0, ['paywall'])
     const offers = moduleOffers(s, s.projects[0]!)
-    expect(offers.map((o) => o.id)).toEqual([...PROJECT_MODULE_IDS])
+    // MV2a: the web catalogue (core + web), not every id.
+    expect(offers.map((o) => o.id)).toEqual(MODULES.filter((m) => !m.categories || m.categories.includes('web')).map((m) => m.id))
     const by = Object.fromEntries(offers.map((o) => [o.id, o]))
     expect(by.paywall).toMatchObject({ refresh: true, cost: Math.round(600 * 4 * 0.4) })
     expect(by.freemium!.error).toBe('invalid')
@@ -401,7 +409,7 @@ describe('offers and suggestion', () => {
     const pick = suggestModule(s, s.projects[0]!)
     expect(pick).not.toBeNull()
     expect(moduleOffers(s, s.projects[0]!).find((o) => o.id === pick)!.error).toBeNull()
-    const full = withModules(s, 0, ['feedback', 'referral'])
+    const full = withModules(s, 0, ['feedback', 'referral', 'analytics'])
     expect(suggestModule(full, full.projects[0]!)).toBeNull()
   })
 
@@ -439,7 +447,7 @@ describe('fuzz', () => {
         if (s.gameOver) break
         shipped += s.projects.filter((q) => q.modules?.length).length
         for (const q of s.projects) {
-          expect((q.modules?.length ?? 0)).toBeLessThanOrEqual(B.MODULE_SLOTS_BY_STAGE[s.stage]!)
+          expect((q.modules?.length ?? 0)).toBeLessThanOrEqual(projectSlots(s, q).total)
           expect(new Set(q.modules?.map((m) => m.id)).size).toBe(q.modules?.length ?? 0)
           for (const kind of MODULE_KINDS) {
             const v = moduleMult(q, kind, s.time.day)

@@ -6,7 +6,7 @@ import { clamp, ledgerCosts } from './economy'
 import { applyMorale, loanOf, syncDebt } from './effects'
 import { lastUpdateDay, owedTotal } from './loopSelectors'
 import { yearlyRaises } from './people'
-import { addProjectUsers, moduleDef, moduleMult, moduleWork, updateSize } from './modules'
+import { addProjectUsers, moduleDef, moduleMeasureBase, moduleMult, moduleWork, projectVersion, updateSize, versionUpdates } from './modules'
 import { DAYS_PER_MONTH, type GameState, type ModuleBuild, type MonthLedger, type MonthReceipt, type PaydayChoice, type PendingPayday, type Project, type ProjectModuleId, type ReleaseEntry } from './types'
 import { newId, policiesOf, policyMult, policySum, pushActivity, pushEvent, stageBaseline, uniquePush, type EngineContent } from './util'
 import { directorOf, graceAfterMissedPayroll } from './world'
@@ -466,7 +466,14 @@ export function updateWave(s: GameState, p?: Project): number {
   return Math.max(1, Math.round(w))
 }
 
-function ship(s: GameState, content: EngineContent, p: Project, level: number, users: number, update?: number, extra?: { module: ProjectModuleId }): void {
+/** What else a release is: a module delivery, or (MV2a) a version: `version` alone = a version release, + `minor` = an update in its line. */
+interface ShipExtra {
+  module?: ProjectModuleId
+  version?: number
+  minor?: number
+}
+
+function ship(s: GameState, content: EngineContent, p: Project, level: number, users: number, update?: number, extra?: ShipExtra): void {
   const mrrBefore = s.finance.mrr
   s.stats.users += users
   // A1: the wave walks into the product that shipped.
@@ -474,21 +481,26 @@ function ship(s: GameState, content: EngineContent, p: Project, level: number, u
   recomputeDerived(s, content)
   const entry: ReleaseEntry = { id: newId(s, 'rel'), day: s.time.day, projectId: p.id, projectName: p.name, level, users, mrr: Math.max(0, s.finance.mrr - mrrBefore) }
   if (update !== undefined) entry.update = update
-  if (extra) entry.module = extra.module
+  if (extra?.module) entry.module = extra.module
+  if (extra?.version !== undefined) entry.version = extra.version
+  if (extra?.minor !== undefined) entry.minor = extra.minor
   const list = (s.releases ??= [])
   list.push(entry)
   if (list.length > B.RELEASES_MAX) list.splice(0, list.length - B.RELEASES_MAX)
   s.releaseCount = (s.releaseCount ?? 0) + 1
   // GAMEPLAY V2 §4.2: from Series A every shipped update leaves a little debt behind (versions before 1.0 do not).
   if (update !== undefined && s.stage >= B.TECH_DEBT_MIN_STAGE) s.techDebt = (s.techDebt ?? 0) + B.TECH_DEBT_PER_UPDATE
-  if (extra) pushActivity(s, 'moduleShipped', { project: p.name, id: p.id, module: extra.module, users, mrr: Math.round(entry.mrr) })
+  if (extra?.module) pushActivity(s, 'moduleShipped', { project: p.name, id: p.id, module: extra.module, users, mrr: Math.round(entry.mrr) })
+  else if (extra?.version !== undefined && extra.minor === undefined && extra.version > 1) pushActivity(s, 'versionShipped', { project: p.name, id: p.id, version: extra.version, users })
   else pushActivity(s, 'release', { project: p.name, level, users, mrr: Math.round(entry.mrr), update: update ?? 0 })
   pushEvent(s, { kind: 'release', refId: entry.id, value: level })
 }
 
 /**
  * A module build done (W2a): installed (a refresh only restamps its day), the build cleared; a new one widens the scope
- * (p.size) and leaves its debt. Its release ships after this (checkReleases).
+ * (p.size) and leaves its debt (MV2a: a negative debt pays some off, techDebt stays ≥ 0) and stamps the product's
+ * counters as the measured effect's "before" (§2.2). Its release ships after this (checkReleases), so the delivery wave
+ * counts as the module's.
  */
 export function finishModule(s: GameState, p: Project, build: ModuleBuild): void {
   delete p.build
@@ -498,11 +510,22 @@ export function finishModule(s: GameState, p: Project, build: ModuleBuild): void
     have.day = s.time.day
     return
   }
-  mods.push({ id: build.id, day: s.time.day })
+  mods.push({ id: build.id, day: s.time.day, base: moduleMeasureBase(s, p) })
   const def = moduleDef(build.id)
   if (!def) return
   p.size += def.sizeAdd
-  if (def.debt > 0) s.techDebt = (s.techDebt ?? 0) + def.debt
+  if (def.debt !== 0) s.techDebt = Math.max(0, (s.techDebt ?? 0) + def.debt)
+}
+
+/** Daily (MV2a §2.2): a module's counters freeze MODULE_MEASURE_DAYS after its delivery ("İlk 30g: …"). */
+export function freezeModuleMeasures(s: GameState): void {
+  const day = Math.floor(s.time.day)
+  for (const p of s.projects) {
+    for (const m of p.modules ?? []) {
+      if (!m.base || m.after || day < m.base.day + B.MODULE_MEASURE_DAYS) continue
+      m.after = { acq: Math.round(p.acq ?? 0), lost: Math.round(p.lost ?? 0), rev: Math.round(p.rev ?? 0) }
+    }
+  }
 }
 
 /**
@@ -510,6 +533,9 @@ export function finishModule(s: GameState, p: Project, build: ModuleBuild): void
  * wave walks in; MRR jumps with it. After 1.0 its builders ship updates (RELEASE_UPDATE_SIZE of work, at most one per
  * RELEASE_UPDATE_MIN_DAYS × the policies' releaseGap), so the beat keeps coming in every stage. A project seen for the first time (old save) is
  * set silently.
+ * MV2a version cycle: the 1.0 ships v1. Every update then counts into the version line (v{n}.{minor}); the one that
+ * fills it (versionUpdates(v)) ships v + 1 instead: a VERSION_WAVE_MULT wave, 3 more slots (projectSlots), the next
+ * tier, and every installed module restamped fresh (VERSION_REFRESHES_MODULES).
  */
 export function checkReleases(s: GameState, content: EngineContent): void {
   // quality-gate (§7.2): updates come further apart.
@@ -533,14 +559,37 @@ export function checkReleases(s: GameState, content: EngineContent): void {
     }
     if (lvl > p.releaseLevel) {
       p.releaseLevel = lvl
-      ship(s, content, p, lvl, releaseWave(s, lvl))
+      const first = lvl >= B.RELEASE_THRESHOLDS.length && p.version === undefined
+      if (first) {
+        p.version = 1
+        p.lineUpdates = 0
+      }
+      ship(s, content, p, lvl, releaseWave(s, lvl), undefined, first ? { version: 1 } : undefined)
       continue
     }
-    if (p.maturity < 1 || (p.updateProgress ?? 0) < updateSize(p, s.time.day) - 1e-9) continue
+    if (p.maturity < 1) continue
+    // An old save at 1.0: the first write stores the version it reads as (modules.projectVersion).
+    if (p.version === undefined) {
+      p.version = projectVersion(p)
+      p.lineUpdates = 0
+    }
+    if ((p.updateProgress ?? 0) < updateSize(p, s.time.day) - 1e-9) continue
     if (s.time.day - lastUpdateDay(s, p.id) < gap) continue
     p.updateProgress = 0
     p.updates = (p.updates ?? 0) + 1
-    ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s, p), p.updates)
+    const v = p.version
+    const line = (p.lineUpdates ?? 0) + 1
+    if (line < versionUpdates(v)) {
+      p.lineUpdates = line
+      ship(s, content, p, B.RELEASE_THRESHOLDS.length, updateWave(s, p), p.updates, { version: v, minor: line })
+      continue
+    }
+    // The line is full: this update is the next version.
+    p.version = v + 1
+    p.lineUpdates = 0
+    const users = Math.round(updateWave(s, p) * B.VERSION_WAVE_MULT)
+    if (B.VERSION_REFRESHES_MODULES) for (const m of p.modules ?? []) m.day = s.time.day
+    ship(s, content, p, B.RELEASE_THRESHOLDS.length, users, p.updates, { version: v + 1 })
   }
 }
 

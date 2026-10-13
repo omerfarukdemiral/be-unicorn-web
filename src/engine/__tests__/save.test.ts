@@ -50,7 +50,8 @@ describe('save and modules', () => {
     const loaded = deserialize(JSON.stringify(raw))!
     expect(loaded).not.toBeNull()
     expect(loaded.projects.every((p) => p.maturity === 1 && p.modules === undefined)).toBe(true)
-    for (const p of loaded.projects) expect(projectSlots(loaded, p)).toEqual({ used: 0, total: 2 })
+    // MV2a (rule change on purpose): an old save at 1.0 reads as v1, 3 slots (was 2 at Seed).
+    for (const p of loaded.projects) expect(projectSlots(loaded, p)).toEqual({ used: 0, total: 3 })
     const fresh = clone(loaded)
     recomputeDerived(fresh, content)
     expect(current(fresh)).toEqual(legacy(clone(loaded)))

@@ -199,7 +199,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const day = s.time.day
   const ws = projectWeights(s)
   const ads = adWeights(s)
-  const mix = (kind: 'churn' | 'cac' | 'tam') => wMean(kind === 'cac' ? ads : ws, (p) => moduleMult(p, kind, day))
+  const mix = (kind: 'churn' | 'cac' | 'tam' | 'infra') => wMean(kind === 'cac' ? ads : ws, (p) => moduleMult(p, kind, day))
   const arpu = E.arpu(s.stage, s.finance.priceMultiplier, o.deptOutput.sales, avgMat, rivalShare) * modifierMult(s, 'arpu') * policyMult(s, content, 'arpu') * wMean(ws, (p) => (B.CATEGORY_ARPU[p.category] ?? 1) * moduleMult(p, 'arpu', day))
   const enterpriseMrr = s.finance.enterpriseCustomers.reduce((a, c) => a + c.mrr, 0)
   // Before the first release users are "beta": they wait at the door and pay nothing (docs/CORE_LOOP.md §4.4 0:14).
@@ -229,11 +229,12 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const pay = payroll(s, content)
   const salaries = pay.paid
   const rent = E.rent(s.stage, openExtraRingCount(s.office)) * modifierMult(s, 'rent') * policyMult(s, content, 'rent')
-  // W2a: the modules' upkeep is infra too (a payday 'infra: defer' defers it with the servers).
+  // W2a: the modules' upkeep is infra too (a payday 'infra: defer' defers it with the servers). MV2a: 'infra' modules
+  // (model router, rate limit; voice mode's minus) scale the servers through the share-weighted mix (1 with none).
   const mixView = projectMix(s, mrr, ws, paid, organic)
   let modulesUpkeep = 0
   for (const v of Object.values(mixView)) modulesUpkeep += v.upkeep
-  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep + modulesUpkeep
+  const infra = E.infra(s.stats.users, mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra') * mix('infra')) + o.fx.upkeep + modulesUpkeep
   const living = E.founderLiving(s.stage) * policyMult(s, content, 'founderPay')
   const expansion = marketUpkeep(s)
   const burn = E.burn(salaries, rent, infra, s.finance.adBudget, living, expansion)

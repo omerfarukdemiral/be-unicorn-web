@@ -780,19 +780,39 @@ export const RELEASE_UPDATE_USER_SHARE = 0.003
 // ---------------------------------------------------------------------------
 /** A module costs cashBase × MODULE_COST_GROWTH^stage (feedback $600 in the garage, aiAssistant $240K at Series B). */
 export const MODULE_COST_GROWTH = 2
-/** Modules a project can hold at each stage: 4 of 9 at most, so every product picks an identity. */
-export const MODULE_SLOTS_BY_STAGE: readonly number[] = [1, 1, 2, 3, 3, 4, 4]
+/**
+ * MV2a version cycle (replaces the stage slot table [1, 1, 2, 3, 3, 4, 4]): the first 1.0 ships v1 with
+ * MODULE_SLOTS_PER_VERSION slots; after that the shipped updates fill a version line of
+ * min(VERSION_UPDATES_MAX, VERSION_UPDATES_BASE^v) updates (v1→v2 2, v2→v3 4, 8, 16, then 32), and the update that
+ * fills it ships v + 1: 3 more slots, the next module tier, every installed module refreshed. The bar shows the line
+ * from VERSION_FLOOR to 100% (display only: p.maturity stays 1, the economy reads it).
+ */
+export const MODULE_SLOTS_PER_VERSION = 3
+export const VERSION_FLOOR = 0.6
+export const VERSION_UPDATES_BASE = 2
+export const VERSION_UPDATES_MAX = 32
+/** A version release's wave: × the update wave (an update 1×, a module 1.3×, a version 2.5×, the first 1.0 its own). */
+export const VERSION_WAVE_MULT = 2.5
+/** Highest module tier (a module of tier t opens at v t); versions above it open slots but no new tier. */
+export const MODULE_TIER_MAX = 5
+/** A version release restamps every installed module (fresh again). MV2d fallback: false if coasterModules reaches Unicorn. */
+export const VERSION_REFRESHES_MODULES = true
+/** Measured effect (MV2a §2.2): the window after a delivery, and the youngest month-end snapshot the "before" rate reads. */
+export const MODULE_MEASURE_DAYS = 30
+export const MODULE_MEASURE_MIN_DAYS = 20
 /** The garage has no move budget: a build costs this much founder energy there instead (MOVE_COST from Pre-seed). */
 export const MODULE_ENERGY = 10
 /** A delivered module's wave: × the update wave (more than an update, less than a version); a refresh brings none. */
 export const MODULE_WAVE_MULT = 1.3
 /**
- * Per project and kind, the product of its modules is held here (churn and cac are floors, the rest ceilings). The
- * company mix is a weighted mean of the projects, so it never passes the best project's cap.
+ * Per project and kind, the product of its modules is held here (churn, cac, updateWork and infra are floors, the rest
+ * ceilings). The company mix is a weighted mean of the projects, so it never passes the best project's cap. MV2a
+ * (round 3 starting caps, MV2d tunes): products hold up to 18 modules now, so the round-2 caps (churn 0.78, arpu 1.25,
+ * organic 1.35, cac 0.85, tam 1.3, wave 1.5) would be hit by v2; these leave room to about v4.
  */
-export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.78, arpu: 1.25, organic: 1.35, cac: 0.85, tam: 1.3, wave: 1.5 }
+export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.72, arpu: 1.3, organic: 1.45, cac: 0.8, tam: 1.4, wave: 1.8, updateWork: 0.7, talk: 2, infra: 0.75 }
 /** Kinds whose cap is a floor (lower is better). */
-export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac']
+export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork', 'infra']
 /**
  * Staleness (anti-coast): a module's gains hold full for MODULE_FRESH_DAYS, then fade linearly to MODULE_STALE_FLOOR at
  * MODULE_STALE_DAYS; its minuses and upkeep stay. A refresh (MODULE_REFRESH_SHARE of the cash and work) starts it over.

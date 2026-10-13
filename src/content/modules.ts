@@ -8,15 +8,15 @@ export interface ModuleText {
 }
 
 export const MODULE_TEXT: Record<ProjectModuleId, ModuleText> = {
-  feedback: { name: 'Geri bildirim döngüsü', line: 'Kullanıcı ne istediğini söyler, güncellemeler isabet eder.' },
-  referral: { name: 'Davet programı', line: 'Kullanıcı arkadaşını getirir, kredi verirsin.' },
-  paywall: { name: 'Premium duvar', line: 'Asıl özellikler ücretli; yayılma yavaşlar.' },
-  onboarding: { name: 'Karşılama akışı', line: 'Yeni gelen ilk gün kaybolmaz.' },
-  analytics: { name: 'Ürün analitiği', line: 'Hangi reklam işe yarıyor, görürsün.' },
-  freemium: { name: 'Ücretsiz katman', line: 'Ücretsiz katman hızlı yayılır, az kazandırır.' },
-  openApi: { name: 'Açık API', line: 'Başkaları üstüne kurar, bırakmak zorlaşır.' },
-  localization: { name: 'Çoklu dil', line: 'Yeni diller, yeni pazarlar.' },
-  aiAssistant: { name: 'Yapay zekâ asistanı', line: 'Akıllı yardım gelir getirir, sunucu faturası da.' },
+  feedback: { name: 'Geri bildirim', line: 'Kullanıcının istediğini yaparsın, güncellemeler biraz uzar.' },
+  referral: { name: 'Davet sistemi', line: 'Davet eden kullanıcıya kredi verirsin, gelir biraz düşer.' },
+  paywall: { name: 'Paywall', line: 'Daha çok kazanırsın ama ürün daha yavaş yayılır.' },
+  onboarding: { name: 'Onboarding', line: 'Yeni kullanıcı ilk gün uygulamayı bırakmaz.' },
+  analytics: { name: 'Analitik', line: 'Hangi reklamın para getirdiğini görürsün.' },
+  freemium: { name: 'Freemium', line: 'Ücretsiz sürüm hızlı yayılır, kullanıcı başı gelir düşer.' },
+  openApi: { name: 'Public API', line: 'Başka ürünler sana bağlanır, müşteri kolay ayrılmaz.' },
+  localization: { name: 'Lokalizasyon', line: 'Yeni dillerle yeni ülkelere açılırsın.' },
+  aiAssistant: { name: 'AI asistan', line: 'Kullanıcı başı gelir artar, sunucu faturası da.' },
 }
 
 /** API projects call the open-API module by its portal name (balance: api churn×0.85, arpu×1.10). */

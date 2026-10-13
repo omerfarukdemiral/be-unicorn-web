@@ -262,7 +262,7 @@ describe('module question at the desk (W2c)', () => {
     return c.projects[0]!.id
   }
 
-  it('collapsed: one sentence naming the project and the module; open: one tile with icon, name, 2+ chips, Kur and Diğerleri', () => {
+  it('collapsed: one sentence naming the project and the module; open: one tile with icon, name, 2+ chips, Ekle and Diğerleri', () => {
     const id = withCompany()
     const key = `desk:module:${id}`
     const st = store().state
@@ -275,7 +275,7 @@ describe('module question at the desk (W2c)', () => {
     openBubble(key)
     const out = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
     expect(out).toContain(MODULE_TEXT[ask.moduleId].line)
-    expect(out).toContain('>Kur<')
+    expect(out).toContain('>Ekle<')
     expect(out).toContain('Diğerleri')
     // gain + (minus or upkeep) + cost: three chips at most, one move on the button.
     const chips = (out.match(/data-chip=""/g) ?? []).length
@@ -283,7 +283,7 @@ describe('module question at the desk (W2c)', () => {
     expect(chips).toBeLessThanOrEqual(3)
   })
 
-  it('opening it holds the world; Kur starts the build, closes the bubble and silences the question', () => {
+  it('opening it holds the world; Ekle starts the build, closes the bubble and silences the question', () => {
     const id = withCompany()
     const key = `desk:module:${id}`
     openBubble(key)

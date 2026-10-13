@@ -431,7 +431,7 @@ describe('project modules (W2c)', () => {
     expect(html).toContain('aria-label="Modül ekle"')
   })
 
-  it('the "+" list: 3 suggested rows (≤ 3 chips, one Kur each), the rest folded behind "Tüm modüller", locked ones not in the three', () => {
+  it('the "+" list: 3 suggested rows (≤ 3 chips, one Ekle each), the rest folded behind "Tüm modüller", locked ones not in the three', () => {
     const s = company(['web'], 2)
     useGameStore.setState({ state: s })
     const html = renderToStaticMarkup(createElement(Suggestions, { project: s.projects[0]!, onDone: () => {} }))
@@ -439,11 +439,11 @@ describe('project modules (W2c)', () => {
     expect(rows).toHaveLength(3)
     for (const r of rows) {
       expect((r.match(/data-chip=""/g) ?? []).length).toBeLessThanOrEqual(3)
-      expect(r).toContain('>Kur<')
+      expect(r).toContain('>Ekle<')
     }
     expect(html).toContain('Tüm modüller')
     expect(html).toContain('aria-expanded="false"')
-    expect(html).not.toContain('Açık API')
+    expect(html).not.toContain('Public API')
   })
 
   it('a poor company still lists the rows, disabled, with the engine reason', () => {
@@ -470,7 +470,7 @@ describe('project modules (W2c)', () => {
     if (!r.ok) throw new Error('build')
     const html = detail(r.state)
     expect(html).toContain('1/2')
-    expect(html).toContain('aria-label="Kuruluyor"')
+    expect(html).toContain('aria-label="Geliştiriliyor"')
     expect(html).toMatch(/≈\d+g/)
     expect((html.match(/aria-label="Modül ekle"/g) ?? []).length).toBe(1)
   })
@@ -486,11 +486,11 @@ describe('project modules (W2c)', () => {
   })
 
   it('the release moment of a module reads "{project}: {module} yayında", with a wave chip only when users came', () => {
-    expect(releaseName(5, undefined, 'Davet programı')).toBe('Davet programı yayında')
-    const m = { key: 1, kind: 'release' as const, project: 'Foo', level: 5, module: 'Davet programı', users: 120, mrr: 900 }
-    expect(momentText(m)).toContain('Foo: Davet programı yayında')
+    expect(releaseName(5, undefined, 'Davet sistemi')).toBe('Davet sistemi yayında')
+    const m = { key: 1, kind: 'release' as const, project: 'Foo', level: 5, module: 'Davet sistemi', users: 120, mrr: 900 }
+    expect(momentText(m)).toContain('Foo: Davet sistemi yayında')
     expect(momentText(m)).toContain('+120')
-    expect(momentText({ ...m, users: 0 })).toBe('Foo: Davet programı yayında')
+    expect(momentText({ ...m, users: 0 })).toBe('Foo: Davet sistemi yayında')
   })
 })
 

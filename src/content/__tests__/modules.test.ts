@@ -23,8 +23,8 @@ describe('module text', () => {
 
   it('api projects call openApi by the portal name', () => {
     expect(moduleName('openApi', 'api')).toBe('Geliştirici portalı')
-    expect(moduleName('openApi', 'web')).toBe('Açık API')
-    expect(moduleName('feedback', 'api')).toBe('Geri bildirim döngüsü')
+    expect(moduleName('openApi', 'web')).toBe('Public API')
+    expect(moduleName('feedback', 'api')).toBe('Geri bildirim')
   })
 
   it('module, ad focus and effort keys are in UI_TEXT with their placeholders', () => {

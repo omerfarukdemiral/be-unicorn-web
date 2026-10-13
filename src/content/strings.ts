@@ -507,7 +507,6 @@ const BASE_TEXT: Record<string, string> = {
   'detail.founderDesk': 'Kurucu masası',
   'detail.emptySlot': 'Boş slot',
   'detail.slotSub': '{type} · {ring}. halka',
-  'detail.founderSub': 'Kurucu',
   'detail.gone': 'Bu artık burada değil.',
   'detail.ringLocked': '{n}. halka henüz kilitli.',
   'detail.ringFirst': 'Önce {n}. halkayı açmalısın.',

@@ -158,7 +158,7 @@ Oyunun başında çoğu aksiyon kilitli (40px) olduğundan pratikte bol yer kal�
 
 #### 1.4.1 Mobil denetim listesi (elle; tarayıcı test bağımlılığı yok)
 
-Viewport'lar (dokunmatik, `isMobile`): 375×667, 390×844, 360×740, 844×390. Her biri için başlangıç, sahne, Mağaza/Ekip/Projeler/Büyüme/Metrikler
+Viewport'lar (dokunmatik, `isMobile`): 375×667, 390×844, 360×740, 360×640 (en kısa), 844×390. RoundSection boyut/pitch kartları ile DeskBubble kategori düğmeleri çok satırlı kartlardır (≥56px), ayrı dokunma alanı gerekmez. Her biri için başlangıç, sahne, Mağaza/Ekip/Projeler/Büyüme/Metrikler
 panelleri, ProjectDetail (ad değiştirme, modül yuvaları, öneri satırları, "Tüm modüller"), Büyüme › Pazarlama (reklam odağı çip satırı),
 kişi/personel balonları, ödeme günü, aşama atlama, tur görüşmesi.
 - `document.documentElement.scrollWidth <= innerWidth`; panelde ve açık balonda yatay taşma yok (çip satırları kendi içinde kayar, bu serbest).

@@ -430,7 +430,13 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
     if (bubbleOpen !== null && !step.lines.some((l) => l.key === bubbleOpen && !l.exiting)) storeApi().setBubbleOpen(null)
   }, [step, bubbleOpen])
 
-  const list = useMemo(() => step.lines.map((l) => ({ b: toBubble(l, stage), exiting: !!l.exiting })), [step, stage])
+  const list = useMemo(() => step.lines.map((l) => ({ b: toBubble(l, stage), exiting: !!l.exiting, pin: isPinned(l) ? l.speakerId : null })), [step, stage])
+  const gs = getGS(mock)
+  /** A pinned pill (burnout, notice) stays over the person's desk while they walk (a moving target slides under the thumb). */
+  const deskOf = (employeeId: string | null): [number, number] | undefined => {
+    const slot = employeeId ? gs.employees.find((e) => e.id === employeeId)?.deskSlotId : undefined
+    return slot ? (layout.itemCenter.get(slot)?.pos ?? layout.slotWorld.get(slot)) : undefined
+  }
 
   // Overlaps (same or different speakers) are resolved in screen space by the layout driver.
   const [registry] = useState(() => new BubbleLayoutRegistry())
@@ -443,7 +449,7 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
   const render = renderBubble ?? ((b: WorldBubble) => <DefaultBubble bubble={b} />)
   return (
     <group>
-      {list.map(({ b, exiting }) =>
+      {list.map(({ b, exiting, pin }) =>
         b ? (
           <BubbleAnchor
             key={b.key}
@@ -452,6 +458,7 @@ export function WorldBubbles({ renderBubble, ambient = true }: { renderBubble?: 
             layout={registry}
             speakerId={b.speakerId}
             fallback={layout.center}
+            pinAt={deskOf(pin)}
             interactive={b.kind !== 'ambient' && b.kind !== 'reflection'}
             openKey={bubbleOpen}
             exiting={exiting}

@@ -66,6 +66,8 @@ describe('effort crisis hold', () => {
     run(() => store().ui.effortHold !== null)
     store().dispatch({ type: 'setSpeed', speed: 2 })
     expect(store().ui.effortHold).toBeNull()
+    // Rested, so no fresh crisis (a new notice would start a new hold, and its card keeps the 1×).
+    useGameStore.setState((x) => ({ state: { ...x.state, employees: x.state.employees.map((e) => ({ ...e, fatigue: 10, loadAvg: 1, status: 'working' as const, burnoutDays: 0 })) } }))
     const day = store().state.time.day
     run(() => store().state.time.day > day + 20, 800)
     expect(store().state.time.speed).toBe(2)
@@ -78,6 +80,17 @@ describe('effort crisis hold', () => {
     expect(eng()?.status).toBe('leaving')
     expect(store().ui.effortHold).toMatchObject({ prevSpeed: 4, employeeIds: ['e9'] })
     expect(store().state.time.speed).toBe(1)
+  })
+
+  it('a payday waiting when the person is answered keeps the 1× until it is dealt with', () => {
+    burntRun(4)
+    run(() => store().ui.effortHold !== null)
+    useGameStore.setState((x) => ({
+      state: { ...x.state, finance: { ...x.state.finance, pendingPayday: { day: x.state.time.day, ledger: { salaries: 0, rent: 0, infra: 0, ads: 0 }, deferredBefore: 0 } as never }, employees: x.state.employees.map((e) => ({ ...e, fatigue: 10, loadAvg: 1, status: 'working' as const, burnoutDays: 0 })) },
+    }))
+    for (let i = 0; i < 12; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(1)
+    expect(store().ui.effortHold).not.toBeNull()
   })
 
   it('1× needs no hold, and "Önemli anda yavaşla" off leaves the speed alone', () => {

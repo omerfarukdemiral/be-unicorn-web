@@ -96,6 +96,8 @@ export interface BubbleAnchorProps {
   offsetY?: number
   /** World XZ used when the speaker has no position yet. */
   fallback?: [number, number]
+  /** Stay above this desk (world XZ) while the speaker is in the building, however they walk. */
+  pinAt?: [number, number]
   /** Clickable content? (sets pointer-events). */
   interactive?: boolean
   /** Join screen-space overlap resolution (needs `kind` and `layoutKey`). */
@@ -118,7 +120,7 @@ const zRange = (kind: BubbleKind | undefined, open: boolean): [number, number] =
 /** drei's wrapper divs are click-through (the inner bubble opts back in when interactive). */
 const NO_POINTER = { pointerEvents: 'none' } as const
 
-export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], interactive = false, layout, kind, layoutKey, openKey = null, exiting = false, children }: BubbleAnchorProps) {
+export function BubbleAnchor({ speakerId, pinAt, offsetY = 0, fallback = [0, 0], interactive = false, layout, kind, layoutKey, openKey = null, exiting = false, children }: BubbleAnchorProps) {
   const group = useRef<THREE.Group>(null)
   const inner = useRef<HTMLDivElement>(null)
   const stem = useRef<HTMLDivElement>(null)
@@ -144,7 +146,11 @@ export function BubbleAnchor({ speakerId, offsetY = 0, fallback = [0, 0], intera
   useFrame((state) => {
     // Clickable bubbles whose speaker is gone (or outside, except a visitor's own ask) move to the desk, the founder or
     // the scene centre.
-    const { pos: p, visible: show, anchorId, ahead } = resolveAnchor(speakerId, kind ?? (interactive ? 'decision' : undefined), speakerPositions)
+    const r = resolveAnchor(speakerId, kind ?? (interactive ? 'decision' : undefined), speakerPositions)
+    const { visible: show, anchorId, ahead } = r
+    let p = r.pos
+    const own = speakerPositions.get(speakerId)
+    if (pinAt && own?.visible && p) p = { ...p, x: pinAt[0], z: pinAt[1] }
     // A hidden bubble gets no pointerleave: never stay frozen behind a fade.
     if (hovered.current && entry.current && !entry.current.shown) hovered.current = false
     const g = group.current

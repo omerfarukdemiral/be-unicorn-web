@@ -146,6 +146,9 @@ function effortCrisisStep(prev: GameState, next: GameState): void {
   }
   const open = hold.employeeIds.some((id) => inCrisis(next, id))
   if (open && next.time.day < hold.untilDay) return
+  // A decision, a payday or a focus pause that came in during the hold keeps the 1×: the speed comes back only once
+  // the moment is dealt with (the moment slowdown's own guard).
+  if (next.decisions.active || next.finance.pendingPayday || ui.pauseReasons.length > 0) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: null } }))
   if (next.time.speed === 1) autoSetSpeed(hold.prevSpeed)
 }

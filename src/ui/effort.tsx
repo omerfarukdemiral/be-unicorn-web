@@ -307,7 +307,7 @@ export function assignSuggestion(s: GameState, e: Employee): { fit: ProjectFit |
   return e.projectId === undefined || key === 'bored' ? { fit: bestProjectFor(s, e) } : null
 }
 
-/** "Projeye ata: {project}" with the load before → after; with no open work, "İş yok: modül ekle" opens Projeler. */
+/** "Projeye ata: {project}" with the load before → after; with no open work, "İş yok: modül ekle" opens that project's module row. */
 export function AssignRow({ e }: { e: Employee }) {
   const sug = useGameStore(
     useShallow((s) => {
@@ -319,7 +319,16 @@ export function AssignRow({ e }: { e: Employee }) {
   )
   if (!sug) return null
   if (sug.id === null)
-    return <ChoiceRow primary icon={{ icon: 'plus', color: 'var(--color-ink-3)' }} label={t('team.noWork')} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'projects' }))} />
+    return <ChoiceRow primary icon={{ icon: 'plus', color: 'var(--color-ink-3)' }} label={t('team.noWork')} onClick={() =>
+          launch(() => {
+            // The module row of the first project (where "Ekle" lives); no project at all → the list.
+            const api = useGameStore.getState()
+            const p = api.state.projects[0]
+            if (p) api.select({ kind: 'project', id: p.id })
+            else api.openPanel({ kind: 'projects' })
+          })
+        }
+      />
   const chips = [loadMoveChip(sug.now, sug.after), ...(sug.fit ? [{ icon: CATEGORY_ICON[sug.category], label: '', text: '✓', good: true, title: t('team.fit') } satisfies Chip] : [])]
   return (
     <ChoiceRow

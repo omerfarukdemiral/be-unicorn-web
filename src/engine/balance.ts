@@ -802,15 +802,21 @@ export const MODULE_MEASURE_DAYS = 30
 export const MODULE_MEASURE_MIN_DAYS = 20
 /** The garage has no move budget: a build costs this much founder energy there instead (MOVE_COST from Pre-seed). */
 export const MODULE_ENERGY = 10
-/** A delivered module's wave: × the update wave (more than an update, less than a version); a refresh brings none. */
-export const MODULE_WAVE_MULT = 0.6
+/**
+ * Every catalogue gain and minus is read as 1 + (x − 1) × this (the table keeps its readable numbers). MV2d pace lever
+ * (0.12: with the table's own sizes bootstrap reached Unicorn in 37 dk, with 0.02 in 87): the pace is set here, and the
+ * caps below stay about 1.8× the best single module's reach so no module fills a kind alone.
+ */
+export const MODULE_EFFECT_SCALE = 0.12
+/** A delivered module's wave: × the update wave (1.3×: more than an update, less than a version's 2.5×); a refresh brings none. */
+export const MODULE_WAVE_MULT = 1.3
 /**
  * Per project and kind, the product of its modules is held here (churn, cac, updateWork and infra are floors, the rest
  * ceilings). The company mix is a weighted mean of the projects, so it never passes the best project's cap. MV2a
- * (round 3 starting caps, MV2d tunes): products hold up to 18 modules now, so the round-2 caps (churn 0.78, arpu 1.25,
- * organic 1.35, cac 0.85, tam 1.3, wave 1.5) would be hit by v2; these leave room to about v4.
+ * (round 3 starting caps 0.72 / 1.3 / 1.45 / 0.8 / 1.4 / 1.8 for churn / arpu / organic / cac / tam / wave): MV2d scaled
+ * them with MODULE_EFFECT_SCALE (a cap is a reach, not a table number), so a few modules of one kind still fill it.
  */
-export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.94, arpu: 1.09, organic: 1.07, cac: 0.97, tam: 1.06, wave: 1.15, updateWork: 0.9, talk: 1.3, infra: 0.9 }
+export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.92, arpu: 1.052, organic: 1.1, cac: 0.96, tam: 1.087, wave: 1.065, updateWork: 0.95, talk: 1.11, infra: 0.97 }
 /** Kinds whose cap is a floor (lower is better). */
 export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork', 'infra']
 /**

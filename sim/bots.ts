@@ -335,6 +335,10 @@ export interface BotRun {
   modulesBuilt: number[]
   moduleIds: Record<string, number>
   firstModule: string | null
+  /** MV2d: how many of the builds were slot-filler picks (no plan score above zero), the rest are plan picks. */
+  fillBuilt: number
+  /** MV2d: ids built by a plan pick (not the filler), for the dominance check. */
+  planIds: Record<string, number>
   refreshes: number
   /** MV2d: every project at the run's end (category, version, modules installed, slots open, installed tiers). */
   projectsEnd: { category: string; version: number; modules: number; slots: number; tiers: number[]; ids: string[] }[]
@@ -986,11 +990,34 @@ function modules(c: Ctx, cfg: BotConfig): void {
     const relief = c.s.time.day - (c.mem.bored ?? -99) <= 1
     const suggested = relief ? moduleLib.suggestModule(c.s, p) : null
     const fill = (suggested ? offers.find((o) => o.id === suggested && !o.refresh && o.error === null) : undefined) ??
-      (cfg.fillSlots ? offers.filter((o) => !o.refresh && o.error === null).sort((a, b) => a.cost - b.cost)[0] : undefined)
-    const pick = stale ?? bestPlanOffer(c, cfg.modules, p, offers) ?? (fill && (relief || affordsWithRunway(c.s, fill.cost, moduleUpkeepOf(c.s, fill.id), FILL_RUNWAY)) ? fill : undefined)
+      (cfg.fillSlots ? fillOffer(c, p, offers) : undefined)
+    const planPick = stale ? null : bestPlanOffer(c, cfg.modules, p, offers)
+    const pick = stale ?? planPick ?? (fill && (relief || affordsWithRunway(c.s, fill.cost, moduleUpkeepOf(c.s, fill.id), FILL_RUNWAY)) ? fill : undefined)
     if (!pick || !affordsWithRunway(c.s, pick.cost, moduleUpkeepOf(c.s, pick.id), MODULE_RUNWAY)) continue
+    c.mem.fillPick = !stale && !planPick ? 1 : 0
     if (c.act({ type: pick.refresh ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: pick.id })) return
   }
+}
+
+/**
+ * The slot filler: one of the offers the till carries with FILL_RUNWAY months to spare, picked by a day-and-project hash
+ * (not always the cheapest, so late modules get built too; deterministic, so a seed replays).
+ */
+function fillOffer(c: Ctx, p: GameState['projects'][number], offers: ReturnType<typeof moduleLib.moduleOffers>): (typeof offers)[number] | undefined {
+  const open = offers
+    .filter((o) => !o.refresh && o.error === null && affordsWithRunway(c.s, o.cost, moduleUpkeepOf(c.s, o.id), FILL_RUNWAY))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+  if (!open.length) return undefined
+  let h = c.s.time.day
+  for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return open[h % open.length]
+}
+
+/** A per-seed, per-module factor in [0.2, 1.8] (an integer hash, no rng draw, so nothing else in the run shifts). */
+function tasteOf(seed: number, id: string): number {
+  let h = (seed * 2654435761) >>> 0
+  for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0
+  return 0.2 + (1.6 * (h % 1000)) / 1000
 }
 
 /** Share of a wave's users counted as monthly gain in the plan score (a wave is a one-off, not a monthly flow). */
@@ -1011,7 +1038,8 @@ function bestPlanOffer(c: Ctx, plan: ModulePlan, p: GameState['projects'][number
     if (w <= 0) continue
     const est = moduleLib.moduleEstimate(s, p, o.id, c.content)
     const gross = est.net + est.upkeep + est.wave * arpu * PLAN_WAVE_SHARE
-    const score = (w * gross - est.upkeep) / Math.max(1, o.cost)
+    // Taste: each run values each module a little differently (0.2 to 1.8), the way two founders would; deterministic per seed.
+    const score = ((w * gross - est.upkeep) / Math.max(1, o.cost)) * tasteOf(c.mem.seed ?? 0, o.id)
     if (score > bestScore) {
       bestScore = score
       best = o
@@ -1316,6 +1344,8 @@ export function playBot(
   const modulesBuilt = [0, 0, 0, 0, 0, 0, 0]
   const moduleIds: Record<string, number> = {}
   let firstModule: string | null = null
+  let fillBuilt = 0
+  const planIds: Record<string, number> = {}
   let refreshes = 0
   let focusChanges = 0
   let roundWeeks = 0
@@ -1346,6 +1376,8 @@ export function playBot(
           modulesBuilt[s.stage] = (modulesBuilt[s.stage] ?? 0) + 1
           moduleIds[a.moduleId] = (moduleIds[a.moduleId] ?? 0) + 1
           firstModule ??= a.moduleId
+          if (ctx.mem.fillPick) fillBuilt++
+          else planIds[a.moduleId] = (planIds[a.moduleId] ?? 0) + 1
         }
         if (a.type === 'refreshModule') refreshes++
         if (a.type === 'setAdFocus') focusChanges++
@@ -1356,7 +1388,7 @@ export function playBot(
       return r.ok
     },
     content,
-    mem: {},
+    mem: { seed },
   }
 
   if (cfg) ctx.act({ type: 'startProject', category: cfg.firstCategory })
@@ -1668,6 +1700,8 @@ export function playBot(
     modulesBuilt,
     moduleIds,
     firstModule,
+    fillBuilt,
+    planIds,
     refreshes,
     projectsEnd: s.projects.filter((p) => p.launched).map((p) => ({
       category: p.category,

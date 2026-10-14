@@ -25,7 +25,7 @@ describe('offer chips (estimate)', () => {
   it('the headline gain is a count a month or dollars a month, with the percent only in the title', () => {
     const s = company(['web'], 3)
     const p = s.projects[0]!
-    const offer = moduleOffers(s, p).find((o) => o.id === 'analytics')!
+    const offer = moduleOffers(s, p).find((o) => o.id === 'paywall')!
     const chips = buildChips(s, p, offer)
     const gain = chips[0]!
     expect(gain.text).toMatch(/^≈ [+−]\S+ kullanıcı\/ay$|^≈ [+−]\$\S+\/ay$/)

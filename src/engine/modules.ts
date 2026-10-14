@@ -191,7 +191,13 @@ export function moduleGain(def: ModuleDef, kind: ModuleEffectKind, category: Pro
   const x = def.gains[kind]
   if (x === undefined) return 1
   const k = def.catBoost?.[category] ?? 1
-  return 1 + (x - 1) * k
+  return 1 + (x - 1) * k * B.MODULE_EFFECT_SCALE
+}
+
+/** A module's minus on a kind, scaled like its gains (1 = none). */
+export function moduleMinus(def: ModuleDef, kind: ModuleEffectKind): number {
+  const x = def.minus?.[kind]
+  return x === undefined ? 1 : 1 + (x - 1) * B.MODULE_EFFECT_SCALE
 }
 
 function capped(kind: ModuleEffectKind, v: number): number {
@@ -223,8 +229,7 @@ export function moduleMult(p: Project, kind: ModuleEffectKind, day: number, modu
       if (k !== 0) gain = 1 + (gain - 1) * (1 + k)
       v *= 1 + (gain - 1) * moduleStrength(m, day)
     }
-    const minus = def.minus?.[kind]
-    if (minus !== undefined) v *= minus
+    v *= moduleMinus(def, kind)
   }
   return capped(kind, v)
 }
@@ -692,7 +697,7 @@ export function moduleHeadlines(id: ProjectModuleId, category: ProjectCategory):
   const def = moduleDef(id)
   if (!def) return {}
   const gains = MODULE_KINDS.flatMap((k): [ModuleEffectKind, number][] => (def.gains[k] !== undefined ? [[k, moduleGain(def, k, category)]] : []))
-  const minuses = MODULE_KINDS.flatMap((k): [ModuleEffectKind, number][] => (def.minus?.[k] !== undefined ? [[k, def.minus[k]!]] : []))
+  const minuses = MODULE_KINDS.flatMap((k): [ModuleEffectKind, number][] => (def.minus?.[k] !== undefined ? [[k, moduleMinus(def, k)]] : []))
   const gain = headline(gains)
   const minus = headline(minuses)
   return { ...(gain ? { gain } : {}), ...(minus ? { minus } : {}) }

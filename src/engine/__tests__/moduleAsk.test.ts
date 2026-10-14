@@ -113,10 +113,13 @@ describe('panel rows', () => {
   })
 
   it('headlines: the biggest gain and the biggest minus; a category boost counts', () => {
-    expect(moduleHeadlines('feedback', 'web')).toEqual({ gain: { kind: 'talk', mult: 1.5, good: true }, minus: { kind: 'updateWork', mult: 1.25, good: false } })
+    expect(moduleHeadlines('feedback', 'web')).toEqual({
+      gain: { kind: 'talk', mult: 1 + 0.5 * B.MODULE_EFFECT_SCALE, good: true },
+      minus: { kind: 'updateWork', mult: 1 + 0.25 * B.MODULE_EFFECT_SCALE, good: false },
+    })
     expect(moduleHeadlines('onboarding', 'web').minus).toBeUndefined()
-    // openApi on an api product: churn 0.88 → 1 − 0.12 × 1.5.
-    expect(moduleHeadlines('openApi', 'api').gain!.mult).toBeCloseTo(0.82, 6)
+    // openApi on an api product: churn 0.88 → 1 − 0.12 × 1.5, at the module effect scale.
+    expect(moduleHeadlines('openApi', 'api').gain!.mult).toBeCloseTo(1 - 0.12 * 1.5 * B.MODULE_EFFECT_SCALE, 6)
   })
 
   it('buildStatus: fraction and days left follow the running build', () => {

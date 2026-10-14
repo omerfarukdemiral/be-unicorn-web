@@ -24,7 +24,9 @@ const DAYS = arg('days', 4500)
 const OUT = arg('out', 'sim/REPORT.md')
 const STAGES = ['Garaj', 'Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Unicorn']
 const CARELESS_LIMIT_DAYS = (4 * 60) / SECONDS_PER_DAY // 4 min at 1x
-const TARGET_MIN = [60, 90] as const
+/** Unicorn median band (design §1.7, MV2d: 55–90 dk) and the archetype spread limit (≤ 1.6×). */
+const TARGET_MIN = [55, 90] as const
+const SPREAD_MAX = 1.6
 
 const toMin = (days: number): number => (days * SECONDS_PER_DAY) / 60
 const fmtMin = (days: number | null): string => (days === null ? '—' : `${toMin(days).toFixed(1)} dk`)
@@ -422,18 +424,20 @@ line('## Modüller v2 (MV2d)')
 line()
 line('Botlar sabit liste yerine tür-ağırlık planıyla kurar: skor = (ağırlık × $karşılık − kira) / maliyet, $karşılık arayüzdeki `moduleEstimate`. Koşu sonu, proje başına.')
 line()
-line('| Bot | Sürüm (medyan / en yüksek) | Kurulu modül (medyan) | Açık slot (medyan) | Dolu / açık slot | Tier dağılımı T1·T2·T3·T4·T5 |')
-line('|---|---|---|---|---|---|')
+line('| Bot | Sürüm (medyan / en yüksek) | Kurulu modül (medyan) | Açık slot (medyan) | Dolu / açık slot | Plan seçimi / slot doldurucu (kurulan) | Tier dağılımı T1·T2·T3·T4·T5 |')
+line('|---|---|---|---|---|---|---|')
 for (const [name, runs] of moduleRows) {
   const ps = runs.flatMap((r) => r.projectsEnd)
   const tiers = [1, 2, 3, 4, 5].map((t) => ps.reduce((a, p) => a + p.tiers.filter((x) => x === t).length, 0))
   const used = sumOf(ps.map((p) => p.modules))
   const open = sumOf(ps.map((p) => p.slots))
-  line(`| ${name} | ${median(ps.map((p) => p.version)) ?? 0} / ${Math.max(0, ...ps.map((p) => p.version))} | ${median(ps.map((p) => p.modules)) ?? 0} | ${median(ps.map((p) => p.slots)) ?? 0} | ${used} / ${open} | ${tiers.join(' · ')} |`)
+  const totalBuilt = sumOf(runs.map((r) => sumOf(r.modulesBuilt)))
+  const filled = sumOf(runs.map((r) => r.fillBuilt))
+  line(`| ${name} | ${median(ps.map((p) => p.version)) ?? 0} / ${Math.max(0, ...ps.map((p) => p.version))} | ${median(ps.map((p) => p.modules)) ?? 0} | ${median(ps.map((p) => p.slots)) ?? 0} | ${used} / ${open} | ${totalBuilt - filled} / ${filled} | ${tiers.join(' · ')} |`)
 }
 line()
 {
-  line('Baskınlık (bilgi): bir kategorinin koşularının > %90’ında kurulan modül (T1 çekirdek hariç). Botlar boş slotu doldurur (15 slot, kategori başına 22 modül), bu yüzden listedekiler baskın değil, ucuz ve her yerde faydalı olanlardır; oyuncu seçer, bot doldurur.')
+  line('Baskınlık: bir kategorinin koşularının > %90’ında planın kendi seçtiği (doldurucu değil) kurulu modül, T1 çekirdek hariç; yalnızca gerçek seçim olan katmanlarda (projeler katmanın %80’inden azını kuruyorsa) sayılır, bir katmanı tümden kuran herkes tek modülü üstün kılmaz. Plan skoru sıfırın altındaysa bot boş slotu gün ve projeye bağlı bir karma ile doldurur (rastgele ama tekrarlanabilir); “Plan seçimi / doldurucu” sütunu hangisinin kaç modül kurduğunu gösterir.')
   line()
   const all = [...byArch.values()].flat()
   const byCat = new Map<string, BotRun[]>()
@@ -441,13 +445,21 @@ line()
   const dominant: string[] = []
   for (const [cat, runs] of byCat) {
     const count = new Map<string, number>()
-    for (const r of runs) for (const id of new Set(r.projectsEnd.filter((p) => p.category === cat).flatMap((p) => p.ids))) count.set(id, (count.get(id) ?? 0) + 1)
+    for (const r of runs) for (const id of new Set(r.projectsEnd.filter((p) => p.category === cat).flatMap((p) => p.ids).filter((id) => r.planIds[id]))) count.set(id, (count.get(id) ?? 0) + 1)
+    // A tier is a real choice only when the projects leave a good part of it unbuilt; a tier that 15 slots nearly empty
+    // (the T3 line at v3+) is built whole by anyone, which says nothing about one module being better.
+    const projs = runs.flatMap((r) => r.projectsEnd.filter((p) => p.category === cat))
+    const choice = (tier: number) => {
+      const cands = MODULES.filter((d) => d.tier === tier && (d.categories === undefined || d.categories.includes(cat as never))).length
+      const mean = projs.length ? sumOf(projs.map((p) => p.tiers.filter((x) => x === tier).length)) / projs.length : 0
+      return mean < 0.8 * cands
+    }
     for (const [id, n] of count) {
       const def = moduleDef(id)
-      if (n / runs.length > 0.9 && def && def.tier > 1) dominant.push(`${cat}/${id} ${pct(n, runs.length)}`)
+      if (n / runs.length > 0.9 && def && def.tier > 1 && choice(def.tier)) dominant.push(`${cat}/${id} ${pct(n, runs.length)}`)
     }
   }
-  line(`Baskın modül: ${dominant.length ? dominant.join(', ') : 'yok'}`)
+  line(`Baskın modül (hedef: yok): **${dominant.length === 0 ? 'EVET' : 'HAYIR'}** · ${dominant.length ? dominant.join(', ') : 'yok'}`)
   line()
   line('Plan özgürlüğü (bootstrap seed’leri, dört plan; Unicorn medyanı 15 % içinde olmalı):')
   line()
@@ -466,14 +478,15 @@ line()
   line()
   line('Kategori turu (bootstrap planı, tek kategori, sınır: 12+ seed): Unicorn · en sık 5 modül')
   line()
-  line('| Kategori | Unicorn | Medyan | İflas | En sık 5 modül |')
-  line('|---|---|---|---|---|')
+  line('| Kategori | Unicorn | Medyan | İflas | Modülsüz Unicorn · medyan | En sık 5 modül |')
+  line('|---|---|---|---|---|---|')
   const seen = new Set<string>()
   for (const cat of TOUR_CATEGORIES) {
     const runs = runMany('bootstrap', 'best', { firstCategory: cat, extraCategories: [] })
     const ids = runs.reduce<Record<string, number>>((acc, r) => (Object.entries(r.moduleIds).forEach(([k, v]) => (acc[k] = (acc[k] ?? 0) + v)), acc), {})
     Object.keys(ids).forEach((k) => seen.add(k))
-    line(`| ${cat} | ${uniCount(runs)}/${SEEDS} | ${fmtMin(uniOf(runs))} | ${runs.filter(failedRun).length} | ${Object.entries(ids).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} |`)
+    const bare = runMany('bootstrap', 'best', { firstCategory: cat, extraCategories: [], modules: {} })
+    line(`| ${cat} | ${uniCount(runs)}/${SEEDS} | ${fmtMin(uniOf(runs))} | ${runs.filter(failedRun).length} | ${uniCount(bare)}/${SEEDS} · ${fmtMin(uniOf(bare))} | ${Object.entries(ids).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} |`)
   }
   for (const r of all) Object.keys(r.moduleIds).forEach((k) => seen.add(k))
   const unseen = MODULES.filter((d) => !seen.has(d.id)).map((d) => d.id)
@@ -538,9 +551,9 @@ if (unicornMedians.length) {
   const hi = Math.max(...mins)
   const ratio = hi / lo
   const dist = lo < TARGET_MIN[0] ? `hedefin ${(TARGET_MIN[0] - lo).toFixed(0)} dk altında (en hızlı)` : hi > TARGET_MIN[1] ? `hedefin ${(hi - TARGET_MIN[1]).toFixed(0)} dk üstünde (en yavaş)` : 'hedef aralıkta'
-  line(`- Unicorn’a varış 60–90 dk: medyanlar ${mins.map((m) => m.toFixed(1)).join(' / ')} dk → **${dist}**; arketip farkı ${ratio.toFixed(2)}× (hedef ≤ 1.3×) — yalnızca çoğunluğu Unicorn’a ulaşan ${unicornMedians.length}/4 arketip sayıldı`)
+  line(`- Unicorn’a varış 55–90 dk: medyanlar ${mins.map((m) => m.toFixed(1)).join(' / ')} dk → **${dist}**; arketip farkı ${ratio.toFixed(2)}× (hedef ≤ ${SPREAD_MAX}×) — yalnızca çoğunluğu Unicorn’a ulaşan ${unicornMedians.length}/4 arketip sayıldı`)
 } else {
-  line(`- Unicorn’a varış 60–90 dk: hiçbir arketipte seed’lerin çoğu ${toMin(DAYS).toFixed(0)} dk içinde Unicorn’a ulaşmadı → **hedefin gerisinde**`)
+  line(`- Unicorn’a varış 55–90 dk: hiçbir arketipte seed’lerin çoğu ${toMin(DAYS).toFixed(0)} dk içinde Unicorn’a ulaşmadı → **hedefin gerisinde**`)
 }
 const goodFail = goodRuns.filter(failedRun).length / goodRuns.length
 line(`- İlk 5 dk’da iki anlamlı an arası medyan ≤ 10 sn (her arketip): **${gap5Worst * SECONDS_PER_DAY <= 10 ? 'EVET' : 'HAYIR'}** (en kötü arketip ${sec(gap5Worst)})`)
@@ -658,8 +671,8 @@ crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, car
   if (unicornMedians.length) {
     const mins = unicornMedians.map(toMin)
     const spread = Math.max(...mins) / Math.min(...mins)
-    const inBand = mins.every((m) => m >= 55 && m <= 95)
-    line(`- Unicorn medyanı (arketip) 55–95 dk ve fark ≤ 1.3×: ${mins.map((m) => m.toFixed(1)).join(' / ')} dk · ${spread.toFixed(2)}×: **${yes(inBand && spread <= 1.3 && unicornMedians.length === 4)}**`)
+    const inBand = mins.every((m) => m >= TARGET_MIN[0] && m <= TARGET_MIN[1])
+    line(`- Unicorn medyanı (arketip) 55–90 dk ve fark ≤ ${SPREAD_MAX}×: ${mins.map((m) => m.toFixed(1)).join(' / ')} dk · ${spread.toFixed(2)}×: **${yes(inBand && spread <= SPREAD_MAX && unicornMedians.length === 4)}**`)
   }
 }
 line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${saveMax.toFixed(1)} KB (hedef < 120): **${yes(saveMed < 70 && saveMax < 120)}**`)

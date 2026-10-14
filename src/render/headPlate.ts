@@ -82,3 +82,9 @@ export function crowdedIds(anchors: readonly { id: string; x: number; y: number 
 
 /** A pop sprite is never smaller than `minPx` on screen: scale = max(base, minPx / pxPerWorldUnit). */
 export const popScale = (base: number, pxPerUnit: number, minPx = 20): number => (pxPerUnit > 0 ? Math.max(base, minPx / pxPerUnit) : base)
+
+/** Does any shown bubble belong to this person? Exact id match (`e1` is not `e12`); undefined = no speaker. */
+export const hasOwnBubble = (id: string, speakers: Iterable<string | undefined>): boolean => {
+  for (const s of speakers) if (s === id) return true
+  return false
+}

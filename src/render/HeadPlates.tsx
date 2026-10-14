@@ -9,7 +9,7 @@ import { memo, useMemo, useRef } from 'react'
 import { Vector3 } from 'three'
 import type { GameState } from '../engine/types'
 import { DEPT_COLORS } from './palette'
-import { fatigueTone, crowdedIds, plateCompact, plateGlyph, plateSalary, plateShown, shortName, type PlateGlyph } from './headPlate'
+import { fatigueTone, crowdedIds, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, shortName, type PlateGlyph } from './headPlate'
 import { useHtmlPortal } from './htmlPortal'
 import { DEPT_PATH, GLYPH_PATH } from './plateIcons'
 import { seatedRegistry, speakerPositions } from './sceneRegistry'
@@ -86,12 +86,12 @@ const PlateView = memo(function PlateView({ plate, reg }: { plate: Plate; reg: (
         <span className="grid size-[16px] shrink-0 place-items-center rounded-full" style={{ background: color }}>
           <Glyph d={DEPT_PATH[plate.dept]} color="#fff" size={11} />
         </span>
+        {plate.lead && <Glyph d={GLYPH_PATH.lead} color={GLYPH_COLOR.lead} size={12} />}
         <span ref={(el) => reg(plate.id, { text: el })} className="flex items-center gap-1">
-          {plate.lead && <Glyph d={GLYPH_PATH.lead} color={GLYPH_COLOR.lead} size={12} />}
           <span className="text-[11px] font-semibold text-ink">{plate.name}</span>
           <span className="text-[10px] tabular-nums text-ink-2">{plate.salary}</span>
+          {plate.glyph && <Glyph d={GLYPH_PATH[plate.glyph]} color={GLYPH_COLOR[plate.glyph]} size={13} />}
         </span>
-        {plate.glyph && <Glyph d={GLYPH_PATH[plate.glyph]} color={GLYPH_COLOR[plate.glyph]} size={13} />}
       </div>
       <div className="mt-[3px] h-[3px] overflow-hidden rounded-full bg-ink/10">
         <div className="h-full rounded-full" style={{ width: `${Math.max(6, Math.min(100, plate.fatigue))}%`, background: tone }} />
@@ -124,8 +124,12 @@ export function HeadPlates() {
         return
       }
       const cur = refs.current.get(id)
-      if (cur) Object.assign(cur, r)
-      else refs.current.set(id, { root: null, text: null, shown: false, compact: false, seen: false, ...r })
+      // A re-mounted ref callback (new Plate objects every key change) must not forget what the DOM already shows.
+      const fresh = { ...r }
+      if (r.root) (fresh as Partial<Refs>).shown = r.root.style.opacity === '1'
+      if (r.text) (fresh as Partial<Refs>).compact = r.text.style.display === 'none'
+      if (cur) Object.assign(cur, fresh)
+      else refs.current.set(id, { root: null, text: null, shown: false, compact: false, seen: false, ...fresh })
     },
     [],
   )
@@ -159,7 +163,7 @@ export function HeadPlates() {
           const rect = el.getBoundingClientRect()
           overlap = rect.width > 0 && bubbles.some((b) => rect.left < b.right + 4 && b.left < rect.right + 4 && rect.top < b.bottom + 4 && b.top < rect.bottom + 4)
         }
-        own = bubbleEls.some((b) => (b.dataset.bubbleKey ?? '').includes(id))
+        own = hasOwnBubble(id, bubbleEls.map((b) => b.dataset.bubbleSpeaker))
         measured.current.set(id, { own, overlap })
       }
       const m = measured.current.get(id)

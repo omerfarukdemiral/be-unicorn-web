@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../engine/balance'
 import type { Employee, PersonEffort } from '../engine/types'
-import { CROWD_PX, LOW_MORALE, crowdedIds, fatigueTone, plateCompact, plateGlyph, plateSalary, plateShown, popScale, shortName } from './headPlate'
+import { CROWD_PX, LOW_MORALE, crowdedIds, fatigueTone, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, popScale, shortName } from './headPlate'
 
 const emp = (over: Partial<Employee>): Employee =>
   ({ id: 'e1', name: 'Ebru Kaya', dept: 'eng', quality: 1, salary: 1700, status: 'working', statusSinceDay: 0, hiredDay: 0, deskSlotId: 'd1', projectId: 'p1', morale: 70, ...over }) as Employee
@@ -77,5 +77,12 @@ describe('pop sprite size (H1)', () => {
     expect(popScale(0.4, 25)).toBeCloseTo(0.8)
     expect(popScale(0.4, 100)).toBe(0.4)
     expect(popScale(0.4, 0)).toBe(0.4)
+  })
+})
+
+describe('head plate (H1): own bubble', () => {
+  it('matches the speaker id exactly, not as a substring', () => {
+    expect(hasOwnBubble('e1', ['e12', 'desk', undefined])).toBe(false)
+    expect(hasOwnBubble('e12', ['e12'])).toBe(true)
   })
 })

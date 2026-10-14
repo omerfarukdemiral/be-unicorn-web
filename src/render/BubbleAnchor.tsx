@@ -209,6 +209,7 @@ export function BubbleAnchor({ speakerId, pinAt, offsetY = 0, fallback = [0, 0],
         <div
           ref={inner}
           data-bubble-key={layoutKey}
+          data-bubble-speaker={layoutKey ? speakerId : undefined}
           onPointerEnter={(e) => {
             if (e.pointerType === 'mouse') hovered.current = true
           }}

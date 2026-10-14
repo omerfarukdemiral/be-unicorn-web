@@ -35,7 +35,7 @@ const MEASURE_MS = 150
 /** A bubble just appeared or moved (bubbleMotion): measure again this soon instead of waiting for MEASURE_MS. */
 const MOTION_MS = 40
 
-function shownBubbles(also?: string): Box[] {
+export function shownBubbles(also?: string): Box[] {
   const out: Box[] = []
   for (const el of document.querySelectorAll<HTMLElement>(also ? `[data-bubble-key],${also}` : '[data-bubble-key]')) {
     if (el.style.visibility === 'hidden' || el.style.opacity === '0') continue

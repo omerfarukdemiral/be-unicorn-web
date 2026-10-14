@@ -41,10 +41,7 @@ export interface CharacterLook {
 
 const EYE = '#2b2a33'
 
-/** Gold of the project lead's star (E3). */
-export const LEAD_STAR = '#f5c542'
-
-export const CharacterModel = memo(function CharacterModel({ look, rig, lead }: { look: CharacterLook; rig?: Rig; lead?: boolean }) {
+export const CharacterModel = memo(function CharacterModel({ look, rig }: { look: CharacterLook; rig?: Rig }) {
   const own = useRef<Rig | null>(null)
   const r = rig ?? (own.current ??= createRig())
   const legs = look.legs ?? '#5b5866'
@@ -59,7 +56,7 @@ export const CharacterModel = memo(function CharacterModel({ look, rig, lead }: 
     const bones = [g, r.legL, r.legR, r.body, r.armL, r.armR, r.head].filter((b): b is THREE.Group => !!b)
     return bakeSkinned(g, bones, { shadow: 'all' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lookKey, lead, r])
+  }, [lookKey, r])
   return (
     <group ref={root} scale={look.scale ?? 1}>
       <group ref={(o) => void (r.legL = o)} position={[-0.08, 0.3, 0]}>
@@ -90,7 +87,6 @@ export const CharacterModel = memo(function CharacterModel({ look, rig, lead }: 
           <mesh geometry={GEO.sphere} material={mat(look.skin)} scale={[0.3, 0.3, 0.3]} castShadow />
           <mesh geometry={GEO.sphere} material={mat(EYE)} scale={[0.04, 0.05, 0.03]} position={[-0.06, 0.02, 0.135]} />
           <mesh geometry={GEO.sphere} material={mat(EYE)} scale={[0.04, 0.05, 0.03]} position={[0.06, 0.02, 0.135]} />
-          {lead && <mesh geometry={GEO.star} material={glowMat(LEAD_STAR, 0.5)} scale={[0.2, 0.2, 0.2]} position={[0.2, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} />}
           {look.hairStyle !== 3 && (
             <mesh geometry={GEO.dome} material={mat(look.hair)} scale={[0.33, 0.3, 0.33]} position={[0, 0.02, -0.01]} rotation={[-0.25, 0, 0]} />
           )}

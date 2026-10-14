@@ -10,6 +10,7 @@ import type { BubbleRenderer } from './bubbles'
 import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp, renderBudget } from './constants'
 import { fitOutline, gapCenterY, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
 import { DeskBadges } from './DeskBadges'
+import { HeadPlates } from './HeadPlates'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
@@ -309,6 +310,7 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
         {/* Core loop beats: release banner + user wave, payday light (docs/CORE_LOOP.md §7). */}
         <JuiceLayer />
       </group>
+      <HeadPlates />
       <WorldBubbles renderBubble={renderBubble} ambient={ambientBubbles} />
     </>
   )

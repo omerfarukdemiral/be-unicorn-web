@@ -11,7 +11,7 @@ import { idleSpots, meetingSeats, type OfficeLayout, type XZ } from './layout'
 import { DEPT_COLORS, FOUNDER_COLORS, FOUNDER_LEGS, HAIR_COLORS, HIGHLIGHT, LEG_COLORS, SKIN_TONES } from './palette'
 import { GEO, HIT_MAT, flatMat } from './resources'
 import { FADE_MS, fadeScale, type GhostMode } from './departing'
-import { clearSpeaker, isCelebrating, sceneTime, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
+import { clearSpeaker, isCelebrating, sceneTime, seatedRegistry, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
 import { STAND, hold, release, reserve } from './spots'
 import { fromBubble } from './bubbleHit'
 import { LEGS_BY_BAND } from './stageLook'
@@ -188,8 +188,6 @@ export interface EmployeeCharacterProps {
   overload: boolean
   /** A builder with nothing to build (idleBuilders): the "…" marker while otherwise working. */
   idle: boolean
-  /** Leads a project (E3): a star over the head. */
-  lead?: boolean
   selected: boolean
   onSelect: (id: string) => void
 }
@@ -206,7 +204,6 @@ function sameEmployeeProps(a: EmployeeCharacterProps, b: EmployeeCharacterProps)
     a.speed === b.speed &&
     a.overload === b.overload &&
     a.idle === b.idle &&
-    a.lead === b.lead &&
     a.employee.offUntil === b.employee.offUntil &&
     a.selected === b.selected &&
     a.onSelect === b.onSelect
@@ -339,6 +336,7 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
       icon.current.visible = !mover.outside
     }
     setLastPos(e.id, mover.x, mover.z, mover.yaw, mover.outside)
+    seatedRegistry.set(e.id, atSeat && !mover.outside)
     setSpeakerPos(e.id, mover.x, HEAD_Y + lift, mover.z, !mover.outside, mover.moving)
   })
 
@@ -348,7 +346,7 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
   return (
     <>
       <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
-        <CharacterModel look={look} rig={rig} lead={props.lead} />
+        <CharacterModel look={look} rig={rig} />
         <HitAndRing selected={props.selected} onSelect={() => props.onSelect(employee.id)} />
       </group>
       <group ref={icon} position={[mover.x, 0, mover.z]} visible={!mover.outside}>

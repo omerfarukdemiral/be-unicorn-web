@@ -49,8 +49,12 @@ export function speakerWalking(id: string): boolean {
   return !!p && (!!p.walking || !p.visible) && !p.dest
 }
 
+/** Employee id → standing still at their own desk this frame (head plates show only then). Written by Character. */
+export const seatedRegistry = new Map<string, boolean>()
+
 export function clearSpeaker(id: string): void {
   speakerPositions.delete(id)
+  seatedRegistry.delete(id)
 }
 
 /** The founder's desk as a fixed speaker: desk bubbles do not follow the founder around the office. */

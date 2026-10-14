@@ -1,24 +1,20 @@
 // Icon badges over the desks (T20, Two Point's "A+ / $" pops): what the office is doing, read without a panel.
 //   production: a builder on a project now and then pops their dept's ▲ above the desk (output is happening);
 //   bug: from tech debt TECH_DEBT_BADGE up, engineers on a project pop a red bug, more often the higher the debt;
-//   one persistent badge per desk (tired > morale > bored): a draining battery from FATIGUE_TIRED (E3), the broken heart
-//   under LOW_MORALE until morale recovers, grey "zzz" for someone with too little to do (E3);
 //   flow (E3): the production pop in gold; sprint (E3): desks of a sprinting project pop every 5 s with a red arrow.
-// Pops rise and fade (never blink in / out); the persistent badges scale in and out. All on scene time: a held world
-// holds them, a paused game starts no new pops. One sprite per desk and kind, drawn from three canvas textures.
-import { useFrame } from '@react-three/fiber'
+// Pops rise and fade (never blink in / out). All on scene time: a held world holds them, a paused game starts no new
+// pops. One sprite per desk and kind, drawn from canvas textures. The persistent state badges (tired / morale / bored)
+// and the lead star live on the head plate now (HeadPlates.tsx, H1); a pop is never smaller than POP_MIN_PX on screen.
+import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import * as B from '../engine/balance'
-import { onLeave } from '../engine/effort'
 import type { Dept, Employee, GameState, PersonEffort } from '../engine/types'
-import { damp, hash01 } from './constants'
+import { hash01 } from './constants'
+import { popScale } from './headPlate'
 import { DEPT_COLORS } from './palette'
 import { sceneTime, useLayout } from './sceneRegistry'
 import { useGS } from './source'
 
-/** Morale below this shows the badge (the leaving / burnout statuses have their own head icons). */
-export const LOW_MORALE = 35
 /** Tech debt from which engineers pop bugs. */
 export const TECH_DEBT_BADGE = 6
 
@@ -30,11 +26,10 @@ const SPRINT_PERIOD = 5
 const Y = 1.62
 const RISE = 0.35
 const SIZE = 0.4
+/** Smallest projected size of a pop (CSS px): 10 px badges were unreadable on a phone. */
+const POP_MIN_PX = 20
 
-export type BadgeKind = 'production' | 'bug' | 'morale' | 'tired' | 'bored' | 'flow' | 'sprint'
-
-/** The kinds that stay on while their reason holds (one per desk); the rest are pops. */
-export const PERSISTENT: ReadonlySet<BadgeKind> = new Set<BadgeKind>(['morale', 'tired', 'bored'])
+export type BadgeKind = 'production' | 'bug' | 'flow' | 'sprint'
 
 /** What effort adds to the badges (E3); without it (the garage, old callers) there are no effort badges. */
 export interface BadgeFx {
@@ -63,21 +58,9 @@ export function deskBadges(employees: readonly Employee[], techDebt: number, fx?
     // One production pop: sprint (red, quicker) > flow (gold) > the dept's own.
     if (building) kinds.push(effort?.pace === 'sprint' ? 'sprint' : effort?.flow ? 'flow' : 'production')
     if (building && e.dept === 'eng' && techDebt >= TECH_DEBT_BADGE) kinds.push('bug')
-    const persistent = persistentBadge(e, fx)
-    if (persistent) kinds.push(persistent)
     if (kinds.length) out.push({ employeeId: e.id, slotId: e.deskSlotId, dept: e.dept, kinds, bugPeriod: Math.max(5, BUG_PERIOD * (TECH_DEBT_BADGE / Math.max(techDebt, TECH_DEBT_BADGE))) })
   }
   return out
-}
-
-/** The one badge that stays: tired (fatigue ≥ FATIGUE_TIRED) > morale (broken heart) > bored (under UNDERLOAD). The leaving / burnout heads speak for themselves. */
-export function persistentBadge(e: Employee, fx?: BadgeFx): BadgeKind | null {
-  if (e.status === 'leaving' || e.status === 'burnout') return null
-  const effort = !!fx?.people?.[e.id]
-  if (effort && fx && !onLeave(e, fx.day) && (e.fatigue ?? 0) >= B.FATIGUE_TIRED) return 'tired'
-  if (e.morale < LOW_MORALE) return 'morale'
-  if (effort && fx && !onLeave(e, fx.day) && e.dept !== 'sales' && e.status !== 'onboarding' && (e.loadAvg ?? 1) < B.UNDERLOAD) return 'bored'
-  return null
 }
 
 /** 0..1 through a pop that is on at scene time t, else null. Each desk has its own phase (seed). */
@@ -148,42 +131,6 @@ function badgeTexture(kind: BadgeKind, color: string): THREE.Texture | null {
     ctx.beginPath()
     ctx.arc(m, m - 24, 11, 0, Math.PI * 2)
     ctx.fill()
-  } else if (kind === 'tired') {
-    // draining battery: outline, nub, one low bar
-    ctx.lineWidth = 7
-    ctx.beginPath()
-    ctx.roundRect(m - 32, m - 18, 58, 38, 7)
-    ctx.stroke()
-    ctx.fillRect(m + 28, m - 8, 8, 18)
-    ctx.fillRect(m - 25, m - 11, 14, 24)
-  } else if (kind === 'bored') {
-    // "zzz"
-    ctx.lineWidth = 8
-    for (const [x, y, w] of [[m - 30, m - 6, 20], [m - 6, m - 22, 26], [m - 2, m + 8, 20]] as const) {
-      ctx.beginPath()
-      ctx.moveTo(x, y)
-      ctx.lineTo(x + w, y)
-      ctx.lineTo(x, y + w * 0.9)
-      ctx.lineTo(x + w, y + w * 0.9)
-      ctx.stroke()
-    }
-  } else {
-    // broken heart
-    ctx.beginPath()
-    ctx.moveTo(m, 96)
-    ctx.bezierCurveTo(m - 44, 70, m - 40, 30, m - 18, 32)
-    ctx.bezierCurveTo(m - 8, 33, m - 2, 40, m, 46)
-    ctx.bezierCurveTo(m + 2, 40, m + 8, 33, m + 18, 32)
-    ctx.bezierCurveTo(m + 40, 30, m + 44, 70, m, 96)
-    ctx.fill()
-    ctx.lineWidth = 6
-    ctx.strokeStyle = color
-    ctx.beginPath()
-    ctx.moveTo(m, 46)
-    ctx.lineTo(m - 7, 60)
-    ctx.lineTo(m + 6, 70)
-    ctx.lineTo(m - 2, 86)
-    ctx.stroke()
   }
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
@@ -192,7 +139,7 @@ function badgeTexture(kind: BadgeKind, color: string): THREE.Texture | null {
   return tex
 }
 
-const BADGE_COLOR: Record<Exclude<BadgeKind, 'production'>, string> = { bug: '#e0533d', morale: '#5b8fd9', tired: '#f0a03c', bored: '#9aa3b2', flow: '#f5c542', sprint: '#e2574c' }
+const BADGE_COLOR: Record<Exclude<BadgeKind, 'production'>, string> = { bug: '#e0533d', flow: '#f5c542', sprint: '#e2574c' }
 
 function material(kind: BadgeKind, dept: Dept): THREE.SpriteMaterial {
   const color = kind === 'production' ? DEPT_COLORS[dept] : BADGE_COLOR[kind]
@@ -206,8 +153,6 @@ const select = (s: GameState) => [s.employees, s.techDebt, s.time.speed, s.deriv
 interface Live {
   sprite: THREE.Sprite | null
   kind: BadgeKind
-  /** A persistent badge's scale, damped toward 1 while it applies and 0 after, so it never blinks out. */
-  k: number
   /** A pop that started keeps going to its end, even if its reason is gone. */
   popping: boolean
 }
@@ -229,7 +174,7 @@ function Badge({ id, dept, kind, pos, register }: { id: string; dept: Dept; kind
 
 /** Kinds a seated employee can ever show here: sprites stay mounted so a badge fades rather than unmounting. */
 function kindsFor(dept: Dept): BadgeKind[] {
-  const all: BadgeKind[] = ['production', 'flow', 'sprint', 'morale', 'tired', 'bored']
+  const all: BadgeKind[] = ['production', 'flow', 'sprint']
   return dept === 'eng' ? ['bug', ...all] : all
 }
 
@@ -247,7 +192,7 @@ export function DeskBadges() {
     () => (key: string, kind: BadgeKind, s: THREE.Sprite | null) => {
       const l = live.current.get(key)
       if (l) l.sprite = s
-      else if (s) live.current.set(key, { sprite: s, kind, k: 0, popping: false })
+      else if (s) live.current.set(key, { sprite: s, kind, popping: false })
     },
     [],
   )
@@ -268,9 +213,18 @@ export function DeskBadges() {
     return out
   }, [employees, layout])
 
-  useFrame((_, rawDt) => {
+  const camera = useThree((st) => st.camera)
+  const size = useThree((st) => st.size)
+  const base = useMemo(() => new THREE.Vector3(), [])
+
+  useFrame(() => {
     const t = sceneTime.t
-    const dt = sceneTime.held ? 0 : Math.min(rawDt, 0.1)
+    // Projected size of one world unit at the scene centre: a pop is scaled up to POP_MIN_PX on small screens.
+    base.set(0, Y, 0).project(camera)
+    const y0 = (1 - base.y) * (size.height / 2)
+    base.set(0, Y + 1, 0).project(camera)
+    const pxPerUnit = Math.abs(y0 - (1 - base.y) * (size.height / 2))
+    const floor = popScale(SIZE, pxPerUnit, POP_MIN_PX)
     for (const [key, l] of live.current) {
       const s = l.sprite
       if (!s) {
@@ -279,14 +233,6 @@ export function DeskBadges() {
       }
       const mat = s.material
       const period = on.current.get(key)
-      if (PERSISTENT.has(l.kind)) {
-        l.k = damp(l.k, period !== undefined ? 1 : 0, 8, dt)
-        s.visible = l.k > 0.01
-        s.scale.set(SIZE * l.k, SIZE * l.k, 1)
-        s.position.y = Y + Math.sin(t * 2 + hash01(key, 3) * 6) * 0.03
-        mat.opacity = Math.min(1, l.k * 1.2)
-        continue
-      }
       const ph = popPhase(t, period ?? (l.kind === 'bug' ? BUG_PERIOD : l.kind === 'sprint' ? SPRINT_PERIOD : PRODUCTION_PERIOD), key)
       if (ph === null) l.popping = false
       // A pop starts only while its reason holds and time runs; once started it runs to its end.
@@ -298,7 +244,7 @@ export function DeskBadges() {
       const grow = Math.min(1, ph / 0.18)
       const fade = ph < 0.6 ? 1 : 1 - (ph - 0.6) / 0.4
       s.visible = true
-      const sc = SIZE * (0.6 + 0.4 * (1 - Math.pow(1 - grow, 3)))
+      const sc = floor * (0.6 + 0.4 * (1 - Math.pow(1 - grow, 3)))
       s.scale.set(sc, sc, 1)
       s.position.y = Y + RISE * (1 - Math.pow(1 - ph, 2))
       mat.opacity = fade

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Employee } from '../engine/types'
 import type { PersonEffort } from '../engine/types'
-import { LOW_MORALE, TECH_DEBT_BADGE, deskBadges, popPhase } from './DeskBadges'
+import { TECH_DEBT_BADGE, deskBadges, popPhase } from './DeskBadges'
 
 const emp = (over: Partial<Employee>): Employee =>
   ({ id: 'e1', name: 'A', dept: 'eng', quality: 1, salary: 1, status: 'working', statusSinceDay: 0, hiredDay: 0, deskSlotId: 'd1', projectId: 'p1', morale: 70, ...over }) as Employee
@@ -20,10 +20,9 @@ describe('desk badges (T20)', () => {
     expect(deskBadges([emp({})], 1e6)[0]!.bugPeriod).toBe(5)
   })
 
-  it('low morale shows unless the head already says leaving / burnout; no desk, no badge', () => {
-    expect(deskBadges([emp({ morale: LOW_MORALE - 1, projectId: undefined })], 0)[0]?.kinds).toEqual(['morale'])
-    expect(deskBadges([emp({ morale: 5, status: 'leaving', projectId: undefined })], 0)).toEqual([])
+  it('no desk, no badge; a seated person with nothing to pop shows none (the state glyphs moved to the head plate, H1)', () => {
     expect(deskBadges([emp({ deskSlotId: undefined })], 0)).toEqual([])
+    expect(deskBadges([emp({ morale: 5, fatigue: 90, projectId: undefined })], 0)).toEqual([])
   })
 
   it('a pop is on for 1.5 s of each period, at a phase of its own per desk', () => {
@@ -41,17 +40,10 @@ describe('effort badges (E3)', () => {
   const fx = (over: Partial<PersonEffort> = {}, day = 10): { day: number; people: Record<string, PersonEffort> } => ({ day, people: { e1: view(over) } })
   const kinds = (e: Partial<Employee>, f?: ReturnType<typeof fx>) => deskBadges([emp(e)], 0, f)[0]?.kinds
 
-  it('one persistent badge per desk: tired over morale over bored', () => {
+  it('only pops are left on a desk: tired / bored / low morale never become badges any more', () => {
     const worn = { fatigue: 70, morale: 10, loadAvg: 0.2, projectId: undefined }
-    expect(kinds(worn, fx())).toEqual(['tired'])
-    expect(kinds({ ...worn, fatigue: 10 }, fx())).toEqual(['morale'])
-    expect(kinds({ ...worn, fatigue: 10, morale: 70 }, fx())).toEqual(['bored'])
-    expect(kinds({ ...worn, fatigue: 10, morale: 70, loadAvg: 1 }, fx())).toBeUndefined()
-  })
-
-  it('burnout and leaving heads speak for themselves; on leave nothing is tired or bored', () => {
-    expect(kinds({ fatigue: 90, status: 'burnout', projectId: undefined }, fx())).toBeUndefined()
-    expect(kinds({ fatigue: 70, offUntil: 20, projectId: undefined, status: 'break' }, fx())).toBeUndefined()
+    expect(kinds(worn, fx())).toBeUndefined()
+    expect(kinds({ ...worn, projectId: 'p1' }, fx())).toEqual(['production'])
   })
 
   it('flow pops gold, a sprint pops red (every 5 s); both replace the plain production pop', () => {

@@ -1,6 +1,6 @@
 // Modules v2 (MV2a): the catalogue, the version cycle, tiers / prerequisites / forks, synergies, caps, negative debt,
 // the infra kind, the offer estimate, the measured effect and the loading of a round-2 save.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as B from '../balance'
 import { computeOutputs, recomputeDerived } from '../derive'
 import { checkReleases, finishModule, freezeModuleMeasures, updateWave } from '../loop'
@@ -29,6 +29,13 @@ import { clone } from '../util'
 import { api, build, company, content, withModules } from './moduleFixtures'
 
 const OLD_IDS = ['feedback', 'referral', 'paywall', 'onboarding', 'analytics', 'freemium', 'openApi', 'localization', 'aiAssistant']
+
+// MV2d tuned the module caps and the module wave tighter (see balance.ts); these tests check the formulas (boost,
+// synergy, staleness, mix), so they run on the wide MV2a caps. The real caps have their own test (modulesCaps.test.ts).
+vi.mock('../balance', async (orig) => ({
+  ...(await orig<typeof import('../balance')>()),
+  MODULE_MULT_CAP: { churn: 0.72, arpu: 1.3, organic: 1.45, cac: 0.8, tam: 1.4, wave: 1.8, updateWork: 0.7, talk: 2, infra: 0.75 },
+}))
 
 describe('catalogue', () => {
   it('65 ids: the 9 round-2 ids first, every id once, in PROJECT_MODULE_IDS order', () => {

@@ -803,14 +803,14 @@ export const MODULE_MEASURE_MIN_DAYS = 20
 /** The garage has no move budget: a build costs this much founder energy there instead (MOVE_COST from Pre-seed). */
 export const MODULE_ENERGY = 10
 /** A delivered module's wave: × the update wave (more than an update, less than a version); a refresh brings none. */
-export const MODULE_WAVE_MULT = 1.3
+export const MODULE_WAVE_MULT = 0.6
 /**
  * Per project and kind, the product of its modules is held here (churn, cac, updateWork and infra are floors, the rest
  * ceilings). The company mix is a weighted mean of the projects, so it never passes the best project's cap. MV2a
  * (round 3 starting caps, MV2d tunes): products hold up to 18 modules now, so the round-2 caps (churn 0.78, arpu 1.25,
  * organic 1.35, cac 0.85, tam 1.3, wave 1.5) would be hit by v2; these leave room to about v4.
  */
-export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.72, arpu: 1.3, organic: 1.45, cac: 0.8, tam: 1.4, wave: 1.8, updateWork: 0.7, talk: 2, infra: 0.75 }
+export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.94, arpu: 1.09, organic: 1.07, cac: 0.97, tam: 1.06, wave: 1.15, updateWork: 0.9, talk: 1.3, infra: 0.9 }
 /** Kinds whose cap is a floor (lower is better). */
 export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork', 'infra']
 /**

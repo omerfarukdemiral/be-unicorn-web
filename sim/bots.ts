@@ -27,6 +27,7 @@ import {
   type GameEventKind,
   type GameState,
   type LeaveCause,
+  type ModuleEffectKind,
   type NextCrisis,
   type PaydayChoice,
   type PolicyId,
@@ -45,6 +46,18 @@ import {
  * 'burner', 'frugal'.
  */
 export type BotKind = Archetype | 'idle' | 'random' | 'careless' | V2BotKind
+/** MV2d: how much a bot values each module effect kind (1 = full price); kinds left out are worth 0. */
+export type ModulePlan = Partial<Record<ModuleEffectKind, number>>
+
+/** Money first: ARPU and churn, then servers (bootstrap, burner, frugal, coasterModules). */
+export const PLAN_MONEY: ModulePlan = { arpu: 1.2, churn: 1, infra: 0.8, cac: 0.6, organic: 0.5, tam: 0.4, wave: 0.3 }
+/** Growth first (vcRocket). */
+export const PLAN_GROWTH: ModulePlan = { organic: 1.2, cac: 1, tam: 0.8, wave: 0.6, churn: 0.6, arpu: 0.4 }
+/** Retention first (niche). */
+export const PLAN_RETENTION: ModulePlan = { churn: 1.3, arpu: 1, tam: 0.4, infra: 0.4, talk: 0.2 }
+/** Reach first (platform, greedyGood). */
+export const PLAN_REACH: ModulePlan = { tam: 1, organic: 0.9, churn: 0.8, wave: 0.5, arpu: 0.5 }
+
 export type V2BotKind = 'coaster' | 'coasterModules' | 'idleAfterProfit' | 'greedyGood' | 'burner' | 'frugal'
 export const V2_BOT_KINDS: readonly V2BotKind[] = ['coaster', 'coasterModules', 'idleAfterProfit', 'greedyGood', 'burner', 'frugal']
 
@@ -106,10 +119,13 @@ export interface BotConfig {
    */
   policyPlan: readonly PolicyId[]
   /**
-   * W2b project modules: the bot's pick order (first buildable one wins, see modules()). Empty / missing = builds none,
-   * and the run is then bit-identical to one from before modules existed.
+   * Project modules (MV2d): a kind-weight plan. The bot builds the buildable offer with the best
+   * score = (w_kind × $equiv − upkeep) per $ of cost (see modules()); `$equiv` is the UI's own moduleEstimate. Empty /
+   * missing = builds none, and the run is then bit-identical to one from before modules existed.
    */
-  modules?: readonly ProjectModuleId[]
+  modules?: ModulePlan
+  /** MV2d: also fill free slots with the engine's suggestion when the till is thick (see modules()). */
+  fillSlots?: boolean
   /**
    * E2 effort management (default on for the good bots, never for careless / the coast probes): pace and leave by fatigue,
    * builders moved by load, a lead on a big project. See manage().
@@ -138,7 +154,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
     policyPlan: ['remote-first', 'quality-gate', 'profit-share'],
-    modules: ['paywall', 'onboarding', 'analytics', 'openApi', 'aiAssistant'],
+    modules: PLAN_MONEY, fillSlots: true,
   },
   // Aggressive hiring, ads, earliest rounds.
   vcRocket: {
@@ -148,7 +164,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'large', pitchStyle: 'fast', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
     policyPlan: ['hire-fast', 'crunch-culture', 'ads-first'],
-    modules: ['referral', 'analytics', 'freemium', 'localization', 'aiAssistant'],
+    modules: PLAN_GROWTH, fillSlots: true,
   },
   // One project, high price, small senior team, enterprise deals.
   niche: {
@@ -158,7 +174,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 3, useSalesCalls: true,
     weights: { cash: 1, users: 30, morale: 150, equity: 2e6, reputation: 400 },
     policyPlan: ['remote-first', 'profit-share', 'quality-gate'],
-    modules: ['feedback', 'openApi', 'onboarding', 'paywall'],
+    modules: PLAN_RETENTION, fillSlots: true,
   },
   // Many projects, eng/ops heavy.
   platform: {
@@ -168,7 +184,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'bold', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
     policyPlan: ['hire-fast', 'remote-first', 'ads-first'],
-    modules: ['feedback', 'referral', 'onboarding', 'openApi', 'localization'],
+    modules: PLAN_REACH, fillSlots: true,
   },
 }
 
@@ -182,10 +198,10 @@ export const BOTS: Record<Archetype, BotConfig> = {
  */
 export const V2_BOTS: Record<V2BotKind, BotConfig> = {
   // The coast probes keep the one-product plan: what they test is stopping, not a second line.
-  coaster: { ...BOTS.bootstrap, kind: 'coaster', extraCategories: [], afterProfit: 'coast', modules: [] },
+  coaster: { ...BOTS.bootstrap, kind: 'coaster', extraCategories: [], afterProfit: 'coast', modules: {} },
   // The anti-coast gate (W2b): the coaster that also fills every slot and refreshes stale modules once profitable.
   coasterModules: { ...BOTS.bootstrap, kind: 'coasterModules', extraCategories: [], afterProfit: 'coast' },
-  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', extraCategories: [], afterProfit: 'idle', modules: [] },
+  idleAfterProfit: { ...BOTS.bootstrap, kind: 'idleAfterProfit', extraCategories: [], afterProfit: 'idle', modules: {} },
   greedyGood: { ...BOTS.platform, kind: 'greedyGood', minRunwayToHire: 4, roundSize: 'large', adAggression: 0.6, minLtvCac: 2, prepareCrisis: false, loans: 'always', desk: 'halfPay' },
   burner: { ...BOTS.bootstrap, kind: 'burner', minRunwayToHire: 3, teamCap: ALL_CAP, adAggression: 0.6, minLtvCac: 1 },
   frugal: { ...BOTS.bootstrap, kind: 'frugal', minRunwayToHire: 9, adAggression: 0.1 },
@@ -320,6 +336,8 @@ export interface BotRun {
   moduleIds: Record<string, number>
   firstModule: string | null
   refreshes: number
+  /** MV2d: every project at the run's end (category, version, modules installed, slots open, installed tiers). */
+  projectsEnd: { category: string; version: number; modules: number; slots: number; tiers: number[]; ids: string[] }[]
   /** W3: ad focus changes (setAdFocus accepted). */
   focusChanges: number
   /** Full weeks that ran with a round going, and those that ended with no move left (modules share the weekly budget). */
@@ -944,32 +962,62 @@ function growth(c: Ctx, cfg: BotConfig): void {
 const REFRESH_BELOW = 0.7
 /** Months of runway left after a module's cash and upkeep. */
 const MODULE_RUNWAY = 6
+/** A slot with no plan pick is still filled (the engine's suggestion, else the cheapest offer) when this many months of runway remain after it. */
+const FILL_RUNWAY = 12
 
 /**
  * Project modules: one per day at most. A finished, live project with nothing building first refreshes an installed
- * module that went stale (< REFRESH_BELOW), else builds the first buildable one of cfg.modules (the engine's offer
- * check covers stage, category, exclusions, slots, cash, energy and moves). Not while preparing for a crisis, and not in a
+ * module that went stale (< REFRESH_BELOW), else builds the buildable offer with the best plan score (MV2d):
+ * score = (w × $equiv − upkeep) per $ of cost, where w is the plan's weight for the module's best gain kind and
+ * $equiv the UI's own moduleEstimate (gross monthly gain, plus a share of the wave). The engine's offer check covers
+ * tier, category, requires / excludes, slots, cash, energy and moves. Not while preparing for a crisis, and not in a
  * round week with one move left (the pitch needs it).
  */
 function modules(c: Ctx, cfg: BotConfig): void {
-  if (!cfg.modules?.length || preparing(c.s, cfg)) return
+  if (!cfg.modules || !Object.keys(cfg.modules).length || preparing(c.s, cfg)) return
   const m = c.s.derived.moves
   if (c.s.round?.active && m && m.left <= 1 && c.s.time.day - (c.mem.bored ?? -99) > 1) return
   for (const p of c.s.projects) {
     if (!p.launched || p.maturity < 1 || p.build) continue
     const offers = moduleLib.moduleOffers(c.s, p)
     const stale = offers.find((o) => o.refresh && o.error === null && moduleStrengthOf(c.s, p, o.id) < REFRESH_BELOW)
-    // MV2a bridge (until MV2d's kind-weight plans): the 65-module catalogue opens 3 slots per version, so a 4–5 id list
-    // runs out by Series A; boredom relief ("let modules() build now") then takes the engine's own suggestion.
+    // Boredom relief (the bot's "let modules() build now"): nobody has work and the plan finds nothing worth its cost, so
+    // the engine's own suggestion keeps the builders busy (a slot filled is better than a bored team).
     const relief = c.s.time.day - (c.mem.bored ?? -99) <= 1
     const suggested = relief ? moduleLib.suggestModule(c.s, p) : null
-    const pick =
-      stale ??
-      cfg.modules.map((id) => offers.find((o) => o.id === id && !o.refresh && o.error === null)).find((o) => o !== undefined) ??
-      (suggested ? offers.find((o) => o.id === suggested) : undefined)
+    const fill = (suggested ? offers.find((o) => o.id === suggested && !o.refresh && o.error === null) : undefined) ??
+      (cfg.fillSlots ? offers.filter((o) => !o.refresh && o.error === null).sort((a, b) => a.cost - b.cost)[0] : undefined)
+    const pick = stale ?? bestPlanOffer(c, cfg.modules, p, offers) ?? (fill && (relief || affordsWithRunway(c.s, fill.cost, moduleUpkeepOf(c.s, fill.id), FILL_RUNWAY)) ? fill : undefined)
     if (!pick || !affordsWithRunway(c.s, pick.cost, moduleUpkeepOf(c.s, pick.id), MODULE_RUNWAY)) continue
     if (c.act({ type: pick.refresh ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: pick.id })) return
   }
+}
+
+/** Share of a wave's users counted as monthly gain in the plan score (a wave is a one-off, not a monthly flow). */
+const PLAN_WAVE_SHARE = 0.3
+
+/** The affordable new offer with the best plan score per $ of cost; null when none scores above zero. */
+function bestPlanOffer(c: Ctx, plan: ModulePlan, p: GameState['projects'][number], offers: ReturnType<typeof moduleLib.moduleOffers>): ReturnType<typeof moduleLib.moduleOffers>[number] | null {
+  const s = c.s
+  const arpu = s.stats.users > 0 ? s.finance.mrr / s.stats.users : 0
+  let best: (typeof offers)[number] | null = null
+  let bestScore = 0
+  for (const o of offers) {
+    if (o.refresh || o.error !== null) continue
+    if (!affordsWithRunway(s, o.cost, moduleUpkeepOf(s, o.id), MODULE_RUNWAY)) continue
+    const def = moduleLib.moduleDef(o.id)
+    if (!def) continue
+    const w = Math.max(0, ...moduleLib.MODULE_KINDS.filter((k) => def.gains[k] !== undefined).map((k) => plan[k] ?? 0))
+    if (w <= 0) continue
+    const est = moduleLib.moduleEstimate(s, p, o.id, c.content)
+    const gross = est.net + est.upkeep + est.wave * arpu * PLAN_WAVE_SHARE
+    const score = (w * gross - est.upkeep) / Math.max(1, o.cost)
+    if (score > bestScore) {
+      bestScore = score
+      best = o
+    }
+  }
+  return best
 }
 
 /**
@@ -1392,7 +1440,7 @@ export function playBot(
       if (cfg.afterProfit === 'coast') {
         housekeeping(ctx, cfg, undefined, policy)
         modules(ctx, cfg)
-        if (cfg.modules?.length && Math.floor(s.time.day) % 7 === 0) adFocus(ctx)
+        if (cfg.modules && Object.keys(cfg.modules).length && Math.floor(s.time.day) % 7 === 0) adFocus(ctx)
         if (s.unlockedTools.includes('adBudget') && s.time.day - profitDay >= COAST_AD_EVERY_DAYS * (coastBumps + 1)) {
           coastBumps++
           ctx.act({ type: 'setAdBudget', amount: Math.max(COAST_AD_FLOOR, Math.round(s.finance.adBudget * 2)) })
@@ -1621,6 +1669,14 @@ export function playBot(
     moduleIds,
     firstModule,
     refreshes,
+    projectsEnd: s.projects.filter((p) => p.launched).map((p) => ({
+      category: p.category,
+      version: moduleLib.projectVersion(p),
+      modules: p.modules?.length ?? 0,
+      slots: moduleLib.projectSlots(s, p).total,
+      tiers: (p.modules ?? []).map((x) => moduleLib.moduleDef(x.id)?.tier ?? 0),
+      ids: (p.modules ?? []).map((x) => x.id),
+    })),
     focusChanges,
     roundWeeks,
     roundWeeksDry,

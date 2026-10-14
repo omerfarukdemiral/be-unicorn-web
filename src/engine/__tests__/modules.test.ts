@@ -1,5 +1,5 @@
 // Project modules (W2a): no-module invariance, caps, slots, build → delivery, staleness, upkeep, actions, fuzz.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as B from '../balance'
 import * as E from '../economy'
 import { averageLaunchedMaturity, computeOutputs, maturityRates, recomputeDerived } from '../derive'
@@ -12,6 +12,13 @@ import { PROJECT_MODULE_IDS, type Action, type GameState, type ModuleEffectKind,
 import { clone, modifierMult, policyMult } from '../util'
 import { deserialize, serialize } from '../save'
 import { api, build, company, content, current, legacy, withModules } from './moduleFixtures'
+
+// MV2d tuned the module caps and the module wave tighter (see balance.ts); these tests check the formulas (boost,
+// synergy, staleness, mix), so they run on the wide MV2a caps. The real caps have their own test (modulesCaps.test.ts).
+vi.mock('../balance', async (orig) => ({
+  ...(await orig<typeof import('../balance')>()),
+  MODULE_MULT_CAP: { churn: 0.72, arpu: 1.3, organic: 1.45, cac: 0.8, tam: 1.4, wave: 1.8, updateWork: 0.7, talk: 2, infra: 0.75 },
+}))
 
 describe('no modules, equal shares: the economy is bit for bit the old one', () => {
   const sets: ProjectCategory[][] = [['mobile'], ['web', 'game'], ['ai', 'api', 'marketplace']]

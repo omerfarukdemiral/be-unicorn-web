@@ -7,7 +7,8 @@ import { writeFileSync } from 'node:fs'
 import { cpus } from 'node:os'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, POLICY_IDS, SECONDS_PER_DAY, balance } from '../src/engine/index'
-import { CRISIS_WINDOW_DAYS, DAYS_10_MIN, DEATH_TRACE_DAYS, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type V2BotKind } from './bots'
+import { MODULES, moduleDef } from '../src/engine/modules'
+import { PLAN_GROWTH, PLAN_MONEY, PLAN_REACH, PLAN_RETENTION, CRISIS_WINDOW_DAYS, DAYS_10_MIN, DEATH_TRACE_DAYS, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type ModulePlan, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
 function arg(name: string, fallback: string): string
@@ -107,6 +108,9 @@ const t0 = Date.now()
  * (idle / random / policy / size / timing) reuse the archetype runs.
  */
 const QUICK = arg('quick', 0) > 0
+/** MV2d: the four kind-weight module plans, and the six categories of the tour (bots never open `game` on their own). */
+const PLANS: [string, ModulePlan][] = [['para (bootstrap)', PLAN_MONEY], ['büyüme (vcRocket)', PLAN_GROWTH], ['tutundurma (niche)', PLAN_RETENTION], ['erişim (platform)', PLAN_REACH]]
+const TOUR_CATEGORIES = ['web', 'mobile', 'api', 'marketplace', 'ai', 'game'] as const
 const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
 {
   const sp = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}, content: RunSpec['content'] = 'full'): RunSpec => ({ kind, policy, overrides, content })
@@ -118,8 +122,11 @@ const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
     sp('bootstrap', 'best', { prepareCrisis: false }),
     sp('vcRocket', 'best', { prepareCrisis: false }),
     ...ARCHETYPES.map((a) => sp(a, 'best', {}, 'calm')),
-    ...ARCHETYPES.map((a) => sp(a, 'best', { modules: [] })),
-    sp('careless', 'best', { modules: [] }),
+    ...ARCHETYPES.map((a) => sp(a, 'best', { modules: {} })),
+    sp('careless', 'best', { modules: {} }),
+    // MV2d: plan freedom (the bootstrap seeds with each of the four module plans) and the category tour.
+    ...PLANS.map(([, plan]) => sp('bootstrap', 'best', { modules: plan })),
+    ...TOUR_CATEGORIES.map((c) => sp('bootstrap', 'best', { firstCategory: c, extraCategories: [] })),
     // E2: the same bots without effort management (the stage-arrival baseline of the acceptance band).
     ...ARCHETYPES.map((a) => sp(a, 'best', NO_EFFORT)),
   ]
@@ -168,7 +175,7 @@ const eagerRuns = EAGER_ARCHS.map((a) => [a, extra(a, 'best', { roundEagerness: 
 
 /** W2b before/after: the same bots and seeds with no module list (the run from before modules existed). */
 const noEffort = new Map<BotKind, BotRun[]>(ARCHETYPES.map((k) => [k, runMany(k, 'best', NO_EFFORT)]))
-const noModules = new Map<BotKind, BotRun[]>([...ARCHETYPES, 'careless' as const].map((k) => [k, runMany(k, 'best', { modules: [] })]))
+const noModules = new Map<BotKind, BotRun[]>([...ARCHETYPES, 'careless' as const].map((k) => [k, runMany(k, 'best', { modules: {} })]))
 
 const md: string[] = []
 const line = (s = '') => md.push(s)
@@ -408,6 +415,70 @@ line()
   const coasterM = v2Runs.get('coasterModules')!
   const mom = coasterM.map((r) => r.stageDays.reduce<number>((a, d, i) => (d != null ? i : a), 0))
   line(`Anti-coast: coasterModules Unicorn ${uniCount(coasterM)}/${SEEDS} (hedef 0) · ulaştığı en yüksek aşama: ${STAGES[Math.max(...mom)]} · kurulan modül (medyan) ${median(coasterM.map((r) => sumOf(r.modulesBuilt))) ?? 0}`)
+}
+line()
+
+line('## Modüller v2 (MV2d)')
+line()
+line('Botlar sabit liste yerine tür-ağırlık planıyla kurar: skor = (ağırlık × $karşılık − kira) / maliyet, $karşılık arayüzdeki `moduleEstimate`. Koşu sonu, proje başına.')
+line()
+line('| Bot | Sürüm (medyan / en yüksek) | Kurulu modül (medyan) | Açık slot (medyan) | Dolu / açık slot | Tier dağılımı T1·T2·T3·T4·T5 |')
+line('|---|---|---|---|---|---|')
+for (const [name, runs] of moduleRows) {
+  const ps = runs.flatMap((r) => r.projectsEnd)
+  const tiers = [1, 2, 3, 4, 5].map((t) => ps.reduce((a, p) => a + p.tiers.filter((x) => x === t).length, 0))
+  const used = sumOf(ps.map((p) => p.modules))
+  const open = sumOf(ps.map((p) => p.slots))
+  line(`| ${name} | ${median(ps.map((p) => p.version)) ?? 0} / ${Math.max(0, ...ps.map((p) => p.version))} | ${median(ps.map((p) => p.modules)) ?? 0} | ${median(ps.map((p) => p.slots)) ?? 0} | ${used} / ${open} | ${tiers.join(' · ')} |`)
+}
+line()
+{
+  line('Baskınlık (bilgi): bir kategorinin koşularının > %90’ında kurulan modül (T1 çekirdek hariç). Botlar boş slotu doldurur (15 slot, kategori başına 22 modül), bu yüzden listedekiler baskın değil, ucuz ve her yerde faydalı olanlardır; oyuncu seçer, bot doldurur.')
+  line()
+  const all = [...byArch.values()].flat()
+  const byCat = new Map<string, BotRun[]>()
+  for (const r of all) for (const cat of new Set(r.projectsEnd.map((p) => p.category))) byCat.set(cat, [...(byCat.get(cat) ?? []), r])
+  const dominant: string[] = []
+  for (const [cat, runs] of byCat) {
+    const count = new Map<string, number>()
+    for (const r of runs) for (const id of new Set(r.projectsEnd.filter((p) => p.category === cat).flatMap((p) => p.ids))) count.set(id, (count.get(id) ?? 0) + 1)
+    for (const [id, n] of count) {
+      const def = moduleDef(id)
+      if (n / runs.length > 0.9 && def && def.tier > 1) dominant.push(`${cat}/${id} ${pct(n, runs.length)}`)
+    }
+  }
+  line(`Baskın modül: ${dominant.length ? dominant.join(', ') : 'yok'}`)
+  line()
+  line('Plan özgürlüğü (bootstrap seed’leri, dört plan; Unicorn medyanı 15 % içinde olmalı):')
+  line()
+  line('| Plan | Unicorn | Medyan | İflas |')
+  line('|---|---|---|---|')
+  const planMeds: number[] = []
+  for (const [name, plan] of PLANS) {
+    const runs = runMany('bootstrap', 'best', { modules: plan })
+    const med = uniOf(runs)
+    if (med !== null) planMeds.push(med)
+    line(`| ${name} | ${uniCount(runs)}/${SEEDS} | ${fmtMin(med)} | ${runs.filter(failedRun).length} |`)
+  }
+  const spread = planMeds.length ? Math.max(...planMeds) / Math.min(...planMeds) : 0
+  line()
+  line(`Plan farkı (en yavaş / en hızlı medyan): ${spread.toFixed(2)}× (hedef ≤ 1.15×): **${spread > 0 && spread <= 1.15 ? 'EVET' : 'HAYIR'}**`)
+  line()
+  line('Kategori turu (bootstrap planı, tek kategori, sınır: 12+ seed): Unicorn · en sık 5 modül')
+  line()
+  line('| Kategori | Unicorn | Medyan | İflas | En sık 5 modül |')
+  line('|---|---|---|---|---|')
+  const seen = new Set<string>()
+  for (const cat of TOUR_CATEGORIES) {
+    const runs = runMany('bootstrap', 'best', { firstCategory: cat, extraCategories: [] })
+    const ids = runs.reduce<Record<string, number>>((acc, r) => (Object.entries(r.moduleIds).forEach(([k, v]) => (acc[k] = (acc[k] ?? 0) + v)), acc), {})
+    Object.keys(ids).forEach((k) => seen.add(k))
+    line(`| ${cat} | ${uniCount(runs)}/${SEEDS} | ${fmtMin(uniOf(runs))} | ${runs.filter(failedRun).length} | ${Object.entries(ids).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} |`)
+  }
+  for (const r of all) Object.keys(r.moduleIds).forEach((k) => seen.add(k))
+  const unseen = MODULES.filter((d) => !seen.has(d.id)).map((d) => d.id)
+  line()
+  line(`Kapsam: ${seen.size}/${MODULES.length} modül en az bir koşuda kuruldu${unseen.length ? `; kurulmayan: ${unseen.join(', ')}` : ''}.`)
 }
 line()
 

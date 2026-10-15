@@ -194,7 +194,7 @@ export function DecisionBubble() {
         ) : (
           <button type="button" onClick={() => setExpanded(true)} className="flex min-h-11 w-full items-center gap-2 text-left">
             <IconBadge icon={card.category === 'crisis' ? 'warning' : 'chat'} size={28} color={card.category === 'crisis' ? 'var(--color-negative)' : 'var(--color-kind-decision)'} />
-            <span className="font-text min-w-0 flex-1 truncate text-sm font-semibold text-ink">{cardQuestion(card, stage)}</span>
+            <span className="font-text line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-ink">{cardQuestion(card, stage)}</span>
             <Icon name="chevronDown" size={16} className="shrink-0 text-ink-2" />
           </button>
         )}

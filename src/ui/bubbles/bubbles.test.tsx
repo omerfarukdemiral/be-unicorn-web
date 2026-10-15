@@ -276,6 +276,11 @@ describe('module question at the desk (W2c)', () => {
     openBubble(key)
     const out = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
     expect(out).toContain(MODULE_TEXT[ask.moduleId].line)
+    // C1: the open header carries the whole question and wraps instead of cutting it with an ellipsis.
+    const header = out.match(/<span data-speaker-text="" class="([^"]*)">([\s\S]*?)<\/span><\/span>/)
+    expect(header).not.toBeNull()
+    expect(header![1]).not.toMatch(/truncate|line-clamp|nowrap/)
+    expect(header![2]).toContain(`${st.projects[0]!.name} için sıradaki modül: ${name}?`)
     expect(out).toContain('>Ekle<')
     expect(out).toContain('Diğerleri')
     // gain + (minus or upkeep) + cost: three chips at most, one move on the button.

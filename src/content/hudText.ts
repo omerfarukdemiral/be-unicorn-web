@@ -232,7 +232,7 @@ export const HUD_TEXT: Record<string, string> = {
   'renew.hold': 'Zam iste',
   'renew.discount': 'İndirim ver',
   'renew.chance': 'Şans {p}',
-  'renew.fail': 'Kayıp {p}',
+  'renew.fail': 'Churn {p}',
   'renew.days': '{d}g',
 
   // Loan offer on a decision card (§6.2): amount, rate, term, covenant as numbers

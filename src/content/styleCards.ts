@@ -124,7 +124,7 @@ export const STYLE_CARDS: readonly DecisionCard[] = [
     options: [
       {
         label: 'Bir zam daha',
-        tradeoff: { gain: 'Kullanıcı başı gelir', cost: 'Kayıp artar' },
+        tradeoff: { gain: 'Kullanıcı başı gelir', cost: 'Churn artar' },
         effects: { modifiers: [mod('arpu', 1.1, 60), mod('churn', 1.2, 30)] },
         reflection: 'Kullanıcı başı gelir artar, churn da artar.',
         conceptId: 'pricing',

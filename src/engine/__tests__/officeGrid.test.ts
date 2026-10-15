@@ -113,9 +113,11 @@ describe('validateLayout', () => {
 
   it('type and decor caps', () => {
     const o = buildOffice(0, 1)
-    const decor = Array.from({ length: 7 }, (_, i) => ({ ...panel(`p${i}`, 0, 0, 'poster') }))
-    expect(validateLayout({ ...o, walls: decor.map((p, i) => ({ wall: 'back' as const, seg: i, kind: p.kind })) }).reason).toBe('decorCap')
-    expect(validateLayout({ ...o, walls: decor.map((_, i) => ({ wall: 'back' as const, seg: i, kind: 'paint' })) }).ok).toBe(true)
+    // Garage: 3 back + 3 left segments and a cap of 6; paint is free of the cap.
+    const walls = (['back', 'left'] as const).flatMap((wall) => [-1, 0, 1].map((seg) => ({ wall, seg, kind: 'poster' })))
+    expect(validateLayout({ ...o, walls }).ok).toBe(true)
+    expect(validateLayout({ ...o, walls, decor: [panel('l', 1, 1, 'lamp')] }).reason).toBe('decorCap')
+    expect(validateLayout({ ...o, walls: [...walls, { wall: 'back', seg: 0, kind: 'paint', color: '#fff' }, { wall: 'left', seg: 0, kind: 'paint', color: '#fff' }] }).ok).toBe(true)
     const desks = { ...o, slots: [...o.slots.map((s) => (s.ring === 1 ? { ...s, itemId: 'desk-basic' } : s)), { id: 'f1', ring: 1, type: 'desk' as const, pos: { x: -1, z: 1 }, rotation: 0 as const, itemId: 'desk-basic', free: true as const }] }
     expect(validateLayout(desks).reason).toBe('typeCap')
   })
@@ -278,8 +280,8 @@ describe('moves and layouts (actions)', () => {
     expect(r.state.office.decor).toEqual([panel('d1', -3, 0, 'plantRow')])
     expect(r.state.office.storage).toEqual([])
     expect(r.state.stats.cash).toBe(s.stats.cash)
-    // Decor that is neither placed nor stored is a purchase: none yet (step 4), so refused.
-    expect(applyAction(s, { type: 'applyLayout', draft: { slots: {}, decor: [panel('d1', -3, 0, 'glass')] } }).error).toBe('invalid')
+    // Decor that is neither placed nor stored is a purchase: a piece the stage does not sell yet is refused.
+    expect(applyAction(s, { type: 'applyLayout', draft: { slots: {}, decor: [panel('d1', -3, 0, 'glass')] } }).error).toBe('notUnlocked')
     const bad = applyAction(s, { type: 'applyLayout', draft: { slots: { 'r1-s0': { x: 2, z: -3, r: 0 }, 'r1-s1': { x: 3, z: -2, r: 0 } }, decor: [] } })
     expect(bad).toMatchObject({ ok: false, error: 'blocksDoor' })
     expect(bad.state).toBe(s)
@@ -293,16 +295,19 @@ describe('moves and layouts (actions)', () => {
 })
 
 describe('stage move carry-over', () => {
-  it('carries free desks and separators; floor decor and wall pieces to storage, paint stays behind', () => {
+  it('carries free desks and separators; floor decor, wall pieces and paint jobs to storage', () => {
     const o = buildOffice(1, 2)
     o.slots.push({ id: 'f1', ring: 2, type: 'desk', pos: { x: -3, z: -2 }, rotation: 3, itemId: 'desk-basic', free: true, occupantId: 'e1', team: 'eng' })
     o.decor = [panel('a', -2, 2, 'plantRow'), panel('b', 2, 2, 'lamp')]
     o.walls = [{ wall: 'back', seg: 1, kind: 'poster' }, { wall: 'left', seg: 0, kind: 'paint', color: '#fff' }]
     const n = relocateOffice(o, 2)
     expect(n.slots.find((x) => x.id === 'f1')).toMatchObject({ pos: { x: -3, z: -2 }, occupantId: 'e1', team: 'eng' })
-    expect(n.decor).toEqual([panel('a', -2, 2, 'plantRow')])
-    expect(n.walls).toEqual([])
-    expect(n.storage).toEqual(expect.arrayContaining([{ kind: 'lamp', n: 1 }, { kind: 'poster', n: 1 }]))
+    // The plant row carries; the Seed office's starter pieces go up (the stored poster is used for its own).
+    expect(n.decor![0]).toEqual(panel('a', -2, 2, 'plantRow'))
+    expect(n.decor!.slice(1).map((p) => p.kind)).toEqual(['plantPot', 'plantPot', 'plantPot'])
+    expect(n.walls!.map((w) => w.kind).sort()).toEqual(['banner', 'clock', 'plaque', 'poster', 'print', 'print', 'print'])
+    expect(n.storage).toEqual(expect.arrayContaining([{ kind: 'lamp', n: 1 }, { kind: 'paint', n: 1 }]))
+    expect(n.storage!.find((x) => x.kind === 'poster')).toBeUndefined()
     expect(validateLayout(n).ok).toBe(true)
   })
 

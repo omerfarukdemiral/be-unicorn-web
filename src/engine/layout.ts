@@ -4,8 +4,9 @@
 // world geometry the fixtures need (CELL, the founder cross-aisle) is mirrored below and pinned by a test.
 import * as B from './balance'
 import { buildRingSlots, chebyshev, findPartnerSlot, isRingUnlocked, orphansOf, ringDistance, stageRingCount, type PlacementSpec } from './office'
-import { FOUNDER_SLOT_ID, type ActionErrorCode, type DecorKind, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type StageIndex, type StoredPiece } from './types'
+import { FOUNDER_SLOT_ID, type ActionErrorCode, type DecorKind, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type StageIndex, type StoredPiece, type WallPiece } from './types'
 import { clone } from './util'
+import { PAINT_KIND, PAINT_PRICE, decorDef } from '../content/decor'
 
 export type Rotation = 0 | 1 | 2 | 3
 export type CellKey = string
@@ -147,7 +148,7 @@ export function stageFixtures(stage: StageIndex): Fixtures {
 // Pieces
 // ---------------------------------------------------------------------------
 
-/** Footprint of a cosmetic piece. The catalogue (looks, prices, stage gates) lands with content/decor.ts. */
+/** Footprint of a cosmetic piece (content/decor.ts). Unknown kinds are a blocking 1×1. */
 export interface DecorShape {
   /** Cells along the right axis × along the front axis. */
   w: 1 | 2
@@ -158,12 +159,28 @@ export interface DecorShape {
   separator: boolean
 }
 
-const SEPARATORS: ReadonlySet<DecorKind> = new Set(['panel', 'plantRow', 'glass', 'slats', 'marblePlanter'])
-
 export function decorShape(kind: DecorKind): DecorShape {
-  if (kind === 'rug') return { w: 2, d: 2, blocking: false, separator: false }
-  return { w: 1, d: 1, blocking: true, separator: SEPARATORS.has(kind) }
+  const d = decorDef(kind)
+  if (!d || d.group === 'wall') return { w: 1, d: 1, blocking: true, separator: false }
+  return { w: d.w, d: d.d, blocking: d.blocking, separator: d.group === 'separator' }
 }
+
+export const isWallKind = (kind: string): boolean => kind === PAINT_KIND || decorDef(kind)?.group === 'wall'
+
+/**
+ * Wall segments a piece may hang on: one per cell column along the back (−z) wall and per cell row along the left
+ * (−x) wall. None on the campus (no walls) and none on the Series C glass back wall.
+ */
+export function wallSegments(stage: StageIndex, wall: WallPiece['wall']): number[] {
+  if (stage === 6 || (stage === 5 && wall === 'back')) return []
+  const h = gridHalf(stage)
+  const out: number[] = []
+  for (let v = -h; v <= h; v++) out.push(v)
+  return out
+}
+
+/** A wall can take paint: it stands and it is not glass. */
+export const paintable = (stage: StageIndex, wall: WallPiece['wall']): boolean => wallSegments(stage, wall).length > 0
 
 export function decorCells(p: Pick<DecorPiece, 'kind' | 'pos' | 'rotation'>): GridPos[] {
   const { w, d } = decorShape(p.kind)
@@ -176,7 +193,7 @@ export function decorCells(p: Pick<DecorPiece, 'kind' | 'pos' | 'rotation'>): Gr
 
 /** Pieces that count against the decor cap: floor decor and wall pieces (paint is free). */
 export function decorCount(office: OfficeState): number {
-  return (office.decor?.length ?? 0) + (office.walls ?? []).filter((w) => w.kind !== 'paint').length
+  return (office.decor?.length ?? 0) + (office.walls ?? []).filter((w) => w.kind !== PAINT_KIND).length
 }
 
 export function decorCap(stage: StageIndex): number {
@@ -357,6 +374,13 @@ export function validateLayout(office: OfficeState): LayoutCheck {
       if (blocking) seen.set(k, 'item')
       else if (other === undefined) seen.set(k, 'rug')
     }
+  }
+  const hung = new Set<string>()
+  for (const w of office.walls ?? []) {
+    const k = w.kind === PAINT_KIND ? `${w.wall}|paint` : `${w.wall}|${w.seg}`
+    if (w.kind === PAINT_KIND ? !paintable(stage, w.wall) : !wallSegments(stage, w.wall).includes(w.seg)) return fail('outside', [])
+    if (hung.has(k)) return fail('overlap', [])
+    hung.add(k)
   }
   const caps = typeCaps(office)
   const use = typeUse(office)
@@ -720,14 +744,11 @@ export function carryOffice(old: OfficeState, next: OfficeState): void {
     next.decor.push({ ...p, pos: { ...p.pos } })
     if (!decorShape(p.kind).separator) toStore.push(p.id)
   }
-  for (const w of old.walls ?? []) {
-    if (w.kind === 'paint') continue
-    const row = next.storage.find((x) => x.kind === w.kind)
-    if (row) row.n++
-    else next.storage.push({ kind: w.kind, n: 1 })
-  }
+  // Walls stay with the old building: paintings go to storage, a painted wall leaves one free paint job behind.
+  for (const w of old.walls ?? []) addStored(next.storage, w.kind)
   storeDecor(next, toStore)
   repairFixtures(next)
+  placeStarterDecor(next)
 }
 
 /** Re-places items and separators that sit on a fixture cell (mutates). Separators that find no cell go to storage. */
@@ -805,34 +826,120 @@ export function dropEmptyFreeSlots(office: OfficeState): void {
   office.slots = office.slots.filter((s) => !(s.free && s.itemId === undefined))
 }
 
-function addStored(storage: StoredPiece[], kind: string): void {
+function addStored(storage: StoredPiece[], kind: string, n = 1): void {
+  if (n <= 0) return
   const row = storage.find((x) => x.kind === kind)
-  if (row) row.n++
-  else storage.push({ kind, n: 1 })
+  if (row) row.n += n
+  else storage.push({ kind, n })
+}
+
+/** Takes one `kind` out of storage (mutates); false when there is none. */
+function takeStored(storage: StoredPiece[], kind: string): boolean {
+  const row = storage.find((x) => x.kind === kind && x.n > 0)
+  if (!row) return false
+  row.n--
+  return true
+}
+
+/** Smallest unused decor id over the given piece lists: d1, d2, … */
+export function nextDecorId(...lists: readonly (readonly { id: string }[] | undefined)[]): string {
+  const ids = new Set(lists.flatMap((l) => (l ?? []).map((p) => p.id)))
+  let n = 1
+  while (ids.has(`d${n}`)) n++
+  return `d${n}`
+}
+
+// ---------------------------------------------------------------------------
+// Starter decor: today's fixed cosmetic stage decor (coworking corner plants and banner, the Seed office's prints,
+// clock and plaque) as real pieces, free, counted in the cap, removable to storage. Placed when the stage's office
+// is entered (and by the v4 → v5 migration); a piece already in storage is used before a new one is given.
+// ---------------------------------------------------------------------------
+
+export interface StarterPlan {
+  floor: Omit<DecorPiece, 'id'>[]
+  walls: WallPiece[]
+}
+
+export function starterPlan(office: OfficeState): StarterPlan {
+  const stage = office.stage
+  if (stage !== 1 && stage !== 2) return { floor: [], walls: [] }
+  const open = Math.max(1, ...office.rings.filter((r) => r.unlocked).map((r) => r.index))
+  const d = ringDistance(open)
+  const h = gridHalf(stage)
+  // Three plants in the corners of the open floor (the coworking corner plants), clear of the door's corner.
+  const floor: StarterPlan['floor'] = [
+    { kind: 'plantPot', pos: { x: -d, z: d }, rotation: 0 },
+    { kind: 'plantPot', pos: { x: -d, z: -d }, rotation: 0 },
+    { kind: 'plantPot', pos: { x: d, z: d }, rotation: 0 },
+  ]
+  const walls: WallPiece[] = [
+    { wall: 'back', seg: -h, kind: 'banner' },
+    { wall: 'left', seg: 1, kind: 'poster' },
+  ]
+  if (stage === 2) {
+    const door = stageFixtures(stage).door.x
+    for (const seg of [-h + 2, -h + 4, door - 2]) if (seg > -h && seg < door) walls.push({ wall: 'back', seg, kind: 'print' })
+    walls.push({ wall: 'back', seg: door, kind: 'clock' })
+    walls.push({ wall: 'back', seg: door < h ? door + 1 : door - 1, kind: 'plaque' })
+  }
+  const seen = new Set<string>()
+  return { floor, walls: walls.filter((w) => (seen.has(`${w.wall}|${w.seg}`) ? false : (seen.add(`${w.wall}|${w.seg}`), true))) }
+}
+
+/**
+ * Puts the stage's starter decor up (mutates): each piece from storage when there is one, else new and free. A piece
+ * that does not fit (cell taken, the layout would break, the cap) waits in storage. `force` skips the whole-office
+ * check (render mock offices, which are not real layouts).
+ */
+export function placeStarterDecor(office: OfficeState, { force = false }: { force?: boolean } = {}): void {
+  const plan = starterPlan(office)
+  if (!plan.floor.length && !plan.walls.length) return
+  office.decor ??= []
+  office.walls ??= []
+  const storage = (office.storage ??= [])
+  const fits = (): boolean => (force ? decorCount(office) <= decorCap(office.stage) : validateLayout(office).ok)
+  for (const f of plan.floor) {
+    takeStored(storage, f.kind)
+    const piece: DecorPiece = { id: nextDecorId(office.decor), kind: f.kind, pos: { ...f.pos }, rotation: f.rotation }
+    const covered = coveredCells(office)
+    const free = decorCells(piece).every((c) => !covered.has(cellKey(c.x, c.z)) && isRingUnlocked(office, ringOfCell(c)))
+    office.decor.push(piece)
+    if (free && fits()) continue
+    office.decor.pop()
+    addStored(storage, f.kind)
+  }
+  for (const w of plan.walls) {
+    takeStored(storage, w.kind)
+    office.walls.push({ ...w })
+    if (fits()) continue
+    office.walls.pop()
+    addStored(storage, w.kind)
+  }
+  office.storage = storage.filter((x) => x.n > 0)
 }
 
 /**
  * The office with `snap` applied, or the refusal. Listed anchors move to their cell and rotation (onto the canonical
  * slot of that cell when it fits, else onto new free slots); seat and team label travel with the desk. Decor comes
- * from the placed pieces or from storage; a piece left out goes to storage. Buying new decor comes with its
- * catalogue (step 4), so a piece from nowhere is 'invalid'. Validated as a whole (validateLayout).
+ * from the placed pieces, from storage or is bought (decorBill: `cost`, charged by applyLayout); a piece left out
+ * goes to storage. Validated as a whole (validateLayout).
  */
-export function applySnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState } | { error: ActionErrorCode } {
+export function applySnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; cost: number } | { error: ActionErrorCode } {
   const p = previewSnapshot(office, snap)
   if ('error' in p) return p
-  return p.check.ok ? { office: p.office } : { error: refusalError(p.check.reason!) }
+  return p.check.ok ? { office: p.office, cost: p.cost } : { error: refusalError(p.check.reason!) }
 }
 
 /**
  * `snap` applied without the verdict, plus its validity check: the edit mode's hover and drop read the refusal and
  * its cells (applySnapshot only keeps the action error). `error` is a malformed snapshot (unknown anchor, bad cell).
  */
-export function previewSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; check: LayoutCheck } | { error: ActionErrorCode } {
+export function previewSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; check: LayoutCheck; cost: number } | { error: ActionErrorCode } {
   const built = buildSnapshot(office, snap)
-  return 'error' in built ? built : { office: built.office, check: validateLayout(built.office) }
+  return 'error' in built ? built : { office: built.office, check: validateLayout(built.office), cost: built.cost }
 }
 
-function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState } | { error: ActionErrorCode } {
+function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; cost: number } | { error: ActionErrorCode } {
   const next = clone(office)
   const pieces = new Map(itemPieces(next).map((p) => [p.anchor.id, p]))
   const moving: { cp: LayoutSnapshot['slots'][string]; itemId: string; occupantId?: string; team?: Dept; spec: PlacementSpec }[] = []
@@ -862,33 +969,64 @@ function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: Off
     if (m.occupantId !== undefined) anchor.occupantId = m.occupantId
     if (m.team !== undefined) anchor.team = m.team
   }
-  // Decor: placed pieces by id, the rest drawn from storage; whatever is left out goes back to storage.
-  const storage = (next.storage ??= [])
-  const placed = new Map((office.decor ?? []).map((p) => [p.id, p]))
-  const take = (kind: string): boolean => {
-    const row = storage.find((x) => x.kind === kind && x.n > 0)
-    if (!row) return false
-    row.n--
-    return true
-  }
-  for (const p of snap.decor) {
-    if (placed.get(p.id)?.kind === p.kind) placed.delete(p.id)
-    else if (!take(p.kind)) return { error: 'invalid' }
-  }
-  for (const p of placed.values()) addStored(storage, p.kind)
+  const bill = decorBill(office, snap)
+  if ('error' in bill) return bill
   next.decor = snap.decor.map((p) => ({ id: p.id, kind: p.kind, pos: { x: p.pos.x, z: p.pos.z }, rotation: p.rotation }))
+  if (snap.walls) next.walls = snap.walls.map((w) => ({ ...w }))
+  next.storage = bill.storage
+  return { office: next, cost: bill.cost }
+}
+
+/** What a draft's decor costs: pieces bought per kind, paint jobs bought, the cash, and storage afterwards. */
+export interface DecorBill {
+  cost: number
+  bought: Record<string, number>
+  storage: StoredPiece[]
+}
+
+/**
+ * Prices the decor and walls of `snap` against the live office. A piece kept (same id and kind, or the same wall
+ * piece) is free; a new piece is taken from storage first, then bought. Pieces left out go to storage. Paint is a
+ * job, not a thing: a newly painted wall uses a stored paint job (from a stage move) or costs PAINT_PRICE, and
+ * painting over or clearing a wall gives nothing back. Buying a piece the stage does not sell yet is 'notUnlocked'.
+ */
+export function decorBill(office: OfficeState, snap: Pick<LayoutSnapshot, 'decor' | 'walls'>): DecorBill | { error: ActionErrorCode } {
+  const stock = new Map<string, number>()
+  for (const x of office.storage ?? []) stock.set(x.kind, (stock.get(x.kind) ?? 0) + x.n)
+  const need = new Map<string, number>()
+  const add = (m: Map<string, number>, k: string, n = 1) => m.set(k, (m.get(k) ?? 0) + n)
+  const live = new Map((office.decor ?? []).map((p) => [p.id, p]))
+  for (const p of snap.decor) {
+    if (!decorDef(p.kind) || isWallKind(p.kind)) return { error: 'invalid' }
+    if (live.get(p.id)?.kind === p.kind) live.delete(p.id)
+    else add(need, p.kind)
+  }
+  for (const p of live.values()) add(stock, p.kind)
   if (snap.walls) {
-    const key = (w: { wall: string; seg: number; kind: string; color?: string }) => `${w.wall}|${w.seg}|${w.kind}|${w.color ?? ''}`
+    const key = (w: WallPiece) => `${w.wall}|${w.seg}|${w.kind}|${w.color ?? ''}`
     const hung = new Map((office.walls ?? []).map((w) => [key(w), w]))
     for (const w of snap.walls) {
+      if (!isWallKind(w.kind) || (w.kind === PAINT_KIND && typeof w.color !== 'string')) return { error: 'invalid' }
       if (hung.delete(key(w))) continue
-      if (w.kind === 'paint' || !take(w.kind)) return { error: 'invalid' }
+      add(need, w.kind)
     }
-    for (const w of hung.values()) if (w.kind !== 'paint') addStored(storage, w.kind)
-    next.walls = snap.walls.map((w) => ({ ...w }))
+    for (const w of hung.values()) if (w.kind !== PAINT_KIND) add(stock, w.kind)
   }
-  next.storage = storage.filter((x) => x.n > 0)
-  return { office: next }
+  let cost = 0
+  const bought: Record<string, number> = {}
+  for (const [kind, n] of need) {
+    const have = stock.get(kind) ?? 0
+    const buy = Math.max(0, n - have)
+    stock.set(kind, Math.max(0, have - n))
+    if (!buy) continue
+    const def = decorDef(kind)
+    if (def && def.stage > office.stage) return { error: 'notUnlocked' }
+    bought[kind] = buy
+    cost += buy * (kind === PAINT_KIND ? PAINT_PRICE : def!.price)
+  }
+  const storage: StoredPiece[] = []
+  for (const [kind, n] of stock) if (n > 0) storage.push({ kind, n })
+  return { cost, bought, storage }
 }
 
 export type { PlacementSpec }

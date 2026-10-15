@@ -5,6 +5,7 @@ import { newLoan } from './effects'
 import { peopleView } from './effort'
 import { FURNITURE } from '../content/furniture'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, DEPTS, FOUNDER_SLOT_ID, SAVE_VERSION, type Dept, type GameState, type OfficeState, type PartialReceipt, type ToolId } from './types'
+import { placeStarterDecor } from './layout'
 import { castOf, defaultMarket, ensureRivals, marketTools, newBoard } from './world'
 import { uniquePush } from './util'
 
@@ -91,7 +92,7 @@ const MIGRATIONS: Record<number, Migration> = {
     return st
   },
   // v4 → v5 (free office grid, grid design §2): desks take a team label (their occupant's dept, else a dept desk's
-  // dept); no decor, walls, storage or saved layouts yet. Cells and rotations are untouched, so the office looks the same.
+  // dept); the stage's starter decor goes up, no storage or saved layouts yet. Cells and rotations are untouched, so the office looks the same.
   4: (st) => {
     const office = st.office as Partial<OfficeState> | undefined
     if (!office || !Array.isArray(office.slots)) return st
@@ -105,6 +106,8 @@ const MIGRATIONS: Record<number, Migration> = {
     if (!Array.isArray(office.walls)) office.walls = []
     if (!Array.isArray(office.storage)) office.storage = []
     if (!Array.isArray(office.saved)) office.saved = []
+    // Today's fixed coworking / Seed decor becomes starter pieces (free, in the cap, removable to storage).
+    if (typeof office.stage === 'number' && Array.isArray(office.rings) && office.decor.length === 0 && office.walls.length === 0) placeStarterDecor(office as OfficeState)
     return st
   },
 }

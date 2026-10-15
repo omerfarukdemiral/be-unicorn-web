@@ -431,6 +431,9 @@ const upgradeItem: Handler<'upgradeItem'> = ({ s, content }, a) => {
 const applyLayout: Handler<'applyLayout'> = ({ s }, a) => {
   const res = applySnapshot(s.office, a.draft)
   if ('error' in res) return res.error
+  // New decor is paid on Bitti, all at once (moving is free); short of cash, nothing changes.
+  if (res.cost > s.stats.cash) return 'insufficientCash'
+  s.stats.cash -= res.cost
   s.office = res.office
   syncSeats(s)
   return null

@@ -222,6 +222,23 @@ export function onlyEmptyDeskSlots(office: OfficeState): boolean {
   return !firstFreeDesk(office) && office.slots.some((s) => isFreeDesk(office, s))
 }
 
+/** The cheapest desk the stage allows: what a one-tap hire buys when no desk stands free (F6). */
+export function autoDeskItem(state: GameState, content: EngineContent): FurnitureItem | undefined {
+  let best: FurnitureItem | undefined
+  for (const f of content.furniture) if (f.slotType === 'desk' && f.stageUnlock <= state.stage && (!best || f.price < best.price)) best = f
+  return best
+}
+
+/**
+ * What a hire with `autoDesk` adds on top of the salary: 0 with a free desk, the auto desk's price when an empty
+ * desk slot can take one, null when no desk slot is open (a ring has to open first).
+ */
+export function hireDeskCost(state: GameState, content: EngineContent): number | null {
+  if (firstFreeDesk(state.office)) return 0
+  const item = autoDeskItem(state, content)
+  return item && findAutoSlot(state, item.id, content) ? item.price : null
+}
+
 /** Placed items (anchor slots only) in open rings. */
 export function placedItems(state: GameState, content: EngineContent): { slot: Slot; item: FurnitureItem }[] {
   const out: { slot: Slot; item: FurnitureItem }[] = []

@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { idleBuilders } from '../../engine/loopSelectors'
+import { hireDeskCost } from '../../engine/office'
 import { DEPTS, type Candidate, type Dept, type Employee } from '../../engine/types'
-import { DEPT_TEXT } from '../../content'
+import { CONTENT, DEPT_TEXT } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import * as B from '../../engine/balance'
 import { Icon } from '../icons'
@@ -15,6 +16,7 @@ import { ChipRow } from '../EffectChips'
 import { CATEGORY_ICON } from './ProjectsPanel'
 import { Bar, Button, Chip, CostPreview, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
 import { useSpendPreview } from '../widgets'
+import { useTwoStep } from '../hooks'
 import { DEPT_COLOR, moraleTone, soft } from '../theme'
 
 type Sub = 'hire' | 'team'
@@ -61,7 +63,7 @@ export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; si
 
 function HireView() {
   const [dept, setDept] = useState<Dept | 'all'>('all')
-  const { candidates, day, showQuality, freeDesks, emptySlots } = useGameStore(
+  const { candidates, day, showQuality, freeDesks, emptySlots, deskCost } = useGameStore(
     useShallow((s) => {
       const open = new Set(s.state.office.rings.filter((r) => r.unlocked).map((r) => r.index))
       const free = s.state.office.slots.filter((sl) => sl.type === 'desk' && !sl.occupantId && !sl.spanOf && sl.id !== 'founder' && (sl.ring === 0 || open.has(sl.ring)))
@@ -72,11 +74,22 @@ function HireView() {
         // Same rule as the engine: a hire needs a desk item on a free desk slot.
         freeDesks: free.filter((sl) => sl.itemId !== undefined).length,
         emptySlots: free.filter((sl) => sl.itemId === undefined).length,
+        // F6: 0 = a desk stands free, a price = the hire buys the desk too, null = no desk slot left (open a ring).
+        deskCost: hireDeskCost(s.state, CONTENT),
       }
     }),
   )
   const dispatch = useGameStore((s) => s.dispatch)
   const list = candidates.filter((c) => dept === 'all' || c.dept === dept)
+  // A hire is a monthly salary (plus a desk when none is free): the first tap arms, the second commits.
+  const [armed, tap] = useTwoStep()
+  const [err, setErr] = useState<{ id: string; text: string } | null>(null)
+  const hire = (id: string) =>
+    tap(id, () => {
+      // Always autoDesk: a bare hire refused with noDesk sent the player to the shop and was never retried (F6).
+      const res = dispatch({ type: 'hire', candidateId: id, autoDesk: true })
+      setErr(res.ok || !res.error ? null : { id, text: t(`error.${res.error}`) })
+    })
 
   return (
     <div className="flex flex-col gap-2">
@@ -105,7 +118,16 @@ function HireView() {
       ) : (
         <ul className="flex flex-col gap-1">
           {list.map((c) => (
-            <CandidateCard key={c.id} candidate={c} day={day} showQuality={showQuality} onHire={() => dispatch({ type: 'hire', candidateId: c.id })} />
+            <CandidateCard
+              key={c.id}
+              candidate={c}
+              day={day}
+              showQuality={showQuality}
+              deskCost={deskCost}
+              armed={armed === c.id}
+              error={err?.id === c.id ? err.text : undefined}
+              onHire={() => hire(c.id)}
+            />
           ))}
         </ul>
       )}
@@ -126,9 +148,28 @@ function RoughQuality({ quality }: { quality: number }) {
   )
 }
 
-/** One candidate: avatar, name + dept, the salary (the number), days left, the hire commit with its runway preview. */
-function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: Candidate; day: number; showQuality: boolean; onHire: () => void }) {
-  const preview = useSpendPreview(0, c.salary)
+/**
+ * One candidate: avatar, name + dept, the salary (the number), days left, the hire commit with its runway preview.
+ * No free desk: the button carries the desk price and the hire buys it (deskCost); no desk slot at all: it is disabled.
+ */
+export function CandidateCard({
+  candidate: c,
+  day,
+  showQuality,
+  deskCost,
+  armed,
+  error,
+  onHire,
+}: {
+  candidate: Candidate
+  day: number
+  showQuality: boolean
+  deskCost: number | null
+  armed: boolean
+  error?: string
+  onHire: () => void
+}) {
+  const preview = useSpendPreview(-(deskCost ?? 0), c.salary)
   const left = Math.ceil(c.expiresDay - day)
   // E3: the one category an engineer / product hire is fluent in; a match with a project they would build is faster.
   const skill = useGameStore(useShallow((s) => candidateFit(s.state, c)))
@@ -154,10 +195,18 @@ function CandidateCard({ candidate: c, day, showQuality, onHire }: { candidate: 
       </div>
       <span className="flex shrink-0 items-center gap-1.5">
         <CostPreview preview={preview} />
-        <Button tone="commit" size="sm" onClick={onHire}>
-          {t('team.hire')}
+        <Button
+          tone="commit"
+          size="sm"
+          disabled={deskCost === null}
+          title={deskCost === null ? t('team.noSlot') : undefined}
+          cost={deskCost ? t('team.deskCost', { v: money(deskCost) }) : undefined}
+          onClick={onHire}
+        >
+          {armed ? t('team.hireConfirm') : t('team.hire')}
         </Button>
       </span>
+      {error && <span className="w-full font-text text-[12px] font-semibold text-negative-ink">{error}</span>}
     </li>
   )
 }

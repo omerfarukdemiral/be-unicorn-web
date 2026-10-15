@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { dailyEndgame } from '../endgame'
 import { dailyEffort, fatigueRate } from '../effort'
-import { createEngine, freeCash } from '../index'
+import { createEngine, freeCash, hireDeskCost } from '../index'
 import { clone } from '../util'
 import { company, content } from './moduleFixtures'
 import { fakeContent } from './fixtures'
@@ -100,5 +100,52 @@ describe('cheap extras', () => {
     const five = previewSpend(s, { burnDelta: 5_000 })
     expect(none.runwayAfter).not.toBeNull()
     expect(five.runwayAfter!).toBeLessThan(none.runwayAfter!)
+  })
+})
+
+describe('hire with autoDesk (F6: the panel hire buys the desk too)', () => {
+  const freeSlots = (s: ReturnType<typeof api.createGame>) =>
+    s.office.slots.filter((x) => x.type === 'desk' && x.id !== 'founder' && x.occupantId === undefined && (x.ring === 0 || s.office.rings.some((r) => r.index === x.ring && r.unlocked)))
+  it('no desk item: one action buys the cheapest desk and seats the hire on it', () => {
+    const s = api.createGame({ seed: 3 })
+    const c = s.candidates[0]!
+    const price = fakeContent().furniture.find((f) => f.id === 'desk-basic')!.price
+    expect(hireDeskCost(s, fakeContent())).toBe(price)
+    const r = api.applyAction(s, { type: 'hire', candidateId: c.id, autoDesk: true })
+    expect(r.ok).toBe(true)
+    expect(r.state.stats.cash).toBe(s.stats.cash - price)
+    expect(r.state.employees).toHaveLength(1)
+    const slot = r.state.office.slots.find((x) => x.id === r.state.employees[0]!.deskSlotId)!
+    expect(slot.itemId).toBe('desk-basic')
+    expect(slot.occupantId).toBe(r.state.employees[0]!.id)
+    expect(slot.ring).toBeLessThanOrEqual(1)
+    expect(r.state.candidates.some((x) => x.id === c.id)).toBe(false)
+    expect(r.state.activity.some((a) => a.kind === 'itemPlaced')).toBe(true)
+  })
+  it('a free desk is used as is: no second desk, no cost', () => {
+    let s = api.createGame({ seed: 3 })
+    s = api.applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: 'r1-s2' }).state
+    expect(hireDeskCost(s, fakeContent())).toBe(0)
+    const r = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id, autoDesk: true })
+    expect(r.ok).toBe(true)
+    expect(r.state.stats.cash).toBe(s.stats.cash)
+    expect(r.state.employees[0]!.deskSlotId).toBe('r1-s2')
+  })
+  it('cash short of the desk: refused, nothing changes', () => {
+    const s = clone(api.createGame({ seed: 3 }))
+    s.stats.cash = 100
+    const r = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id, autoDesk: true })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('insufficientCash')
+    expect(r.state).toBe(s)
+  })
+  it('every open desk slot taken: noFreeSlot, no cost, and hireDeskCost says null', () => {
+    const s = clone(api.createGame({ seed: 3 }))
+    for (const x of freeSlots(s)) Object.assign(x, { itemId: 'desk-basic', occupantId: 'someone' })
+    expect(hireDeskCost(s, fakeContent())).toBeNull()
+    const r = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id, autoDesk: true })
+    expect(r.ok).toBe(false)
+    expect(r.error).toBe('noFreeSlot')
+    expect(r.state).toBe(s)
   })
 })

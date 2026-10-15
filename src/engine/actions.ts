@@ -1,4 +1,5 @@
 // applyAction(state, action): pure. Invalid actions return ok:false + error code and the untouched input state.
+import type { FurnitureItem } from '../content/index'
 import * as B from './balance'
 import { learnConcept, minimizeConcept } from './concepts'
 import { answerDecision } from './decisions'
@@ -7,7 +8,7 @@ import { applyEffects, applyMorale, unlockTool } from './effects'
 import { buildersOf, effortOn, hasOpenWork, isBuilder, isSprinting, onLeave } from './effort'
 import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
 import { checkSale } from './endgame'
-import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
+import { anchorOf, autoDeskItem, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag, projectVersion } from './modules'
 import { checkName, nameKey } from './names'
@@ -60,7 +61,7 @@ export function applyAction(state: GameState, action: Action, content: EngineCon
 // Team
 // ---------------------------------------------------------------------------
 
-const hire: Handler<'hire'> = ({ s }, a) => {
+const hire: Handler<'hire'> = ({ s, content }, a) => {
   const c = s.candidates.find((x) => x.id === a.candidateId)
   if (!c) return 'notFound'
   let slot: Slot | undefined
@@ -70,6 +71,15 @@ const hire: Handler<'hire'> = ({ s }, a) => {
     if (err) return err
   } else {
     slot = firstFreeDesk(s.office)
+    if (!slot && a.autoDesk) {
+      // F6: refusing here sent the player to the shop, the desk got bought and the hire was never retried
+      // ("para gidiyor, kişi gelmiyor"). The panel's hire now buys the desk too; any failure costs nothing (clone).
+      const item = autoDeskItem(s, content)
+      slot = (item && findAutoSlot(s, item.id, content)) || undefined
+      if (!item || !slot) return 'noFreeSlot'
+      const err = placeOn(s, item, slot)
+      if (err) return err
+    }
     if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
   }
   hireCandidate(s, c, slot?.id)
@@ -279,6 +289,11 @@ const placeItem: Handler<'placeItem'> = ({ s, content }, a) => {
   // No slot given: buy → auto place on the free slot nearest the center.
   const slot = a.slotId !== undefined ? findSlot(s.office, a.slotId) : findAutoSlot(s, item.id, content)
   if (!slot) return a.slotId !== undefined ? 'notFound' : 'noFreeSlot'
+  return placeOn(s, item, slot)
+}
+
+/** Buys `item` onto `slot` (placeItem and the auto-desk hire share it, so the scene's furniture pop fires for both). */
+function placeOn(s: GameState, item: FurnitureItem, slot: Slot): ActionErrorCode | null {
   if (slot.id === FOUNDER_SLOT_ID) return 'invalid'
   if (!isRingUnlocked(s.office, slot.ring)) return 'slotLocked'
   if (slot.type !== item.slotType) return 'wrongSlotType'

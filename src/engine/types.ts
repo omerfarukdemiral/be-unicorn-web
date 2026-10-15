@@ -1642,7 +1642,8 @@ export interface GameState {
 
 export type Action =
   // Team
-  | { type: 'hire'; candidateId: string; deskSlotId?: SlotId }
+  /** `autoDesk` (the Team panel): no free desk → buy the cheapest open desk onto the auto slot first, all or nothing. */
+  | { type: 'hire'; candidateId: string; deskSlotId?: SlotId; autoDesk?: boolean }
   | { type: 'fire'; employeeId: EmployeeId }
   | { type: 'renameProject'; projectId: string; name: string }
   | { type: 'assignDesk'; employeeId: EmployeeId; slotId: SlotId | null }

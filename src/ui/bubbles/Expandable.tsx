@@ -7,7 +7,7 @@ import { useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import { ChipRow, type Chip } from '../EffectChips'
 import { useIsMobile, useLayoutMode } from '../hooks'
-import { CARD_HEADER_H, CARD_SLACK, expandableLimits } from '../layout/panelFit'
+import { CARD_SLACK, expandableLimits } from '../layout/panelFit'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { cx, IconButton } from '../primitives'
@@ -122,7 +122,9 @@ export function Expandable({
           )}
         >
           {face ? <Face id={face} size={28} color={mark.color} badge={mark.icon} className="mr-0.5" /> : <MarkTile mark={mark} />}
-          <span className="font-text min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight text-ink">
+          <span className="font-text line-clamp-2 min-w-0 flex-1 text-[13px] font-semibold leading-tight text-ink">
+            {/* Two lines, not one (C1): a long question ("Kervan.io için sıradaki modül: Ödeme altyapısı?") was cut
+                before the part being asked; two 13px lines still fit the 44px phone pill. */}
             {/* Phones: a question pill spends its ~260px on the question; the stem and the mark already say who asks
                 ("Metin · En büyük iki müşterin s…" cut the hook mid-word, QA). The open card names the speaker. */}
             {speaker && !(mobile && lineInBody) && <span className="text-ink-2">{speaker} · </span>}
@@ -142,11 +144,13 @@ export function Expandable({
         data-open="true"
         role="dialog"
         aria-label={line}
-        style={{ ...tintEdge(mark.color), ...(limits.landscape ? { width: limits.maxW } : null) }}
+        // The whole card is capped by the free scene area and only the body scrolls: a long topic wraps the header to
+        // 3-4 lines on a 320-375px phone (C1), and a fixed header allowance would push the card's top off the scene.
+        style={{ ...tintEdge(mark.color), maxHeight: `calc(var(--scene-free-h, 9999px) - ${CARD_SLACK}px)`, ...(limits.landscape ? { width: limits.maxW } : null) }}
         className={cx(BUBBLE_SHELL, 'flex flex-col overflow-hidden', !limits.landscape && (mobile ? 'w-[calc(100vw-24px)]' : 'w-[min(340px,calc(100vw-32px))]'))}
       >
         {/* The header on the kind's ground, the answers on the neutral surface (chips keep their green / red). */}
-        <div className={cx('mb-2 flex min-w-0 items-center gap-1.5 py-1 pr-1', face ? 'pl-1.5' : 'pl-2.5')} style={{ background: ground.background }}>
+        <div className={cx('mb-2 flex min-w-0 shrink-0 items-center gap-1.5 py-1 pr-1', face ? 'pl-1.5' : 'pl-2.5')} style={{ background: ground.background }}>
           {face && <Face id={face} size={32} color={mark.color} badge={mark.icon} />}
           {/* Open, the pill's line stays as the header topic ("Sen · Tur penceresi açık"): the rows below need that context. */}
           <SpeakerLine icon={face ? undefined : mark.icon} color={mark.color} speaker={speaker} topic={lineInBody && speaker ? undefined : line} className="min-w-0 flex-1" />
@@ -154,7 +158,7 @@ export function Expandable({
           {detail && <IconButton icon="info" label={t('bubble.detail')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={() => launch(detail)} />}
           <IconButton icon="close" label={t('bubble.close')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={closeBubble} />
         </div>
-        <div className="flex flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5 *:shrink-0" style={{ maxHeight: `min(${limits.maxH}px, calc(var(--scene-free-h, 9999px) - ${CARD_HEADER_H + CARD_SLACK}px))` }}>{children}</div>
+        <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5 *:shrink-0" style={{ maxHeight: limits.maxH }}>{children}</div>
       </div>
       <BubbleTail style={tintEdge(mark.color)} />
     </div>

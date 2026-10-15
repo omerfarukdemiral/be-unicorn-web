@@ -14,6 +14,7 @@ import { deserialize, serialize } from '../engine'
 import type { GameState } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import { clearSave, readProfile, readSave, readSaveMeta, setSaveOwner, writeProfile, writeSave } from '../store/save'
+import { clearRunOnScreen } from '../store/session'
 import {
   backendStatus,
   currentSession,
@@ -280,6 +281,15 @@ export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void
   await logout({ all: opts.everywhere })
   setSaveOwner(null)
   useCloud.setState({ ...initial, phase: 'login', backend: useCloud.getState().backend })
+  clearRunOnScreen('signOut')
+  if (typeof window !== 'undefined') window.location.reload()
+}
+
+/** Offline play › Giriş yap: the local save is written, then the sign-in card comes back on reload (not an
+ * auto-resume of the run: the run mark is cleared first, store/session.ts). */
+export function goSignIn(): void {
+  useGameStore.getState().save()
+  clearRunOnScreen('signIn')
   if (typeof window !== 'undefined') window.location.reload()
 }
 

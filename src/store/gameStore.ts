@@ -14,6 +14,7 @@ import * as B from '../engine/balance'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readCodex, readProfile, readSave, readUiSave, writeCodex, writeProfile, writeSave, writeUiSave } from './save'
 import { addPin, autoPin, defaultPins, removePin } from './metricPins'
+import { clearRunOnScreen } from './session'
 import { CENTER_KINDS, type Codex, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState } from './types'
 
 export { SAVE_KEY } from './save'
@@ -421,6 +422,8 @@ function onGameOver(s: GameState): void {
   if (!s.gameOver) return
   writeProfile({ founderXp: s.meta.founderXp + s.gameOver.xpEarned, runIndex: s.meta.runIndex + 1 })
   clearSave()
+  // A reload after the end shows the start card, not an auto-resume (there is nothing left to resume).
+  clearRunOnScreen('gameOver')
 }
 
 function freshState(opts?: Partial<NewGameOptions>): GameState {

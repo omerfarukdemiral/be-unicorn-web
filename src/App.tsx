@@ -2,7 +2,7 @@
 // Before a run starts, the canvas shows the garage behind the title screen and the loop is stopped.
 // Start card phases (net/cloud): boot (probe the backend + resume the token) → login (e-posta + PIN, or play
 // offline) → ready (Devam et / Yeni oyun). Without a backend the card goes straight to ready, local save only.
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { STAGES, suggestCompanyName, type CompanyNameIssue } from './content'
 import { balance } from './engine'
 import type { GameState } from './engine/types'
@@ -11,6 +11,8 @@ import { ObjectPreview } from './render/ObjectPreview'
 import { startLoop } from './store/loop'
 import { useGameStore } from './store/gameStore'
 import { readProfile, readSave } from './store/save'
+import { markRunOnScreen, previousExit, resumeAfterReload, startExitNote } from './store/session'
+import { ErrorCatch } from './ui/ErrorCatch'
 import { GameUI } from './ui/GameUI'
 import { renderWorldBubble } from './ui/bubbles'
 import { Icon } from './ui/icons'
@@ -263,6 +265,25 @@ async function onAuthed(a: AuthOk, kind: AuthKind, companyName: string | undefin
   onStart()
 }
 
+function saveRun(): void {
+  try {
+    useGameStore.getState().save()
+  } catch (e) {
+    console.error('[run] save failed', e)
+  }
+}
+
+/** A render error in the scene or the game layer: the run is written and held still until "Devam et". */
+function holdRun(): void {
+  const st = useGameStore.getState()
+  try {
+    st.save()
+    if (st.state.time.speed !== 0 && !st.state.gameOver) st.dispatch({ type: 'setSpeed', speed: 0 })
+  } catch (e) {
+    console.error('[run] hold failed', e)
+  }
+}
+
 export default function App() {
   const mock = useMemo(wantsMock, [])
   const [started, setStarted] = useState(mock)
@@ -273,11 +294,25 @@ export default function App() {
   useEffect(() => {
     if (mock) playOffline()
     else void bootCloud()
+    if (previousExit.kind) console.info('[run] previous exit:', previousExit.kind, previousExit.note)
   }, [mock])
+
+  // F5: the page reloaded under a run (tab discarded in the background, killed under memory pressure, a crash): the
+  // same run comes back paused instead of the start card. Once per page load, after the cloud boot settled ('ready'
+  // = the same moment "Devam et" would be offered); an expired sign-in ('login') keeps the card.
+  const resumeTried = useRef(false)
+  useLayoutEffect(() => {
+    if (started || mock || phase !== 'ready' || resumeTried.current) return
+    resumeTried.current = true
+    if (resumeAfterReload(() => useGameStore.getState().load())) setStarted(true)
+  }, [phase, started, mock])
 
   useEffect(() => {
     if (!started || mock) return
     setRunOnScreen(true)
+    const day = useGameStore.getState().state.time.day
+    markRunOnScreen(day)
+    startExitNote(day)
     const stop = startLoop()
     return () => {
       setRunOnScreen(false)
@@ -306,8 +341,16 @@ export default function App() {
 
   return (
     <div className="relative h-full w-full overflow-clip bg-canvas-bg">
-      <GameCanvas renderBubble={started ? renderWorldBubble : () => null} ambientBubbles={ambient} />
-      {started ? <GameUI worldBubbles mock={mock} renderPreview={(target) => <ObjectPreview target={target} />} /> : card}
+      <ErrorCatch where="scene" run onError={started ? holdRun : undefined}>
+        <GameCanvas renderBubble={started ? renderWorldBubble : () => null} ambientBubbles={ambient} onContextLost={started ? saveRun : undefined} />
+      </ErrorCatch>
+      {started ? (
+        <ErrorCatch where="run" run onError={holdRun}>
+          <GameUI worldBubbles mock={mock} renderPreview={(target) => <ObjectPreview target={target} />} />
+        </ErrorCatch>
+      ) : (
+        card
+      )}
     </div>
   )
 }

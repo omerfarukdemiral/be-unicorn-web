@@ -289,6 +289,9 @@ function UserWave({ count, target }: { count: number; target: XZ }) {
   const head = useMemo(() => new THREE.SphereGeometry(0.12, 10, 8), [])
   const headMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f1c9a5', roughness: 0.8 }), [])
   const mats = useMemo(() => figures.map((f) => new THREE.MeshStandardMaterial({ color: f.color, roughness: 0.7 })), [figures])
+  // Built per wave: freed when the wave ends, so a long run's celebrations do not pile up on the GPU (F5).
+  useEffect(() => () => [body, head, headMat].forEach((r) => r.dispose()), [body, head, headMat])
+  useEffect(() => () => mats.forEach((m) => m.dispose()), [mats])
   const lengths = useMemo(
     () =>
       figures.map((f) => {

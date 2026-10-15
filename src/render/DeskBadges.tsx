@@ -6,7 +6,7 @@
 // pops. One sprite per desk and kind, drawn from canvas textures. The persistent state badges (tired / morale / bored)
 // and the lead star live on the head plate now (HeadPlates.tsx, H1); a pop is never smaller than POP_MIN_PX on screen.
 import { useFrame, useThree } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { Dept, Employee, GameState, PersonEffort } from '../engine/types'
 import { hash01 } from './constants'
@@ -159,6 +159,8 @@ interface Live {
 
 function Badge({ id, dept, kind, pos, register }: { id: string; dept: Dept; kind: BadgeKind; pos: [number, number]; register: (key: string, kind: BadgeKind, s: THREE.Sprite | null) => void }) {
   const mat = useMemo(() => material(kind, dept), [kind, dept])
+  // The material is this badge's own (its map is the shared cached texture, left alone): freed with the badge (F5).
+  useEffect(() => () => mat.dispose(), [mat])
   const key = `${id}|${kind}`
   return (
     <sprite

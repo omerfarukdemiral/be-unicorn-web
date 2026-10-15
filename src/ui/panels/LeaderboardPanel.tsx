@@ -8,11 +8,11 @@ import { STAGES } from '../../content'
 import { useCloud } from '../../net/cloud'
 import type { LeaderboardGap, LeaderboardOk, LeaderboardRow } from '../../net/contract'
 import { runLengthText, teamText } from '../../net/netText'
-import { useGameStore } from '../../store/gameStore'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { money } from '../format'
-import { Button, cx, Empty, Pill } from '../primitives'
+import { cx, Empty, Pill } from '../primitives'
+import { SignInButton } from './AccountSection'
 
 /** Seconds since the board arrived, ticking once a second. */
 function useAgo(at: number | null): number | null {
@@ -30,12 +30,6 @@ export function gapLine(above: LeaderboardRow, gap: LeaderboardGap): string {
   if (gap.days > 0) return t('lb.gapDays', { ...base, n: gap.days })
   if (gap.valuation > 0) return t('lb.gapValuation', { ...base, v: money(gap.valuation) })
   return t('lb.gapTie', base)
-}
-
-/** Log in from offline play: the sign-in card comes back on reload (the local save is written first). */
-function goSignIn() {
-  useGameStore.getState().save()
-  window.location.reload()
 }
 
 export function LeaderboardPanel() {
@@ -98,9 +92,7 @@ function MeCard({ board, signedIn }: { board: LeaderboardOk | null; signedIn: bo
     return (
       <div className="rounded-card border border-border bg-surface-2/60 p-3">
         <p className="font-text text-xs text-ink-2">{t('lb.signedOut')}</p>
-        <Button size="sm" tone="primary" icon="mail" className="mt-2" onClick={goSignIn}>
-          {t('account.signIn')}
-        </Button>
+        <SignInButton className="mt-2" />
       </div>
     )
   }

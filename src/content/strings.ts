@@ -501,6 +501,8 @@ const BASE_TEXT: Record<string, string> = {
   'gameOver.retry': 'Yeniden kur',
   'ui.error.title': 'Bu ekran açılamadı. Oyun devam ediyor.',
   'ui.error.retry': 'Tekrar dene',
+  'ui.error.run': 'Ekran takıldı. Oyun kaydedildi, bekliyor.',
+  'ui.error.resume': 'Devam et',
   'victory.title': 'Unicorn oldun!',
   'victory.body': 'Garajdan bir milyar dolara. {days} günde.',
   'victory.lessons': '{n} ders öğrendin.',

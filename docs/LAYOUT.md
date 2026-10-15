@@ -163,6 +163,7 @@ panelleri, ProjectDetail (ad değiştirme, modül yuvaları, öneri satırları,
 kişi/personel balonları, ödeme günü, aşama atlama, tur görüşmesi.
 - `document.documentElement.scrollWidth <= innerWidth`; panelde ve açık balonda yatay taşma yok (çip satırları kendi içinde kayar, bu serbest).
 - Kaba imleçte her `button/input` ≥ 44px (kutusu küçük ikon-butonlar `before:` ile 44px'lik vuruş alanı alır, bkz. InfoTip); input `font-size` 16.
+- 375×667'de açık kişi balonu aşama kartının (sol üst) altında başlar, başlığı kartın altında kalmaz (`freeBubbleHeight`: dar alanda üst bara asılı kart da engel sayılır); liste kendi içinde kayar.
 - Açık balon yatayda founder dock'un üstünde; kartın gövdesi kendi içinde kayar. Balon metni 390px'te tek satır (kesilirse `…`).
 - Konsolda hata yok; `renderer.info` çizim çağrısı aşama 0/3/6 (`createMockState`, `?power=full` ve varsayılan).
 - Şerit satırı 44px kartın 1px kenarlığı yüzünden 42px dokunma alanı verir; bilinen, kabul edildi.

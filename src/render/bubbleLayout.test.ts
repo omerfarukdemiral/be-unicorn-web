@@ -447,3 +447,23 @@ describe('freeBubbleHeight (landscape phone 844 x 390)', () => {
     expect(freeBubbleHeight({ ...vp, obstacles: [] })).toBe(382 - 76)
   })
 })
+
+describe('freeBubbleHeight (portrait phone 375 x 667)', () => {
+  // The stage goal card hangs under the top bar (y 68..125); the dock starts at y 540.
+  const vp: Viewport = {
+    left: 8,
+    top: 76,
+    right: 367,
+    bottom: 659,
+    obstacles: [
+      { left: 6, top: 66, right: 162, bottom: 127 },
+      { left: 8, top: 538, right: 367, bottom: 660 },
+    ],
+  }
+  it('starts under a HUD card hanging off the top bar', () => {
+    expect(freeBubbleHeight(vp)).toBe(538 - 4 - (127 + 4))
+  })
+  it('a wide viewport (desktop, landscape) is not narrowed by a card beside the bubble', () => {
+    expect(freeBubbleHeight({ ...vp, right: 836 })).toBe(538 - 4 - 76)
+  })
+})

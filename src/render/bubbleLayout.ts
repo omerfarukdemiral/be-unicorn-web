@@ -71,10 +71,19 @@ export interface Viewport {
  */
 export function freeBubbleHeight(vp: Viewport, minTop = 40): number {
   let bottom = vp.bottom
+  let top = vp.top
+  // A portrait card is as wide as the screen, so a HUD card hanging under the top bar (the stage goal, 375 x 667) is in
+  // its way whatever the side: the card starts below it, and the list scrolls in what is left (MR).
+  if (vp.right - vp.left < NARROW_W) for (const o of vp.obstacles ?? []) if (o.top <= vp.top + minTop && o.bottom > top && o.bottom < vp.top + TOP_BAND_H) top = o.bottom + 4
   for (const o of vp.obstacles ?? []) if (o.top > vp.top + minTop && o.top < bottom) bottom = o.top - 4
   // Floor: an obstacle far off to the side must not squeeze the list to nothing.
-  return Math.max(MIN_FREE_H, bottom - vp.top)
+  return Math.max(MIN_FREE_H, bottom - top)
 }
+
+/** Free area narrower than this = a phone held upright (a landscape phone is 800+ wide). */
+const NARROW_W = 520
+/** A HUD card within this many px of the free area's top counts as a top obstacle (the stage goal card is ~58 tall). */
+const TOP_BAND_H = 90
 
 const MIN_FREE_H = 120
 

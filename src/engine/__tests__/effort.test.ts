@@ -520,6 +520,17 @@ describe('staffAttention (E1)', () => {
     const g = company(0, 3, 'web', { fatigue: 90, boredDays: 50, loadAvg: 0.2 })
     expect(staffAttention(g)).toEqual([])
   })
+
+  it('a calm person is not tired any more ("Yavaşlat" answers it, F2), but burnt out still asks', () => {
+    const s = company(1, 3)
+    const set = (id: string, over: Partial<Employee>) => Object.assign(person(s, id), over)
+    set('e1', { fatigue: 70, pace: 'calm' })
+    expect(staffAttention(s).some(([, n]) => n === 'tired')).toBe(false)
+    set('e2', { fatigue: 65 })
+    expect(staffAttention(s).filter(([, n]) => n === 'tired')).toEqual([['e2', 'tired']])
+    set('e1', { fatigue: 90 })
+    expect(staffAttention(s)).toContainEqual(['e1', 'burnout'])
+  })
 })
 
 describe('saves (E1)', () => {

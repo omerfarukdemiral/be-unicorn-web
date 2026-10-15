@@ -13,6 +13,7 @@ import { ReflectionBubble } from './ReflectionBubble'
 import { PersonBubble } from './PersonBubble'
 import { StaffBubble } from './StaffBubble'
 import { renderWorldBubble } from './worldBubble'
+import { routeCandidates } from '../../render/WorldBubbles'
 import { company } from '../../engine/__tests__/moduleFixtures'
 import { moduleAsk } from '../../engine/modules'
 import { MODULE_TEXT, moduleName } from '../../content'
@@ -334,6 +335,15 @@ describe('effort bubbles (E3)', () => {
     for (const label of ['Yavaşlat', 'İzin ver', 'Devam']) expect(out).toContain(label)
     expect(out).toContain('−%15')
     expect(out).toContain('−%20')
+  })
+
+  it('tired: "Yavaşlat" closes the card and the pill does not come back (F2)', () => {
+    const { id } = withTired(70)
+    expect(routeCandidates(store().state, { bubbleOpen: null }).some((l) => l.key === `staff:${id}`)).toBe(true)
+    openBubble(`staff:${id}`)
+    expect(store().dispatch({ type: 'setPace', employeeId: id, pace: 'calm' }).ok).toBe(true)
+    expect(store().ui.bubbleOpen).toBeNull()
+    expect(routeCandidates(store().state, { bubbleOpen: null }).some((l) => l.key === `staff:${id}`)).toBe(false)
   })
 
   it('burnout: leave is the main move, then slow down and let go', () => {

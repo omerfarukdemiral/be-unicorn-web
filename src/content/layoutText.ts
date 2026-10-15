@@ -54,6 +54,12 @@ export const LAYOUT_TEXT: Record<string, string> = {
   'layout.paint': 'Boya',
   'layout.paintPrice': 'Duvar başı {v}',
   'layout.noWalls': 'Kampüste duvar yok.',
+  'layout.islands': 'Takım adaları',
+  'layout.islandHint': 'Aynı ekipten 3 masa yan yana',
+  'layout.islandRow': '{n} kişi yan yana',
+  'layout.deskIsland': 'Ekibiyle yan yana: +%{v} hız.',
+  'team.islandChip': '+%{v} hız',
+  'team.islandTitle': 'Ekibiyle yan yana oturuyor',
   'time.reason.layout': 'Ofis düzenleniyor',
   'time.reasonShort.layout': 'Ofis',
 }

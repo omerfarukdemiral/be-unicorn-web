@@ -2,7 +2,8 @@
 // right panel (RightPanel). Header + close-up preview + metrics + actions.
 import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { PROJECT_NAME_MAX } from '../engine/balance'
+import { PROJECT_NAME_MAX, TEAM_ADJ_BONUS } from '../engine/balance'
+import { teamClusteredEmployees } from '../engine/office'
 import { effortOn } from '../engine/effort'
 import { nameKey } from '../engine/names'
 import { FOUNDER_SLOT_ID, type Employee, type Project, type Slot } from '../engine/types'
@@ -304,6 +305,8 @@ function EmployeeDetail({ id }: { id: string }) {
   const mobile = useIsMobile()
   // E3: the person's battery, load and fit (derived.people; absent in the Garage).
   const effort = useGameStore((s) => (e ? s.state.derived.people?.[e.id] : undefined))
+  // Grid §5: sits in a team island (3+ same-team desks side by side) → "+%4 hız" under the desk.
+  const island = useGameStore((s) => teamClusteredEmployees(s.state).has(id))
   // Taking someone off their project is two taps, like the sale of furniture.
   const [armed, tap] = useTwoStep()
   if (!e) return <p className="text-xs text-ink-2">{t('detail.gone')}</p>
@@ -318,7 +321,11 @@ function EmployeeDetail({ id }: { id: string }) {
         <Stat label={t('detail.salary')} value={t('hud.perMonthPlain', { v: money(e.salary) })} />
         {effort && e.dept !== 'sales' && <Stat label={t('fx.tag.fatigue')} value={fatigue} sub={<Bar value={fatigue / 100} color={fatigueColor} height={4} className="mt-1" />} />}
         {showQuality && <Stat label={t('detail.quality')} value={<QualityStars quality={e.quality} />} />}
-        <Stat label={t('detail.desk')} value={e.deskSlotId ? t('detail.seated') : <span className="inline-flex items-center gap-1.5"><Dot color="var(--color-negative)" size={6} />{t('team.noSeat')}</span>} />
+        <Stat
+          label={t('detail.desk')}
+          value={e.deskSlotId ? t('detail.seated') : <span className="inline-flex items-center gap-1.5"><Dot color="var(--color-negative)" size={6} />{t('team.noSeat')}</span>}
+          sub={island ? <ChipRow className="mt-1" chips={[{ icon: 'users', label: '', text: t('team.islandChip', { v: Math.round(TEAM_ADJ_BONUS * 100) }), good: true, title: t('team.islandTitle') }]} /> : undefined}
+        />
       </div>
       {effort && (
         <ChipRow chips={[loadChip(effort.load), ...hiddenLossChip(effort.fatigueFactor), ...(effort.fit && current ? fitChips(CATEGORY_ICON[current.category]) : [])]} />

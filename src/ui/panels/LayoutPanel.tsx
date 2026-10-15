@@ -2,15 +2,17 @@
 // desk; turn / Depoya kaldır for decor), the last refusal in the game's voice, the piece tabs (Ayırıcı, Dekor, Duvar,
 // Depo: a card arms the piece, the scene puts it down), the footer (Parça n/cap, the spend paid on Bitti, undo / redo,
 // Vazgeç / Bitti). The scene does the moving (render/LayoutEditor); this panel never opens a popup. The head number is
-// "Masa 14/21" (panelHeadline).
+// "Masa 14/21" (panelHeadline). The Masalar tab also lists the team islands (grid §5: 3 same-team desks side by side,
+// +TEAM_ADJ_BONUS speed), or the one-line hint when there is none.
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { DEPT_TEXT, FURNITURE } from '../../content'
 import { DECOR, PAINT_KIND, PAINT_PRICE, PAINT_SWATCHES, decorDef, type DecorDef, type DecorGroup } from '../../content/decor'
+import * as B from '../../engine/balance'
 import { decorBill, decorCap, isWallKind, paintable } from '../../engine/layout'
 import { DEPTS, type Dept } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
-import { draftPieces, draftSpend, wallAt } from '../../store/layoutEdit'
+import { draftIslands, draftPieces, draftSpend, wallAt } from '../../store/layoutEdit'
 import { money } from '../format'
 import { stageName } from '../theme'
 import { Icon } from '../icons'
@@ -30,7 +32,8 @@ function SelectedPiece() {
       const p = e?.selected ? draftPieces(s.state.office, e.draft).find((x) => x.id === e.selected) : undefined
       if (!p) return null
       const who = p.occupantId ? s.state.employees.find((x) => x.id === p.occupantId)?.name : undefined
-      return { id: p.id, itemId: p.itemId, type: p.type, team: p.team ?? null, who: who ?? null }
+      const island = p.type === 'desk' && draftIslands(s.state.office, e!.draft, deptOfIn(s.state.employees)).some((c) => c.active && c.slotIds.includes(p.id))
+      return { id: p.id, itemId: p.itemId, type: p.type, team: p.team ?? null, who: who ?? null, island }
     }),
   )
   const op = useGameStore((s) => s.layoutEditOp)
@@ -56,8 +59,59 @@ function SelectedPiece() {
               <TeamButton key={d} dept={d} hotkey={i + 1} active={sel.team === d} onClick={() => op({ kind: 'team', team: d })} />
             ))}
           </div>
+          {sel.island && <span className="font-text text-[12px] font-semibold text-positive-ink">{t('layout.deskIsland', { v: BONUS_PCT })}</span>}
         </div>
       )}
+    </div>
+  )
+}
+
+/** TEAM_ADJ_BONUS as the panel prints it ("4" in "+%4 hız"). */
+const BONUS_PCT = Math.round(B.TEAM_ADJ_BONUS * 100)
+
+const deptOfIn = (employees: readonly { id: string; dept: Dept }[]) => {
+  const m = new Map(employees.map((e) => [e.id, e.dept]))
+  return (id: string) => m.get(id)
+}
+
+/** Masalar tab: one row per team island of the draft (dept face, "3 kişi yan yana", +%4), else the rule as a dim row. */
+function TeamIslands() {
+  const rows = useGameStore(
+    useShallow((s) => {
+      const e = s.ui.layoutEdit
+      if (!e) return [] as string[]
+      // "dept:size" keys keep the shallow compare cheap; the panel needs nothing else.
+      return draftIslands(s.state.office, e.draft, deptOfIn(s.state.employees))
+        .filter((c) => c.active)
+        .sort((a, b) => b.slotIds.length - a.slotIds.length)
+        .map((c) => `${c.team}:${c.slotIds.length}`)
+    }),
+  )
+  const chip = <span className="tabular shrink-0 rounded-md bg-positive/10 px-1.5 py-[3px] text-[12px] font-bold text-positive-ink">{t('team.islandChip', { v: BONUS_PCT })}</span>
+  // No island yet: the rule as one dim row (3 same-team desks side by side → the chip), not a sentence.
+  if (!rows.length)
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-dashed border-border px-2 py-1.5" data-team-islands="">
+        <Icon name="users" size={18} className="shrink-0 text-ink-3" />
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-2">{t('layout.islandHint')}</span>
+        {chip}
+      </div>
+    )
+  return (
+    <div className="flex flex-col gap-1.5" data-team-islands="">
+      <span className="ui-label text-ink-2">{t('layout.islands')}</span>
+      {rows.map((r, i) => {
+        const [dept, n] = r.split(':') as [Dept, string]
+        return (
+          <div key={i} className="flex items-center gap-2 rounded-xl bg-surface-2/70 px-2 py-1.5">
+            <Avatar name={DEPT_TEXT[dept].name} dept={dept} size={22} />
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+              {DEPT_TEXT[dept].short} · {t('layout.islandRow', { n })}
+            </span>
+            {chip}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -314,6 +368,7 @@ export function LayoutPanel() {
       <HowLine />
       {decorPicked ? <SelectedDecor /> : tab === 'desks' || itemPicked ? <SelectedPiece /> : null}
       <Refusal />
+      {tab === 'desks' && !decorPicked && <TeamIslands />}
       <div role="tablist" className="flex gap-0.5 rounded-xl bg-surface-2 p-0.5">
         {TABS.map((k) => (
           <Chip key={k} segment active={tab === k} onClick={() => setTab(k)}>

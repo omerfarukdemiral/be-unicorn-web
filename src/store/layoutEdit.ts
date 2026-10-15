@@ -6,6 +6,7 @@
 // paid on Bitti. The spend is shown live and a piece the cash cannot cover is refused when it is added.
 import { PAINT_KIND, decorDef } from '../content/decor'
 import { cellKey, decorBill, decorCells, decorShape, isWallKind, itemPieces, nextDecorId, previewSnapshot, rightDir, ringOfCell, type CellKey, type LayoutRefusal, type Rotation } from '../engine/layout'
+import { teamIslands, type TeamCluster } from '../engine/office'
 import { FOUNDER_SLOT_ID, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type WallPiece } from '../engine/types'
 
 /** Undo depth (one snapshot is well under 10 KB). */
@@ -190,6 +191,14 @@ export function draftPieces(office: OfficeState, draft: LayoutSnapshot): DraftPi
       moved,
     }
   })
+}
+
+/** Team islands (grid §5) of the draft as it stands: the panel's island rows and the scene's brighter tint. */
+export function draftIslands(office: OfficeState, draft: LayoutSnapshot, deptOf: (id: string) => Dept | undefined): TeamCluster[] {
+  const desks = draftPieces(office, draft)
+    .filter((p) => p.type === 'desk' && p.id !== FOUNDER_SLOT_ID)
+    .map((p) => ({ id: p.id, pos: { x: p.x, z: p.z }, ...(p.team !== undefined ? { team: p.team } : {}), ...(p.occupantId !== undefined ? { occupantId: p.occupantId } : {}) }))
+  return teamIslands(desks, deptOf)
 }
 
 /** The piece on a cell, 'founder' on the founder desk, null on bare floor. */

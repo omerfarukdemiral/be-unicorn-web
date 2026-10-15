@@ -1,18 +1,18 @@
-// Office edit mode in the scene (grid design §4, PC only): the cell grid, one tinted fill for the team labels, the
-// selection and the ghost (green / red footprint, its front edge), the refused cells with their short reason, and the
-// pointer: press a piece and drag it (over 10 px), or select it and click a free cell. Picking is plane math (a y = 0
-// ray hit → worldToGrid), never a raycast on the baked meshes. One draw call (grid lines are thin quads in the same
-// vertex-coloured mesh) plus DOM for the reason; nothing here bakes, and the drop only changes the draft (furniture
-// moves by transform, see useFurnitureView).
+// Office edit mode in the scene (grid design §4, PC only): the cell grid, one tinted fill for the team labels (an
+// island of 3+, grid §5, tinted stronger), the selection and the ghost (green / red footprint, its front edge), the
+// refused cells with their short reason, and the pointer: press a piece and drag it (over 10 px), or select it and
+// click a free cell. Picking is plane math (a y = 0 ray hit → worldToGrid), never a raycast on the baked meshes. One
+// draw call (grid lines are thin quads in the same vertex-coloured mesh) plus DOM for the reason; nothing here bakes,
+// and the drop only changes the draft (furniture moves by transform, see useFurnitureView).
 import { Html } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { decorCells, frontDir, gridHalf, inGrid, isWallKind, ringOfCell, stageFixtures, wallSegments, worldToGrid, type CellKey, type Rotation } from '../engine/layout'
 import { isRingUnlocked } from '../engine/office'
-import { FOUNDER_SLOT_ID, type GridPos, type OfficeState } from '../engine/types'
+import { FOUNDER_SLOT_ID, type Dept, type GridPos, type OfficeState } from '../engine/types'
 import { UI_TEXT } from '../content'
-import { checkFloor, checkPlace, checkWall, decorAt, draftPieces, pieceAt, wallAt, type DecorCheck, type DraftPiece, type LayoutEdit, type WallSeg } from '../store/layoutEdit'
+import { checkFloor, checkPlace, checkWall, decorAt, draftIslands, draftPieces, pieceAt, wallAt, type DecorCheck, type DraftPiece, type LayoutEdit, type WallSeg } from '../store/layoutEdit'
 import { CELL, WALL_HEIGHT, gridToWorld } from './constants'
 import { FloorModel, WallModel, floorPose, wallPose } from './Decor'
 import { useHtmlPortal } from './htmlPortal'
@@ -144,6 +144,12 @@ function Editor({ edit }: { edit: LayoutEdit }) {
   const portal = useHtmlPortal()
   const cash = useGS((s) => s.stats.cash)
   const pieces = useMemo(() => draftPieces(office, edit.draft), [office, edit.draft])
+  // Desks in a team island (grid §5) read stronger than a lone labelled desk. Seats do not change while editing.
+  const deptOf = useGS((s) => s.employees.map((e) => `${e.id}:${e.dept}`).join('|'))
+  const island = useMemo(() => {
+    const m = new Map(deptOf.split('|').map((x) => x.split(':') as [string, Dept]))
+    return new Set(draftIslands(office, edit.draft, (id) => m.get(id)).filter((c) => c.active).flatMap((c) => c.slotIds))
+  }, [office, edit.draft, deptOf])
   const piecesRef = useRef(pieces)
   piecesRef.current = pieces
   const cells = useMemo(() => openCells(office), [office])
@@ -361,7 +367,7 @@ function Editor({ edit }: { edit: LayoutEdit }) {
       quads.push({ c, color: rgba('#7a7468', 0.22) })
     }
     for (const p of pieces) {
-      const tint = p.team ? rgba(DEPT_COLORS[p.team], 0.42) : rgba('#ffffff', 0.12)
+      const tint = p.team ? rgba(DEPT_COLORS[p.team], island.has(p.id) ? 0.7 : 0.42) : rgba('#ffffff', 0.12)
       for (const c of p.cells) quads.push({ c, color: tint })
     }
     for (const p of edit.draft.decor) for (const c of decorCells(p)) quads.push({ c, color: rgba('#ffffff', p.id === edit.decorSel ? 0 : 0.1) })
@@ -387,7 +393,7 @@ function Editor({ edit }: { edit: LayoutEdit }) {
     if (edit.refused) for (const k of edit.refused.cells) quads.push({ c: keyToCell(k), color: rgba(HIGHLIGHT.invalid, 0.6) })
     return fillGeometry(lines, quads)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [office.stage, lines, pieces, hoverId, selected, edit.selected, edit.refused, check, ghost?.piece.r, edit.draft.decor, decorSel, fCheck])
+  }, [office.stage, lines, pieces, island, hoverId, selected, edit.selected, edit.refused, check, ghost?.piece.r, edit.draft.decor, decorSel, fCheck])
 
   useEffect(() => () => fill.dispose(), [fill])
   // Pulls toward the camera harder than the floor's own offset (factor / units −1), still behind any furniture.

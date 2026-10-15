@@ -115,6 +115,8 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
         onPointerMissed={(e) => {
           if (e.button !== 0 || fromBubble(e)) return
           const api = storeApi()
+          // The edit mode picks by cell on its own (LayoutEditor).
+          if (api.ui.layoutEdit) return
           if (!api.ui.placing) {
             api.select(null)
             api.setHoverSlot(null)

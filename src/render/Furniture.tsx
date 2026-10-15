@@ -16,7 +16,7 @@ import { GEO, capsuleGeo, glassMat, glowMat, mat, torusGeo } from './resources'
 import { MAX_EXTRAS_IN_SCENE, furnitureBand, founderDeskExtras, pickExtras } from './stageLook'
 import { useGS } from './source'
 import type { OfficeLayout, XZ } from './layout'
-import { useLayout, useOffice } from './sceneRegistry'
+import { useFurnitureView, useLayoutEditing } from './sceneRegistry'
 import { useSpawnScale } from './useSpawnScale'
 
 type V3 = [number, number, number]
@@ -568,8 +568,11 @@ const PlacedItem = memo(function PlacedItem({
  * change re-resolves the pieces in place: PlacedItem keeps its key, so nothing remounts or plops in again.
  */
 export function FurnitureLayer({ band = 1, lowPower = false }: { band?: StageBand; lowPower?: boolean }) {
-  const slots = useOffice().slots
-  const layout = useLayout()
+  // The edit draft while the office edit mode is open (moved pieces keep their keys: a drop is a transform only).
+  const view = useFurnitureView()
+  const slots = view.office.slots
+  const layout = view.layout
+  const editing = useLayoutEditing()
   const books = useBookColors()
   const overload = useGS(selectOverload)
   const look = furnitureBand(band, lowPower)
@@ -579,7 +582,9 @@ export function FurnitureLayer({ band = 1, lowPower = false }: { band?: StageBan
   // later changes inside one office animate.
   const mounted = useRef(false)
   const stage = useRef(layout.stage)
-  const animate = mounted.current && stage.current === layout.stage
+  // Entering or leaving the edit mode re-keys moved pieces (draft ids → their committed slots): no plop for that.
+  const wasEditing = useRef(editing)
+  const animate = mounted.current && stage.current === layout.stage && wasEditing.current === editing
   const prev = useRef<Placed[]>(placed)
   const [ghosts, setGhosts] = useState<Placed[]>([])
   useLayoutEffect(() => {
@@ -587,9 +592,11 @@ export function FurnitureLayer({ band = 1, lowPower = false }: { band?: StageBan
     prev.current = placed
     const stageMoved = stage.current !== layout.stage
     stage.current = layout.stage
-    if (!mounted.current || stageMoved) {
+    const editToggled = wasEditing.current !== editing
+    wasEditing.current = editing
+    if (!mounted.current || stageMoved || editToggled) {
       mounted.current = true
-      if (stageMoved) setGhosts((g) => (g.length ? [] : g))
+      if (stageMoved || editToggled) setGhosts((g) => (g.length ? [] : g))
       return
     }
     const keys = new Set(placed.map((p) => p.key))
@@ -598,7 +605,7 @@ export function FurnitureLayer({ band = 1, lowPower = false }: { band?: StageBan
       const kept = cur.filter((g) => !keys.has(g.key) && !gone.some((x) => x.key === g.key))
       return gone.length === 0 && kept.length === cur.length ? cur : [...kept, ...gone]
     })
-  }, [placed, layout.stage])
+  }, [placed, layout.stage, editing])
   const ghostDone = useCallback((key: string) => setGhosts((cur) => cur.filter((g) => g.key !== key)), [])
 
   return (

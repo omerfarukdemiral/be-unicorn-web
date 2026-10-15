@@ -20,7 +20,8 @@ import { stagePalette } from './palette'
 import { stageBand, type StageBand } from '../content/stageBand'
 import { sunFor } from './stageLook'
 import { People } from './People'
-import { speakerPositions, useLayout, useOffice } from './sceneRegistry'
+import { speakerPositions, useLayout, useLayoutEditing, useOffice } from './sceneRegistry'
+import { LayoutEditor } from './LayoutEditor'
 import { SlotsLayer } from './Slot'
 import { Surroundings } from './Surroundings'
 import { useGS, useUi } from './source'
@@ -278,11 +279,15 @@ function Background() {
 
 export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbles = true }: OfficeSceneProps) {
   const uiZoom = useUi((u) => u.zoom)
+  // Office edit mode (PC): the grid overlay takes the floor; slot markers, people and desk badges step aside (people
+  // would sit at desks that are being moved), and the camera stays on the whole office (no close zoom).
+  const editing = useLayoutEditing()
+  const zoomLevel = zoom ?? uiZoom
   const band = useGS((s: GameState) => stageBand(s.office.stage))
   return (
     <>
       <Background />
-      <CameraRig zoomLevel={zoom ?? uiZoom} />
+      <CameraRig zoomLevel={editing ? (Math.min(zoomLevel, 1) as ZoomLevel) : zoomLevel} />
       <Lights lowPower={lowPower} band={band} />
       <StageTransition>
         {/* Layer names: perf probes group meshes and draw calls by them. */}
@@ -292,16 +297,14 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
         <group name="office">
           <Office lowPower={lowPower} />
         </group>
-        <group name="slots">
-          <SlotsLayer />
-        </group>
+        <group name="slots">{editing ? <LayoutEditor /> : <SlotsLayer />}</group>
         <group name="furniture">
           <FurnitureLayer band={band} lowPower={lowPower} />
         </group>
-        <group name="people">
+        <group name="people" visible={!editing}>
           <People band={band} />
         </group>
-        <group name="badges">
+        <group name="badges" visible={!editing}>
           <DeskBadges />
         </group>
       </StageTransition>

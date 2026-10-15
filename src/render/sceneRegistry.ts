@@ -3,8 +3,9 @@
 import { useFrame } from '@react-three/fiber'
 import { useCallback, useMemo, useRef } from 'react'
 import type { GameState, OfficeState } from '../engine/types'
+import { draftOffice } from '../store/layoutEdit'
 import { computeLayout, type OfficeLayout, type XZ } from './layout'
-import { getGS, useGS, useMockState } from './source'
+import { getGS, useGS, useMockState, useUi } from './source'
 
 export interface SpeakerPos {
   x: number
@@ -153,4 +154,26 @@ export function useOffice(): OfficeState {
 export function useLayout(): OfficeLayout {
   const office = useOffice()
   return useMemo(() => computeLayout(office.slots, office.rings, office.stage), [office])
+}
+
+/** True while the office edit mode is open (PC only): slots, people and badges step aside for the grid overlay. */
+export function useLayoutEditing(): boolean {
+  const mock = useMockState()
+  return useUi((u) => u.layoutEdit !== null) && !mock
+}
+
+/**
+ * The office the furniture is drawn from: the live one, or the edit draft while the edit mode is open. Moved pieces
+ * keep their live slot ids (store/layoutEdit draftOffice), so a drop only moves a transform: the shell and the
+ * per-piece bakes are untouched until Bitti / Vazgeç.
+ */
+export function useFurnitureView(): { office: OfficeState; layout: OfficeLayout } {
+  const office = useOffice()
+  const layout = useLayout()
+  const mock = useMockState()
+  const draft = useUi((u) => (mock ? null : (u.layoutEdit?.draft ?? null)))
+  return useMemo(() => {
+    const view = draft ? draftOffice(office, draft) : office
+    return view === office ? { office, layout } : { office: view, layout: computeLayout(view.slots, view.rings, view.stage) }
+  }, [office, layout, draft])
 }

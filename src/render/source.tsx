@@ -44,12 +44,16 @@ export function storeApi() {
 /**
  * A card or call owns the screen, so scene bubbles and juice (banner, "+N") fade out until it goes: a centred card or
  * screen (stage-up, victory, statistics…; the payday dock is not one) or the paused start call with its stage goal
- * and Başlat (ui/time.tsx StartCall), which a pill or a release banner must never print over.
+ * and Başlat (ui/time.tsx StartCall), which a pill or a release banner must never print over, or the office edit mode.
  */
 export function useSceneCovered(): boolean {
   const mock = useContext(MockStateContext)
   const covered = useGameStore(
-    (s) => (!!s.ui.overlay && s.ui.overlay.kind !== 'payday') || (!s.ui.runStarted && s.state.time.speed === 0 && !s.state.gameOver),
+    (s) =>
+      (!!s.ui.overlay && s.ui.overlay.kind !== 'payday') ||
+      (!s.ui.runStarted && s.state.time.speed === 0 && !s.state.gameOver) ||
+      // The office edit mode: bubbles, head plates and juice step aside for the grid (they wait, the world is held).
+      s.ui.layoutEdit !== null,
   )
   return !mock && covered
 }

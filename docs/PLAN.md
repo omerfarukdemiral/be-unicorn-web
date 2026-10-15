@@ -18,7 +18,7 @@ Oyunun asıl amacı startup dünyasının kavramlarını **oynatarak öğretmek*
 
 ### Repodan taşınanlar (kavram olarak)
 - **Aşamalar:** Garaj → Pre-seed → Seed → Series A → Series B → Series C → Unicorn
-- **Departmanlar:** Mühendislik, Ürün & Tasarım, Pazarlama, Satış, Operasyon
+- **Departmanlar:** Geliştirici, Ürün & Tasarım, Pazarlama, Satış, Operasyon
 - **Projeler:** 6 kategori (Mobil, Web, AI, API, Oyun, Pazar Yeri). MVP ile yayına çıkar, olgunlaştıkça değer üretir.
 - **Karar kartları:** Tek doğru cevap yok. Bazı kararların etkisi gecikmeli gelir. Seçimin ardından yargılamayan bir "yansıma" cümlesi gösterilir.
 - **Founder arketipleri:** Bootstrap, VC-Roket, Niş Uzman, Platform. Dördü de kazanabilmeli.
@@ -244,7 +244,7 @@ type Concept = {
   id: string
   stage: number                 // en erken görünebileceği aşama
   trigger: (s: GameState) => boolean
-  speaker: NpcRole              // mentor, ortak, muhasebeci, mühendis, yatırımcı, müşteri
+  speaker: NpcRole              // mentor, ortak, muhasebeci, geliştirici, yatırımcı, müşteri
   bubble: string                // ≤ 12 kelime
   card: { what: string; where: (s: GameState) => string; rule: string }
   unlocks?: HudWidget | Tool    // açtığı gösterge veya araç
@@ -352,7 +352,7 @@ Bu haller, sayıların yerine oyuncuya durumu gösterir.
 | Çalışıyor | Masada, klavye animasyonu |
 | Yorgun (moral < 40) | Yavaş yürüme, esneme |
 | Tükenmiş (moral < 28) | Başında bulut, kapıya bakıyor |
-| Aşırı yük | Sunucu rafında kırmızı ışık, mühendisler koşturuyor |
+| Aşırı yük | Sunucu rafında kırmızı ışık, geliştiriciler koşturuyor |
 | Mola | Ortak alanda kahve |
 | Yeni kişi | İlk 3 gün etrafı gezen onboarding yürüyüşü |
 

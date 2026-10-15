@@ -76,7 +76,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         label: 'Kabul et, kal',
         tradeoff: { gain: 'Ekip yerinde kalır', cost: 'Zam kasadan çıktı' },
         effects: { morale: 2 },
-        reflection: 'Yer değiştirmemek de bir bedel, sadece görünmez.',
+        reflection: 'Ekip yerinde, zam kasadan çıktı.',
         conceptId: 'burn',
       },
       {
@@ -86,7 +86,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         // policy is open anyway, still pays; the move itself costs a slower quarter.
         tradeoff: { gain: 'Kasa +%4, uzaktan yasası açılır', cost: 'Üretim −%10, 90 gün' },
         effects: { cashPercent: 0.04, setFlag: REMOTE_FIRST_FLAG, morale: -3, modifiers: [{ kind: 'production', value: 0.9, days: 90 }] },
-        reflection: 'Ofis bir araçtır; kira, ekibin işine yaradığı kadar değerlidir.',
+        reflection: 'Kira gitti, üretim 90 gün düşük.',
         conceptId: 'burn',
       },
     ],
@@ -103,14 +103,14 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         label: 'Fiyatı koru',
         tradeoff: { gain: 'Gelir korunur', cost: 'Churn +%20, 90 gün' },
         effects: { modifiers: [{ kind: 'churn', value: 1.2, days: 90 }] },
-        reflection: 'Fiyat, ürünün değerine dair verdiğin sözdür.',
+        reflection: 'Gelir korunur, 90 gün churn yüksek.',
         conceptId: 'pricing',
       },
       {
         label: 'İndirime eşlik et',
         tradeoff: { gain: 'Churn −%20, 180 gün', cost: 'Gelir −%10, 180 gün' },
         effects: { modifiers: [{ kind: 'arpu', value: 0.9, days: 180 }, { kind: 'churn', value: 0.8, days: 180 }] },
-        reflection: 'Fiyat savaşını genelde kasası derin olan kazanır.',
+        reflection: 'Kullanıcı kalır, gelir 180 gün düşük.',
         conceptId: 'ltv-cac',
       },
     ],
@@ -127,7 +127,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         label: 'Yeniden pazarlık et',
         tradeoff: { gain: 'Müşteriler kalır', cost: 'Gelir −%8, 180 gün' },
         effects: { reputation: 2, modifiers: [{ kind: 'arpu', value: 0.92, days: 180 }] },
-        reflection: 'Büyük müşteri, pazarlık gücünü de beraberinde getirir.',
+        reflection: 'İkisi de kalır, gelir 180 gün düşük.',
         conceptId: 'concentration',
       },
       {
@@ -136,7 +136,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         // burn × 0.5 as a share of the cash (a burn-sized cost has no effect field yet).
         tradeoff: { gain: 'Churn −%20, olgunluk +', cost: 'Kasa −%6' },
         effects: { cashPercent: -0.06, maturity: 0.05, reputation: 3, modifiers: [{ kind: 'churn', value: 0.8, days: 120 }] },
-        reflection: 'Güven, sözleşmeden önce altyapıda kazanılır.',
+        reflection: 'Kasa azaldı, churn düşer.',
         conceptId: 'concentration',
       },
     ],
@@ -153,7 +153,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         label: 'Turu ertele',
         tradeoff: { gain: 'Hisse korunur', cost: 'Kasa kendine yetmeli' },
         effects: { reputation: 2 },
-        reflection: 'Kışta yatırım aramak yerine baharı beklemek de bir strateji.',
+        reflection: 'Hisse korundu, kasa kendine yetmeli.',
         conceptId: 'fundraise-time',
       },
       {
@@ -161,7 +161,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         // §6.2 loan sized on the burn (covenant = 2 months of runway); with a loan already running the engine pays nothing.
         tradeoff: { gain: 'Kasa nefes alır', cost: '%2 hisse ve borç' },
         effects: { loan: { burnMonths: 4, months: 9, rate: 0.02, covenantRunway: 2 }, equity: -0.02 },
-        reflection: 'Köprü, karşıya geçmek için; üstünde yaşamak için değil.',
+        reflection: 'Kasa nefes aldı, kredi geri ödenecek.',
         conceptId: 'fundraise-time',
       },
     ],
@@ -179,7 +179,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         // T10: salaries × 0.9 once the payday desk lands; until then the saving as cash.
         tradeoff: { gain: 'Kasa +%6', cost: 'Moral −8' },
         effects: { cashPercent: 0.06, morale: -8 },
-        reflection: 'Erken ve açık yapılan kesinti, geç yapılandan az acıtır.',
+        reflection: 'Kasa güçlendi, ekibin morali düştü.',
         conceptId: 'default-alive',
       },
       {
@@ -187,7 +187,7 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         // T19: keeps the segment upkeep × 1.5 once segments exist; until then cash for lower churn.
         tradeoff: { gain: 'Churn −%25, 90 gün', cost: 'Kasa −%8' },
         effects: { cashPercent: -0.08, modifiers: [{ kind: 'churn', value: 0.75, days: 90 }] },
-        reflection: 'Düzeltmede pay kazanmak ucuzdur, ama kasa derin olmalı.',
+        reflection: 'Churn 90 gün düşük, kasa azaldı.',
         conceptId: 'trough',
       },
     ],
@@ -207,14 +207,14 @@ export const CRISIS_CARDS: readonly DecisionCard[] = [
         label: 'Zamlı kirayla kal',
         tradeoff: { gain: 'Ekip yerinde kalır', cost: 'Kira ×1.5, 6 ay' },
         effects: { modifiers: [{ kind: 'rent', value: 1.5, days: 180 }] },
-        reflection: 'Ertelenen kira faiziyle geri döner.',
+        reflection: 'Ekip kaldı, kira 6 ay yüksek.',
         conceptId: 'burn',
       },
       {
         label: 'Küçük yere taşın',
         tradeoff: { gain: 'Kira artmaz', cost: 'Yarım aylık gider, üretim −%15' },
         effects: { cashBurnMonths: -0.5, morale: -3, modifiers: [{ kind: 'production', value: 0.85, days: 45 }] },
-        reflection: 'Taşınmak ucuz görünür; kaybolan haftalar sayılmaz.',
+        reflection: 'Kira artmadı, taşınma üretimi yavaşlattı.',
         conceptId: 'burn',
       },
     ],

@@ -11,14 +11,14 @@ const bigTeam = (s: GameState): boolean => s.derived.teamSize >= 6
 export const OFFICE_LINES: readonly OfficeLine[] = [
   // ---- hire
   { id: 'hire-1', trigger: 'hire', speaker: 'anyEmployee', text: 'Hoş geldin! Kahve makinesi solda, şifre panoda.', variants: { 2: 'Hoş geldin! Giriş kartın İK’da.', 3: 'Hoş geldin! Oryantasyon programın hazır.' } },
-  { id: 'hire-2', trigger: 'hire', speaker: 'founder', text: 'Ekibe katıldığın için çok mutluyuz.', variants: { 2: 'Ekibe hoş geldin, seninle gurur duyuyoruz.', 3: 'Aramıza hoş geldin. Büyük işler bizi bekliyor.' } },
-  { id: 'hire-3', trigger: 'hire', speaker: 'eng', text: 'Yeni bir çift el, harika. İlk görevin hazır.', variants: { 2: 'Yeni bir çift el. İlk iş kaydın hazır.', 3: 'Yeni mühendis geldi. Sprint planı hazır.' } },
+  { id: 'hire-2', trigger: 'hire', speaker: 'founder', text: 'Hoş geldin, masan hazır, ilk iş seni bekliyor.', variants: { 2: 'Hoş geldin, ilk sprint seni bekliyor.', 3: 'Hoş geldin, büyük işler sırada.' } },
+  { id: 'hire-3', trigger: 'hire', speaker: 'eng', text: 'Yeni bir çift el, harika. İlk görevin hazır.', variants: { 2: 'Yeni bir çift el. İlk iş kaydın hazır.', 3: 'Yeni geliştirici geldi. Sprint planı hazır.' } },
   { id: 'hire-4', trigger: 'hire', speaker: 'anyEmployee', text: 'Masan hazır, istersen önce ofisi gezelim.', condition: bigTeam },
   { id: 'hire-5', trigger: 'hire', speaker: 'anyEmployee', text: 'Garajda yer kalmadı ama sana da yer açarız.', maxStage: 0 },
 
   // ---- fire / resign
-  { id: 'fire-1', trigger: 'fire', speaker: 'anyEmployee', text: 'Zor bir gün. Ona iyi şanslar diliyoruz.', variants: { 2: 'Zor bir gün. İK ile birlikte ilgileniyoruz.', 3: 'Zor karar. Ona iyi şanslar diliyoruz.' } },
-  { id: 'fire-2', trigger: 'fire', speaker: 'founder', text: 'Bu kararı kolay vermedim, devam edelim.', variants: { 2: 'Kolay bir karar değildi, yola devam.', 3: 'Zor bir karardı. Şirket yoluna devam eder.' } },
+  { id: 'fire-1', trigger: 'fire', speaker: 'anyEmployee', text: 'Zor bir gün. Ona iyi şanslar.', variants: { 2: 'Zor bir gün. İşlerini paylaşalım.', 3: 'Zor karar. Ona iyi şanslar.' } },
+  { id: 'fire-2', trigger: 'fire', speaker: 'founder', text: 'Kolay vermedim bu kararı, yola devam.', variants: { 2: 'Kolay bir karar değildi, yola devam.', 3: 'Zor bir karardı, yola devam.' } },
   { id: 'resign-1', trigger: 'resign', speaker: 'anyEmployee', text: 'Masası boş kaldı, garip bir his.', variants: { 2: 'Boş masa, garip bir his.', 3: 'Bir ayrılık daha. Yerine bakalım.' } },
   { id: 'resign-2', trigger: 'resign', speaker: 'anyEmployee', text: 'Onun işlerini paylaşmamız lazım.', variants: { 2: 'İşlerini paylaşalım, İK ilan açsın.', 3: 'Devir teslim planı yapmamız lazım.' } },
 
@@ -73,16 +73,16 @@ export const OFFICE_LINES: readonly OfficeLine[] = [
   // ---- overload
   { id: 'overload-1', trigger: 'overload', speaker: 'eng', text: 'Sunucular kırmızıda, herkes el atsın!' },
   { id: 'overload-2', trigger: 'overload', speaker: 'ops', text: 'Destek talepleri patladı, sayfa çok yavaş.' },
-  { id: 'overload-3', trigger: 'overload', speaker: 'eng', text: 'Daha fazla mühendis ya da sunucu lazım.' },
+  { id: 'overload-3', trigger: 'overload', speaker: 'eng', text: 'Bir geliştirici daha ya da sunucu lazım.' },
 
   // ---- fundraising
-  { id: 'round-start-1', trigger: 'roundStarted', speaker: 'investor', text: 'Rakamlarınızı inceleyeceğiz, birkaç hafta sürer.' },
+  { id: 'round-start-1', trigger: 'roundStarted', speaker: 'investor', text: 'Rakamlarına bakacağız, birkaç hafta sürer.' },
   { id: 'round-start-2', trigger: 'roundStarted', speaker: 'anyEmployee', text: 'Takım elbiseli biri geldi, yatırımcı mı?' },
   { id: 'round-closed-1', trigger: 'roundClosed', speaker: 'founder', text: 'Tur kapandı! Bu para bir sorumluluk.' },
   { id: 'round-closed-2', trigger: 'roundClosed', speaker: 'anyEmployee', text: 'Tur kapandı, şampanya mı açıyoruz?' },
 
   // ---- stage up / moving
   { id: 'stage-1', trigger: 'stageUp', speaker: 'anyEmployee', text: 'Yeni ofis! Pencere kenarını ben kaptım.' },
-  { id: 'stage-2', trigger: 'stageUp', speaker: 'founder', text: 'Garajdan buraya... yol uzun, devam ediyoruz.', minStage: 1, maxStage: 2 },
+  { id: 'stage-2', trigger: 'stageUp', speaker: 'founder', text: 'Garajdan buraya geldik, yol uzun, devam.', minStage: 1, maxStage: 2 },
   { id: 'stage-3', trigger: 'stageUp', speaker: 'anyEmployee', text: 'Bu binada kaybolabilirim, harita var mı?', minStage: 5 },
 ]

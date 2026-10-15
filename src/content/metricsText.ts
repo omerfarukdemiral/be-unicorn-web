@@ -29,9 +29,9 @@ export const METRICS_TEXT: Record<string, string> = {
   'hud.netPerDay': 'net {v}/gün',
   'hud.netPerMonth': '{v}/ay',
   'hud.burnSub': 'maaş + kira + kurucu + altyapı + reklam',
-  'hud.burnTitle': 'Yakıt: ayın toplam gideri, gelir düşülmeden',
-  'hud.profitFormula': 'Gelir {mrr} − Yakıt {burn}',
-  'hud.profitTitle': 'Kâr tahmini: aylık Gelir − Yakıt',
+  'hud.burnTitle': 'Burn: ayın toplam gideri, gelir düşülmeden',
+  'hud.profitFormula': 'Gelir {mrr} − Burn {burn}',
+  'hud.profitTitle': 'Kâr tahmini: aylık Gelir − Burn',
   'burn.founder': 'Kurucu',
 
   // Merged cards.

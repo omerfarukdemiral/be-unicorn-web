@@ -39,7 +39,7 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
   'strip.bankrupt': 'Maaş ödenemedi · iflasa {d} gün',
   'strip.bankruptSub': 'Kasayı artıya çevir: gelir, tur ya da kesinti',
   'strip.runwayLow': 'Runway 3 ayın altında: {v} ay',
-  'strip.runwayLowSub': 'Yakıtı kıs ya da tura çık',
+  'strip.runwayLowSub': 'Burn’ü kıs ya da tura çık',
   'strip.paid': 'ödenen',
   'strip.receipt': '{m}. ay fişi · net {n} · ödenen {p}{r}',
   'strip.release': '{project} {level} yayında · +{u} kullanıcı · +{m}/ay',

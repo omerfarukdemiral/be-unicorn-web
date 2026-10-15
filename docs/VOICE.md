@@ -26,7 +26,7 @@ Bu belge Defter kartları (Kazanımlar) için yazıldı. Balon, karar kartı ve 
 | Mentor | Nevin | Çok şey görmüş, sakin, biraz alaycı. Cevabı vermez, soruyla dürter. Hikâyeye değil gözleme dayanır. | "Reklamı bir hafta kapat, bakalım kim kalıyor." |
 | Muhasebeci | Hakan | Kuru, rakamcı, telaşsız. Her şeyi paraya çevirir. Espri yapacaksa hesap makinesiyle yapar. | "Kasada 18K var, ayda 4K gidiyor. Dört ay, sonra ışıkları kapatırız." |
 | Kurucu ortak | Can | Samimi, "biz" diye konuşur. Yorgunluğu ve ekibi dert eder. Bazen dert yanar. | "Üç işe birden girdik, hiçbiri bitmiyor abi." |
-| Mühendis | Elif | Kısa ve teknik, lafı dolandırmaz. Kod ve hız üzerinden konuşur. | "Geçen ay yamadığımız her şey şimdi önüme çıkıyor." |
+| Geliştirici | Elif | Kısa ve teknik, lafı dolandırmaz. Kod ve hız üzerinden konuşur. | "Geçen ay yamadığımız her şey şimdi önüme çıkıyor." |
 | Yatırımcı | Bora | Kibar, hızlı, pazarlıkçı. Güler yüzle yüzde ister. Kendi adına konuşur, başkasını aktarmaz. | "Parayı bugün vereyim, fiyatı sonra konuşuruz. Anlaştık mı?" |
 | Müşteri | Aylin | Kullanıcının kendisidir. Birinci tekil konuşur, şirketin içini bilmez, "biz" demez. Ürünü kendi derdi üzerinden anlatır. | "Açtım, bir iki baktım, sonra unuttum. Kusura bakma." |
 

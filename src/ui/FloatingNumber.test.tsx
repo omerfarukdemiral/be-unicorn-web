@@ -98,15 +98,18 @@ describe('ability slot', () => {
     expect(html).toContain(tip)
   })
 
-  it('out of moves stays tappable (the engine answers with one word)', () => {
+  it('out of moves stays tappable (the engine names the reason in a short line)', () => {
     const html = renderToStaticMarkup(<FounderSlot a={view({ disabled: true, outOfMoves: true })} />)
     expect(html).not.toMatch(/\sdisabled=""/)
-    expect(t('error.noMoves').replace(/[.!]$/, '').split(/\s+/)).toHaveLength(1)
+    expect(t('error.noMoves').replace(/[.!]$/, '').split(/\s+/).length).toBeLessThanOrEqual(5)
   })
 
-  it('every precondition error is one word (§11)', () => {
+  // Round 3 (T1, design §6.4): "Parasız." named nothing; a reason the player can fix needs 2-5 words.
+  it('every precondition error is a short reason, 5 words at most', () => {
     for (const [code, text] of Object.entries(ACTION_ERROR_TEXT)) {
-      expect(text.replace(/[.!]$/, '').split(/\s+/), code).toHaveLength(1)
+      const words = text.replace(/[.!]$/, '').split(/\s+/)
+      expect(words.length, code).toBeLessThanOrEqual(5)
+      expect(text, code).toMatch(/\.$/)
     }
   })
 })

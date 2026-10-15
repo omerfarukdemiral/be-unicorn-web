@@ -26,7 +26,7 @@ describe('stageBand', () => {
 
   it('NPC titles grow with the company', () => {
     expect([1, 3, 5].map((s) => npcTitle('accountant', s))).toEqual(['Muhasebeci', 'Mali işler', 'CFO'])
-    expect([1, 3, 5].map((s) => npcTitle('engineer', s))).toEqual(['Mühendis', 'Baş mühendis', 'CTO'])
+    expect([1, 3, 5].map((s) => npcTitle('engineer', s))).toEqual(['Geliştirici', 'Tech lead', 'CTO'])
     expect(npcTitle('customer', 3)).toBe('Kurumsal müşteri')
     expect(npcTitle('journalist', 4)).toBe('Teknoloji muhabiri')
   })

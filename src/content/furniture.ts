@@ -98,7 +98,7 @@ export const FURNITURE: readonly FurnitureItem[] = [
   },
   {
     id: 'desk-eng',
-    name: 'Mühendis İstasyonu',
+    name: 'Geliştirici İstasyonu',
     description: 'Mekanik klavye ve bol kahve lekesi.',
     slotType: 'desk',
     size: 1,

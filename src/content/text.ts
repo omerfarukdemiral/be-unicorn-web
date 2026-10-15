@@ -3,17 +3,17 @@ import type { ActivityTextTable, DeptTextTable, NpcTextTable, PostMortemTextTabl
 
 export const ACTIVITY_TEXT: ActivityTextTable = {
   hired: '{name} ekibe katıldı.',
-  fired: '{name} ile yollar ayrıldı.',
+  fired: '{name} işten çıkarıldı.',
   resigned: '{name} istifa etti.',
-  resignWarning: '{name} ayrılmayı düşünüyor.',
+  resignWarning: '{name} istifa etmek üzere.',
   retained: '{name} kalmaya karar verdi.',
   itemPlaced: '{item} yerleştirildi.',
   itemSold: '{item} satıldı.',
   itemMoved: '{item} taşındı.',
   ringOpened: '{ring}. halka açıldı.',
-  projectStarted: '{project} projesi başladı.',
+  projectStarted: '{project} başladı, ilk satırlar yazılıyor.',
   projectLaunched: '{project} yayında!',
-  founderActionStarted: '{action} başladı…',
+  founderActionStarted: '{action} başladı.',
   founderActionDone: '{action} tamamlandı.',
   roundStarted: 'Yatırım turu başladı.',
   roundProgress: 'Tur görüşmesi sürüyor ({done}/{total} hafta).',
@@ -37,7 +37,7 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
   roundOffer: 'Tur haftası {done}/{total}: teklif {from} → {amount}.',
   roundPitch: 'Pitch: {pitch}. Teklif {amount}.',
   payrollMissed: 'Maaşlar ödenemedi: kasa {amount} ekside. İflas sayacı başladı.',
-  decisionDefaulted: 'Cevapsız kart kendi varsayılanıyla kapandı: {option}.',
+  decisionDefaulted: 'Cevap vermedin, "{option}" seçildi.',
   grew: '{name} ustalaştı',
   burnedOut: '{name} tükendi',
   leadSet: '{name} ekip lideri',
@@ -45,20 +45,20 @@ export const ACTIVITY_TEXT: ActivityTextTable = {
 }
 
 export const POST_MORTEM_TEXT: PostMortemTextTable = {
-  runwayIgnored: 'Runway azalırken tur geç başladı.',
-  burnTooHigh: 'Aylık yakıt gelirin çok üstündeydi.',
-  scaledWithoutPmf: 'Ürün tutmadan büyümeye para harcandı.',
+  runwayIgnored: 'Runway azalırken turu geç başlattın.',
+  burnTooHigh: 'Aylık burn gelirin çok üstündeydi.',
+  scaledWithoutPmf: 'Ürün tutmadan büyümeye para bastın.',
   highChurn: 'Kullanıcılar geldiği hızla gitti.',
   lowMorale: 'Ekip morali uzun süre düşük kaldı.',
-  prematureScaling: 'Ekip talepten önce büyüdü.',
-  lateFundraise: 'Tur, kasa bitmeden kapanamadı.',
+  prematureScaling: 'Talep gelmeden ekibi büyüttün.',
+  lateFundraise: 'Kasa bitmeden tur kapanmadı.',
   overload: 'Sunucular kullanıcıyı taşıyamadı.',
   teamLost: 'Ekip dağıldı.',
-  unfocused: 'Aynı anda çok fazla proje yürüdü.',
+  unfocused: 'Aynı anda çok fazla ürün yürüttün.',
 }
 
 export const DEPT_TEXT: DeptTextTable = {
-  eng: { name: 'Mühendislik', short: 'Müh' },
+  eng: { name: 'Geliştirici', short: 'Dev' },
   product: { name: 'Ürün & Tasarım', short: 'Ürün' },
   marketing: { name: 'Pazarlama', short: 'Paz' },
   sales: { name: 'Satış', short: 'Satış' },
@@ -73,14 +73,14 @@ export const PROJECT_CATEGORY_TEXT: ProjectCategoryTextTable = {
   ai: { name: 'Yapay Zekâ', description: 'En uzun sürer; kullanıcı başı en çok kazandırır.' },
   api: { name: 'API', description: 'Hızlı çıkar, iyi kazandırır ama kendiliğinden yayılmaz.' },
   game: { name: 'Oyun', description: 'Uzun sürer, az kazandırır ama kendiliğinden yayılır.' },
-  marketplace: { name: 'Pazar Yeri', description: 'Uzun kurulur; iyi yayılır, platform yolunu açar.' },
+  marketplace: { name: 'Pazar Yeri', description: 'Uzun sürer; iyi yayılır, platform yolunu açar.' },
 }
 
 export const NPC_TEXT: NpcTextTable = {
   mentor: { name: 'Nevin', title: 'Mentor' },
   cofounder: { name: 'Can', title: 'Kurucu ortak' },
   accountant: { name: 'Hakan', title: 'Muhasebeci', titleBy: { 2: 'Mali işler', 3: 'CFO' } },
-  engineer: { name: 'Elif', title: 'Mühendis', titleBy: { 2: 'Baş mühendis', 3: 'CTO' } },
+  engineer: { name: 'Elif', title: 'Geliştirici', titleBy: { 2: 'Tech lead', 3: 'CTO' } },
   investor: { name: 'Bora', title: 'Yatırımcı' },
   customer: { name: 'Aylin', title: 'Müşteri', titleBy: { 2: 'Kurumsal müşteri' } },
   journalist: { name: 'Tuna', title: 'Gazeteci', titleBy: { 2: 'Teknoloji muhabiri' } },

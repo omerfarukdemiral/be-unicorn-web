@@ -453,7 +453,7 @@ describe('project modules (W2c)', () => {
     s.stats.cash = 5
     useGameStore.setState({ state: s })
     const html = renderToStaticMarkup(createElement(Suggestions, { project: s.projects[0]!, onDone: () => {} }))
-    expect(html).toContain('Parasız.')
+    expect(html).toContain('Kasa yetmiyor.')
     expect((html.match(/disabled=""/g) ?? []).length).toBe(3)
   })
 

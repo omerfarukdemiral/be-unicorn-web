@@ -19,11 +19,11 @@ export const ONLINE_TEXT: Record<string, string> = {
   'login.switchNew': 'İlk kez mi geldin? Şirket kur',
   'login.switchBack': 'Zaten şirketim var',
   'login.unknown': 'Bu e-postayla şirket yok. Hadi kuralım.',
-  'login.maskNote': 'Liderlikte {v} olarak görünürsün. PIN’in yedeği yok, unutma.',
+  'login.maskNote': 'Liderlikte {v} diye görünürsün. PIN’in yedeği yok, unutma.',
   'login.offline': 'Çevrimdışı oyna',
   'login.offlineNote': 'Kayıt sadece bu cihazda kalır, liderlikte görünmezsin.',
-  'login.busy': 'Bir saniye…',
-  'login.checking': 'Sunucuya bakıyoruz…',
+  'login.busy': 'Bir saniye',
+  'login.checking': 'Sunucuya bakıyoruz',
 
   // --- start screen with an account ---
   'start.signedAs': '{v}',
@@ -68,7 +68,7 @@ export const ONLINE_TEXT: Record<string, string> = {
   'account.email': 'E-posta',
   'account.cloudOk': 'Bulutta · {v}',
   'account.cloudNever': 'Henüz buluta yazılmadı',
-  'account.cloudSaving': 'Buluta yazılıyor…',
+  'account.cloudSaving': 'Buluta yazılıyor',
   'account.cloudOffline': 'Çevrimdışı. İnternet gelince yazılacak.',
   'account.cloudSignedOut': 'Oturum düştü. Çıkış yapıp tekrar gir.',
   'account.syncNow': 'Şimdi buluta yaz',

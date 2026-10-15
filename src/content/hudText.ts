@@ -62,7 +62,7 @@ export const HUD_TEXT: Record<string, string> = {
   'stats.axis.efficiency': 'Verim',
   'stats.axis.team': 'Ekip',
   'stats.axis.morale': 'Moral',
-  'stats.axis.cash': 'Nakit',
+  'stats.axis.cash': 'Kasa',
 
   // Notification strip: items folded over the daily budget (count on the ⌃ button)
   'strip.digest': '+{n}',
@@ -92,7 +92,7 @@ export const HUD_TEXT: Record<string, string> = {
 
   // Payday desk (§6.1, §10.6): line answers, what is left after, the one sentence, commit + routine
   'desk.title': 'Maaş günü',
-  'desk.line': 'Kasa bu ayı karşılamıyor; neyin bekleyeceğini sen seç.',
+  'desk.line': 'Kasa bu ayı karşılamıyor, neyin bekleyeceğini sen seç.',
   'desk.short': 'Açık {v}',
   'desk.old': 'Eski borç',
   'desk.opt.full': 'Öde',
@@ -220,7 +220,7 @@ export const HUD_TEXT: Record<string, string> = {
   'mkt.buy': 'Satın al',
   'mkt.lead': 'Baş rakip',
   'mkt.rivalsEmpty': 'Rakip yok',
-  'mkt.full': 'Pazar doluyor; büyümek için yeni segment aç.',
+  'mkt.full': 'Pazar doluyor, büyümek için yeni segment aç.',
 
   // Kurul (§8.3) and renewals (§8.4) in Büyüme
   'board.title': 'Kurul',
@@ -262,11 +262,11 @@ export const HUD_TEXT: Record<string, string> = {
   'fx.tag.equity': 'Hisse',
   'fx.tag.techDebt': 'Teknik',
   'fx.tag.roundWeeks': 'Süre',
-  'fx.tag.mod.churn': 'Kayıp',
-  'fx.tag.mod.arpu': 'Gelir',
+  'fx.tag.mod.churn': 'Churn',
+  'fx.tag.mod.arpu': 'ARPU',
   'fx.tag.mod.production': 'Hız',
   'fx.tag.mod.morale': 'Moral',
-  'fx.tag.mod.cac': 'Edinme',
+  'fx.tag.mod.cac': 'CAC',
   'fx.tag.mod.organic': 'Organik',
   'fx.tag.mod.roundSpeed': 'Tempo',
   'fx.tag.mod.multipleCap': 'Çarpan',

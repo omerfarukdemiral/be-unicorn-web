@@ -349,7 +349,7 @@ describe('effort bubbles (E3)', () => {
 
   it('bored: the busiest project with its load, and a wave-off', () => {
     const { id, name } = withTired(0, { projectId: undefined })
-    expect(staff(id, 'bored')).toContain(`${name} boşa harcanıyor.`)
+    expect(staff(id, 'bored')).toContain(`${name} sıkılıyor, işi az.`)
     useGameStore.setState({ state: { ...store().state, projects: store().state.projects.map((p) => ({ ...p, maturity: 0.4 })) } })
     openBubble(`staff:${id}`)
     const out = staff(id, 'bored')

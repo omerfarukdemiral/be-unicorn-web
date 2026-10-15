@@ -58,4 +58,14 @@ describe('shopPlacement', () => {
     for (const s of o.slots) if (s.type === 'room') s.itemId = 'x'
     expect(shopPlacement(o, ROOM, undefined)).toMatchObject({ slot: null, roomRing: null })
   })
+
+  it('an edited office (suggested cells under decor) previews the free cell the buy really takes', () => {
+    const o = buildOffice(0, 1)
+    // Every garage desk cell is under a panel: no suggested cell left, but free floor is.
+    o.decor = o.slots.filter((s) => s.type === 'desk' && s.id !== 'founder').map((s, i) => ({ id: `d${i + 1}`, kind: 'panel', pos: { ...s.pos }, rotation: 0 as const }))
+    const p = shopPlacement(o, DESK, undefined)
+    expect(p.slot).not.toBeNull()
+    expect(p.slot).toMatchObject({ id: 'new', free: true, ring: 1 })
+    expect(o.decor.some((d) => d.pos.x === p.slot!.pos.x && d.pos.z === p.slot!.pos.z)).toBe(false)
+  })
 })

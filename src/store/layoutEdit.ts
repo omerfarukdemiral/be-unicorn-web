@@ -1,15 +1,30 @@
 // Office edit mode (grid design §4), pure: the draft, the pieces as the player sees them in it, and the ops.
 // The draft is a LayoutSnapshot over the live office (anchor slot id → cell + rotation + team label), so "Bitti" is one
 // applyLayout action. Every op keeps the draft legal: a move, turn or label that validateLayout refuses never lands,
-// it comes back as red cells and a short reason. No money moves in edit mode yet (buying pieces comes with step 4).
-import { cellKey, itemPieces, previewSnapshot, rightDir, ringOfCell, type CellKey, type LayoutRefusal, type Rotation } from '../engine/layout'
-import { FOUNDER_SLOT_ID, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType } from '../engine/types'
+// it comes back as red cells and a short reason. Decor (grid step 4): floor pieces and wall pieces are placed,
+// moved, turned and taken out (to storage) in the same draft; new ones are priced against storage (decorBill) and
+// paid on Bitti. The spend is shown live and a piece the cash cannot cover is refused when it is added.
+import { PAINT_KIND, decorDef } from '../content/decor'
+import { cellKey, decorBill, decorCells, decorShape, isWallKind, itemPieces, nextDecorId, previewSnapshot, rightDir, ringOfCell, type CellKey, type LayoutRefusal, type Rotation } from '../engine/layout'
+import { FOUNDER_SLOT_ID, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type WallPiece } from '../engine/types'
 
 /** Undo depth (one snapshot is well under 10 KB). */
 export const UNDO_MAX = 100
 
-/** Why a change was refused: a layout rule, the fixed founder desk, or a malformed draft. */
-export type EditRefusal = LayoutRefusal | 'founder' | 'invalid'
+/** Why a change was refused: a layout rule, the fixed founder desk, cash, or a malformed draft. */
+export type EditRefusal = LayoutRefusal | 'founder' | 'invalid' | 'cash'
+
+/** A wall segment: which wall and which cell column / row along it. */
+export interface WallSeg {
+  wall: WallPiece['wall']
+  seg: number
+}
+
+/** What a click puts down: a catalogue or stored piece (floor or wall), or a paint colour. */
+export interface Armed {
+  kind: string
+  color?: string
+}
 
 export interface LayoutEdit {
   draft: LayoutSnapshot
@@ -21,6 +36,14 @@ export interface LayoutEdit {
   refused: { cells: CellKey[]; reason: EditRefusal; at: number } | null
   /** Esc with nothing selected and changes made: the next Esc drops them (a line in the panel, no popup). */
   armedCancel: boolean
+  /** Selected floor decor piece (draft id). Only one of selected / decorSel / wallSel is set. */
+  decorSel?: string | null
+  /** Selected wall piece. */
+  wallSel?: WallSeg | null
+  /** The piece a click puts down (stays armed for the next click until Esc or another card). */
+  armed?: Armed | null
+  /** Turn of the armed floor piece. */
+  armedRot?: Rotation
 }
 
 /** A functional piece where the draft puts it. */
@@ -48,10 +71,90 @@ export type LayoutOp =
   | { kind: 'undo' }
   | { kind: 'redo' }
   | { kind: 'armCancel'; on: boolean }
+  | { kind: 'selectDecor'; id: string | null }
+  | { kind: 'selectWall'; at: WallSeg | null }
+  | { kind: 'arm'; armed: Armed | null }
+  | { kind: 'addDecor'; x: number; z: number }
+  | { kind: 'moveDecor'; id: string; x: number; z: number }
+  | { kind: 'hang'; at: WallSeg }
+  | { kind: 'moveWall'; from: WallSeg; to: WallSeg }
+  | { kind: 'remove' }
 
 export function startEdit(office: OfficeState): LayoutEdit {
-  return { draft: { slots: {}, decor: (office.decor ?? []).map((p) => ({ ...p, pos: { ...p.pos } })) }, undo: [], redo: [], selected: null, refused: null, armedCancel: false }
+  return {
+    draft: { slots: {}, decor: (office.decor ?? []).map((p) => ({ ...p, pos: { ...p.pos } })), walls: (office.walls ?? []).map((w) => ({ ...w })) },
+    undo: [],
+    redo: [],
+    selected: null,
+    refused: null,
+    armedCancel: false,
+    decorSel: null,
+    wallSel: null,
+    armed: null,
+    armedRot: 0,
+  }
 }
+
+/** Cash the draft spends on Bitti (new pieces not covered by storage, paint jobs). */
+export function draftSpend(office: OfficeState, draft: LayoutSnapshot): number {
+  const b = decorBill(office, draft)
+  return 'error' in b ? 0 : b.cost
+}
+
+/** The floor piece on a cell: a blocking piece before a rug under it. */
+export function decorAt(draft: LayoutSnapshot, c: GridPos): string | null {
+  const on = draft.decor.filter((p) => decorCells(p).some((q) => q.x === c.x && q.z === c.z))
+  return (on.find((p) => decorShape(p.kind).blocking) ?? on[0])?.id ?? null
+}
+
+/** The wall piece (not paint) hung on a segment. */
+export function wallAt(draft: LayoutSnapshot, at: WallSeg): WallPiece | undefined {
+  return (draft.walls ?? []).find((w) => w.kind !== PAINT_KIND && w.wall === at.wall && w.seg === at.seg)
+}
+
+const sameSeg = (a: WallSeg | null | undefined, b: WallSeg | null | undefined): boolean => !!a && !!b && a.wall === b.wall && a.seg === b.seg
+
+export type DecorCheck = { ok: true; draft: LayoutSnapshot; cells: GridPos[] } | { ok: false; cells: GridPos[]; bad: CellKey[]; reason: EditRefusal }
+
+/**
+ * Would the draft with `decor` / `walls` swapped in be legal and affordable? Same engine preview as a desk move
+ * (validateLayout), plus the bill: a change that raises the spend past `cash` is refused ('cash').
+ */
+export function checkDecor(office: OfficeState, e: Pick<LayoutEdit, 'draft'>, next: Partial<Pick<LayoutSnapshot, 'decor' | 'walls'>>, cells: GridPos[], cash = Infinity): DecorCheck {
+  const draft: LayoutSnapshot = { ...e.draft, ...next }
+  const res = previewSnapshot(office, draft)
+  if ('error' in res) return { ok: false, cells, bad: [], reason: 'invalid' }
+  if (!res.check.ok) return { ok: false, cells, bad: res.check.bad, reason: res.check.reason! }
+  if (res.cost > cash && res.cost > draftSpend(office, e.draft)) return { ok: false, cells, bad: [], reason: 'cash' }
+  return { ok: true, draft, cells }
+}
+
+/** A floor piece of `kind` at (x, z) turned `r`, replacing piece `id` (a move) or new (`id` null). */
+export function checkFloor(office: OfficeState, e: Pick<LayoutEdit, 'draft'>, id: string | null, kind: string, x: number, z: number, r: Rotation, cash = Infinity): DecorCheck & { id: string } {
+  const pid = id ?? nextDecorId(office.decor, e.draft.decor)
+  const piece: DecorPiece = { id: pid, kind, pos: { x, z }, rotation: r }
+  const decor = id ? e.draft.decor.map((p) => (p.id === id ? piece : p)) : [...e.draft.decor, piece]
+  return { ...checkDecor(office, e, { decor }, decorCells(piece), cash), id: pid }
+}
+
+/** Walls of the draft with `kind` hung on `at` (paint replaces the wall's paint; a piece needs a bare segment). */
+function hungWalls(draft: LayoutSnapshot, at: WallSeg, armed: Armed): WallPiece[] {
+  const walls = draft.walls ?? []
+  if (armed.kind === PAINT_KIND) return [...walls.filter((w) => !(w.kind === PAINT_KIND && w.wall === at.wall)), { wall: at.wall, seg: 0, kind: PAINT_KIND, color: armed.color ?? '#ffffff' }]
+  return [...walls, { wall: at.wall, seg: at.seg, kind: armed.kind }]
+}
+
+export function checkWall(office: OfficeState, e: Pick<LayoutEdit, 'draft'>, at: WallSeg, armed: Armed, cash = Infinity): DecorCheck {
+  if (armed.kind !== PAINT_KIND && wallAt(e.draft, at)) return { ok: false, cells: [], bad: [], reason: 'overlap' }
+  return checkDecor(office, e, { walls: hungWalls(e.draft, at, armed) }, [], cash)
+}
+
+/** Nothing selected, nothing armed (Esc order: armed piece, selection, then the cancel). */
+export function hasSelection(e: LayoutEdit): boolean {
+  return !!(e.selected || e.decorSel || e.wallSel)
+}
+
+const NO_SEL = { selected: null, decorSel: null, wallSel: null } as const
 
 /** Something to keep or drop (the undo stack is the change list: back to the start = nothing to save). */
 export function isDirty(e: LayoutEdit): boolean {
@@ -113,10 +216,10 @@ export function checkPlace(office: OfficeState, draft: LayoutSnapshot, id: SlotI
   return { ok: true, draft: next, cells }
 }
 
-function push(e: LayoutEdit, draft: LayoutSnapshot, selected: SlotId | null): LayoutEdit {
+function push(e: LayoutEdit, draft: LayoutSnapshot, selected: SlotId | null, sel: Partial<Pick<LayoutEdit, 'decorSel' | 'wallSel'>> = {}): LayoutEdit {
   const undo = [...e.undo, e.draft]
   if (undo.length > UNDO_MAX) undo.shift()
-  return { ...e, draft, undo, redo: [], selected, refused: null, armedCancel: false }
+  return { ...e, draft, undo, redo: [], selected, decorSel: null, wallSel: null, ...sel, refused: null, armedCancel: false }
 }
 
 function refuse(e: LayoutEdit, cells: readonly GridPos[], bad: readonly CellKey[], reason: EditRefusal, now: number): LayoutEdit {
@@ -124,16 +227,78 @@ function refuse(e: LayoutEdit, cells: readonly GridPos[], bad: readonly CellKey[
   return { ...e, refused: { cells: keys, reason, at: now }, armedCancel: false }
 }
 
-/** One op on the edit state. Returns the same object when nothing changes. `now` stamps a refusal. */
-export function reduceLayoutEdit(office: OfficeState, e: LayoutEdit, op: LayoutOp, now = 0): LayoutEdit {
+/**
+ * One op on the edit state. Returns the same object when nothing changes. `now` stamps a refusal; `cash` is the live
+ * company cash (a new piece the draft cannot pay for is refused when it is put down).
+ */
+export function reduceLayoutEdit(office: OfficeState, e: LayoutEdit, op: LayoutOp, now = 0, cash = Infinity): LayoutEdit {
   switch (op.kind) {
     case 'select': {
-      if (op.id === FOUNDER_SLOT_ID) return refuse({ ...e, selected: null }, [{ x: 0, z: 0 }], [], 'founder', now)
+      if (op.id === FOUNDER_SLOT_ID) return refuse({ ...e, ...NO_SEL }, [{ x: 0, z: 0 }], [], 'founder', now)
       if (op.id !== null && !draftPieces(office, e.draft).some((p) => p.id === op.id)) return e
-      return e.selected === op.id && !e.refused && !e.armedCancel ? e : { ...e, selected: op.id, refused: null, armedCancel: false }
+      return e.selected === op.id && !e.decorSel && !e.wallSel && !e.refused && !e.armedCancel ? e : { ...e, ...NO_SEL, selected: op.id, refused: null, armedCancel: false }
+    }
+    case 'selectDecor': {
+      if (op.id !== null && !e.draft.decor.some((p) => p.id === op.id)) return e
+      return e.decorSel === op.id && !e.selected && !e.wallSel && !e.refused ? e : { ...e, ...NO_SEL, decorSel: op.id, armed: null, refused: null, armedCancel: false }
+    }
+    case 'selectWall': {
+      if (op.at && !wallAt(e.draft, op.at)) return e
+      return { ...e, ...NO_SEL, wallSel: op.at, armed: null, refused: null, armedCancel: false }
+    }
+    case 'arm': {
+      if (op.armed && !(op.armed.kind === PAINT_KIND || decorDef(op.armed.kind))) return e
+      return { ...e, ...NO_SEL, armed: op.armed, armedRot: e.armedRot ?? 0, refused: null, armedCancel: false }
+    }
+    case 'addDecor': {
+      const a = e.armed
+      if (!a || isWallKind(a.kind)) return e
+      const c = checkFloor(office, e, null, a.kind, op.x, op.z, e.armedRot ?? 0, cash)
+      if (!c.ok) return refuse(e, c.cells, c.bad, c.reason, now)
+      return push(e, c.draft, null)
+    }
+    case 'moveDecor': {
+      const p = e.draft.decor.find((x) => x.id === op.id)
+      if (!p) return e
+      if (p.pos.x === op.x && p.pos.z === op.z) return { ...e, ...NO_SEL, decorSel: p.id, refused: null }
+      const c = checkFloor(office, e, p.id, p.kind, op.x, op.z, p.rotation, cash)
+      if (!c.ok) return refuse({ ...e, ...NO_SEL, decorSel: p.id }, c.cells, c.bad, c.reason, now)
+      return push(e, c.draft, null, { decorSel: p.id })
+    }
+    case 'hang': {
+      const a = e.armed
+      if (!a || !isWallKind(a.kind)) return e
+      const c = checkWall(office, e, op.at, a, cash)
+      if (!c.ok) return refuse(e, [], [], c.reason, now)
+      return push(e, c.draft, null)
+    }
+    case 'moveWall': {
+      const w = wallAt(e.draft, op.from)
+      if (!w || sameSeg(op.from, op.to)) return e
+      if (wallAt(e.draft, op.to)) return refuse(e, [], [], 'overlap', now)
+      const walls = (e.draft.walls ?? []).map((x) => (x === w ? { ...x, wall: op.to.wall, seg: op.to.seg } : x))
+      const c = checkDecor(office, e, { walls }, [], cash)
+      if (!c.ok) return refuse(e, [], [], c.reason, now)
+      return push(e, c.draft, null, { wallSel: op.to })
+    }
+    case 'remove': {
+      // Del: the selected floor or wall piece goes to storage on Bitti (free to put back). Desks stay (sell them in the shop).
+      if (e.decorSel) return push(e, { ...e.draft, decor: e.draft.decor.filter((p) => p.id !== e.decorSel) }, null)
+      const w = e.wallSel ? wallAt(e.draft, e.wallSel) : undefined
+      if (w) return push(e, { ...e.draft, walls: (e.draft.walls ?? []).filter((x) => x !== w) }, null)
+      return e
     }
     case 'place':
     case 'rotate': {
+      if (op.kind === 'rotate' && !op.id && !e.selected) {
+        // R turns the armed piece, else the selected floor piece.
+        if (e.armed && !isWallKind(e.armed.kind)) return { ...e, armedRot: (((e.armedRot ?? 0) + 1) & 3) as Rotation }
+        const p = e.decorSel ? e.draft.decor.find((x) => x.id === e.decorSel) : undefined
+        if (!p) return e
+        const c = checkFloor(office, e, p.id, p.kind, p.pos.x, p.pos.z, ((p.rotation + 1) & 3) as Rotation, cash)
+        if (!c.ok) return refuse(e, c.cells, c.bad, c.reason, now)
+        return push(e, c.draft, null, { decorSel: p.id })
+      }
       const id = op.kind === 'place' ? op.id : (op.id ?? e.selected)
       if (id === null) return e
       if (id === FOUNDER_SLOT_ID) return refuse(e, [{ x: 0, z: 0 }], [], 'founder', now)
@@ -142,9 +307,9 @@ export function reduceLayoutEdit(office: OfficeState, e: LayoutEdit, op: LayoutO
       const x = op.kind === 'place' ? op.x : piece.x
       const z = op.kind === 'place' ? op.z : piece.z
       const r: Rotation = op.kind === 'place' ? (op.r ?? piece.r) : (((piece.r + 1) & 3) as Rotation)
-      if (x === piece.x && z === piece.z && r === piece.r) return e.selected === id ? e : { ...e, selected: id, refused: null }
+      if (x === piece.x && z === piece.z && r === piece.r) return e.selected === id ? e : { ...e, ...NO_SEL, selected: id, refused: null }
       const c = checkPlace(office, e.draft, id, x, z, r)
-      if (!c.ok) return refuse({ ...e, selected: id }, c.cells, c.bad, c.reason, now)
+      if (!c.ok) return refuse({ ...e, ...NO_SEL, selected: id }, c.cells, c.bad, c.reason, now)
       return push(e, c.draft, id)
     }
     case 'team': {
@@ -158,12 +323,12 @@ export function reduceLayoutEdit(office: OfficeState, e: LayoutEdit, op: LayoutO
     case 'undo': {
       const draft = e.undo[e.undo.length - 1]
       if (!draft) return e
-      return { ...e, draft, undo: e.undo.slice(0, -1), redo: [...e.redo, e.draft], refused: null, armedCancel: false }
+      return { ...e, draft, undo: e.undo.slice(0, -1), redo: [...e.redo, e.draft], decorSel: null, wallSel: null, refused: null, armedCancel: false }
     }
     case 'redo': {
       const draft = e.redo[e.redo.length - 1]
       if (!draft) return e
-      return { ...e, draft, redo: e.redo.slice(0, -1), undo: [...e.undo, e.draft], refused: null, armedCancel: false }
+      return { ...e, draft, redo: e.redo.slice(0, -1), undo: [...e.undo, e.draft], decorSel: null, wallSel: null, refused: null, armedCancel: false }
     }
     case 'armCancel':
       return e.armedCancel === op.on ? e : { ...e, armedCancel: op.on }

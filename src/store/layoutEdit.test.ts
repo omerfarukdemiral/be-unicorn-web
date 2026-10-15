@@ -6,7 +6,7 @@ import { buildOffice } from '../engine/office'
 import type { GameState, OfficeState } from '../engine/types'
 import { UI_TEXT } from '../content'
 import { effectiveSpeed, pauseReasonsOf, useGameStore } from './gameStore'
-import { draftOffice, draftPieces, isDirty, reduceLayoutEdit, startEdit, UNDO_MAX, type LayoutEdit } from './layoutEdit'
+import { draftOffice, draftPieces, draftSpend, isDirty, reduceLayoutEdit, startEdit, UNDO_MAX, type LayoutEdit } from './layoutEdit'
 
 /** Pre-seed office (2 rings open), desks on r1-s0 (0,-1) and r1-s1 (0,1); the door cell is (3,-3). */
 function game(): GameState {
@@ -208,5 +208,74 @@ describe('layout edit in the store', () => {
     store().closeOverlay()
     useGameStore.setState((st) => ({ state: { ...st.state, gameOver: { reason: 'bankrupt' } as never } }))
     expect(store().beginLayoutEdit()).toBe(false)
+  })
+})
+
+describe('layout edit: decor pieces (grid step 4)', () => {
+  it('an armed piece goes down on a cell, stays armed, R turns it; the spend is the bill; Del takes a piece out', () => {
+    const o = office()
+    let e = run(o, startEdit(o), { kind: 'arm', armed: { kind: 'plantRow' } }, { kind: 'rotate' }, { kind: 'addDecor', x: -3, z: 0 })
+    expect(e.draft.decor).toEqual([{ id: 'd1', kind: 'plantRow', pos: { x: -3, z: 0 }, rotation: 1 }])
+    expect(e.armed).toEqual({ kind: 'plantRow' })
+    expect(draftSpend(o, e.draft)).toBe(600)
+    e = run(o, e, { kind: 'addDecor', x: -3, z: 1 })
+    expect(draftSpend(o, e.draft)).toBe(1200)
+    // Taken out again before Bitti: never bought, nothing to pay.
+    e = run(o, e, { kind: 'arm', armed: null }, { kind: 'selectDecor', id: 'd2' }, { kind: 'remove' })
+    expect(e.draft.decor.map((p) => p.id)).toEqual(['d1'])
+    expect(draftSpend(o, e.draft)).toBe(600)
+    // Undo brings it back.
+    expect(run(o, e, { kind: 'undo' }).draft.decor).toHaveLength(2)
+  })
+
+  it('a piece the cash cannot cover is refused when it is put down', () => {
+    const o = office()
+    const e = reduceLayoutEdit(o, run(o, startEdit(o), { kind: 'arm', armed: { kind: 'plantRow' } }), { kind: 'addDecor', x: -3, z: 0 }, 7, 500)
+    expect(e.draft.decor).toEqual([])
+    expect(e.refused).toMatchObject({ reason: 'cash', at: 7 })
+  })
+
+  it('a floor piece on a desk or over the cap is refused with the reason (Ofis dolu)', () => {
+    const o = office()
+    const onDesk = run(o, startEdit(o), { kind: 'arm', armed: { kind: 'panel' } }, { kind: 'addDecor', x: 0, z: -1 })
+    expect(onDesk.refused?.reason).toBe('overlap')
+    let e = run(o, startEdit(o), { kind: 'arm', armed: { kind: 'poster' } })
+    for (const seg of [-3, -2, -1, 0, 1, 2]) for (const wall of ['back', 'left'] as const) e = run(o, e, { kind: 'hang', at: { wall, seg } })
+    expect(e.draft.walls).toHaveLength(12)
+    e = run(o, e, { kind: 'hang', at: { wall: 'left', seg: 3 } })
+    expect(e.refused?.reason).toBe('decorCap')
+    expect(UI_TEXT['layout.reason.decorCap']).toBe('Ofis dolu.')
+  })
+
+  it('walls: hang, move to a bare segment, paint (one colour per wall), all priced', () => {
+    const o = office()
+    let e = run(o, startEdit(o), { kind: 'arm', armed: { kind: 'clock' } }, { kind: 'hang', at: { wall: 'back', seg: 0 } })
+    expect(e.draft.walls).toEqual([{ wall: 'back', seg: 0, kind: 'clock' }])
+    e = run(o, e, { kind: 'hang', at: { wall: 'back', seg: 0 } })
+    expect(e.refused?.reason).toBe('overlap')
+    e = run(o, e, { kind: 'arm', armed: null }, { kind: 'selectWall', at: { wall: 'back', seg: 0 } }, { kind: 'moveWall', from: { wall: 'back', seg: 0 }, to: { wall: 'left', seg: 2 } })
+    expect(e.draft.walls).toEqual([{ wall: 'left', seg: 2, kind: 'clock' }])
+    e = run(o, e, { kind: 'arm', armed: { kind: 'paint', color: '#cfe6c4' } }, { kind: 'hang', at: { wall: 'left', seg: -1 } }, { kind: 'arm', armed: { kind: 'paint', color: '#3b3a45' } }, { kind: 'hang', at: { wall: 'left', seg: 1 } })
+    expect(e.draft.walls!.filter((w) => w.kind === 'paint')).toEqual([{ wall: 'left', seg: 0, kind: 'paint', color: '#3b3a45' }])
+    expect(draftSpend(o, e.draft)).toBe(500 + 200)
+  })
+
+  it('Bitti charges the spend; short of cash the draft stays with the reason', () => {
+    const st = useGameStore.getState()
+    let s = game()
+    s = { ...s, stats: { ...s.stats, cash: 700 } }
+    useGameStore.setState({ state: s, ui: { ...st.ui, layoutEdit: null, panel: null, overlay: null } })
+    expect(useGameStore.getState().beginLayoutEdit()).toBe(true)
+    const op = useGameStore.getState().layoutEditOp
+    op({ kind: 'arm', armed: { kind: 'plantRow' } })
+    op({ kind: 'addDecor', x: -3, z: 0 })
+    useGameStore.setState((x) => ({ state: { ...x.state, stats: { ...x.state.stats, cash: 100 } } }))
+    expect(useGameStore.getState().commitLayoutEdit()).toMatchObject({ ok: false, error: 'insufficientCash' })
+    expect(useGameStore.getState().ui.layoutEdit?.refused?.reason).toBe('cash')
+    useGameStore.setState((x) => ({ state: { ...x.state, stats: { ...x.state.stats, cash: 700 } } }))
+    expect(useGameStore.getState().commitLayoutEdit()).toMatchObject({ ok: true })
+    expect(useGameStore.getState().state.stats.cash).toBe(100)
+    expect(useGameStore.getState().state.office.decor).toHaveLength(1)
+    expect(useGameStore.getState().ui.layoutEdit).toBeNull()
   })
 })

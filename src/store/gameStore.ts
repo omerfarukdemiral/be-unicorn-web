@@ -658,7 +658,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     set((s) => {
       const e = s.ui.layoutEdit
       if (!e) return s
-      const next = reduceLayoutEdit(s.state.office, e, op, performance.now())
+      const next = reduceLayoutEdit(s.state.office, e, op, performance.now(), s.state.stats.cash)
       return next === e ? s : { ui: { ...s.ui, layoutEdit: next } }
     })
   },
@@ -674,9 +674,17 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     }
     // Checked before the edit mode closes, so a refusal keeps the draft and says why (the action re-checks anyway).
     const pre = applySnapshot(get().state.office, e.draft)
-    if ('error' in pre) {
-      set((s) => ({ ui: { ...s.ui, lastError: { code: pre.error, at: performance.now(), action: 'applyLayout' } } }))
-      return { ok: false, state: get().state, error: pre.error }
+    // Short of cash for the new pieces: the draft stays and the panel says why (the spend line is already red).
+    const preErr = 'error' in pre ? pre.error : pre.cost > get().state.stats.cash ? ('insufficientCash' as const) : null
+    if (preErr) {
+      set((s) => ({
+        ui: {
+          ...s.ui,
+          lastError: { code: preErr, at: performance.now(), action: 'applyLayout' },
+          layoutEdit: s.ui.layoutEdit && preErr === 'insufficientCash' ? { ...s.ui.layoutEdit, refused: { cells: [], reason: 'cash', at: performance.now() } } : s.ui.layoutEdit,
+        },
+      }))
+      return { ok: false, state: get().state, error: preErr }
     }
     get().cancelLayoutEdit()
     const res = get().dispatch({ type: 'applyLayout', draft: e.draft })

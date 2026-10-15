@@ -128,7 +128,9 @@ const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
     sp('careless', 'best', { modules: {} }),
     // MV2d: plan freedom (the bootstrap seeds with each of the four module plans) and the category tour.
     ...PLANS.map(([, plan]) => sp('bootstrap', 'best', { modules: plan })),
-    ...TOUR_CATEGORIES.map((c) => sp('bootstrap', 'best', { firstCategory: c, extraCategories: [] })),
+    // B1: the tour runs under all four bots (a category can be fine for one plan and stall for another), plus module-less.
+    ...ARCHETYPES.flatMap((a) => TOUR_CATEGORIES.map((c) => sp(a, 'best', { firstCategory: c, extraCategories: [] }))),
+    ...TOUR_CATEGORIES.map((c) => sp('bootstrap', 'best', { firstCategory: c, extraCategories: [], modules: {} })),
     // E2: the same bots without effort management (the stage-arrival baseline of the acceptance band).
     ...ARCHETYPES.map((a) => sp(a, 'best', NO_EFFORT)),
   ]
@@ -488,6 +490,24 @@ line()
     const bare = runMany('bootstrap', 'best', { firstCategory: cat, extraCategories: [], modules: {} })
     line(`| ${cat} | ${uniCount(runs)}/${SEEDS} | ${fmtMin(uniOf(runs))} | ${runs.filter(failedRun).length} | ${uniCount(bare)}/${SEEDS} · ${fmtMin(uniOf(bare))} | ${Object.entries(ids).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} |`)
   }
+  line()
+  // B1: every category under every bot (single category, best decisions). The gate: >= 85% of the seeds reach Unicorn.
+  line('Kategori × bot (tek kategori, Unicorn / seed · medyan):')
+  line()
+  line(`| Kategori | ${ARCHETYPES.join(' | ')} |`)
+  line(`|---|${ARCHETYPES.map(() => '---').join('|')}|`)
+  const tourMin = Math.ceil(0.85 * SEEDS)
+  const weak: string[] = []
+  for (const cat of TOUR_CATEGORIES) {
+    const cells = ARCHETYPES.map((a) => {
+      const runs = runMany(a, 'best', { firstCategory: cat, extraCategories: [] })
+      if (uniCount(runs) < tourMin) weak.push(`${cat}/${a} ${uniCount(runs)}`)
+      return `${uniCount(runs)}/${SEEDS} · ${fmtMin(uniOf(runs))}`
+    })
+    line(`| ${cat} | ${cells.join(' | ')} |`)
+  }
+  line()
+  line(`Her kategori her botta ≥ ${tourMin}/${SEEDS} Unicorn: **${weak.length === 0 ? 'EVET' : 'HAYIR'}**${weak.length ? ` · zayıf: ${weak.join(', ')}` : ''}`)
   for (const r of all) Object.keys(r.moduleIds).forEach((k) => seen.add(k))
   const unseen = MODULES.filter((d) => !seen.has(d.id)).map((d) => d.id)
   line()

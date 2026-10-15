@@ -615,7 +615,7 @@ describe('ad focus (W3, A1: weights route the paid users)', () => {
 
   it('focusPreview: promoting the higher-ARPU product earns more 3 months out than promoting the lower one', () => {
     const s = full(['game', 'ai'], null)
-    // game ARPU 0.8, ai 1.2 (balance.CATEGORY_ARPU).
+    // game ARPU 0.88, ai 1.2 (balance.CATEGORY_ARPU).
     expect(focusPreview(s, s.projects[1]!.id, 3)).toBeGreaterThan(focusPreview(s, s.projects[0]!.id, 3))
   })
 

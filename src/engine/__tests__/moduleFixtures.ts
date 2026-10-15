@@ -63,7 +63,8 @@ export function legacy(s: GameState) {
   const mrr = s.projects.some((p) => p.launched) ? E.mrr(s.stats.users, arpu, enterpriseMrr) : enterpriseMrr
   const tam = E.marketTam(marketOf(s).segments, s.time.day)
   const pen = E.penetration(s.stats.users, tam)
-  const cac = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac')
+  // B1: the category CAC (web 0.85) joins the pre-module mix like the ARPU and organic ones.
+  const cac = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac') * categoryMix(s, B.CATEGORY_CAC)
   const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic') * categoryMix(s, B.CATEGORY_ORGANIC)
   const paid = E.paidPerMonth(s.finance.adBudget, cac, pen)
   const daysSincePrice = s.finance.priceChangeDay !== undefined ? s.time.day - s.finance.priceChangeDay : null

@@ -475,9 +475,9 @@ export function releaseWave(s: GameState, level: number): number {
   return Math.max(1, Math.round(w))
 }
 
-/** Users an update (after 1.0) brings: a smaller wave than a version, plus word of mouth; × the project's 'wave' modules. */
+/** Users an update (after 1.0) brings: a smaller wave than a version, plus word of mouth; × the project's 'wave' modules and its category (B1: game grows in hits). */
 export function updateWave(s: GameState, p?: Project): number {
-  const w = (B.RELEASE_UPDATE_USERS * B.RELEASE_WAVE_STAGE_GROWTH ** s.stage * (0.5 + s.stats.reputation / 100) + s.stats.users * B.RELEASE_UPDATE_USER_SHARE) * (p ? moduleMult(p, 'wave', s.time.day) : 1)
+  const w = (B.RELEASE_UPDATE_USERS * B.RELEASE_WAVE_STAGE_GROWTH ** s.stage * (0.5 + s.stats.reputation / 100) + s.stats.users * B.RELEASE_UPDATE_USER_SHARE) * (p ? moduleMult(p, 'wave', s.time.day) * (B.CATEGORY_WAVE[p.category] ?? 1) : 1)
   return Math.max(1, Math.round(w))
 }
 

@@ -40,10 +40,10 @@ export function adStepWarning(s: GameState, amount: number): boolean {
   return after < 1 || (now !== null && now < 1)
 }
 
-export type CacFactorKey = 'crisis' | 'spend' | 'market' | 'focus' | 'maturity' | 'stage' | 'modules' | 'policy'
+export type CacFactorKey = 'crisis' | 'spend' | 'market' | 'focus' | 'maturity' | 'stage' | 'category' | 'modules' | 'policy'
 
 /** Tie order of the reason line: the first one the player can act on or name. */
-export const CAC_FACTOR_ORDER: readonly CacFactorKey[] = ['crisis', 'spend', 'market', 'focus', 'maturity', 'stage', 'modules', 'policy']
+export const CAC_FACTOR_ORDER: readonly CacFactorKey[] = ['crisis', 'spend', 'market', 'focus', 'maturity', 'stage', 'category', 'modules', 'policy']
 
 export interface CacFactor {
   key: CacFactorKey
@@ -62,7 +62,7 @@ export interface CacFactor {
  * The multiplicative parts of today's CAC (economy.cac × modifiers × policies × module mix × warm-up):
  * stage (CAC_STAGE_GROWTH, only CAC_STAGE_REASON_DAYS after a stage-up, against the stage before), maturity (against
  * avgMaturity 1), spend (the ad budget past the MRR), market (the penetration), crisis (the 'cac' modifiers), focus
- * (the warm-up), modules (the ad-weighted module mix), policy. Every part but stage multiplies back to derived.cac
+ * (the warm-up), category (the ad-weighted CATEGORY_CAC, B1), modules (the ad-weighted module mix), policy. Every part but stage multiplies back to derived.cac
  * from CAC_BASE × CAC_STAGE_GROWTH^stage / 1.5.
  */
 export function cacFactors(s: GameState): CacFactor[] {
@@ -106,6 +106,7 @@ export function cacFactors(s: GameState): CacFactor[] {
     { key: 'focus', value: warm, ...(warm > 1 ? { days: left } : {}) },
     { key: 'maturity', value: 1.5 / (0.5 + d.avgMaturity) },
     { key: 'stage', value: fresh ? B.CAC_STAGE_GROWTH : 1 },
+    { key: 'category', value: wMean(ads, (p) => B.CATEGORY_CAC[p.category] ?? 1) },
     { key: 'modules', value: modules, ...(module ? { module } : {}) },
     { key: 'policy', value: d.policies?.mult.cac ?? 1 },
   ]

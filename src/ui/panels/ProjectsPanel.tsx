@@ -61,9 +61,9 @@ export const CATEGORY_COLOR: Record<ProjectCategory, string> = {
 function pips(v: number, steps: readonly number[]): number {
   return 1 + steps.filter((x) => v >= x).length
 }
-const TRAITS: readonly { key: 'time' | 'arpu' | 'organic'; icon: IconName; color: string; of: (c: ProjectCategory) => number }[] = [
+export const TRAITS: readonly { key: 'time' | 'arpu' | 'organic'; icon: IconName; color: string; of: (c: ProjectCategory) => number }[] = [
   { key: 'time', icon: 'hourglass', color: 'var(--color-g-runway)', of: (c) => pips(B.PROJECT_SIZE[c], [9, 11, 13]) },
-  { key: 'arpu', icon: 'coin', color: 'var(--color-g-cash)', of: (c) => pips(B.CATEGORY_ARPU[c], [0.9, 1.05, 1.15]) },
+  { key: 'arpu', icon: 'coin', color: 'var(--color-g-cash)', of: (c) => pips(B.CATEGORY_ARPU[c], [0.95, 1.05, 1.15]) },
   { key: 'organic', icon: 'trend', color: 'var(--color-g-users)', of: (c) => pips(B.CATEGORY_ORGANIC[c], [0.85, 1.05, 1.3]) },
 ]
 

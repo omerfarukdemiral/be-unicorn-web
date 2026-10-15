@@ -234,6 +234,9 @@ function cacFactorText(s: GameState, r: CacFactor): string | null {
       return t('ads.cac.maturity', { f })
     case 'stage':
       return t('ads.cac.stage', { f, stage: withCase(STAGES[s.stage]?.name ?? '', 'loc') })
+    case 'category':
+      // A category only ever lowers the CAC (web 0.85): never the reason it is high.
+      return null
     case 'modules':
       return r.module ? t('ads.cac.modules', { f, module: moduleName(r.module) }) : null
     case 'policy': {

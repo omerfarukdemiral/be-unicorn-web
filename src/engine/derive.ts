@@ -210,7 +210,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   // churn; ads past the MRR saturate on their own (super-linear CAC), so the paid channel has a peak.
   const tam = E.marketTam(marketOf(s).segments, s.time.day) * mix('tam')
   const pen = E.penetration(s.stats.users, tam)
-  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac') * mix('cac') * adFocusWarmup(s)
+  const cacValue = E.cac(s.stage, avgMat, s.finance.adBudget, mrr, pen) * modifierMult(s, 'cac') * policyMult(s, content, 'cac') * mix('cac') * wMean(ads, (p) => B.CATEGORY_CAC[p.category] ?? 1) * adFocusWarmup(s)
   const organic = E.organicPerMonth(o.deptOutput.marketing, s.stats.reputation, avgMat, pen, rivalShare) * modifierMult(s, 'organic') * policyMult(s, content, 'organic') * wMean(ws, (p) => (B.CATEGORY_ORGANIC[p.category] ?? 1) * moduleMult(p, 'organic', day))
   // One paid channel: its saturation reads the TOTAL ad budget, whatever the modules do to the CAC.
   const paid = E.paidPerMonth(s.finance.adBudget, cacValue, pen)

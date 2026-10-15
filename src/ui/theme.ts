@@ -214,6 +214,7 @@ export const PANEL_COLOR: Record<PanelKind, string> = {
   settings: 'var(--color-ink-3)',
   roadmap: 'var(--color-brand)',
   leaderboard: 'var(--color-g-indigo)',
+  layout: 'var(--color-g-retention)',
 }
 
 /** Runway (months) under which a number turns red: the one danger band (docs/LAYOUT.md §4.1). */

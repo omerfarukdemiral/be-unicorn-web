@@ -24,6 +24,7 @@ const PANELS = {
   settings: { kind: 'settings' },
   roadmap: { kind: 'roadmap' },
   leaderboard: { kind: 'leaderboard' },
+  layout: { kind: 'layout' },
 } satisfies { [K in PanelKind]: Extract<Panel, { kind: K }> }
 
 function game(): GameState {
@@ -31,9 +32,9 @@ function game(): GameState {
 }
 
 describe('panelHeadline', () => {
-  it('returns a finite primary number for all 11 panel kinds', () => {
+  it('returns a finite primary number for all 12 panel kinds', () => {
     const s = game()
-    expect(Object.keys(PANELS)).toHaveLength(11)
+    expect(Object.keys(PANELS)).toHaveLength(12)
     for (const p of Object.values(PANELS)) {
       const h = panelHeadline(s, p)
       expect(h, p.kind).not.toBeNull()

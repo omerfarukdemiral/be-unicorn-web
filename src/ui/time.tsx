@@ -89,7 +89,7 @@ export function useRecentSlowdown(): boolean {
 
 /** Focus pause (the game holds time while a card is read), as opposed to the player's own pause. */
 export function isFocusHold(hold: TimeHold): hold is PauseReason {
-  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer' || hold === 'payday' || hold === 'bubble'
+  return hold === 'decision' || hold === 'concept' || hold === 'modal' || hold === 'offer' || hold === 'payday' || hold === 'bubble' || hold === 'layout'
 }
 
 /**
@@ -176,9 +176,10 @@ export function ScreenFrame() {
 // ---------------------------------------------------------------------------
 
 /** The veil shows on a still world with nothing open: a blocking modal brings its own backdrop and a center
- * screen (stats, Kanun Kitabı, Pazar haritası) sits over the scene itself (docs/GAMEPLAY_V2.md §14.3). */
-export function pauseVeilShown(speed: GameSpeed, gameOver: boolean, ui: Pick<UiState, 'overlay'>): boolean {
-  return speed === 0 && !gameOver && ui.overlay === null
+ * screen (stats, Kanun Kitabı, Pazar haritası) sits over the scene itself (docs/GAMEPLAY_V2.md §14.3). The office edit
+ * mode is paused too, but the office is what the player works on: no veil over it. */
+export function pauseVeilShown(speed: GameSpeed, gameOver: boolean, ui: Pick<UiState, 'overlay'> & { layoutEdit?: unknown }): boolean {
+  return speed === 0 && !gameOver && ui.overlay === null && !ui.layoutEdit
 }
 
 /** Still world: the scene fades a little (desaturated, soft vignette). Below every UI surface. */
@@ -207,7 +208,7 @@ export function StartCall() {
   const inset = useGameStore((st) => st.ui.sceneInset)
   const s = useGameStore(
     useShallow((st) => ({
-      show: !st.ui.runStarted && st.state.time.speed === 0 && !st.state.gameOver && blockingOverlay(st.ui) === null,
+      show: !st.ui.runStarted && st.state.time.speed === 0 && !st.state.gameOver && blockingOverlay(st.ui) === null && !st.ui.layoutEdit,
       stage: st.state.stage,
       panelOpen: st.ui.panel !== null,
     })),

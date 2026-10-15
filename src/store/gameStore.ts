@@ -10,11 +10,13 @@
 import { create } from 'zustand'
 import { DECISIONS } from '../content'
 import { applyAction, createGame, step } from '../engine'
+import { applySnapshot } from '../engine/layout'
 import * as B from '../engine/balance'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
 import { clearSave, readCodex, readProfile, readSave, readUiSave, writeCodex, writeProfile, writeSave, writeUiSave } from './save'
 import { addPin, autoPin, defaultPins, removePin } from './metricPins'
-import { CENTER_KINDS, type Codex, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState } from './types'
+import { isDirty, reduceLayoutEdit, startEdit } from './layoutEdit'
+import { CENTER_KINDS, type Codex, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState, type ZoomLevel } from './types'
 
 export { SAVE_KEY } from './save'
 
@@ -237,6 +239,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   pinTouched: saved.pinTouched ?? false,
   seenGoals: saved.seenGoals ?? [],
   codex: readCodex(),
+  layoutEdit: null,
 })
 
 /** UI fields that survive newGame()/load() (player preferences of this session, top-bar pins included). */
@@ -300,7 +303,7 @@ export function centerOpen(ui: Pick<UiState, 'overlay'>): boolean {
  * A center screen is not one: it shows, it does not ask for a decision (docs/GAMEPLAY_V2.md §14.1).
  * `concept` holds only while the card itself is open; a concept arriving never pauses.
  */
-export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean; bubbleOpen?: string | null }, state?: GameState): PauseReason[] {
+export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisionExpanded?: boolean; bubbleOpen?: string | null; layoutEdit?: unknown }, state?: GameState): PauseReason[] {
   const r: PauseReason[] = []
   if (blockingOverlay(ui)) r.push('modal')
   const p = ui.panel
@@ -311,6 +314,8 @@ export function pauseReasonsOf(ui: Pick<UiState, 'overlay' | 'panel'> & { decisi
   if (p?.kind === 'growth' && p.section === 'round' && state && offerWaiting(state)) r.push('offer')
   if (paydayDeskOpen(ui, state)) r.push('payday')
   if (ui.bubbleOpen != null) r.push('bubble')
+  // The office edit mode holds the world: nobody walks into a desk that is being moved.
+  if (ui.layoutEdit != null) r.push('layout')
   return r
 }
 
@@ -530,6 +535,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
 
   select(selection) {
     const { ui, state, openPanel, closePanel, panelGoBack } = get()
+    // The edit mode picks pieces by cell (render/LayoutEditor): people, slots and the floor select nothing.
+    if (ui.layoutEdit) return
     if (!selection) {
       if (ui.bubbleOpen) get().setBubbleOpen(null)
       // Empty floor: leave a detail / targeted shop the way the back button does (a dock tab stays open).
@@ -549,6 +556,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   },
   openPanel(panel, opts) {
     set((s) => {
+      // The edit mode owns the panel until Vazgeç / Bitti.
+      if (s.ui.layoutEdit && panel.kind !== 'layout') return s
       const cur = s.ui.panel
       if (samePanel(cur, panel)) return s
       const panelBack = opts?.root ? null : opts?.replace ? s.ui.panelBack : cur
@@ -563,11 +572,17 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     if (ui.panel?.kind === tab) closePanel()
     else openPanel({ kind: tab }, { root: true })
   },
-  closePanel: () => set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: withPause({ ...s.ui, panel: null, panelBack: null }, s.state) })),
+  closePanel: () => {
+    // Closing the layout panel is Vazgeç: the draft goes, nothing moved.
+    if (get().ui.layoutEdit) return get().cancelLayoutEdit()
+    set((s) => (s.ui.panel === null && s.ui.panelBack === null ? s : { ui: withPause({ ...s.ui, panel: null, panelBack: null }, s.state) }))
+  },
   panelGoBack: () => set((s) => (s.ui.panelBack ? { ui: withPause({ ...s.ui, panel: s.ui.panelBack, panelBack: null }, s.state) } : s)),
   setHoverSlot: (hoverSlotId) => set((s) => (s.ui.hoverSlotId === hoverSlotId ? s : { ui: { ...s.ui, hoverSlotId } })),
   openOverlay: (overlay) =>
     set((s) => {
+      // A center screen would cover the office being edited.
+      if (s.ui.layoutEdit && CENTER_KINDS.has(overlay.kind)) return s
       // A center screen and the panel are one surface (phones have room for one): the screen closes the panel.
       if (CENTER_KINDS.has(overlay.kind)) return { ui: withPause({ ...s.ui, overlay, panel: null, panelBack: null }, s.state) }
       return { ui: withPause({ ...s.ui, overlay }, s.state) }
@@ -590,7 +605,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       return { ui: withPause({ ...s.ui, overlay: null }, s.state) }
     }),
   setPlacing: (placing) => set((s) => ({ ui: { ...s.ui, placing } })),
-  setZoom: (zoom) => set((s) => ({ ui: { ...s.ui, zoom } })),
+  // The edit mode shows the whole office: the close zoom (selection follow) waits until it ends.
+  setZoom: (zoom) => set((s) => ({ ui: { ...s.ui, zoom: s.ui.layoutEdit ? (Math.min(zoom, 1) as ZoomLevel) : zoom } })),
   setSceneInset: (inset) =>
     set((s) => {
       const c = s.ui.sceneInset
@@ -615,6 +631,57 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const next = { ...ui, pinnedMetrics: removePin(ui.pinnedMetrics, id), pinTouched: true }
     set({ ui: next })
     persistUi(next)
+  },
+  beginLayoutEdit() {
+    const { ui, state } = get()
+    if (ui.layoutEdit || state.gameOver || blockingOverlay(ui) || ui.overlay?.kind === 'payday') return false
+    set((s) => ({
+      ui: withPause(
+        {
+          ...s.ui,
+          layoutEdit: startEdit(s.state.office),
+          panel: { kind: 'layout' },
+          panelBack: null,
+          overlay: centerOpen(s.ui) ? null : s.ui.overlay,
+          placing: null,
+          hoverSlotId: null,
+          bubbleOpen: null,
+          decisionExpanded: false,
+          zoom: Math.min(s.ui.zoom, 1) as ZoomLevel,
+        },
+        s.state,
+      ),
+    }))
+    return true
+  },
+  layoutEditOp(op) {
+    set((s) => {
+      const e = s.ui.layoutEdit
+      if (!e) return s
+      const next = reduceLayoutEdit(s.state.office, e, op, performance.now())
+      return next === e ? s : { ui: { ...s.ui, layoutEdit: next } }
+    })
+  },
+  cancelLayoutEdit() {
+    set((s) => (s.ui.layoutEdit ? { ui: withPause({ ...s.ui, layoutEdit: null, panel: null, panelBack: null }, s.state) } : s))
+  },
+  commitLayoutEdit() {
+    const e = get().ui.layoutEdit
+    if (!e) return null
+    if (!isDirty(e)) {
+      get().cancelLayoutEdit()
+      return { ok: true, state: get().state }
+    }
+    // Checked before the edit mode closes, so a refusal keeps the draft and says why (the action re-checks anyway).
+    const pre = applySnapshot(get().state.office, e.draft)
+    if ('error' in pre) {
+      set((s) => ({ ui: { ...s.ui, lastError: { code: pre.error, at: performance.now(), action: 'applyLayout' } } }))
+      return { ok: false, state: get().state, error: pre.error }
+    }
+    get().cancelLayoutEdit()
+    const res = get().dispatch({ type: 'applyLayout', draft: e.draft })
+    if (!res.ok) set((s) => ({ ui: withPause({ ...s.ui, layoutEdit: e, panel: { kind: 'layout' }, panelBack: null }, s.state) }))
+    return res
   },
   markGoalsSeen() {
     const { ui, state } = get()

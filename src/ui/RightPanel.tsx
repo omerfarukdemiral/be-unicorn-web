@@ -34,6 +34,7 @@ import { DecisionPanel } from './panels/DecisionPanel'
 import { SettingsPanel } from './panels/SettingsPanel'
 import { RoadmapPanel } from './panels/RoadmapPanel'
 import { LeaderboardPanel } from './panels/LeaderboardPanel'
+import { LayoutPanel } from './panels/LayoutPanel'
 
 function panelMeta(p: Panel): { icon: IconName; title: string } {
   switch (p.kind) {
@@ -51,6 +52,8 @@ function panelMeta(p: Panel): { icon: IconName; title: string } {
       return { icon: 'trophy', title: t('lb.title') }
     case 'journal':
       return { icon: 'book', title: t('achv.title') }
+    case 'layout':
+      return { icon: 'move', title: t('layout.title') }
     default:
       return { icon: DOCK_TABS.find((d) => d.id === p.kind)?.icon ?? 'bag', title: t(`dock.${p.kind}`) }
   }
@@ -144,6 +147,8 @@ function PanelBody({ panel }: { panel: Panel }) {
       return <RoadmapPanel />
     case 'leaderboard':
       return <LeaderboardPanel />
+    case 'layout':
+      return <LayoutPanel />
   }
 }
 

@@ -1,4 +1,4 @@
-// View controls (top bar, section C): zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, İstatistik,
+// View controls (top bar, section C): Ofisi düzenle (PC only), zoom −/+, language (≥1440 only; otherwise in Settings), Kazanımlar, İstatistik,
 // Liderlik, settings. Frameless icons (bare IconButtons: no box, a round hover tint; an open panel = brand icon + a
 // dot under it), no card of their own: they sit on the top bar plate, spacing alone groups them.
 import { useEffect, useRef } from 'react'
@@ -9,6 +9,7 @@ import { t } from '../i18n'
 import { BARE_HOVER, cx, IconButton } from '../primitives'
 import { useCloud } from '../../net/cloud'
 import { toggleAchievements, toggleLeaderboard } from '../shortcuts'
+import { tryBeginLayoutEdit, useCanEditLayout } from '../layoutEditGate'
 
 /** Gear → settings in the single panel (again closes it). */
 export function toggleSettings() {
@@ -24,6 +25,7 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
   const z = (d: number) => setZoom(Math.max(0, Math.min(2, zoom + d)) as ZoomLevel)
   return (
     <div className="flex shrink-0 items-center gap-0.5">
+      <LayoutEditButton size={size} />
       {showZoom && (
         <>
           <IconButton icon="zoomOut" label={t('view.zoomOut')} onClick={() => z(-1)} disabled={zoom === 0} size={size} bare />
@@ -48,6 +50,18 @@ export function ViewControls({ size = 40, showLanguage = false, showZoom = true 
       <IconButton icon="gear" label={t('settings.title')} onClick={toggleSettings} size={size} active={settingsOpen} bare />
     </div>
   )
+}
+
+/**
+ * Ofisi düzenle (O): PC only. A phone, a tablet or any touch-first screen never sees it (layoutEditGate), so the
+ * same ViewControls in the phone's more menu stays without it. Again = Bitti.
+ */
+export function LayoutEditButton({ size }: { size: number }) {
+  const allowed = useCanEditLayout()
+  const editing = useGameStore((s) => s.ui.layoutEdit !== null)
+  const commit = useGameStore((s) => s.commitLayoutEdit)
+  if (!allowed) return null
+  return <IconButton icon="move" label={t('layout.openTitle')} title={t('layout.openTitle')} onClick={() => (editing ? commit() : tryBeginLayoutEdit())} size={size} active={editing} bare />
 }
 
 /** One short pop when the badge grows (a new concept or goal): the only notice an achievement gets. */

@@ -5,6 +5,7 @@
 import { CONCEPT_IDS, type GameState } from '../engine/types'
 import type { Panel } from '../store/types'
 import { displayMaturity } from '../engine/modules'
+import { typeCaps, typeUse } from '../engine/layout'
 import { cashFlow } from './cashflow'
 
 /** How the number prints: money ($12K), Kasa in the HUD chip's own format ($15,098), money per month (−$4.2K/ay),
@@ -52,6 +53,9 @@ export function panelHeadline(s: GameState, panel: Panel): PanelHeadline | null 
       return { label: 'head.valuation', value: s.finance.valuation, unit: 'money' }
     case 'settings':
       return { label: 'head.day', value: Math.floor(s.time.day) + 1, unit: 'day' }
+    // Ofisi düzenle: desks placed out of what the open rings hold (the cap a layout cannot pass).
+    case 'layout':
+      return { label: 'layout.desks', value: typeUse(s.office).desk, unit: 'count', of: typeCaps(s.office).desk }
     // The detail head draws DetailHeader, not this number; the figure is kept for the selection's own readouts.
     case 'detail': {
       const sel = panel.selection

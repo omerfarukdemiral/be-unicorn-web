@@ -184,13 +184,13 @@ export function decorCap(stage: StageIndex): number {
 }
 
 /** A functional item as placed: its cells (anchor first) and its rotation. */
-interface ItemPiece {
+export interface ItemPiece {
   anchor: Slot
   cells: Slot[]
   rotation: Rotation
 }
 
-function itemPieces(office: OfficeState): ItemPiece[] {
+export function itemPieces(office: OfficeState): ItemPiece[] {
   const parts = new Map<SlotId, Slot[]>()
   for (const s of office.slots) if (s.spanOf !== undefined) parts.set(s.spanOf, [...(parts.get(s.spanOf) ?? []), s])
   const out: ItemPiece[] = []
@@ -818,6 +818,21 @@ function addStored(storage: StoredPiece[], kind: string): void {
  * catalogue (step 4), so a piece from nowhere is 'invalid'. Validated as a whole (validateLayout).
  */
 export function applySnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState } | { error: ActionErrorCode } {
+  const p = previewSnapshot(office, snap)
+  if ('error' in p) return p
+  return p.check.ok ? { office: p.office } : { error: refusalError(p.check.reason!) }
+}
+
+/**
+ * `snap` applied without the verdict, plus its validity check: the edit mode's hover and drop read the refusal and
+ * its cells (applySnapshot only keeps the action error). `error` is a malformed snapshot (unknown anchor, bad cell).
+ */
+export function previewSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; check: LayoutCheck } | { error: ActionErrorCode } {
+  const built = buildSnapshot(office, snap)
+  return 'error' in built ? built : { office: built.office, check: validateLayout(built.office) }
+}
+
+function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState } | { error: ActionErrorCode } {
   const next = clone(office)
   const pieces = new Map(itemPieces(next).map((p) => [p.anchor.id, p]))
   const moving: { cp: LayoutSnapshot['slots'][string]; itemId: string; occupantId?: string; team?: Dept; spec: PlacementSpec }[] = []
@@ -873,8 +888,7 @@ export function applySnapshot(office: OfficeState, snap: LayoutSnapshot): { offi
     next.walls = snap.walls.map((w) => ({ ...w }))
   }
   next.storage = storage.filter((x) => x.n > 0)
-  const check = validateLayout(next)
-  return check.ok ? { office: next } : { error: refusalError(check.reason!) }
+  return { office: next }
 }
 
 export type { PlacementSpec }

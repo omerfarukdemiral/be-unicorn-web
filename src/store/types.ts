@@ -1,6 +1,7 @@
 // Store contract: the ONLY bridge between engine and render/ui.
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
 import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameSpeed, GameState, HudWidget, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
+import type { LayoutEdit, LayoutOp } from './layoutEdit'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -34,6 +35,8 @@ export type Panel =
   | { kind: 'roadmap' }
   /** Liderlik: the live leaderboard (L, top-bar trophy). Polls every 10 s while open. */
   | { kind: 'leaderboard' }
+  /** Ofisi düzenle (PC edit mode, grid §4): the selected piece, its turn and team label, undo, Vazgeç / Bitti. Only while ui.layoutEdit is set. */
+  | { kind: 'layout' }
 
 export type PanelKind = Panel['kind']
 
@@ -76,9 +79,10 @@ export interface SceneInset {
  * expanded in the scene bubble (ui.decisionExpanded), a Defter (concept) card open in the panel, the round offer
  * (`offer`: Büyüme › Tur `{kind:'growth', section:'round'}`, the only view that draws the size picker, while a size
  * choice or a weekly pitch waits), or the payday desk open while finance.pendingPayday waits (`payday`, GAMEPLAY V2
- * §3 md.6), or an actionable scene bubble expanded (`bubble`, ui.bubbleOpen: the world holds while it is read). Shop / team / projects panels and the plain Büyüme hub never pause; a concept arriving never pauses.
+ * §3 md.6), or an actionable scene bubble expanded (`bubble`, ui.bubbleOpen: the world holds while it is read), or the
+ * office edit mode (`layout`, ui.layoutEdit: PC only). Shop / team / projects panels and the plain Büyüme hub never pause; a concept arriving never pauses.
  */
-export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday' | 'bubble'
+export type PauseReason = 'modal' | 'decision' | 'concept' | 'offer' | 'payday' | 'bubble' | 'layout'
 
 /**
  * Keşif (docs/GAMEPLAY_V2.md §9.2, §12): decision cards ever shown and threads whose last step came, across runs.
@@ -146,6 +150,8 @@ export interface UiState {
   seenGoals: string[]
   /** Keşif grid (cards seen, threads done over every run); read from 'be-unicorn:codex', written by afterStep. */
   codex: Codex
+  /** Office edit mode (PC only, grid §4): the draft and its undo stack. Set = the `layout` pause, the layout panel. */
+  layoutEdit: LayoutEdit | null
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
@@ -204,4 +210,14 @@ export interface GameStore {
   markMetricsSeen(ids: readonly HudWidget[]): void
   /** Kazanımlar was opened: every goal done so far stops counting on the badge. */
   markGoalsSeen(): void
+
+  // Office edit mode (grid §4). The caller checks the device (ui/layoutEditGate): phones never get here.
+  /** Opens the edit mode on the live office (pauses; the layout panel replaces any panel). false when a modal or the end blocks it. */
+  beginLayoutEdit(): boolean
+  /** One draft op (select, move, turn, team label, undo / redo). */
+  layoutEditOp(op: LayoutOp): void
+  /** Vazgeç: drops the draft, nothing is charged or moved. */
+  cancelLayoutEdit(): void
+  /** Bitti: one applyLayout for the whole draft. A refusal keeps the edit mode open with the reason. */
+  commitLayoutEdit(): ActionResult | null
 }

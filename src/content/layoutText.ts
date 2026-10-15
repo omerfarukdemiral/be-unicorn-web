@@ -1,4 +1,4 @@
-// Free office grid copy (grid design §4). One short line each; the edit mode's ghost words come with step 3.
+// Free office grid copy (grid design §4). One short line each, "sen" voice; merged into UI_TEXT (content/index.ts).
 import type { ActionErrorCode } from '../engine/types'
 
 /** Refusals of a layout change (moveItem to a cell, applyLayout). */
@@ -6,4 +6,33 @@ export const LAYOUT_ERROR_TEXT: Pick<Record<ActionErrorCode, string>, 'blocksDoo
   blocksDoor: 'Kapının önü kapanır.',
   sealsDesk: 'Bir masaya yol kalmaz.',
   officeFull: 'Ofis dolu.',
+}
+
+/** PC edit mode (O, "Ofisi düzenle"): panel lines, buttons and the red cell's reason. */
+export const LAYOUT_TEXT: Record<string, string> = {
+  'layout.title': 'Ofisi düzenle',
+  'layout.openTitle': 'Ofisi düzenle (O)',
+  'layout.hint': 'Parçayı tut, sürükle. R ile döndür.',
+  'layout.pick': 'Bir masa ya da eşya seç.',
+  'layout.rotate': 'Döndür',
+  'layout.team': 'Ekip',
+  'layout.undo': 'Geri al',
+  'layout.redo': 'Yinele',
+  'layout.cancel': 'Vazgeç',
+  'layout.done': 'Bitti',
+  'layout.desks': 'Masa',
+  'layout.armed': 'Değişiklikler gider. Esc’ye bir daha bas.',
+  'layout.sits': '{name} oturuyor',
+  'layout.reason.blocksDoor': LAYOUT_ERROR_TEXT.blocksDoor,
+  'layout.reason.sealsDesk': LAYOUT_ERROR_TEXT.sealsDesk,
+  'layout.reason.typeCap': LAYOUT_ERROR_TEXT.officeFull,
+  'layout.reason.decorCap': LAYOUT_ERROR_TEXT.officeFull,
+  'layout.reason.overlap': 'Burası dolu.',
+  'layout.reason.fixture': 'Burası sabit.',
+  'layout.reason.locked': 'Bu alan kilitli.',
+  'layout.reason.outside': 'Ofisin dışı.',
+  'layout.reason.founder': 'Senin masan yerinde kalır.',
+  'layout.reason.invalid': 'Buraya olmaz.',
+  'time.reason.layout': 'Ofis düzenleniyor',
+  'time.reasonShort.layout': 'Ofis',
 }

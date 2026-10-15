@@ -8,7 +8,7 @@ import { useGameStore } from '../store/gameStore'
  * (short + touch) get the compact layout. Below 1024 the one-row desktop bars do not fit (stage + 4 gauges + speed
  * + view controls ≈ 840px), so the tablet band takes the phone bars and the bottom sheet.
  */
-const MOBILE_QUERY = '(max-width: 1023px), (pointer: coarse) and (max-height: 500px)'
+export const MOBILE_QUERY = '(max-width: 1023px), (pointer: coarse) and (max-height: 500px)'
 
 function subscribeMq(cb: () => void): () => void {
   if (typeof window === 'undefined' || !window.matchMedia) return () => {}

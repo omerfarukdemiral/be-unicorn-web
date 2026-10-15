@@ -2,7 +2,7 @@
 // tab, a speed key, zoom or each other.
 import { describe, expect, it } from 'vitest'
 import { DOCK_TABS } from './Dock'
-import { ACHIEVEMENTS_KEY, CENTER_KEYS, LEADERBOARD_KEY } from './shortcuts'
+import { ACHIEVEMENTS_KEY, CENTER_KEYS, LAYOUT_KEY, LEADERBOARD_KEY } from './shortcuts'
 
 const FIXED = ['1', '2', '3', '+', '=', '-', '_', ' ', 'escape']
 
@@ -19,10 +19,10 @@ describe('shortcuts', () => {
   })
 
   it('i / l / m / k: every key has one owner (dock, Liderlik, Kazanımlar, center screens, speed, zoom)', () => {
-    const all = [...DOCK_TABS.map((d) => d.key), LEADERBOARD_KEY, ACHIEVEMENTS_KEY, ...Object.keys(CENTER_KEYS), ...FIXED]
+    const all = [...DOCK_TABS.map((d) => d.key), LEADERBOARD_KEY, ACHIEVEMENTS_KEY, LAYOUT_KEY, ...Object.keys(CENTER_KEYS), ...FIXED]
     expect(new Set(all).size).toBe(all.length)
     expect(CENTER_KEYS.i).toBe('stats')
-    for (const k of ['i', 'l', 'm', 'k', 'y', 'h']) expect(all.filter((x) => x === k)).toHaveLength(1)
+    for (const k of ['i', 'l', 'm', 'k', 'y', 'h', 'o']) expect(all.filter((x) => x === k)).toHaveLength(1)
   })
 
   it('y / h open Kanun Kitabı and Pazar haritası, clear of the dock, Liderlik and Kazanımlar', () => {

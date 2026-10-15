@@ -202,7 +202,7 @@ describe('autoPlace', () => {
 })
 
 describe('hiring seats (nearestFreeDesk)', () => {
-  it('labelled desk of the team nearest the team, then the first unlabelled one (today’s seat), then any', () => {
+  it('a desk touching the team, then a labelled one nearest the team, then the first unlabelled one (today’s seat), then any', () => {
     const o = buildOffice(2, 3)
     const desks = o.slots.filter((s) => s.type === 'desk' && s.ring > 0)
     for (const s of desks) s.itemId = 'desk-basic'
@@ -210,7 +210,9 @@ describe('hiring seats (nearestFreeDesk)', () => {
     const seat = desks.find((s) => s.id === 'r3-s4')!
     seat.occupantId = 'e1'
     seat.team = 'eng'
-    expect(nearestFreeDesk(o, 'eng')?.id).toBe(desks[0]!.id)
+    // Grid §5: the free desk beside the team (r3-s5, Chebyshev 1) beats today's first unlabelled one.
+    expect(nearestFreeDesk(o, 'eng')?.id).toBe('r3-s5')
+    expect(nearestFreeDesk(o, 'sales')?.id).toBe(desks[0]!.id)
     // Two labelled free desks: the one nearest the seated team wins.
     const near = desks.find((s) => s.id === 'r3-s5')!
     near.team = 'eng'

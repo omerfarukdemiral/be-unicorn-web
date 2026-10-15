@@ -18,6 +18,8 @@ import {
   onLeave,
   previewSpend,
   serialize,
+  typeCaps,
+  typeUse,
   type Action,
   type Archetype,
   type Dept,
@@ -523,9 +525,16 @@ function randomDesk(rng?: Rng): PaydayChoice {
   }
 }
 
+/** Seats left without a new ring: desks still buyable under the cap plus placed desks nobody sits at. */
 function freeDesks(s: GameState): number {
   const open = new Set(s.office.rings.filter((r) => r.unlocked).map((r) => r.index))
-  return s.office.slots.filter((x) => x.type === 'desk' && x.id !== 'founder' && open.has(x.ring) && x.occupantId === undefined).length
+  const spare = s.office.slots.filter((x) => x.type === 'desk' && x.id !== 'founder' && x.itemId !== undefined && x.spanOf === undefined && open.has(x.ring) && x.occupantId === undefined).length
+  return Math.max(0, typeCaps(s.office).desk - typeUse(s.office).desk) + spare
+}
+
+/** Buys a desk where auto placement puts it (grid §3, like a phone buy); false when refused. */
+function buyDesk(c: Ctx, itemId: string): boolean {
+  return typeUse(c.s.office).desk < typeCaps(c.s.office).desk && c.act({ type: 'placeItem', itemId })
 }
 
 function neededDept(s: GameState, cfg: BotConfig, mem?: Record<string, number>): Dept[] {
@@ -562,10 +571,8 @@ function furnish(c: Ctx, cfg: BotConfig): void {
   const avail = (f: FurnitureItem) => f.stageUnlock <= c.s.stage
   const desks = content.furniture.filter((f) => f.slotType === 'desk' && f.size === 1 && avail(f) && !f.effects.deptBonus).sort((a, b) => a.price - b.price)
   const basic = desks[0]
-  for (const slot of c.s.office.slots) {
-    if (!open.has(slot.ring) || slot.id === 'founder') continue
-    if (slot.type === 'desk' && !slot.itemId && basic && affordable(c.s, reserve, basic.price)) act({ type: 'placeItem', itemId: basic.id, slotId: slot.id })
-  }
+  // Every desk the cap allows, through auto placement (grid §3: today's ring slots, nearest the centre first).
+  while (basic && affordable(c.s, reserve, basic.price) && buyDesk(c, basic.id)) continue
   // Upgrade occupied desks when cash is comfortable.
   for (const slot of c.s.office.slots) {
     if (slot.type !== 'desk' || !slot.itemId || slot.occupantId === undefined) continue
@@ -657,9 +664,8 @@ function hiring(c: Ctx, cfg: BotConfig): void {
   // A hire needs a desk item on a free slot (PLAN §4.2).
   const deskFree = (s: GameState) => s.office.slots.some((x) => x.type === 'desk' && x.id !== 'founder' && x.itemId !== undefined && x.occupantId === undefined && s.office.rings.some((r) => r.index === x.ring && r.unlocked))
   if (!deskFree(c.s)) {
-    const slot = c.s.office.slots.find((x) => x.type === 'desk' && x.id !== 'founder' && x.itemId === undefined && x.occupantId === undefined && c.s.office.rings.some((r) => r.index === x.ring && r.unlocked))
     const basic = c.content.furniture.filter((f) => f.slotType === 'desk' && f.size === 1 && f.stageUnlock <= c.s.stage && !f.effects.deptBonus).sort((a, b) => a.price - b.price)[0]
-    if (slot && basic) act({ type: 'placeItem', itemId: basic.id, slotId: slot.id })
+    if (basic) buyDesk(c, basic.id)
     if (!deskFree(c.s)) return
   }
   const order = neededDept(c.s, cfg, c.mem)

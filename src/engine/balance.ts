@@ -51,10 +51,15 @@ export const RING_OPEN_COST: readonly number[] = [0, 0, 6_000, 30_000, 150_000, 
 export const OFFICE_BASE_RENT: readonly number[] = [300, 1_500, 5_000, 20_000, 80_000, 300_000, 300_000]
 /** Rent per opened extra ring (beyond ring 1) per month (index = stage). */
 export const RING_RENT: readonly number[] = [0, 800, 2_500, 8_000, 30_000, 100_000, 100_000]
-/** Chebyshev radius for "adjacent" (aura, dept cluster). */
+/** Chebyshev radius for "adjacent" (common-area aura). */
 export const ADJACENCY_RADIUS = 2
-export const DEPT_CLUSTER_MIN = 3
-export const DEPT_CLUSTER_BONUS = 0.1
+/**
+ * Grid §5 team island: same-label desks at Chebyshev ≤ TEAM_ADJ_RADIUS (diagonals too), ≥ TEAM_CLUSTER_MIN of them,
+ * give their people +TEAM_ADJ_BONUS speed. A light bonus that replaced the +10% dept cluster (radius 2); never both.
+ */
+export const TEAM_ADJ_RADIUS = 1
+export const TEAM_CLUSTER_MIN = 3
+export const TEAM_ADJ_BONUS = 0.03
 /** Output factor for an employee on a desk slot without a desk item / without any desk. */
 export const NO_DESK_ITEM_QUALITY = 0.85
 export const NO_DESK_QUALITY = 0.6

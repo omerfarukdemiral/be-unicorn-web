@@ -8,7 +8,7 @@ import { buildersOf, effortOn, hasOpenWork, isBuilder, isSprinting, onLeave } fr
 import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
 import { checkSale } from './endgame'
 import { anchorOf, findPartnerSlot, findSlot, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots, syncSeats } from './office'
-import { applySnapshot, autoPlace, cellKey, coveredCells, dropEmptyFreeSlots, liftItem, nearestFreeDesk, putItem, refusalError, storeDecor, typeCaps, typeUse, validateLayout } from './layout'
+import { applySnapshot, autoPlace, cellKey, coveredCells, dropEmptyFreeSlots, autoSeat, liftItem, putItem, refusalError, storeDecor, typeCaps, typeUse, validateLayout } from './layout'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag, projectVersion } from './modules'
 import { checkName, nameKey } from './names'
@@ -73,8 +73,8 @@ const hire: Handler<'hire'> = ({ s }, a) => {
     const err = deskError(s, slot)
     if (err) return err
   } else {
-    // Grid §3: a free desk of the hire's team, nearest the team; else an unlabelled one (it takes the label); else any.
-    slot = nearestFreeDesk(s.office, c.dept)
+    // Grid §3/§5: a free desk by the hire's team (a spare ring desk may be carried there first); else any free desk.
+    slot = autoSeat(s.office, c.dept)
     if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
   }
   hireCandidate(s, c, slot?.id)

@@ -8,7 +8,7 @@ import { heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelec
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
 import { adFocusWarmup, adWeights, moduleMult, projectMix, projectWeights, wMean } from './modules'
-import { auraAt, bookshelfMorale, clusteredEmployees, deskQualityAt, findSlot, officeEffects, openExtraRingCount, type OfficeEffects } from './office'
+import { auraAt, bookshelfMorale, deskQualityAt, findSlot, officeEffects, openExtraRingCount, teamClusteredEmployees, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
 import { boardView, marketOf, marketUpkeep, marketView } from './world'
@@ -37,7 +37,7 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
   const deptCounts = perDept(0)
   for (const e of s.employees) deptCounts[e.dept] += 1
   const coord = E.coordination(s.employees.length, fx.hasMeetingRoom, policyMult(s, content, 'coordination'))
-  const cluster = clusteredEmployees(s)
+  const cluster = teamClusteredEmployees(s)
   const prodMod = modifierMult(s, 'production') * policyMult(s, content, 'production')
   const perEmployee: Record<string, number> = {}
   const deptOutput = perDept(0)
@@ -45,7 +45,7 @@ export function computeOutputs(s: GameState, content: EngineContent): Outputs {
   const projects = effortOn(s) ? new Map(s.projects.map((p) => [p.id, p])) : undefined
   for (const e of s.employees) {
     const slot = e.deskSlotId !== undefined ? findSlot(s.office, e.deskSlotId) : undefined
-    const adjacency = (cluster.has(e.id) ? 1 + B.DEPT_CLUSTER_BONUS : 1) + fx.deptBonus[e.dept]
+    const adjacency = (cluster.has(e.id) ? 1 + B.TEAM_ADJ_BONUS : 1) + fx.deptBonus[e.dept]
     const out =
       E.personOutput(B.BASE_OUTPUT[e.dept], deskQualityAt(content, slot), e.morale, adjacency, e.quality) *
       employeeStatusFactor(e) *

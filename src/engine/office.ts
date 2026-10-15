@@ -221,9 +221,9 @@ export function firstFreeDesk(office: OfficeState): Slot | undefined {
   return office.slots.find((s) => isFreeDesk(office, s) && s.itemId !== undefined)
 }
 
-/** True when the office has free desk slots but none with a desk item on it. */
+/** True when no desk is free but one more may still be bought (the desk cap is not reached). */
 export function onlyEmptyDeskSlots(office: OfficeState): boolean {
-  return !firstFreeDesk(office) && office.slots.some((s) => isFreeDesk(office, s))
+  return !firstFreeDesk(office) && typeUse(office).desk < typeCaps(office).desk
 }
 
 /** Placed items (anchor slots only) in open rings. */
@@ -293,30 +293,65 @@ export function deskQualityAt(content: EngineContent, slot: Slot | undefined): n
   return item?.effects.deskQuality ?? (item ? 1 : B.NO_DESK_ITEM_QUALITY)
 }
 
-/** Employee ids that sit in a same-dept cluster of ≥3 adjacent desks (§3.4 rule 2). */
-export function clusteredEmployees(state: GameState): Set<string> {
-  const seated = state.employees
-    .map((e) => ({ e, slot: e.deskSlotId !== undefined ? findSlot(state.office, e.deskSlotId) : undefined }))
-    .filter((x): x is { e: GameState['employees'][number]; slot: Slot } => x.slot !== undefined)
-  const out = new Set<string>()
+/** One team island: same-label desks, each seating someone of that team, linked by Chebyshev ≤ TEAM_ADJ_RADIUS. */
+export interface TeamCluster {
+  team: Dept
+  /** Desk slot ids in the island. */
+  slotIds: string[]
+  /** Employee ids seated on them. */
+  employeeIds: string[]
+  /** Size ≥ TEAM_CLUSTER_MIN: everyone in it gets TEAM_ADJ_BONUS. */
+  active: boolean
+}
+
+/** A desk as the team rule sees it (a live slot or an edit-mode draft piece). */
+export interface TeamDesk {
+  id: string
+  pos: { x: number; z: number }
+  team?: Dept
+  occupantId?: string
+}
+
+/**
+ * Team islands (grid §5): a desk counts when it is labelled `team` and seats someone of that dept (unlabelled desks
+ * and a sitter from another team never count). Desks link at Chebyshev ≤ 1, diagonals included. `deptOf` maps an
+ * occupant id to its dept. Callers pass desks only, never the founder's.
+ */
+export function teamIslands(all: readonly TeamDesk[], deptOf: (id: string) => Dept | undefined): TeamCluster[] {
+  const desks = all.filter((d) => d.team !== undefined && d.occupantId !== undefined && deptOf(d.occupantId) === d.team)
+  const out: TeamCluster[] = []
   const seen = new Set<string>()
-  for (const start of seated) {
-    if (seen.has(start.e.id)) continue
-    const comp: string[] = []
+  for (const start of desks) {
+    if (seen.has(start.id)) continue
+    const comp: TeamDesk[] = []
     const stack = [start]
-    seen.add(start.e.id)
+    seen.add(start.id)
     while (stack.length) {
       const cur = stack.pop()!
-      comp.push(cur.e.id)
-      for (const o of seated) {
-        if (seen.has(o.e.id) || o.e.dept !== cur.e.dept) continue
-        if (chebyshev(o.slot.pos, cur.slot.pos) <= B.ADJACENCY_RADIUS) {
-          seen.add(o.e.id)
-          stack.push(o)
-        }
+      comp.push(cur)
+      for (const o of desks) {
+        if (seen.has(o.id) || o.team !== cur.team || chebyshev(o.pos, cur.pos) > B.TEAM_ADJ_RADIUS) continue
+        seen.add(o.id)
+        stack.push(o)
       }
     }
-    if (comp.length >= B.DEPT_CLUSTER_MIN) comp.forEach((id) => out.add(id))
+    out.push({ team: start.team!, slotIds: comp.map((x) => x.id), employeeIds: comp.map((x) => x.occupantId!), active: comp.length >= B.TEAM_CLUSTER_MIN })
   }
+  return out
+}
+
+/** teamIslands over the office's placed desks (the founder desk excluded). */
+export function teamClusters(office: OfficeState, deptOf: (id: string) => Dept | undefined): TeamCluster[] {
+  return teamIslands(
+    office.slots.filter((s) => s.type === 'desk' && s.id !== FOUNDER_SLOT_ID && s.spanOf === undefined && s.itemId !== undefined),
+    deptOf,
+  )
+}
+
+/** Employee ids in an active team island (grid §5: +TEAM_ADJ_BONUS speed). */
+export function teamClusteredEmployees(state: GameState): Set<string> {
+  const dept = new Map(state.employees.map((e) => [e.id, e.dept]))
+  const out = new Set<string>()
+  for (const c of teamClusters(state.office, (id) => dept.get(id))) if (c.active) c.employeeIds.forEach((id) => out.add(id))
   return out
 }

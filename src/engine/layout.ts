@@ -488,6 +488,10 @@ export interface AutoPlaceOpts {
   canonicalOnly?: boolean
   /** Ignore the type cap (stage moves re-place pieces the office already owns). */
   ignoreCap?: boolean
+  /** Only cells in the team's area (tiers 1 and 3); no decor is bumped. Null when the area has no room. */
+  teamOnly?: boolean
+  /** Extra sort key for cells in the team's area, right after the team-neighbour count (lower first). */
+  rank?: (c: GridPos) => number[]
 }
 
 const MAX_BUMPS = 3
@@ -540,7 +544,7 @@ function canonicalCandidates(office: OfficeState, spec: PlacementSpec, covered: 
     }
     const place = { pos: s.pos, rotation: s.rotation, slotId: s.id, ...(partnerId !== undefined ? { partnerId } : {}) }
     const near = team.filter((t) => chebyshev(t, s.pos) === 1).length
-    if (near > 0) inTeam.push({ key: [-near, centre ? dist2(s.pos, centre) : 0, dist2(s.pos, { x: 0, z: 0 }), order], place })
+    if (near > 0) inTeam.push({ key: [-near, ...(opts.rank?.(s.pos) ?? []), centre ? dist2(s.pos, centre) : 0, dist2(s.pos, { x: 0, z: 0 }), order], place })
     // Tier 2 = today's findAutoSlotFor key: ring, then (rooms) orphan slots left, then squared distance, then slot order.
     else rest.push({ key: [s.ring, orphans, dist2(s.pos, { x: 0, z: 0 }), order], place })
   })
@@ -602,7 +606,7 @@ function freeCellCandidates(office: OfficeState, spec: PlacementSpec, covered: S
         // Covering a canonical (suggested) cell comes last: phones and bots still look for those.
         const key = [canonical.has(cellKey(x, z)) ? 1 : 0, d < 0 ? 1e9 : d, dist2(c, { x: 0, z: 0 }), order++]
         const place = { pos: c, rotation }
-        if (near > 0) inTeam.push({ key: [-near, ...key], place })
+        if (near > 0) inTeam.push({ key: [-near, ...(opts.rank?.(c) ?? []), ...key], place })
         else rest.push({ key, place })
       }
     }
@@ -626,11 +630,12 @@ function firstValid(office: OfficeState, spec: PlacementSpec, opts: AutoPlaceOpt
   const team = teamCells(office, opts.team)
   const centre = centroidOf(team)
   const can = canonicalCandidates(office, spec, covered, opts, team, centre)
-  const tiers = [sortCandidates(can.inTeam), sortCandidates(can.rest)]
+  const tiers = opts.teamOnly ? [sortCandidates(can.inTeam)] : [sortCandidates(can.inTeam), sortCandidates(can.rest)]
   for (const tier of tiers) for (const c of tier) if (validateLayout(withPlacement(office, c.place, spec)).ok) return c.place
   if (opts.canonicalOnly) return null
   const loose = freeCellCandidates(office, spec, covered, opts, team, centre)
-  for (const tier of [sortCandidates(loose.inTeam), sortCandidates(loose.rest)]) for (const c of tier) if (validateLayout(withPlacement(office, c.place, spec)).ok) return c.place
+  const looseTiers = opts.teamOnly ? [sortCandidates(loose.inTeam)] : [sortCandidates(loose.inTeam), sortCandidates(loose.rest)]
+  for (const tier of looseTiers) for (const c of tier) if (validateLayout(withPlacement(office, c.place, spec)).ok) return c.place
   return null
 }
 
@@ -648,7 +653,7 @@ export function autoPlace(office: OfficeState, spec: PlacementSpec, opts: AutoPl
   for (let bump = 0; bump <= MAX_BUMPS; bump++) {
     const place = firstValid(cur, spec, opts)
     if (place) return { ...place, bumped }
-    if (opts.canonicalOnly) return null
+    if (opts.canonicalOnly || opts.teamOnly) return null
     // Worst case: the cap allows it but decor jams every cell. Bump the blocking decor piece nearest the centre.
     const centre = centroidOf(teamCells(cur, opts.team)) ?? { x: 0, z: 0 }
     const decor = (cur.decor ?? []).filter((p) => decorShape(p.kind).blocking)
@@ -696,13 +701,34 @@ function freeDeskWithItem(office: OfficeState, s: Slot): boolean {
   return s.type === 'desk' && s.id !== FOUNDER_SLOT_ID && s.itemId !== undefined && s.spanOf === undefined && s.occupantId === undefined && isRingUnlocked(office, s.ring)
 }
 
+/** Same-team desk cells around `c` (Chebyshev 1), `self` excluded. */
+function teamNeighbours(office: OfficeState, dept: Dept, c: GridPos, self?: SlotId): number {
+  let n = 0
+  for (const s of office.slots) if (s.id !== self && s.type === 'desk' && s.team === dept && s.itemId !== undefined && s.spanOf === undefined && chebyshev(s.pos, c) <= B.TEAM_ADJ_RADIUS) n++
+  return n
+}
+
 /**
- * Seat for a new hire of `dept`: a free desk labelled `dept` nearest the team's centroid, else the first unlabelled
- * free desk in slot order (it takes the label: today's firstFreeDesk choice), else any free desk. Grouping a team
- * is auto placement's job (desks bought for a team land next to it), so hiring keeps today's seats and the sim.
+ * Seat for a new hire of `dept` (read only): a free desk that touches the team (labelled `dept` or unlabelled; most
+ * team neighbours, labelled first, then slot order), else a free desk labelled `dept` nearest the team's centroid,
+ * else the first unlabelled free desk in slot order (it takes the label: today's firstFreeDesk choice), else any
+ * free desk. autoSeat may still pull that unlabelled desk next to the team.
  */
 export function nearestFreeDesk(office: OfficeState, dept: Dept): Slot | undefined {
   const free = office.slots.filter((s) => freeDeskWithItem(office, s))
+  let touch: Slot | undefined
+  let touchKey: number[] = []
+  free.forEach((s, order) => {
+    if (s.team !== undefined && s.team !== dept) return
+    const n = teamNeighbours(office, dept, s.pos, s.id)
+    if (n === 0) return
+    const key = [-n, s.team === dept ? 0 : 1, order]
+    if (!touch || lexLess(key, touchKey)) {
+      touch = s
+      touchKey = key
+    }
+  })
+  if (touch) return touch
   const centre = centroidOf(office.slots.filter((s) => s.type === 'desk' && s.team === dept && s.occupantId !== undefined).map((s) => s.pos))
   const best = (xs: Slot[]): Slot | undefined => {
     if (!centre) return xs[0]
@@ -711,6 +737,59 @@ export function nearestFreeDesk(office: OfficeState, dept: Dept): Slot | undefin
     return pick
   }
   return best(free.filter((s) => s.team === dept)) ?? free.find((s) => s.team === undefined) ?? best(free)
+}
+
+/**
+ * Auto seat for a `dept` hire (grid §5; mutates): nearestFreeDesk, and when that is a spare, unlabelled desk on one
+ * of today's ring slots away from a team that already has desks, the desk is first carried into the team's area
+ * (autoPlace teamOnly: an empty ring desk slot by the team, else a free cell off the ring slots and their aisles,
+ * aura neutral first). So phones and bots, which only buy onto ring slots, still grow team islands (TEAM_ADJ_BONUS)
+ * the way a PC layout would, and nothing else about their office gets better. A desk the player moved off the ring
+ * (`free`) or labelled stays where it is. Undefined: no free desk.
+ */
+export function autoSeat(office: OfficeState, dept: Dept): Slot | undefined {
+  const desk = nearestFreeDesk(office, dept)
+  if (!desk || desk.free || desk.team !== undefined || teamNeighbours(office, dept, desk.pos, desk.id) > 0) return desk
+  if (!office.slots.some((s) => s.type === 'desk' && s.team === dept && s.itemId !== undefined && s.id !== FOUNDER_SLOT_ID)) return desk
+  // Today's ring slots and the aisle cell in front of each stay clear, so every later buy still finds its slot.
+  const avoid = new Set<CellKey>()
+  for (const s of office.slots) {
+    if (s.free || s.id === FOUNDER_SLOT_ID) continue
+    const f = frontDir(restRotation(office.stage, s.id) ?? s.rotation)
+    avoid.add(cellKey(s.pos.x, s.pos.z)).add(cellKey(s.pos.x + f.x, s.pos.z + f.z))
+  }
+  // Nor where a later office has a column, the stairs or its door: the island moves house unchanged.
+  for (let st = office.stage + 1; st <= 6; st++) {
+    const fx = stageFixtures(st as StageIndex)
+    for (const k of fx.blocked) avoid.add(k)
+    for (const k of fx.noPiece) avoid.add(k)
+  }
+  // Aura neutral first: a cell no nearer more of today's common-area / special cells than the ring slot it leaves
+  // (the island is the bonus; a seat by the sofas on top would be a second one), else any cell by the team.
+  const auraCells = office.slots.filter((s) => !s.free && (s.type === 'common' || s.type === 'special')).map((s) => s.pos)
+  const exposure = (c: GridPos) => auraCells.filter((a) => chebyshev(a, c) <= B.ADJACENCY_RADIUS).length
+  const limit = exposure(desk.pos)
+  const nearer = new Set<CellKey>()
+  const h = gridHalf(office.stage)
+  for (let z = -h; z <= h; z++) for (let x = -h; x <= h; x++) if (exposure({ x, z }) > limit) nearer.add(cellKey(x, z))
+  const neutral = new Set([...avoid, ...nearer])
+  const spec: PlacementSpec = { slotType: 'desk', size: 1 }
+  const trial = trialOffice(office)
+  liftItem(trial, trial.slots.filter((s) => s.id === desk.id))
+  // Within the team's area: fewest common-area cells in reach, then the outer side (the ring slots it frees are
+  // refilled from the centre out, so the island grows where the outer ring desks would have been).
+  const opts: AutoPlaceOpts = { team: dept, teamOnly: true, ignoreCap: true, rank: (c) => [exposure(c), -Math.max(Math.abs(c.x), Math.abs(c.z))] }
+  const place =
+    autoPlace(trial, spec, { ...opts, canonicalOnly: true, avoid: nearer }) ??
+    autoPlace(trial, spec, { ...opts, avoid: neutral }) ??
+    autoPlace(trial, spec, { ...opts, canonicalOnly: true }) ??
+    autoPlace(trial, spec, { ...opts, avoid })
+  if (!place) return desk
+  const itemId = desk.itemId!
+  liftItem(office, [desk])
+  const slot = putItem(office, place, itemId, spec)
+  slot.rotation = place.rotation
+  return slot
 }
 
 // ---------------------------------------------------------------------------
@@ -757,17 +836,22 @@ function repairFixtures(office: OfficeState): void {
   const onFixture = (c: GridPos) => fx.blocked.has(cellKey(c.x, c.z)) || fx.noPiece.has(cellKey(c.x, c.z))
   const clash = (office.decor ?? []).filter((p) => decorCells(p).some(onFixture)).map((p) => p.id)
   storeDecor(office, clash)
-  for (const it of itemPieces(office)) {
-    if (!it.cells.some((s) => onFixture(s.pos))) continue
-    const spec: PlacementSpec = { slotType: it.anchor.type, size: it.cells.length === 2 ? 2 : 1 }
-    const keep = { itemId: it.anchor.itemId!, occupantId: it.anchor.occupantId, team: it.anchor.team }
-    for (const s of it.cells) {
-      delete s.itemId
-      delete s.spanOf
-      delete s.occupantId
-      delete s.team
-    }
-    office.slots = office.slots.filter((s) => !(s.free && s.itemId === undefined))
+  // Lift every clashing piece first: one still on a fixture would make every trial cell of the others invalid.
+  const lifted = itemPieces(office)
+    .filter((it) => it.cells.some((s) => onFixture(s.pos)))
+    .map((it) => {
+      const spec: PlacementSpec = { slotType: it.anchor.type, size: it.cells.length === 2 ? 2 : 1 }
+      const keep = { itemId: it.anchor.itemId!, occupantId: it.anchor.occupantId, team: it.anchor.team }
+      for (const s of it.cells) {
+        delete s.itemId
+        delete s.spanOf
+        delete s.occupantId
+        delete s.team
+      }
+      return { spec, keep }
+    })
+  office.slots = office.slots.filter((s) => !(s.free && s.itemId === undefined))
+  for (const { spec, keep } of lifted) {
     const place = autoPlace(office, spec, { team: keep.team, ignoreCap: true })
     if (!place) continue
     storeDecor(office, place.bumped)

@@ -9,7 +9,7 @@ import { PROFILE_AXES, type BoardView, type BurnBreakdown, type CalendarEntry, t
 import type { BarGroup, LinePoint } from '../charts'
 
 /**
- * Cost parts of a month, bottom of the stack first (same order as the Yakıt card), then the late ones: segment upkeep
+ * Cost parts of a month, bottom of the stack first (same order as the Burn card), then the late ones: segment upkeep
  * (§8.1) and loan interest (§6.2; on the receipt only: the live burn has no such line). The principal repaid is a cash
  * flow, not a cost: it stays out of the stack.
  */

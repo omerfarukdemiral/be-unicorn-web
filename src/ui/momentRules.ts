@@ -32,7 +32,7 @@ export function mergeMoments<T extends { key: number; kind: string }>(cur: reado
   return out
 }
 
-/** Panel a moment opens when clicked. The month receipt opens Yakıt in Metrikler (the cost breakdown's home). */
+/** Panel a moment opens when clicked. The month receipt opens Burn in Metrikler (the cost breakdown's home). */
 export function momentPanel(kind: MomentKind): Panel {
   switch (kind) {
     case 'receipt':

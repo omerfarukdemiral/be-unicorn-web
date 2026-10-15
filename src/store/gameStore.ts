@@ -516,7 +516,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const kept = keptUi(get().ui)
     const pinTouched = prof.pinTouched ?? kept.pinTouched
     const pins = prof.pinnedMetrics ?? kept.pinnedMetrics
-    // A mid-game save loaded by a player who never picked pins: fill the free slots with the defaults (Yakıt, Kâr
+    // A mid-game save loaded by a player who never picked pins: fill the free slots with the defaults (Burn, Kâr
     // tahmini) so the old HUD's secondary numbers do not simply vanish (auto-pin only reacts to NEW unlocks).
     const pinnedMetrics = pinTouched ? pins : defaultPins(pins, state.unlockedWidgets)
     const ui: UiState = {

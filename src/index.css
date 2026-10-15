@@ -111,7 +111,7 @@
   --color-g-users: #3a7bea;       /* kullanıcı, kanallar */
   --color-g-morale: #ec6fa8;      /* moral, moral haritası, kültür (clear pink, not a warning red) */
   --color-g-runway: #d9730d;      /* runway */
-  --color-g-burn: #c65a34;        /* yakıt / burn (brick: identity, never --color-negative) */
+  --color-g-burn: #c65a34;        /* burn (brick: identity, never --color-negative) */
   --color-g-churn: #b8487f;       /* churn (plum) */
   --color-g-retention: #139c8c;   /* elde tutma, LTV/CAC */
   --color-g-reputation: #8b5cf6;  /* itibar */

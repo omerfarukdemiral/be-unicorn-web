@@ -1,6 +1,6 @@
 // Top bar, section B: the four fixed gauges (Kasa, Runway, Kullanıcı, Moral). Pins: widgets.tsx › PinnedMetric.
 // Each value has ONE home here (docs/LAYOUT.md §2): Kasa shows usable money + the daily NET flow only
-// (monthly net → Metrikler › Kâr tahmini, burn → Metrikler › Yakıt, runway → its own chip).
+// (monthly net → Metrikler › Kâr tahmini, burn → Metrikler › Burn, runway → its own chip).
 // Red only for real danger (§4.1): runway < 3, usable cash < 0 / missed payroll, morale < 28. Other thresholds amber.
 // HUD grammar (docs/GAMEPLAY_V2.md §10.4, §11): a finished founder action pops the gauge it fed once (a find → Kullanıcı) (`pop-once`), and
 // the garage's "users" step draws a goal notch under Kullanıcı (guidance.ts).

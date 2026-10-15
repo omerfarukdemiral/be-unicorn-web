@@ -387,7 +387,9 @@ function retargetEmptiedDetail(action: Action, s: GameState): void {
   const { ui, openPanel } = useGameStore.getState()
   const p = ui.panel
   if (p?.kind !== 'detail' || p.selection.kind !== 'slot' || !isEmptyOpenSlot(s, p.selection.id)) return
-  if (action.type === 'moveItem') openPanel({ kind: 'detail', selection: { kind: 'slot', id: action.toSlotId } }, { replace: true })
+  if (action.type === 'moveItem') {
+    if (action.toSlotId !== undefined) openPanel({ kind: 'detail', selection: { kind: 'slot', id: action.toSlotId } }, { replace: true })
+  }
   else openPanel({ kind: 'shop', slotTarget: p.selection.id }, { replace: true })
 }
 

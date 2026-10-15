@@ -108,7 +108,7 @@ describe('save v3 → v4', () => {
 
   it('serialize writes the new version', () => {
     const api = createEngine(fakeContent())
-    expect(JSON.parse(serialize(api.createGame({ seed: 1 }))).version).toBe(4)
+    expect(JSON.parse(serialize(api.createGame({ seed: 1 }))).version).toBe(SAVE_VERSION)
   })
 })
 

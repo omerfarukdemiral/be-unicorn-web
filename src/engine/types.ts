@@ -13,7 +13,7 @@ export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
 export const FIXED_STEP_DAYS = 0.25
 /** Bump when GameState shape changes incompatibly; save.ts migrates. */
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 
 /** Company name when none was given (and for pre-v3 saves). */
 export const DEFAULT_COMPANY_NAME = 'İsimsiz Startup'
@@ -284,6 +284,10 @@ export interface Slot {
   spanOf?: SlotId
   /** Employee sitting here (desk slots only). */
   occupantId?: EmployeeId
+  /** Desk team label (grid §2): set by the first hire who sits here or by a dept desk; hires and auto placement group by it. */
+  team?: Dept
+  /** Off-canonical cell (free grid): the slot exists only while it holds an item. */
+  free?: true
 }
 
 export interface RingState {
@@ -298,7 +302,61 @@ export interface RingState {
 export interface OfficeState {
   stage: StageIndex // office layout belongs to this stage
   rings: RingState[]
+  /** Canonical ring slots (always present, empty ones are suggested cells) plus `free` slots holding moved items. */
   slots: Slot[]
+  // Free grid (save v5). Optional so a v4 office still reads; migration and buildOffice set them.
+  /** Floor separators and decor. */
+  decor?: DecorPiece[]
+  /** Paint, paintings and ornaments on the back (−z) and left (−x) walls, one segment per cell. */
+  walls?: WallPiece[]
+  /** Owned, unplaced pieces. */
+  storage?: StoredPiece[]
+  /** Up to 3 named layouts. */
+  saved?: SavedLayout[]
+}
+
+/** Cosmetic piece kinds. The catalogue (looks, prices, stage gates) lands with content/decor.ts. */
+export type DecorKind = string
+/** Wall piece kinds; 'paint' is free of the decor cap. */
+export type WallKind = string
+
+export interface DecorPiece {
+  id: string
+  kind: DecorKind
+  pos: GridPos
+  rotation: 0 | 1 | 2 | 3
+}
+
+export interface WallPiece {
+  wall: 'back' | 'left'
+  seg: number
+  kind: WallKind
+  color?: string
+}
+
+export interface StoredPiece {
+  kind: DecorKind | WallKind
+  n: number
+}
+
+/** Where a functional item sits in a layout: its anchor cell and rotation (a room's second cell is on its right). */
+export interface CellPlacement {
+  x: number
+  z: number
+  r: 0 | 1 | 2 | 3
+  /** Desk team label (absent: unchanged). */
+  team?: Dept
+}
+
+/** A whole office arrangement: the edit-mode draft, a saved layout. Anchor slots not listed stay where they are. */
+export interface LayoutSnapshot {
+  slots: Record<SlotId, CellPlacement>
+  decor: DecorPiece[]
+  walls?: WallPiece[]
+}
+
+export interface SavedLayout extends LayoutSnapshot {
+  name: string
 }
 
 // ---------------------------------------------------------------------------
@@ -1660,10 +1718,13 @@ export type Action =
   /** Silences someone's tired / bored bubble for STAFF_ACK_DAYS. */
   | { type: 'ackStaff'; employeeId: EmployeeId }
   // Office
-  /** `slotId` omitted: auto place on the free slot nearest the center (findAutoSlot), else `noFreeSlot`. */
+  /** `slotId` omitted: auto place (layout.autoPlace: today's slot nearest the center, a dept desk near its team), else `noFreeSlot`. */
   | { type: 'placeItem'; itemId: FurnitureId; slotId?: SlotId }
   | { type: 'sellItem'; slotId: SlotId }
-  | { type: 'moveItem'; fromSlotId: SlotId; toSlotId: SlotId }
+  /** To a slot (`toSlotId`), or to any valid cell of the free grid (`toCell`, PC edit mode). */
+  | { type: 'moveItem'; fromSlotId: SlotId; toSlotId?: SlotId; toCell?: CellPlacement }
+  /** Commits an edited layout in one step: re-validated, atomic (grid §4). */
+  | { type: 'applyLayout'; draft: LayoutSnapshot }
   | { type: 'upgradeItem'; slotId: SlotId; toItemId: FurnitureId }
   | { type: 'openRing'; ring: number }
   // Projects
@@ -1735,6 +1796,7 @@ export type ActionErrorCode =
   | 'insufficientCash' | 'noFreeSlot' | 'slotOccupied' | 'slotLocked' | 'wrongSlotType'
   | 'ringOrder' | 'noDesk' | 'notUnlocked' | 'cooldown' | 'noEnergy' | 'founderBusy' | 'notFound'
   | 'roundActive' | 'roundNotReady' | 'gameOver' | 'invalid' | 'engineNotConnected' | 'noMoves'
+  | 'blocksDoor' | 'sealsDesk' | 'officeFull'
 
 export interface ActionResult {
   state: GameState

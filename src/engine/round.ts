@@ -14,7 +14,7 @@ import { clamp } from './economy'
 import { scheduleCrisis } from './decisions'
 import { applyMorale, loanOf, syncDebt, unlockTool, unlockWidget } from './effects'
 import { actionEnergy, enterMoveBudget, movesError, spendMoves } from './founder'
-import { relocateOffice } from './office'
+import { relocateOffice, syncSeats } from './office'
 import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, InvestorStyle, MeetingTopic, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
 import { INVESTOR_STYLES, MEETING_PITCHES, ROUND_MEETINGS, ROUND_SIZES } from './types'
@@ -576,6 +576,7 @@ export function enterStage(s: GameState, stage: StageIndex, rng?: Rng): void {
   s.stage = stage
   s.stageStart = stageBaseline(s)
   s.office = relocateOffice(s.office, stage)
+  syncSeats(s)
   for (const t of B.STAGE_UNLOCK_TOOLS[stage] ?? []) unlockTool(s, t)
   // GAMEPLAY V2 §7.1: the move budget starts here, with a full week and a rested founder.
   if (stage === B.MOVES_FROM_STAGE) enterMoveBudget(s)

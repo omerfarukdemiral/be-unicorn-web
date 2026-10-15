@@ -211,7 +211,11 @@ export function hireCandidate(s: GameState, c: Candidate, deskSlotId: string | u
   s.candidates = s.candidates.filter((x) => x.id !== c.id)
   if (deskSlotId !== undefined) {
     const slot = s.office.slots.find((x) => x.id === deskSlotId)
-    if (slot) slot.occupantId = e.id
+    if (slot) {
+      slot.occupantId = e.id
+      // Grid §2: an unlabelled desk takes its first sitter's team.
+      if (slot.type === 'desk' && slot.team === undefined) slot.team = e.dept
+    }
   }
   // Builders join the least mature unfinished project; with none left they wait for the next one (idleBuilders).
   if (e.dept === 'eng' || e.dept === 'product') {

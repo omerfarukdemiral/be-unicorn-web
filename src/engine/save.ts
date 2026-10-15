@@ -3,7 +3,8 @@ import { BOARD_FROM_STAGE, DILIGENCE_MOM, INITIAL_TOOLS, DIRECTOR_PRESSURE_DEFAU
 import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
 import { peopleView } from './effort'
-import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, SAVE_VERSION, type GameState, type PartialReceipt, type ToolId } from './types'
+import { FURNITURE } from '../content/furniture'
+import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, DEPTS, FOUNDER_SLOT_ID, SAVE_VERSION, type Dept, type GameState, type OfficeState, type PartialReceipt, type ToolId } from './types'
 import { castOf, defaultMarket, ensureRivals, marketTools, newBoard } from './world'
 import { uniquePush } from './util'
 
@@ -89,6 +90,29 @@ const MIGRATIONS: Record<number, Migration> = {
     if (typeof game.stage === 'number' && game.finance && game.time && Array.isArray(game.events) && typeof game.nextId === 'number') ensureRivals(game)
     return st
   },
+  // v4 → v5 (free office grid, grid design §2): desks take a team label (their occupant's dept, else a dept desk's
+  // dept); no decor, walls, storage or saved layouts yet. Cells and rotations are untouched, so the office looks the same.
+  4: (st) => {
+    const office = st.office as Partial<OfficeState> | undefined
+    if (!office || !Array.isArray(office.slots)) return st
+    const employees = Array.isArray(st.employees) ? (st.employees as { id?: unknown; dept?: Dept }[]) : []
+    for (const slot of office.slots) {
+      if (slot.type !== 'desk' || slot.id === FOUNDER_SLOT_ID || slot.team !== undefined) continue
+      const team = employees.find((e) => e.id === slot.occupantId)?.dept ?? deskDept(slot.itemId)
+      if (team !== undefined) slot.team = team
+    }
+    if (!Array.isArray(office.decor)) office.decor = []
+    if (!Array.isArray(office.walls)) office.walls = []
+    if (!Array.isArray(office.storage)) office.storage = []
+    if (!Array.isArray(office.saved)) office.saved = []
+    return st
+  },
+}
+
+/** The dept a desk item works for (its deptBonus), if any. */
+function deskDept(itemId: string | undefined): Dept | undefined {
+  const bonus = FURNITURE.find((f) => f.id === itemId)?.effects.deptBonus
+  return bonus ? DEPTS.find((d) => (bonus[d] ?? 0) > 0) : undefined
 }
 
 /** Month history rebuilt from the v3 month-end snapshots (MRR, users): the last HISTORY_MAX_MONTHS months. */

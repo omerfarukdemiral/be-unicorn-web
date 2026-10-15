@@ -14,6 +14,7 @@ import type {
   ToolId,
 } from '../engine/types'
 import type { DecisionCategory } from './types'
+import { LAYOUT_ERROR_TEXT } from './layoutText'
 import { CRISES } from './crises'
 import { STAGES } from './stages'
 import { DEPT_TEXT, PROJECT_CATEGORY_TEXT } from './text'
@@ -115,6 +116,7 @@ export const ACTION_ERROR_TEXT: Record<ActionErrorCode, string> = {
   invalid: 'Bu olmaz.',
   engineNotConnected: 'Bağlanıyor.',
   noMoves: 'Bu haftanın hamleleri bitti.',
+  ...LAYOUT_ERROR_TEXT,
 }
 
 /** What a rejected action was about (the strip prints "İşe alım: Boş masa yok."). */

@@ -7,7 +7,8 @@ import { applyEffects, applyMorale, unlockTool } from './effects'
 import { buildersOf, effortOn, hasOpenWork, isBuilder, isSprinting, onLeave } from './effort'
 import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
 import { checkSale } from './endgame'
-import { anchorOf, findAutoSlot, findPartnerSlot, findSlot, firstFreeDesk, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots } from './office'
+import { anchorOf, findPartnerSlot, findSlot, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots, syncSeats } from './office'
+import { applySnapshot, autoPlace, cellKey, coveredCells, dropEmptyFreeSlots, liftItem, nearestFreeDesk, putItem, refusalError, storeDecor, typeCaps, typeUse, validateLayout } from './layout'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag, projectVersion } from './modules'
 import { checkName, nameKey } from './names'
@@ -26,11 +27,14 @@ import {
   type ActionErrorCode,
   type ActionOf,
   type ActionResult,
+  DEPTS,
+  type Dept,
   type Employee,
   type GameState,
   type PolicyId,
   type Slot,
 } from './types'
+import type { FurnitureItem } from '../content/index'
 import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, type EngineContent } from './util'
 import { acquireError, acquireRival, openSegment, segmentError } from './world'
 
@@ -69,7 +73,8 @@ const hire: Handler<'hire'> = ({ s }, a) => {
     const err = deskError(s, slot)
     if (err) return err
   } else {
-    slot = firstFreeDesk(s.office)
+    // Grid §3: a free desk of the hire's team, nearest the team; else an unlabelled one (it takes the label); else any.
+    slot = nearestFreeDesk(s.office, c.dept)
     if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
   }
   hireCandidate(s, c, slot?.id)
@@ -272,26 +277,49 @@ const ackStaff: Handler<'ackStaff'> = ({ s }, a) => {
 // Office
 // ---------------------------------------------------------------------------
 
+/** The dept a desk item works for (its deptBonus): the desk's team label. */
+function deskTeam(item: FurnitureItem): Dept | undefined {
+  const bonus = item.slotType === 'desk' ? item.effects.deptBonus : undefined
+  return bonus ? DEPTS.find((d) => (bonus[d] ?? 0) > 0) : undefined
+}
+
 const placeItem: Handler<'placeItem'> = ({ s, content }, a) => {
   const item = furnitureById(content, a.itemId)
   if (!item) return 'notFound'
   if (item.stageUnlock > s.stage) return 'notUnlocked'
-  // No slot given: buy → auto place on the free slot nearest the center.
-  const slot = a.slotId !== undefined ? findSlot(s.office, a.slotId) : findAutoSlot(s, item.id, content)
-  if (!slot) return a.slotId !== undefined ? 'notFound' : 'noFreeSlot'
-  if (slot.id === FOUNDER_SLOT_ID) return 'invalid'
-  if (!isRingUnlocked(s.office, slot.ring)) return 'slotLocked'
-  if (slot.type !== item.slotType) return 'wrongSlotType'
-  if (slot.itemId !== undefined || slot.spanOf !== undefined) return 'slotOccupied'
-  const partner = item.size === 2 ? findPartnerSlot(s.office, slot) : undefined
-  if (item.size === 2 && !partner) return 'noFreeSlot'
-  if (s.stats.cash < item.price) return 'insufficientCash'
-  s.stats.cash -= item.price
-  slot.itemId = item.id
-  if (partner) {
-    partner.itemId = item.id
-    partner.spanOf = slot.id
+  const spec = { slotType: item.slotType, size: item.size === 2 ? (2 as const) : (1 as const) }
+  const team = deskTeam(item)
+  let slot: Slot
+  if (a.slotId !== undefined) {
+    const at = findSlot(s.office, a.slotId)
+    if (!at) return 'notFound'
+    if (at.id === FOUNDER_SLOT_ID) return 'invalid'
+    if (!isRingUnlocked(s.office, at.ring)) return 'slotLocked'
+    if (at.type !== item.slotType) return 'wrongSlotType'
+    const covered = coveredCells(s.office)
+    if (at.itemId !== undefined || at.spanOf !== undefined || covered.has(cellKey(at.pos.x, at.pos.z))) return 'slotOccupied'
+    const partner = item.size === 2 ? findPartnerSlot(s.office, at) : undefined
+    if (item.size === 2 && (!partner || covered.has(cellKey(partner.pos.x, partner.pos.z)))) return 'noFreeSlot'
+    if (typeUse(s.office)[spec.slotType] + spec.size > typeCaps(s.office)[spec.slotType]) return 'officeFull'
+    if (s.stats.cash < item.price) return 'insufficientCash'
+    at.itemId = item.id
+    if (partner) {
+      partner.itemId = item.id
+      partner.spanOf = at.id
+    }
+    const check = validateLayout(s.office)
+    if (!check.ok) return refusalError(check.reason!)
+    slot = at
+  } else {
+    // No slot given: buy → auto place (grid §3: today's nearest-the-center slot, a dept desk near its team).
+    const place = autoPlace(s.office, spec, team !== undefined ? { team } : {})
+    if (!place) return 'noFreeSlot'
+    if (s.stats.cash < item.price) return 'insufficientCash'
+    storeDecor(s.office, place.bumped)
+    slot = putItem(s.office, place, item.id, spec)
   }
+  s.stats.cash -= item.price
+  if (team !== undefined && slot.team === undefined) slot.team = team
   if (item.effects.reputation !== undefined) s.stats.reputation = Math.min(100, s.stats.reputation + item.effects.reputation)
   if (item.effects.enablesTool) unlockTool(s, item.effects.enablesTool)
   pushActivity(s, 'itemPlaced', { item: item.id, slot: slot.id })
@@ -299,14 +327,10 @@ const placeItem: Handler<'placeItem'> = ({ s, content }, a) => {
   return null
 }
 
+/** Empties an item's slots, team label included (a canonical slot gets its rotation back, free slots go). */
 function clearItem(s: GameState, anchor: Slot): void {
-  for (const x of s.office.slots) {
-    if (x.spanOf === anchor.id) {
-      delete x.itemId
-      delete x.spanOf
-    }
-  }
-  delete anchor.itemId
+  liftItem(s.office, s.office.slots.filter((x) => x.id === anchor.id || x.spanOf === anchor.id))
+  dropEmptyFreeSlots(s.office)
 }
 
 const sellItem: Handler<'sellItem'> = ({ s, content }, a) => {
@@ -334,6 +358,18 @@ const moveItem: Handler<'moveItem'> = ({ s, content }, a) => {
   const from = anchorOf(s.office, fromSlot)
   const item = furnitureById(content, from.itemId)
   if (!item) return 'notFound'
+  // Free grid (PC edit mode): any valid cell, through the same path as a committed layout.
+  if (a.toCell !== undefined) {
+    const res = applySnapshot(s.office, { slots: { [from.id]: a.toCell }, decor: s.office.decor ?? [] })
+    if ('error' in res) return res.error
+    s.office = res.office
+    syncSeats(s)
+    const to = s.office.slots.find((x) => x.pos.x === a.toCell!.x && x.pos.z === a.toCell!.z && x.itemId === item.id && x.spanOf === undefined)
+    pushActivity(s, 'itemMoved', { item: item.id, from: from.id, to: to?.id ?? from.id })
+    pushEvent(s, { kind: 'itemMoved', refId: to?.id ?? from.id })
+    return null
+  }
+  if (a.toSlotId === undefined) return 'invalid'
   const to = findSlot(s.office, a.toSlotId)
   if (!to) return 'notFound'
   if (to.id === from.id) return null
@@ -342,10 +378,17 @@ const moveItem: Handler<'moveItem'> = ({ s, content }, a) => {
   if (to.type !== item.slotType) return 'wrongSlotType'
   const ownIds = s.office.slots.filter((x) => x.id === from.id || x.spanOf === from.id).map((x) => x.id)
   if ((to.itemId !== undefined && !ownIds.includes(to.id)) || (to.occupantId !== undefined && to.occupantId !== from.occupantId)) return 'slotOccupied'
+  // A canonical slot under a moved piece or decor is hidden.
+  const ownCells = new Set(s.office.slots.filter((x) => ownIds.includes(x.id)).map((x) => cellKey(x.pos.x, x.pos.z)))
+  const covered = coveredCells(s.office)
+  const hidden = (x: Slot) => covered.has(cellKey(x.pos.x, x.pos.z)) && !ownCells.has(cellKey(x.pos.x, x.pos.z))
+  if (hidden(to)) return 'slotOccupied'
   const partner = item.size === 2 ? findPartnerSlot(s.office, to, ownIds) : undefined
-  if (item.size === 2 && !partner) return 'noFreeSlot'
+  if (item.size === 2 && (!partner || hidden(partner))) return 'noFreeSlot'
   const occupant = from.occupantId
+  const team = from.team
   clearItem(s, from)
+  if (team !== undefined) to.team = team
   to.itemId = item.id
   if (partner) {
     partner.itemId = item.id
@@ -358,6 +401,8 @@ const moveItem: Handler<'moveItem'> = ({ s, content }, a) => {
     const e = s.employees.find((x) => x.id === occupant)
     if (e) e.deskSlotId = to.id
   }
+  const check = validateLayout(s.office)
+  if (!check.ok) return refusalError(check.reason!)
   pushActivity(s, 'itemMoved', { item: item.id, from: from.id, to: to.id })
   pushEvent(s, { kind: 'itemMoved', refId: to.id })
   return null
@@ -379,6 +424,15 @@ const upgradeItem: Handler<'upgradeItem'> = ({ s, content }, a) => {
   if (next.effects.enablesTool) unlockTool(s, next.effects.enablesTool)
   pushActivity(s, 'itemPlaced', { item: next.id, slot: anchor.id })
   pushEvent(s, { kind: 'itemPlaced', refId: anchor.id })
+  return null
+}
+
+/** Commits an edited layout (grid §4): one validated, atomic step; seats follow their desks. */
+const applyLayout: Handler<'applyLayout'> = ({ s }, a) => {
+  const res = applySnapshot(s.office, a.draft)
+  if ('error' in res) return res.error
+  s.office = res.office
+  syncSeats(s)
   return null
 }
 
@@ -669,6 +723,7 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   placeItem,
   sellItem,
   moveItem,
+  applyLayout,
   upgradeItem,
   openRing,
   startProject,

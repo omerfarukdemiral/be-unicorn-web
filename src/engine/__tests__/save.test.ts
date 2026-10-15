@@ -1,4 +1,4 @@
-// Saves and project modules (W2a): no version bump, the new fields round-trip, a v4 save without them loads as before.
+// Saves and project modules (W2a): no version bump of their own, the new fields round-trip, a v4 save without them loads as before.
 import { describe, expect, it } from 'vitest'
 import { recomputeDerived } from '../derive'
 import { projectSlots } from '../modules'
@@ -8,8 +8,8 @@ import { clone } from '../util'
 import { api, build, company, content, current, legacy, withModules } from './moduleFixtures'
 
 describe('save and modules', () => {
-  it('SAVE_VERSION stays 4 (every module field is optional)', () => {
-    expect(SAVE_VERSION).toBe(4)
+  it('SAVE_VERSION is 5 (the free office grid; every module field is optional)', () => {
+    expect(SAVE_VERSION).toBe(5)
   })
 
   it('modules and a running build round-trip', () => {

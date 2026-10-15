@@ -59,6 +59,8 @@ export const DEPT_CLUSTER_BONUS = 0.1
 export const NO_DESK_ITEM_QUALITY = 0.85
 export const NO_DESK_QUALITY = 0.6
 export const SELL_REFUND = 0.5
+/** Free grid (grid §6): placed decor + wall pieces per stage (paint and functional items do not count). */
+export const DECOR_CAP: readonly number[] = [6, 12, 20, 30, 45, 60, 80]
 /** Bookshelf: extra global morale per learned concept, capped. */
 export const BOOKSHELF_PER_CONCEPT = 0.2
 export const BOOKSHELF_CONCEPT_CAP = 5

@@ -1,6 +1,7 @@
 // Office layout (rings from center outward), ring opening rules and adjacency (PLAN §3.2–3.4).
 import type { FurnitureItem } from '../content/index'
 import * as B from './balance'
+import { autoPlace, carryOffice, cellKey, coveredCells, typeCaps, typeUse } from './layout'
 import { DEPTS, FOUNDER_SLOT_ID, type Dept, type GameState, type OfficeState, type RingState, type Slot, type SlotType, type StageIndex, type ToolId } from './types'
 import { furnitureById, type EngineContent } from './util'
 
@@ -74,23 +75,29 @@ export function buildOffice(stage: StageIndex, unlockedRings = 1): OfficeState {
     rings.push({ index: r, unlocked: r <= unlockedRings, openCost: ringOpenCost(r), rentPerMonth: ringRent(stage, r) })
     slots.push(...buildRingSlots(r))
   }
-  return { stage, rings, slots }
+  return { stage, rings, slots, decor: [], walls: [], storage: [], saved: [] }
 }
 
-/** Move to the next office: same slot ids/positions, furniture & seats carried for free, new rings locked. */
+/**
+ * Move to the next office: same slot ids/positions, furniture, seats, team labels and separators carried for free,
+ * new rings locked (layout.carryOffice: other decor to storage, pieces on a new fixture re-placed). syncSeats after.
+ */
 export function relocateOffice(old: OfficeState, stage: StageIndex): OfficeState {
   const unlocked = old.rings.filter((r) => r.unlocked).length
   const next = buildOffice(stage, Math.max(1, unlocked))
-  const byId = new Map(old.slots.map((s) => [s.id, s]))
-  for (const s of next.slots) {
-    const o = byId.get(s.id)
-    if (!o) continue
-    if (o.itemId !== undefined) s.itemId = o.itemId
-    if (o.spanOf !== undefined) s.spanOf = o.spanOf
-    if (o.occupantId !== undefined) s.occupantId = o.occupantId
-    s.rotation = o.rotation
-  }
+  carryOffice(old, next)
   return next
+}
+
+/** Points every seated employee at the slot that seats them after the office moved pieces (a seat that is gone: none). */
+export function syncSeats(s: GameState): void {
+  const seat = new Map<string, string>()
+  for (const slot of s.office.slots) if (slot.occupantId !== undefined) seat.set(slot.occupantId, slot.id)
+  for (const e of s.employees) {
+    const id = seat.get(e.id)
+    if (id !== undefined) e.deskSlotId = id
+    else if (e.deskSlotId !== undefined && !findSlot(s.office, e.deskSlotId)) delete e.deskSlotId
+  }
 }
 
 export function isRingUnlocked(office: OfficeState, ring: number): boolean {
@@ -139,7 +146,7 @@ function isFreeFor(s: Slot, ignoreIds: readonly string[]): boolean {
  * Free neighbours that a size-2 item on (a, b) would leave without any free partner of their own.
  * Pairs with 0 orphans keep runs like -2..1 usable for a second 2-slot item.
  */
-function orphansOf(office: OfficeState, a: Slot, b: Slot, ignoreIds: readonly string[]): number {
+export function orphansOf(office: OfficeState, a: Slot, b: Slot, ignoreIds: readonly string[]): number {
   let n = 0
   for (const x of office.slots) {
     if (x.id === a.id || x.id === b.id || !isFreeFor(x, ignoreIds)) continue
@@ -171,33 +178,30 @@ export interface PlacementSpec {
   size: 1 | 2
 }
 
-/** True when `slot` can take a new item of `spec` right now (open ring, right type, free, partner for size 2). */
+/**
+ * True when `slot` can take a new item of `spec` right now (open ring, right type, free, partner for size 2), its
+ * cell is not covered by a moved piece or decor, and the type cap leaves room.
+ */
 export function canPlaceAt(office: OfficeState, slot: Slot, spec: PlacementSpec): boolean {
   if (slot.id === FOUNDER_SLOT_ID || slot.type !== spec.slotType) return false
   if (slot.itemId !== undefined || slot.spanOf !== undefined) return false
   if (!isRingUnlocked(office, slot.ring)) return false
-  return spec.size !== 2 || findPartnerSlot(office, slot) !== undefined
+  if (typeUse(office)[spec.slotType] + spec.size > typeCaps(office)[spec.slotType]) return false
+  const covered = coveredCells(office)
+  if (covered.has(cellKey(slot.pos.x, slot.pos.z))) return false
+  if (spec.size !== 2) return true
+  const partner = findPartnerSlot(office, slot)
+  return partner !== undefined && !covered.has(cellKey(partner.pos.x, partner.pos.z))
 }
 
 /**
- * Auto placement (buy → place): the free slot nearest the center that fits `spec`.
+ * Auto placement on today's slots (buy → place, the shop's preview): layout.autoPlace tiers 1–2.
  * Order: ring (inside out), then (size 2) pairs that leave no orphan slot, then squared distance from the
  * founder desk, then slot order. Deterministic; placeItem pairs the anchor with the same findPartnerSlot.
  */
 export function findAutoSlotFor(office: OfficeState, spec: PlacementSpec): Slot | null {
-  let best: Slot | null = null
-  let bestKey: [number, number, number] = [Infinity, Infinity, Infinity]
-  for (const s of office.slots) {
-    if (!canPlaceAt(office, s, spec)) continue
-    const partner = spec.size === 2 ? findPartnerSlot(office, s) : undefined
-    const orphans = partner ? orphansOf(office, s, partner, []) : 0
-    const key: [number, number, number] = [s.ring, orphans, s.pos.x * s.pos.x + s.pos.z * s.pos.z]
-    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && (key[1] < bestKey[1] || (key[1] === bestKey[1] && key[2] < bestKey[2])))) {
-      best = s
-      bestKey = key
-    }
-  }
-  return best
+  const p = autoPlace(office, spec, { canonicalOnly: true })
+  return p?.slotId !== undefined ? (findSlot(office, p.slotId) ?? null) : null
 }
 
 /** findAutoSlotFor by furniture id; null for unknown items or a full office. */

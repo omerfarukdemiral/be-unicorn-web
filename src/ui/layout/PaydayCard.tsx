@@ -44,7 +44,7 @@ export function PaydayCard() {
           <Icon name="cash" tone={color} size={20} />
         </span>
         <span className="min-w-0">
-          <span className="ui-label block text-ink-2">{t('top.paydayCard', { n: people })}</span>
+          <span className="ui-label block text-ink-2">{people > 0 ? t('top.paydayCard', { n: people }) : t('top.paydayCardSolo')}</span>
           <span className="ui-num block text-[26px] leading-[30px] text-ink">−{money(r.paid)}</span>
         </span>
       </span>

@@ -50,6 +50,7 @@ export function accrueMonth(s: GameState, dt: number): void {
  * and what the payday desk deferred (× (1 + DEFER_INTEREST)); the lender checks its covenant; the month receipt is
  * written. GAMEPLAY V2 §6.1: when cash (> 0) cannot cover the month, nothing but the loan service leaves: the month
  * waits on the payday desk (finance.pendingPayday, event paydayShort) until resolvePayday or PAYDAY_DECIDE_DAYS.
+ * A month with nothing to weigh (no wages, no ads: DECISIONS #36) skips the desk and closes in the default order.
  */
 export function payday(s: GameState, content: EngineContent): void {
   // A month still on the desk at the next payday (it waits only PAYDAY_DECIDE_DAYS): the default order closes it first.
@@ -64,7 +65,8 @@ export function payday(s: GameState, content: EngineContent): void {
   s.stats.cash -= loan.interest + loan.repay
   s.finance.ledger = emptyLedger()
   // Nothing in the till at all (cash ≤ 0): nothing to choose between, the month is missed as before (the clock starts).
-  const short = s.stats.cash < due && s.stats.cash > 0
+  // Under half a dollar short is ledger dust (infra runs ~$0.005 with no team): the till pays it.
+  const short = s.stats.cash < due - 0.5 && s.stats.cash > 0
   if (!short) {
     s.stats.cash -= due
     clearDeferred(s)
@@ -82,12 +84,23 @@ export function payday(s: GameState, content: EngineContent): void {
   loan.repay += checkCovenant(s, content)
   if (desk) {
     desk.loanRepay = loan.repay
+    // F3: no wages to weigh and no ads to cut (a solo garage: rent and the founder's own pay) is nothing to decide.
+    // The default order settles it quietly and the month closes on its ordinary receipt.
+    if (!deskWorthy(s, l)) {
+      resolvePayday(s, content, autoPaydayChoice(s))
+      return
+    }
     recomputeDerived(s, content)
     pushEvent(s, { kind: 'paydayShort', value: Math.max(0, due - s.stats.cash) })
     return
   }
   closeMonth(s, content, l, { paid: due + loan.interest + loan.repay, net: l.revenue - due - loan.interest - loan.repay, interest: loan.interest, repay: loan.repay, runwayBefore })
   missedPayroll(s, content)
+}
+
+/** A short month is worth the payday desk only with wages on it (or owed) or an ad budget the desk could cut. */
+function deskWorthy(s: GameState, l: MonthLedger): boolean {
+  return l.salaries >= 0.5 || l.ads >= 0.5 || !!s.flags['wagesOwed']
 }
 
 /** What closes a month on the receipt: paid in total (loan service included), the month's net, the runway before. */
@@ -201,7 +214,9 @@ export function resolvePayday(s: GameState, content: EngineContent, choice: Payd
   const l = p.ledger
   let paid = 0
   let deferAdd = 0
-  if (choice.salaries === 'full') paid += l.salaries
+  // No wages on the month (a solo founder): the salary row means nothing, so 'half' / 'defer' cost no morale and no clock.
+  const noWages = l.salaries < 0.5
+  if (choice.salaries === 'full' || noWages) paid += l.salaries
   else {
     const owe = choice.salaries === 'half' ? l.salaries / 2 : l.salaries
     paid += l.salaries - owe
@@ -246,7 +261,7 @@ export function resolvePayday(s: GameState, content: EngineContent, choice: Payd
   const loanPaid = (p.interest ?? 0) + (p.loanRepay ?? 0)
   closeMonth(s, content, l, { paid: paid + loanPaid, net: l.revenue - paid - loanPaid - deferAdd, interest: p.interest ?? 0, repay: p.loanRepay ?? 0, runwayBefore: p.runwayBefore ?? null })
   const overCap = (s.finance.deferred ?? 0) > B.DEFER_CAP_MONTHS * s.finance.burn
-  missedPayroll(s, content, choice.salaries !== 'full' || overCap)
+  missedPayroll(s, content, (choice.salaries !== 'full' && !noWages) || overCap)
   return true
 }
 

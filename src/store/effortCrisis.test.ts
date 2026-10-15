@@ -93,6 +93,25 @@ describe('effort crisis hold', () => {
     expect(store().ui.effortHold).not.toBeNull()
   })
 
+  it('a collapsed, unanswered card does not outlive the hold window (F1); an expanded one stops ticks', () => {
+    burntRun(4)
+    run(() => store().ui.effortHold !== null)
+    const untilDay = store().ui.effortHold!.untilDay
+    useGameStore.setState((x) => ({ state: { ...x.state, decisions: { ...x.state.decisions, active: { cardId: 'remote-vs-office', shownDay: x.state.time.day } } } }))
+    // Expanded: a focus pause, the world does not move.
+    store().setDecisionExpanded(true)
+    const day = store().state.time.day
+    for (let i = 0; i < 20; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.day).toBe(day)
+    // Collapsed and never answered: the hold still ends on schedule and 4× returns.
+    store().setDecisionExpanded(false)
+    run(() => store().ui.effortHold === null, 400)
+    expect(store().state.decisions.active?.cardId).toBe('remote-vs-office')
+    expect(store().ui.effortHold).toBeNull()
+    expect(store().state.time.speed).toBe(4)
+    expect(store().state.time.day).toBeLessThan(untilDay + 1)
+  })
+
   it('1× needs no hold, and "Önemli anda yavaşla" off leaves the speed alone', () => {
     burntRun(1)
     run(() => (eng()?.burnoutDays ?? 0) > 0)

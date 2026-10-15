@@ -24,7 +24,7 @@ const MAX_DAYS_PER_TICK = 4
 const NO_INSET = { top: 0, right: 0, bottom: 0 }
 
 /**
- * Events that interrupt a center screen: it closes so no card or payday desk is hidden behind it (and 4× drops to 1×).
+ * Events that interrupt a center screen: it closes so no card or payday desk is hidden behind it.
  * docs/GAMEPLAY_V2.md §3.6.
  */
 const INTERRUPTS: readonly GameEventKind[] = [
@@ -40,9 +40,15 @@ const INTERRUPTS: readonly GameEventKind[] = [
 ]
 export const INTERRUPT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(INTERRUPTS)
 
-/** Events that are worth watching at 1×: at 4× they slow the run down (never pause). */
+/**
+ * Events that bring a card (a decision, the payday desk, a crisis card via bringCrisisCard). They never slow 4×: an
+ * open card pauses through pauseReasons and the player's chosen speed comes back as it closes (F1, DECISIONS #35).
+ */
+export const CARD_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(['decisionShown', 'paydayShort', 'crisis'])
+
+/** Events that are worth watching at 1×: at 4× they slow the run down (never pause). Cards are not among them. */
 export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
-  ...INTERRUPTS,
+  ...INTERRUPTS.filter((k) => !CARD_EVENT_KINDS.has(k)),
   // A crisis showing what it is (GAMEPLAY V2 §5.1): the player plans around it.
   'crisisRevealed',
   'projectLaunched',
@@ -78,7 +84,7 @@ export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
  * 4× is not dropped every ~25 s (review fix):
  * - a release only for a new version or a module, not for the updates after 1.0;
  * - a payday only when runway CROSSES below PAYDAY_SLOW_RUNWAY_MONTHS, not on every tight month.
- * Every decision card counts (the card budget keeps them rare, docs/GAMEPLAY_V2.md §3.11).
+ * Cards never count (CARD_EVENT_KINDS): an open card pauses and the chosen speed stays.
  */
 export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   const since = lastEventId(prev)
@@ -148,9 +154,9 @@ function effortCrisisStep(prev: GameState, next: GameState): void {
   }
   const open = hold.employeeIds.some((id) => inCrisis(next, id))
   if (open && next.time.day < hold.untilDay) return
-  // A decision, a payday or a focus pause that came in during the hold keeps the 1×: the speed comes back only once
-  // the moment is dealt with (the moment slowdown's own guard).
-  if (next.decisions.active || next.finance.pendingPayday || ui.pauseReasons.length > 0) return
+  // A payday or a focus pause that came in during the hold keeps the 1×: the speed comes back only once it is dealt
+  // with. A collapsed card does not hold it (an open one pauses through pauseReasons).
+  if (next.finance.pendingPayday || ui.pauseReasons.length > 0) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: null } }))
   if (next.time.speed === 1) autoSetSpeed(hold.prevSpeed)
 }
@@ -637,8 +643,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
  * - a concept that arrived never shows as a scene bubble: it counts on the Kazanımlar badge at once, its visitor
  *   stands silently (tap → card) and, once the visitor's stay is over, it moves to the shelf (minimizeConcept);
  * - an interrupting event (a card, the round window, a missed payroll…) closes an open center screen;
- * - at 4× an important event slows the run to 1× (a real setSpeed: the player sees and may undo it) for
- *   SLOWDOWN_WINDOW_DAYS game days once the moment is dealt with (no card or payday waiting, no focus pause), then 4×
+ * - at 4× an important event (never a card) slows the run to 1× (a real setSpeed: the player sees and may undo it) for
+ *   SLOWDOWN_WINDOW_DAYS game days once the moment is dealt with (no payday waiting, no focus pause), then 4×
  *   comes back the same way; a new moment in the window pushes the restore later, a player setSpeed cancels it;
  * - a card shown goes into the Keşif record (storage errors are swallowed by save.ts: play never breaks on them).
  * Engine changes go through dispatch, so the replay log reproduces them.
@@ -665,8 +671,9 @@ function afterStep(prev: GameState, next: GameState): void {
     return
   }
   if (ui.slowdownResumeDay === null) return
-  // The window counts from when the moment is dealt with: a card or a payday still waiting (or a new moment) moves it on.
-  const waiting = !!next.decisions.active || !!next.finance.pendingPayday || hasImportantMoment(prev, next)
+  // The window counts from when the moment is dealt with: a payday still waiting (or a new moment) moves it on. A
+  // collapsed card does not: it lets time run, and an open one already stops ticks through pauseReasons.
+  const waiting = !!next.finance.pendingPayday || hasImportantMoment(prev, next)
   if (waiting) {
     if (resumeDay > ui.slowdownResumeDay) useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: resumeDay } }))
     return

@@ -97,9 +97,11 @@ const matCache = new Map<string, THREE.Material>()
 
 /**
  * Materials a bake (bake.ts) may merge: 'color' parts fold into one vertex-coloured mesh (mat(): every one is the
- * same flat standard material but for its colour), 'same' parts merge only with parts of the same material (glow).
+ * same flat standard material but for its colour), 'same' parts merge only with parts of the same material (glow),
+ * 'glass' panes merge per material too but only in a bake that asks for them (the decor layer: flat upright panes,
+ * so one transparent mesh sorts well enough; the shell's windows stay as they are).
  */
-export const BAKE_KIND = new WeakMap<THREE.Material, 'color' | 'same'>()
+export const BAKE_KIND = new WeakMap<THREE.Material, 'color' | 'same' | 'glass'>()
 
 /** Flat-shaded pastel standard material, cached by colour. */
 export function mat(color: string): THREE.MeshStandardMaterial {
@@ -142,6 +144,7 @@ export function glassMat(color = '#cfe8f5', opacity = 0.35): THREE.MeshStandardM
   let m = matCache.get(key)
   if (!m) {
     m = new THREE.MeshStandardMaterial({ color, transparent: true, opacity, roughness: 0.1, depthWrite: false })
+    BAKE_KIND.set(m, 'glass')
     matCache.set(key, m)
   }
   return m as THREE.MeshStandardMaterial

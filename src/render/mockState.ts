@@ -1,5 +1,6 @@
 // Self-contained mock GameState so the scene renders without the engine or store.
 // Layout here is illustrative only; the engine owns real slot layouts.
+import { placeStarterDecor } from '../engine/layout'
 import {
   DEPTS,
   FOUNDER_SLOT_ID,
@@ -8,6 +9,7 @@ import {
   type ConceptId,
   type Dept,
   type Employee,
+  type OfficeState,
   type EmployeeStatus,
   type GameState,
   type RingState,
@@ -144,7 +146,7 @@ export function createMockState(stage: StageIndex = 1, seed = 7): GameState {
       overload: stage >= 2 ? 0.2 : 0, coordination: 1, moraleTarget: 64, cac: 8, ltv: 80, ltvCac: null, momGrowth: 0.12,
       valuationMultiple: 8, channels: { organic: 30, paid: 0, manual: 5, enterprise: 0 }, stageProgress: 0.6, canStartRound: false,
     },
-    office: { stage, rings, slots },
+    office: mockOffice({ stage, rings, slots }),
     employees: shown,
     candidates: [],
     projects: [{ id: 'p1', name: 'MVP', category: 'mobile', size: 1, maturity: 0.35, launched: true, createdDay: 1, assignedIds: shown.map((e) => e.id) }],
@@ -167,4 +169,11 @@ export function createMockState(stage: StageIndex = 1, seed = 7): GameState {
     events: [],
     nextId: 100,
   }
+}
+
+/** The mock office with its stage's starter decor (forced: a mock office is no real layout). */
+function mockOffice(office: OfficeState): OfficeState {
+  const o: OfficeState = { ...office, decor: [], walls: [], storage: [], saved: [] }
+  placeStarterDecor(o, { force: true })
+  return o
 }

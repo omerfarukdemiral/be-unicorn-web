@@ -5,6 +5,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { ActionResult, GameState, RingState, Slot, SlotId } from '../engine/types'
+import { cellKey, coveredCells } from '../engine/layout'
 import { panelSelection } from '../store/gameStore'
 import type { PlacingMode } from '../store/types'
 import { CELL } from './constants'
@@ -203,7 +204,13 @@ function makeMat(color: string): THREE.MeshBasicMaterial {
 }
 
 export function SlotsLayer() {
-  const { slots, rings } = useOffice()
+  const office = useOffice()
+  const { slots, rings } = office
+  // An empty suggested cell under a piece (a moved desk, floor decor) is hidden: the piece stands there.
+  const hidden = useMemo(() => {
+    const covered = coveredCells(office)
+    return new Set(slots.filter((s) => s.itemId === undefined && s.id !== 'founder' && covered.has(cellKey(s.pos.x, s.pos.z))).map((s) => s.id))
+  }, [office, slots])
   const layout = useLayout()
   const heatKey = useGS(selectHeat)
   const heat = useMemo(() => {
@@ -234,7 +241,7 @@ export function SlotsLayer() {
 
   return (
     <group>
-      {slots.map((s) => (
+      {slots.map((s) => hidden.has(s.id) ? null : (
         <SlotView
           key={s.id}
           slot={s}

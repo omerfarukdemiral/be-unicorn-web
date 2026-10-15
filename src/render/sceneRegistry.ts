@@ -2,7 +2,7 @@
 // heads) and short-lived visual moods (celebration). Never written to GameState.
 import { useFrame } from '@react-three/fiber'
 import { useCallback, useMemo, useRef } from 'react'
-import type { GameState, OfficeState } from '../engine/types'
+import type { DecorPiece, GameState, OfficeState, WallPiece } from '../engine/types'
 import { draftOffice } from '../store/layoutEdit'
 import { computeLayout, type OfficeLayout, type XZ } from './layout'
 import { getGS, useGS, useMockState, useUi } from './source'
@@ -139,7 +139,46 @@ export function officeSignature(s: GameState): string {
   let k = `${o.stage}|`
   for (const r of o.rings) k += r.unlocked ? '1' : '0'
   for (const x of o.slots) k += `|${x.id},${x.ring},${x.type},${x.pos.x},${x.pos.z},${x.rotation},${x.itemId ?? ''},${x.spanOf ?? ''},${x.occupantId ?? ''}`
+  // Floor decor is in the walk layout (obstacles) and hides the suggested cells under it.
+  for (const p of o.decor ?? []) k += `|${p.id}:${p.kind},${p.pos.x},${p.pos.z},${p.rotation}`
   return k
+}
+
+/**
+ * Signature of what the decor layer draws: floor pieces and wall pieces (paint included). No seats and no furniture,
+ * so a hire, a purchase or a desk move never rebakes the decor (grid §7).
+ */
+export function decorSignature(s: GameState): string {
+  return decorKey(s.office.stage, s.office.decor, s.office.walls)
+}
+
+function decorKey(stage: number, decor: readonly DecorPiece[] | undefined, walls: readonly WallPiece[] | undefined): string {
+  let k = `${stage}`
+  for (const p of decor ?? []) k += `|${p.id}:${p.kind},${p.pos.x},${p.pos.z},${p.rotation}`
+  k += '#'
+  for (const w of walls ?? []) k += `|${w.wall},${w.seg},${w.kind},${w.color ?? ''}`
+  return k
+}
+
+export interface DecorView {
+  stage: number
+  decor: readonly DecorPiece[]
+  walls: readonly WallPiece[]
+  key: string
+}
+
+/** What the decor layer draws: the live pieces, or the edit draft's while the edit mode is open. Stable per key. */
+export function useDecorView(): DecorView {
+  const sig = useGS(decorSignature)
+  const mock = useMockState()
+  const draft = useUi((u) => (mock ? null : (u.layoutEdit?.draft ?? null)))
+  return useMemo(() => {
+    const o = getGS(mock).office
+    const decor = draft ? draft.decor : (o.decor ?? [])
+    const walls = draft?.walls ?? o.walls ?? []
+    return { stage: o.stage, decor, walls, key: draft ? decorKey(o.stage, decor, walls) : sig }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, mock, draft?.decor, draft?.walls])
 }
 
 /** Office snapshot with a stable reference while its signature is unchanged. */
@@ -153,7 +192,7 @@ export function useOffice(): OfficeState {
 /** Memoised scene layout for the current office (stable across engine ticks). */
 export function useLayout(): OfficeLayout {
   const office = useOffice()
-  return useMemo(() => computeLayout(office.slots, office.rings, office.stage), [office])
+  return useMemo(() => computeLayout(office.slots, office.rings, office.stage, office.decor), [office])
 }
 
 /** True while the office edit mode is open (PC only): slots, people and badges step aside for the grid overlay. */
@@ -174,6 +213,6 @@ export function useFurnitureView(): { office: OfficeState; layout: OfficeLayout 
   const draft = useUi((u) => (mock ? null : (u.layoutEdit?.draft ?? null)))
   return useMemo(() => {
     const view = draft ? draftOffice(office, draft) : office
-    return view === office ? { office, layout } : { office: view, layout: computeLayout(view.slots, view.rings, view.stage) }
+    return view === office ? { office, layout } : { office: view, layout: computeLayout(view.slots, view.rings, view.stage, view.decor) }
   }, [office, layout, draft])
 }

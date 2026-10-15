@@ -16,6 +16,7 @@ import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
 import { furnishedBox, type FrameBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
+import { DecorLayer } from './Decor'
 import { stagePalette } from './palette'
 import { stageBand, type StageBand } from '../content/stageBand'
 import { sunFor } from './stageLook'
@@ -296,6 +297,9 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
         </group>
         <group name="office">
           <Office lowPower={lowPower} />
+        </group>
+        <group name="decor">
+          <DecorLayer />
         </group>
         <group name="slots">{editing ? <LayoutEditor /> : <SlotsLayer />}</group>
         <group name="furniture">

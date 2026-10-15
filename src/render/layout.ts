@@ -1,6 +1,7 @@
 // Pure scene layout derived from office slots: floor bounds, ring bands, door, walk targets.
 // No game formulas here — only geometry for drawing and walking.
-import { FOUNDER_SLOT_ID, type RingState, type Slot, type SlotId, type StageIndex } from '../engine/types'
+import { decorShape } from '../engine/layout'
+import { FOUNDER_SLOT_ID, type DecorPiece, type RingState, type Slot, type SlotId, type StageIndex } from '../engine/types'
 import { CELL, gridToWorld, hashString, rotateXZ } from './constants'
 import { findPath, isFreeFloor } from './nav'
 import { resolveFurniture, type ShapeKey } from './furnitureCatalog'
@@ -125,7 +126,7 @@ function bandRects(outer: Box, inner: Box | null): Box[] {
   return out
 }
 
-export function computeLayout(slots: readonly Slot[], rings: readonly RingState[], stage: StageIndex): OfficeLayout {
+export function computeLayout(slots: readonly Slot[], rings: readonly RingState[], stage: StageIndex, decor: readonly DecorPiece[] = []): OfficeLayout {
   const pad = CELL * 0.55
   const slotWorld = new Map<SlotId, XZ>()
   for (const s of slots) slotWorld.set(s.id, gridToWorld(s.pos))
@@ -207,6 +208,15 @@ export function computeLayout(slots: readonly Slot[], rings: readonly RingState[
 
   // Series B stairs along the back-left corner (drawn in Office.tsx).
   if (stage === 4) obstacles.push({ minX: bounds.minX, maxX: bounds.minX + 0.95, minZ: bounds.minZ, maxZ: bounds.minZ + 4.6 })
+
+  // Floor decor (rugs are walked on): a separator is a thin wall across its cell, other pieces a small block.
+  for (const p of decor) {
+    const shape = decorShape(p.kind)
+    if (!shape.blocking) continue
+    const c = gridToWorld(p.pos)
+    const yaw = -p.rotation * (Math.PI / 2)
+    obstacles.push(shape.separator ? rotatedBox(c, yaw, 0.48, -0.08, 0.08) : rotatedBox(c, yaw, 0.3, -0.3, 0.3))
+  }
 
   // A seated person is furniture too: walkers path around occupied seats instead of through laps.
   for (const s of slots) {

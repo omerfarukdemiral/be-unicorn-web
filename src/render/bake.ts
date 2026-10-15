@@ -12,7 +12,15 @@ export type ShadowMode = 'keep' | 'all' | 'none'
 export interface BakeOptions {
   /** 'keep': a caster bucket and a non-caster bucket; 'all': one mesh casts; 'none': nothing casts. */
   shadow?: ShadowMode
+  /** Merge glass panes too (one transparent mesh per glass material, never casting). */
+  glass?: boolean
+  /** Name for the dev bake counter (bakeStats.byTag). */
+  tag?: string
 }
+
+/** Dev counter: how many bakes ran, per tag (QA: a hire must not rebake the office shell). */
+export const bakeStats = { count: 0, byTag: {} as Record<string, number> }
+if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __bakes: typeof bakeStats }).__bakes = bakeStats
 
 interface Part {
   mesh: THREE.Mesh
@@ -40,17 +48,18 @@ export function bakedMat(): THREE.MeshStandardMaterial {
 }
 
 /** Mesh that a bake may take: a plain Mesh with one bakeable material, drawn normally. */
-function bakeable(o: THREE.Object3D): o is THREE.Mesh {
+function bakeable(o: THREE.Object3D, glass: boolean): o is THREE.Mesh {
   if (!(o as THREE.Mesh).isMesh) return false
   const m = o as THREE.Mesh
   if ((m as THREE.InstancedMesh).isInstancedMesh || (m as THREE.SkinnedMesh).isSkinnedMesh) return false
   if (m.userData[BAKED] || m.renderOrder !== 0 || Array.isArray(m.material)) return false
   if (m.morphTargetInfluences?.length) return false
-  return !!BAKE_KIND.get(m.material as THREE.Material)
+  const kind = BAKE_KIND.get(m.material as THREE.Material)
+  return kind === 'glass' ? glass : !!kind
 }
 
 /** Collects the visible bakeable parts under root, each in the frame of its nearest bone (root is bone 0). */
-export function collectParts(root: THREE.Object3D, bones: readonly THREE.Object3D[] = [root]): Part[] {
+export function collectParts(root: THREE.Object3D, bones: readonly THREE.Object3D[] = [root], glass = false): Part[] {
   const out: Part[] = []
   const boneIndex = new Map<THREE.Object3D, number>(bones.map((b, i) => [b, i]))
   const visit = (o: THREE.Object3D, toBone: THREE.Matrix4, bone: number) => {
@@ -65,7 +74,7 @@ export function collectParts(root: THREE.Object3D, bones: readonly THREE.Object3
         b = i
       } else m = toBone.clone().multiply(o.matrix)
     }
-    if (o !== root && bakeable(o)) out.push({ mesh: o, matrix: m, bone: b })
+    if (o !== root && bakeable(o, glass)) out.push({ mesh: o, matrix: m, bone: b })
     for (const c of o.children) visit(c, m, b)
   }
   visit(root, new THREE.Matrix4(), boneIndex.get(root) ?? 0)
@@ -78,9 +87,10 @@ export function bucketParts(parts: readonly Part[], shadow: ShadowMode = 'keep')
   for (const p of parts) {
     const material = p.mesh.material as THREE.Material
     const kind = BAKE_KIND.get(material)
-    const cast = shadow === 'all' ? true : shadow === 'none' ? false : p.mesh.castShadow
-    const receive = p.mesh.receiveShadow
-    const own = kind === 'same' ? material : null
+    // Glass never casts (a pane's shadow would be a solid slab).
+    const cast = kind === 'glass' ? false : shadow === 'all' ? true : shadow === 'none' ? false : p.mesh.castShadow
+    const receive = kind === 'glass' ? false : p.mesh.receiveShadow
+    const own = kind === 'same' || kind === 'glass' ? material : null
     const key = `${own ? own.uuid : 'vc'}|${cast ? 1 : 0}|${receive ? 1 : 0}`
     let b = map.get(key)
     if (!b) {
@@ -176,8 +186,10 @@ function finish(root: THREE.Object3D, parts: readonly Part[], meshes: THREE.Mesh
  * Merges the static plain-coloured parts under `root` (which must not move relative to them) into one mesh per
  * material bucket, added under root. Returns the undo (dispose the merge, show the parts again).
  */
-export function bakeStatic(root: THREE.Object3D, { shadow = 'keep' }: BakeOptions = {}): () => void {
-  const parts = collectParts(root)
+export function bakeStatic(root: THREE.Object3D, { shadow = 'keep', glass = false, tag }: BakeOptions = {}): () => void {
+  bakeStats.count++
+  if (tag) bakeStats.byTag[tag] = (bakeStats.byTag[tag] ?? 0) + 1
+  const parts = collectParts(root, [root], glass)
   if (parts.length < 2) return () => {}
   const meshes = bucketParts(parts, shadow).map((b) => {
     const m = new THREE.Mesh(mergeBucket(b, false), b.material ?? bakedMat())
@@ -227,11 +239,11 @@ export function bakeSkinned(root: THREE.Object3D, bones: readonly THREE.Object3D
  * draw from). Children's layout effects run first, so the parts are in place. `enabled` false leaves it unbaked.
  */
 export function useBake(ref: RefObject<THREE.Object3D | null>, deps: DependencyList, opts: BakeOptions & { enabled?: boolean } = {}): void {
-  const { shadow, enabled = true } = opts
+  const { shadow, glass, tag, enabled = true } = opts
   useLayoutEffect(() => {
     const root = ref.current
     if (!root || !enabled) return
-    return bakeStatic(root, { shadow })
+    return bakeStatic(root, { shadow, glass, tag })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ref, enabled, shadow, ...deps])
+  }, [ref, enabled, shadow, glass, ...deps])
 }

@@ -9,8 +9,8 @@ import type { Box, OfficeLayout, RingBand } from './layout'
 import { LOCKED_OPACITY, PASTEL, PROP_COLORS, stagePalette, type StagePalette } from './palette'
 import { useBake } from './bake'
 import { GEO, glassMat, glowMat, mat } from './resources'
-import { mood, useLayout } from './sceneRegistry'
-import { seedDecorPlan } from './stageLook'
+import { mood, useDecorView, useLayout } from './sceneRegistry'
+import { paintOf } from './Decor'
 import { FLOOR_TILE, WALL_TILE, floorTexture, wallTexture } from './surfaces'
 
 type V3 = [number, number, number]
@@ -157,11 +157,11 @@ function Windows({ from, to, fixed, axis, pal, tall }: { from: number; to: numbe
 }
 
 /** The painted inner faces of the back wall (around the door; not on the glass street front) and the left wall. */
-function WallFaces({ layout, pal, H, dl, dr }: { layout: OfficeLayout; pal: StagePalette; H: number; dl: number; dr: number }) {
+function WallFaces({ layout, pal, H, dl, dr, paint }: { layout: OfficeLayout; pal: StagePalette; H: number; dl: number; dr: number; paint: Paint }) {
   const b = layout.bounds
   const st = layout.stage
-  const back = wallTexture(st, 'back', pal.wall, pal.accent, pal.wallTrim)
-  const left = wallTexture(st, 'left', pal.wall, pal.accent, pal.wallTrim)
+  const back = wallTexture(st, 'back', paint.back ?? pal.wall, pal.accent, pal.wallTrim)
+  const left = wallTexture(st, 'left', paint.left ?? pal.wall, pal.accent, pal.wallTrim)
   const T = WALL_TILE
   const z = b.minZ + 0.002
   const x = b.minX + 0.002
@@ -184,7 +184,10 @@ function WallFaces({ layout, pal, H, dl, dr }: { layout: OfficeLayout; pal: Stag
   )
 }
 
-function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
+/** Wall colours the player painted (grid §6), per wall; absent = the stage's own. */
+type Paint = { back?: string; left?: string }
+
+function Walls({ layout, pal, paint }: { layout: OfficeLayout; pal: StagePalette; paint: Paint }) {
   const b = layout.bounds
   const t = WALL_THICKNESS
   const H = layout.stage === 5 ? WALL_HEIGHT * 1.15 : WALL_HEIGHT
@@ -194,7 +197,8 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   const backZ = b.minZ - t / 2
   const leftX = b.minX - t / 2
   const glassy = layout.stage === 5
-  const wallC = pal.wall
+  const wallC = paint.back ?? pal.wall
+  const leftC = paint.left ?? pal.wall
   return (
     <group>
       {/* back wall (−z) with door gap */}
@@ -212,12 +216,12 @@ function Walls({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
       <B s={[door.width, H - 1.35, t]} p={[door.pos[0], 1.35 + (H - 1.35) / 2, backZ]} c={wallC} />
       <B s={[b.maxX - b.minX + t, 0.08, t + 0.04]} p={[(b.minX + b.maxX - t) / 2, H, backZ]} c={pal.wallTrim} shadow={false} />
       {/* left wall (−x) */}
-      <B s={[t, H, b.maxZ - b.minZ]} p={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} c={wallC} />
+      <B s={[t, H, b.maxZ - b.minZ]} p={[leftX, H / 2, (b.minZ + b.maxZ) / 2]} c={leftC} />
       <B s={[t + 0.04, 0.08, b.maxZ - b.minZ]} p={[leftX, H, (b.minZ + b.maxZ) / 2]} c={pal.wallTrim} shadow={false} />
       {/* skirting on the open front sides */}
       <B s={[b.maxX - b.minX, 0.1, 0.06]} p={[(b.minX + b.maxX) / 2, 0.05, b.maxZ + 0.03]} c={pal.wallTrim} shadow={false} />
       <B s={[0.06, 0.1, b.maxZ - b.minZ]} p={[b.maxX + 0.03, 0.05, (b.minZ + b.maxZ) / 2]} c={pal.wallTrim} shadow={false} />
-      <WallFaces layout={layout} pal={pal} H={H} dl={dl} dr={dr} />
+      <WallFaces layout={layout} pal={pal} H={H} dl={dl} dr={dr} paint={paint} />
       {/* door frame + open leaf */}
       <B s={[0.07, 1.4, t + 0.06]} p={[dl - 0.035, 0.7, backZ]} c={pal.wallTrim} />
       <B s={[0.07, 1.4, t + 0.06]} p={[dr + 0.035, 0.7, backZ]} c={pal.wallTrim} />
@@ -272,42 +276,6 @@ function GarageDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette 
       </group>
       {/* bicycle-ish tyres leaning on the wall */}
       <mesh geometry={GEO.cyl} material={mat(PROP_COLORS.tire)} scale={[0.5, 0.06, 0.5]} rotation={[Math.PI / 2, 0, 0.1]} position={[b.maxX - CELL * 0.35, 0.26, b.minZ + 0.1]} castShadow />
-    </group>
-  )
-}
-
-function CoworkingDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
-  const b = layout.bounds
-  const plants: V3[] = [
-    [b.minX + 0.3, 0, b.maxZ - 0.3],
-    [b.minX + 0.3, 0, b.minZ + 0.3],
-    [b.maxX - 0.3, 0, b.maxZ - 0.3],
-  ]
-  return (
-    <group>
-      {plants.map((p, i) => (
-        <group key={i} position={p}>
-          <mesh geometry={GEO.cyl} material={mat(PROP_COLORS.pot)} scale={[0.26, 0.26, 0.26]} position={[0, 0.13, 0]} castShadow />
-          <mesh geometry={GEO.sphere} material={mat(PROP_COLORS.leaf)} scale={[0.4, 0.5, 0.4]} position={[0, 0.5, 0]} castShadow />
-        </group>
-      ))}
-      {/* striped banner on the back wall */}
-      {[0, 1, 2, 3].map((i) => (
-        <B key={i} s={[0.28, 0.5, 0.03]} p={[b.minX + CELL * 0.6 + i * 0.3, 1.55, b.minZ + 0.02]} c={[PASTEL.mint, PASTEL.lemon, PASTEL.rose, PASTEL.sky][i]!} shadow={false} />
-      ))}
-      <B s={[0.03, 0.6, 1.2]} p={[b.minX + 0.03, 1.5, (b.minZ + b.maxZ) / 2 + CELL]} c={pal.accent} shadow={false} />
-    </group>
-  )
-}
-
-/** Seed (G2): prints, a clock and a plaque on the back wall, up at the banner's height or higher. */
-function SeedDecor({ layout }: { layout: OfficeLayout }) {
-  const pieces = useMemo(() => seedDecorPlan(layout.bounds, layout.door), [layout.bounds, layout.door])
-  return (
-    <group>
-      {pieces.map((p, i) => (
-        <mesh key={i} geometry={p.round ? GEO.cyl : GEO.box} material={mat(p.color)} scale={p.size} position={p.pos} rotation={p.rot} receiveShadow />
-      ))}
     </group>
   )
 }
@@ -368,19 +336,14 @@ function CampusDecor({ layout }: { layout: OfficeLayout }) {
   )
 }
 
-function StageDecor({ layout, pal, lowPower }: { layout: OfficeLayout; pal: StagePalette; lowPower: boolean }) {
+function StageDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   switch (layout.stage) {
     case 0:
       return <GarageDecor layout={layout} pal={pal} />
+    // Pre-seed / Seed: their plants, banner, prints, clock and plaque are starter decor pieces now (Decor.tsx).
     case 1:
-      return <CoworkingDecor layout={layout} pal={pal} />
     case 2:
-      return (
-        <>
-          <CoworkingDecor layout={layout} pal={pal} />
-          {!lowPower && <SeedDecor layout={layout} />}
-        </>
-      )
+      return null
     case 3:
       return <Columns layout={layout} pal={pal} />
     case 4:
@@ -454,7 +417,7 @@ function Dust({ rects, count, color, rising }: { rects: Box[]; count: number; co
 
 function Clutter({ rects, color }: { rects: Box[]; color: string }) {
   const root = useRef<THREE.Group>(null)
-  useBake(root, [rects, color])
+  useBake(root, [rects, color], { tag: 'clutter' })
   return (
     <group ref={root}>
       {rects.map((r, i) => {
@@ -548,20 +511,37 @@ function LockTape({ box }: { box: Box }) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * What the shell draws from the layout: stage, bounds, door, ring locks, columns. A hire or a moved desk changes the
+ * layout object (seats are walk obstacles) but not this, so the shell never rebakes for them (grid §7).
+ */
+export function shellKey(layout: OfficeLayout): string {
+  const b = layout.bounds
+  return `${layout.stage}|${b.minX},${b.maxX},${b.minZ},${b.maxZ}|${layout.door.pos.join(',')}|${layout.bands.map((x) => `${x.ring}${x.unlocked ? 1 : 0}`).join('')}|${layout.columns.map((c) => c.join(',')).join(';')}`
+}
+
 export function Office({ lowPower = false }: { lowPower?: boolean }) {
-  const layout = useLayout()
+  const live = useLayout()
+  const key = shellKey(live)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const layout = useMemo(() => live, [key])
   const pal = stagePalette(layout.stage as StageIndex)
+  const walls = useDecorView().walls
+  const paint = paintOf(walls)
+  const paintKey = `${paint.back ?? ''}|${paint.left ?? ''}`
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const paintMemo = useMemo(() => paint, [paintKey])
   const lockedIdx = layout.bands.findIndex((b) => !b.unlocked)
   const tapeBox = lockedIdx > 0 ? layout.bands[lockedIdx - 1]!.box : null
-  // Floor, walls, decor and tape are a pure function of the layout: baked into a few draw calls (bake.ts).
+  // Floor, walls, stage decor and tape are a pure function of the shell key and the paint: baked into a few draw calls.
   const statics = useRef<THREE.Group>(null)
-  useBake(statics, [layout, lowPower])
+  useBake(statics, [key, paintKey, lowPower], { tag: 'shell' })
   return (
     <group>
       <group ref={statics}>
         <Floor layout={layout} pal={pal} />
-        {layout.stage !== 6 && <Walls layout={layout} pal={pal} />}
-        <StageDecor layout={layout} pal={pal} lowPower={lowPower} />
+        {layout.stage !== 6 && <Walls layout={layout} pal={pal} paint={paintMemo} />}
+        <StageDecor layout={layout} pal={pal} />
         {tapeBox && <LockTape box={tapeBox} />}
       </group>
       {layout.bands.map((band) => (

@@ -5,7 +5,7 @@ import { CONTENT } from '../../src/content/index'
 import { categoryModules, moduleDef, slotsAt } from '../../src/engine/modules'
 import { PROJECT_CATEGORIES, type ProjectModuleId } from '../../src/engine/types'
 import { playBot } from '../bots'
-import { CONCENTRATION_MAX, moduleConcentration } from '../moduleStats'
+import { CONCENTRATION_MAX, moduleConcentration, planConcentration } from '../moduleStats'
 
 describe('moduleConcentration', () => {
   it('shares per category, the modules over the bar, distinct first threes, used and per-run shares', () => {
@@ -29,6 +29,24 @@ describe('moduleConcentration', () => {
     expect(c.unused).not.toContain('seo')
     expect(c.perRun.seo).toBe(1)
     expect(c.perRun.docs).toBeCloseTo(0.2, 12)
+  })
+})
+
+describe('planConcentration (B2 review)', () => {
+  it('counts only the plan picks: its share of the builds, the runs it picked in, and the modules over the bar', () => {
+    const c = planConcentration([
+      { category: 'web', planIds: { seo: 1, teamPlans: 1 }, fillBuilt: 6, built: 8 },
+      { category: 'web', planIds: { seo: 2 }, fillBuilt: 8, built: 10 },
+      { category: 'web', planIds: {}, fillBuilt: 9, built: 9 },
+      { category: 'game', planIds: { shop: 1 }, fillBuilt: 0, built: 1 },
+    ])
+    const web = c.find((x) => x.category === 'web')!
+    expect(web.runs).toBe(3)
+    expect(web.planRuns).toBe(2)
+    expect(web.planShare).toBeCloseTo(4 / 27, 12)
+    expect(web.share).toEqual({ seo: 1, teamPlans: 0.5 })
+    expect(web.over).toEqual(['seo'])
+    expect(c.find((x) => x.category === 'game')!.planShare).toBe(1)
   })
 })
 

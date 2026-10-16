@@ -80,6 +80,11 @@ export function roundEquityFor(target: StageIndex, size: RoundSize, stars: numbe
   return Math.max(0.02, base * B.ROUND_SIZE_EQUITY[size] - Math.max(0, stars) * B.GOAL_STAR_EQUITY_DISCOUNT - Math.max(0, board)) + Math.max(0, extra)
 }
 
+/** B2 review: the extra equity a round started under its target sells, × the equity (ROUND_EARLY_EQUITY); 1 at or above it. */
+export function earlyEquityMult(price: number): number {
+  return 1 + B.ROUND_EARLY_EQUITY * Math.max(0, 1 - price)
+}
+
 /** GAMEPLAY V2 §8.3: BOARD_HIT_EQUITY less equity in the next round per board quarter hit since the last one. */
 export function boardEquity(s: GameState): number {
   return (s.board?.credit ?? 0) * B.BOARD_HIT_EQUITY
@@ -305,6 +310,19 @@ export function pitchAverage(r: RoundState): number {
   return clamp(-B.PITCH_BONUS_CAP, B.PITCH_BONUS_CAP, list.reduce((a, p) => a + p.delta, 0) / n)
 }
 
+/**
+ * B2 review: the equity follows the live price like the amount does (half locked at the start; weekly and at the close,
+ * so a meeting answer lands as stated), so a round started at
+ * the window's edge that grew into its target during the weeks sells little extra, and one started at 0.6 sells more.
+ */
+function repriceEquity(s: GameState, r: RoundState): void {
+  if (r.down || r.earlyMult === undefined) return
+  const m = earlyEquityMult(livePrice(s, r))
+  if (m === r.earlyMult) return
+  r.offer.equity = clamp(0.01, B.ROUND_EQUITY_MAX, (r.offer.equity / r.earlyMult) * m)
+  r.earlyMult = m
+}
+
 function setOfferAmount(r: RoundState, amount: number): void {
   r.offer.amount = amount
   r.offer.preMoney = r.offer.equity > 0 ? amount / r.offer.equity - amount : 0
@@ -354,11 +372,12 @@ export function roundView(s: GameState, stars: number): RoundView | undefined {
     const downFactor = offerFactor(price, diligence, 0, 0)
     view.sizes = ROUND_SIZES.map((size): RoundSizeOption => {
       const amount = roundAmountFor(s, targetStage, B.ROUND_RUNWAY_MONTHS[size])
-      const equity = roundEquityFor(targetStage, size, stars, policyEquity(s), boardEquity(s))
+      const normal = roundEquityFor(targetStage, size, stars, policyEquity(s), boardEquity(s))
+      const equity = normal * earlyEquityMult(price)
       const o: RoundSizeOption = { size, months: B.ROUND_RUNWAY_MONTHS[size], amount, offer: Math.round(amount * view.factor), equity }
       if (down) {
         const downAmount = amount * B.DOWN_ROUND_AMOUNT
-        o.down = { amount: downAmount, offer: Math.round(downAmount * downFactor), equity: downEquity(equity) }
+        o.down = { amount: downAmount, offer: Math.round(downAmount * downFactor), equity: downEquity(normal) }
       }
       return o
     })
@@ -396,7 +415,10 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
   const months = B.ROUND_RUNWAY_MONTHS[size]
   const baseAmount = roundAmountFor(s, target, months) * (down ? B.DOWN_ROUND_AMOUNT : 1)
   const normal = roundEquityFor(target, size, stars, policyEquity(s), boardEquity(s))
-  const equity = down ? downEquity(normal) : normal
+  // The down round has its own price (downEquity); a normal one started under the target sells more (B2 review),
+  // repriced each week on the live price (repriceEquity).
+  const earlyMult = down ? undefined : earlyEquityMult(priceRatio(s.finance.valuation, targetValuation))
+  const equity = down ? downEquity(normal) : normal * earlyMult!
   const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
   const investorStyle = rng.pick(INVESTOR_STYLES)
   const diligence = diligenceNow(s)
@@ -414,6 +436,7 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
     targetValuation,
     pitchBonus: 0,
     priceAtStart: priceRatio(s.finance.valuation, targetValuation),
+    ...(earlyMult !== undefined ? { earlyMult } : {}),
     pitches: [],
     investorStyle,
     meetingWeeks: meetingWeeksFor(weeks),
@@ -507,6 +530,7 @@ function weekPassed(s: GameState, r: RoundState): boolean {
   const from = r.offer.amount
   if (r.months !== undefined) r.amountBy = roundAmountParts(s, r.targetStage, r.months).by
   const to = liveOffer(s, r, r.diligence)
+  repriceEquity(s, r)
   setOfferAmount(r, to)
   r.lastMove = { week, from, to }
   // The next meeting falls due on its week. One left unanswered stays open until then, and is gone (a 0 in the
@@ -619,6 +643,7 @@ export function closeRound(s: GameState, content: EngineContent, rng: Rng): void
   // The close prices today's numbers (canlı teklif).
   r.diligence = diligenceNow(s)
   if (r.months !== undefined) r.amountBy = roundAmountParts(s, r.targetStage, r.months).by
+  repriceEquity(s, r)
   setOfferAmount(r, liveOffer(s, r, r.diligence))
   r.active = false
   // GAMEPLAY V2 §6.2: the close pays the loan off first (the balance, not the principal).

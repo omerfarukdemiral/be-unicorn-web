@@ -42,9 +42,9 @@ describe('category flavor (B1)', () => {
     s.finance.adBudget = 5_000
     recomputeDerived(s, content)
     const w = as(s, 'web')
-    expect(B.CATEGORY_CAC.web).toBe(0.85)
+    expect(B.CATEGORY_CAC.web).toBe(0.8)
     expect(w.derived.cac / s.derived.cac).toBeCloseTo(B.CATEGORY_CAC.web, 9)
-    expect(cacFactors(w).find((f) => f.key === 'category')!.value).toBeCloseTo(0.85, 9)
+    expect(cacFactors(w).find((f) => f.key === 'category')!.value).toBeCloseTo(0.8, 9)
     expect(cacFactors(s).find((f) => f.key === 'category')!.value).toBe(1)
   })
 

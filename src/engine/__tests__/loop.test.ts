@@ -8,7 +8,7 @@ import { crisisSeverity, isCardEligible } from '../decisions'
 import { winRun } from '../endgame'
 import { renewHoldChance } from '../founder'
 import { releaseLevel } from '../loop'
-import { enterStage } from '../round'
+import { earlyEquityMult, enterStage } from '../round'
 import { daysToPayday, horizon, nextCrisis, nextStep } from '../loopSelectors'
 import { migrate } from '../save'
 import type { EngineApi, GameState, RoundState, StageIndex } from '../types'
@@ -313,9 +313,9 @@ describe('stage goals (☆)', () => {
     const ready: GameState = { ...s, goalsDone: ['g-launch'], derived: { ...s.derived, canStartRound: true } }
     const r = api.applyAction(ready, { type: 'startRound' })
     expect(r.ok).toBe(true)
-    expect(r.state.round!.offer.equity).toBeCloseTo(B.ROUND_EQUITY[1]! - B.GOAL_STAR_EQUITY_DISCOUNT, 6)
+    expect(r.state.round!.offer.equity).toBeCloseTo((B.ROUND_EQUITY[1]! - B.GOAL_STAR_EQUITY_DISCOUNT) * earlyEquityMult(r.state.round!.priceAtStart!), 6)
     const plain = api.applyAction({ ...ready, goalsDone: [] }, { type: 'startRound' })
-    expect(plain.state.round!.offer.equity).toBeCloseTo(B.ROUND_EQUITY[1]!, 6)
+    expect(plain.state.round!.offer.equity).toBeCloseTo(B.ROUND_EQUITY[1]! * earlyEquityMult(plain.state.round!.priceAtStart!), 6)
   })
 })
 

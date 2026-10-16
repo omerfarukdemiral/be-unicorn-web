@@ -588,6 +588,11 @@ export interface RoundState {
   pitchWeeks?: number
   /** Price ratio (valuation / target) when the round started: half of the price is locked at the start. */
   priceAtStart?: number
+  /**
+   * B2 review: the early-start factor (earlyEquityMult of the live, half-locked price) offer.equity carries now; it follows
+   * the price every week until the close. Absent on a down round and on a round from an older save (equity as signed).
+   */
+  earlyMult?: number
   /** What decided the amount at the last weekly re-size: the table floor, the burn × months, or the table ceiling. */
   amountBy?: 'floor' | 'burn' | 'ceiling'
   /** Week (1-based, weeks done) whose meeting waits for the player's choice; undefined = none open. */

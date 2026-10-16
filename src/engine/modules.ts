@@ -81,6 +81,9 @@ const syn = (w: ProjectModuleId, kind: ModuleEffectKind, k: number): ModuleSyner
  * aiAssistant 6 → 4 %). notifications, support and cicd open at v1, so v1's 3 slots choose among ~10. Each pricing path
  * keeps a later ARPU step: adminPanel no longer needs teamPlans (the usagePricing path on web), battlePass needs
  * liveEvents instead of shop (a premium game sells a season pass too).
+ * B2 review: a module cannot be removed, so both sides of a fork open together: the category sellers (inAppPurchase,
+ * shop, promotedListings) are tier 1 like paywall (they opened at v2, so at v1 Paywall was the only seller and shut
+ * them unseen), and the offer card names what a build shuts (exclusionChip, "Freemium ile olmaz").
  */
 export const MODULES: readonly ModuleDef[] = [
   // Core: the round-2 nine (same ids and effects; onboarding's upkeep 100 → 60, tiers instead of stages).
@@ -108,7 +111,7 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'crashReports', tier: 1, categories: ['mobile'], synergies: [syn('feedback', 'churn', 0.5)], work: 0.06, cashBase: 500, gains: { churn: 0.95 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
   { id: 'deepLinks', tier: 2, categories: ['mobile'], synergies: [syn('referral', 'organic', 0.5)], work: 0.1, cashBase: 1_000, gains: { organic: 1.08 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
   { id: 'offlineMode', tier: 2, categories: ['mobile'], work: 0.15, cashBase: 1_500, gains: { churn: 0.92 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 1 },
-  { id: 'inAppPurchase', tier: 2, categories: ['mobile'], excludes: ['paywall'], work: 0.12, cashBase: 1_500, gains: { arpu: 1.08 }, minus: { organic: 0.96 }, sizeAdd: 0, debt: 0 },
+  { id: 'inAppPurchase', tier: 1, categories: ['mobile'], excludes: ['paywall'], work: 0.12, cashBase: 1_500, gains: { arpu: 1.08 }, minus: { organic: 0.96 }, sizeAdd: 0, debt: 0 },
   { id: 'widgets', tier: 3, categories: ['mobile'], synergies: [syn('notifications', 'churn', 0.3)], work: 0.12, cashBase: 3_000, gains: { churn: 0.94, wave: 1.1 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
   { id: 'tabletApp', tier: 3, categories: ['mobile'], work: 0.2, cashBase: 4_000, gains: { tam: 1.1 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
   { id: 'watchApp', tier: 4, categories: ['mobile'], requires: ['widgets'], work: 0.2, cashBase: 8_000, gains: { churn: 0.95, tam: 1.04 }, minus: { updateWork: 1.2 }, sizeAdd: 1, debt: 0 },
@@ -143,7 +146,7 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'leaderboard', tier: 1, categories: ['game'], synergies: [syn('guilds', 'churn', 0.5)], work: 0.06, cashBase: 1_000, gains: { churn: 0.97, organic: 1.05 }, minus: { infra: 1.08 }, sizeAdd: 0, debt: 0 },
   { id: 'dailyRewards', tier: 1, categories: ['game'], synergies: [syn('notifications', 'churn', 0.5)], work: 0.06, cashBase: 600, gains: { churn: 0.93 }, minus: { arpu: 0.96 }, sizeAdd: 0, debt: 0 },
   { id: 'liveEvents', tier: 2, categories: ['game'], work: 0.1, cashBase: 1_200, gains: { wave: 1.25, churn: 0.97 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
-  { id: 'shop', tier: 2, categories: ['game'], excludes: ['paywall'], synergies: [syn('battlePass', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.1 }, minus: { organic: 0.94 }, sizeAdd: 0, debt: 0 },
+  { id: 'shop', tier: 1, categories: ['game'], excludes: ['paywall'], synergies: [syn('battlePass', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.1 }, minus: { organic: 0.94 }, sizeAdd: 0, debt: 0 },
   { id: 'battlePass', tier: 3, categories: ['game'], requires: ['liveEvents'], work: 0.15, cashBase: 3_500, gains: { arpu: 1.08, churn: 0.96 }, minus: { updateWork: 1.2 }, sizeAdd: 0, debt: 0 },
   { id: 'guilds', tier: 3, categories: ['game'], work: 0.2, cashBase: 4_000, gains: { churn: 0.9, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
   { id: 'ugcEditor', tier: 4, categories: ['game'], work: 0.25, cashBase: 8_000, gains: { organic: 1.1, churn: 0.94 }, sizeAdd: 1, debt: 2 },
@@ -154,7 +157,7 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'payments', tier: 1, categories: ['marketplace'], synergies: [syn('buyerProtection', 'churn', 0.3)], work: 0.1, cashBase: 800, gains: { churn: 0.93, arpu: 1.05 }, upkeep: stageScaled(100), sizeAdd: 0, debt: 0 },
   { id: 'sellerDashboard', tier: 2, categories: ['marketplace'], work: 0.15, cashBase: 1_500, gains: { tam: 1.1, churn: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 0 },
   { id: 'search', tier: 2, categories: ['marketplace'], synergies: [syn('reviews', 'arpu', 0.5)], work: 0.12, cashBase: 2_000, gains: { arpu: 1.04, cac: 0.95 }, minus: { infra: 1.1 }, sizeAdd: 0, debt: 0 },
-  { id: 'promotedListings', tier: 2, categories: ['marketplace'], excludes: ['paywall'], work: 0.08, cashBase: 1_200, gains: { arpu: 1.08 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
+  { id: 'promotedListings', tier: 1, categories: ['marketplace'], excludes: ['paywall'], work: 0.08, cashBase: 1_200, gains: { arpu: 1.08 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
   { id: 'buyerProtection', tier: 3, categories: ['marketplace'], requires: ['payments'], work: 0.1, cashBase: 3_000, gains: { churn: 0.9 }, minus: { arpu: 0.97 }, sizeAdd: 0, debt: 0 },
   { id: 'shipping', tier: 3, categories: ['marketplace'], synergies: [syn('sellerDashboard', 'tam', 0.3)], work: 0.2, cashBase: 4_000, gains: { tam: 1.1, churn: 0.95 }, upkeep: stageScaled(150), sizeAdd: 1, debt: 1 },
   { id: 'recommendations', tier: 4, categories: ['marketplace'], requires: ['search'], work: 0.25, cashBase: 9_000, gains: { arpu: 1.1, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },

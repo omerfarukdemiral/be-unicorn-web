@@ -59,3 +59,43 @@ export function moduleConcentration(runs: readonly ModuleRunLike[]): ModuleConce
   const perRun = Object.fromEntries([...perRunCount].map(([id, n]) => [id, runs.length ? n / runs.length : 0]))
   return { categories, used: used.size, unused: MODULES.filter((d) => !used.has(d.id)).map((d) => d.id), perRun }
 }
+
+/** The part of a single-category BotRun the plan measure reads: its category, the plan's builds by id, and every build. */
+export interface PlanRunLike {
+  category: string
+  planIds: Readonly<Record<string, number>>
+  fillBuilt: number
+  built: number
+}
+
+export interface CategoryPlanConcentration {
+  category: string
+  runs: number
+  /** Builds the plan chose (by the card's estimate), of all builds; the rest came from the slot filler's weighted draw. */
+  planShare: number
+  /** Runs with at least one plan build. */
+  planRuns: number
+  /** Share of those runs whose plan built each module, highest first. */
+  share: Record<string, number>
+  over: string[]
+}
+
+/**
+ * B2 review: the concentration a player who picks by the card's number would face. The project measure above mixes
+ * the plan's picks with the filler's seeded draw (~80% of builds), so it cannot tell whether picking by the estimate
+ * still converges on one set; this one counts only the plan's picks. Single-category runs: one category per run.
+ */
+export function planConcentration(runs: readonly PlanRunLike[]): CategoryPlanConcentration[] {
+  const byCat = new Map<string, PlanRunLike[]>()
+  for (const r of runs) byCat.set(r.category, [...(byCat.get(r.category) ?? []), r])
+  return [...byCat].map(([category, rs]) => {
+    const built = rs.reduce((a, r) => a + r.built, 0)
+    const fill = rs.reduce((a, r) => a + r.fillBuilt, 0)
+    const withPlan = rs.filter((r) => Object.keys(r.planIds).length > 0)
+    const count = new Map<string, number>()
+    for (const r of withPlan) for (const id of Object.keys(r.planIds)) count.set(id, (count.get(id) ?? 0) + 1)
+    const share = Object.fromEntries([...count].sort((a, b) => b[1] - a[1]).map(([id, n]) => [id, n / withPlan.length]))
+    const over = Object.entries(share).filter(([, v]) => v > CONCENTRATION_MAX).map(([id]) => id)
+    return { category, runs: rs.length, planShare: built ? (built - fill) / built : 0, planRuns: withPlan.length, share, over }
+  })
+}

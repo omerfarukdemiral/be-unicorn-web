@@ -1,6 +1,7 @@
 // GAMEPLAY V2 §7.2 company policies (Kanun Kitabı): unlock, excludes, cooldown, irreversible, and the sharp effects.
 import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
+import { earlyEquityMult } from '../round'
 import { createEngine } from '../index'
 import { POLICIES } from '../../content/index'
 import { POLICY_IDS, type Employee, type GameState, type PolicyId } from '../types'
@@ -138,7 +139,7 @@ describe('effects (§7.2)', () => {
     const before = s.derived.round!.sizes!.map((o) => o.equity)
     const after = sign(s, 'salary-freeze').state
     expect(after.policies!.survival).toBe(1)
-    after.derived.round!.sizes!.forEach((o, i) => expect(o.equity - before[i]!).toBeCloseTo(B.POLICY_SURVIVAL_EQUITY, 9))
+    after.derived.round!.sizes!.forEach((o, i) => expect((o.equity - before[i]!) / earlyEquityMult(after.derived.round!.priceRatio)).toBeCloseTo(B.POLICY_SURVIVAL_EQUITY, 9))
     // A growth policy does not.
     const grow = sign(at(1, RICH, 3), 'hire-fast').state
     expect(grow.policies!.survival ?? 0).toBe(0)

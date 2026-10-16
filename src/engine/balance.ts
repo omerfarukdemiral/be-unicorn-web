@@ -118,7 +118,7 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
  * (game), B2B price with little buzz (api). Means ≈ 0.99 / 1.04 and the rich end capped at 1.2: the first cut
  * (api 1.25, ai 1.45) moved the fastest Unicorn from day 1855 to 1378 in sim/minStageDays.ts.
  */
-export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.92, mobile: 1, api: 1.1, ai: 1.2, game: 0.88, marketplace: 1 }
+export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.94, mobile: 1, api: 1.1, ai: 1.2, game: 0.92, marketplace: 1 }
 export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1.1, api: 0.75, ai: 0.9, game: 1.35, marketplace: 1.15 }
 /**
  * [DENGE B1] The Series C plateau sits right on the Unicorn gate: ~$16.2M MRR (1B / 12 / MULTIPLE_MAX_BY_STAGE[5])
@@ -129,9 +129,12 @@ export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web
  * and versions bring a 2× wave, which also lifts the MoM the multiple reads), web stays cheap (paid users at 0.85×
  * the CAC: landing pages, SEO). CATEGORY_WAVE: updateWave × the project's factor; CATEGORY_CAC: derived.cac × the
  * ad-weighted mean.
+ * [B2 review] B2's 10-slot cap and trimmed sellers took back part of the cure (24 seeds, Unicorn median: web vcRocket
+ * 75.4 → 87.5 dk, web platform 89.6 → 94.2 dk and 22/24, game vcRocket 76.0 → 82.0 dk): web ARPU .92 → .94 and CAC
+ * .85 → .8, game ARPU .88 → .92 (order game < web < mobile and one coin pip each kept).
  */
 export const CATEGORY_WAVE: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1, api: 1, ai: 1, game: 2, marketplace: 1 }
-export const CATEGORY_CAC: Readonly<Record<ProjectCategory, number>> = { web: 0.85, mobile: 1, api: 1, ai: 1, game: 1, marketplace: 1 }
+export const CATEGORY_CAC: Readonly<Record<ProjectCategory, number>> = { web: 0.8, mobile: 1, api: 1, ai: 1, game: 1, marketplace: 1 }
 
 // ---------------------------------------------------------------------------
 // Users (PLAN §5.4)
@@ -453,6 +456,14 @@ export const BRIDGE_CARD_ID = 'vc-bridge-loan'
 // Live round window (docs/CORE_LOOP.md §4.3, phase 2) ------------------------
 /** The round can start once valuation ≥ target × this ("şimdi mi, biraz daha mı?"). */
 export const ROUND_EARLY_RATIO = 0.6
+/**
+ * B2 review: a round priced under its target sells more of the company for the same check: equity × (1 + this ×
+ * (1 − price)), price = the live, half-locked price of the offer (√(at start × now), valuation / target in
+ * ROUND_OFFER_CLAMP), repriced weekly to the close. Started at the window's 0.6 and still there: +20%. Before, equity was fixed per size and the early price only trimmed the amount,
+ * which the table floor mostly absorbed, so "start the moment the window opens" was faster for the same equity
+ * (sim, platform: 66.9 against 69.6 dk at 49% each). Now waiting buys equity: a real "şimdi mi, biraz daha mı?".
+ */
+export const ROUND_EARLY_EQUITY = 0.5
 /**
  * Months of runway each size buys (on the new burn). [GAMEPLAY V2 §4.2: 12/18/24 → 8/12/16] The round is the breath of
  * the cash constraint: 8–16 months, so the next round is always in sight (DECISIONS #16 revised).

@@ -8,7 +8,7 @@ import { cpus } from 'node:os'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, POLICY_IDS, SECONDS_PER_DAY, balance } from '../src/engine/index'
 import { MODULES } from '../src/engine/modules'
-import { CONCENTRATION_MAX, MODULES_USED_MIN, moduleConcentration, type ModuleConcentration } from './moduleStats'
+import { CONCENTRATION_MAX, MODULES_USED_MIN, moduleConcentration, planConcentration, type CategoryPlanConcentration, type ModuleConcentration } from './moduleStats'
 import { PLAN_GROWTH, PLAN_MONEY, PLAN_REACH, PLAN_RETENTION, CRISIS_WINDOW_DAYS, DAYS_10_MIN, DEATH_TRACE_DAYS, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type ModulePlan, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
@@ -117,6 +117,7 @@ const TOUR_CATEGORIES = ['web', 'mobile', 'api', 'marketplace', 'ai', 'game'] as
 const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
 /** B2: module pick concentration, filled by the module section and read by the criteria. */
 let conc: ModuleConcentration | null = null
+let planConc: CategoryPlanConcentration[] = []
 {
   const sp = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}, content: RunSpec['content'] = 'full'): RunSpec => ({ kind, policy, overrides, content })
   const always: RunSpec[] = [
@@ -503,6 +504,23 @@ line()
   const archOnly = moduleConcentration(all)
   line()
   line(`Kullanılan modül: ${conc.used}/${MODULES.length}${conc.unused.length ? ` (kurulmayan: ${conc.unused.join(', ')})` : ''}. Yalnız arketip koşularında (kategorileri sabit, bilgi): > %80 olan ${archOnly.categories.reduce((a, c) => a + c.over.length, 0)} modül · ${archOnly.categories.map((c) => `${c.category} ${c.over.join('/') || '—'}`).join(' · ')}.`)
+  // B2 review: the same tour, only the builds the plan chose by the card's estimate (the filler's draw left out).
+  planConc = planConcentration(
+    ARCHETYPES.flatMap((a) =>
+      TOUR_CATEGORIES.flatMap((cat) =>
+        runMany(a, 'best', { firstCategory: cat, extraCategories: [] }).map((r) => ({ category: cat, planIds: r.planIds, fillBuilt: r.fillBuilt, built: sumOf(r.modulesBuilt) })),
+      ),
+    ),
+  )
+  line()
+  line('Plan seçimleri (B2 inceleme): kategori × bot turunda yalnız botun karttaki tahmine göre seçtiği modüller (slot doldurucunun çekilişi hariç); pay = planın seçtiği koşu / plan seçimi olan koşu.')
+  line()
+  line('| Kategori | Plan payı (kurulan) | Plan seçimi olan koşu | > %80 | En sık 5 plan seçimi |')
+  line('|---|---|---|---|---|')
+  for (const c of planConc) {
+    const top = Object.entries(c.share).slice(0, 5).map(([id, v]) => `${id} ${pct(v, 1)}`).join(', ')
+    line(`| ${c.category} | ${pct(c.planShare, 1)} | ${c.planRuns}/${c.runs} | ${c.over.length ? c.over.join(', ') : '—'} | ${top || '—'} |`)
+  }
   for (const r of all) Object.keys(r.moduleIds).forEach((k) => seen.add(k))
   const unseen = MODULES.filter((d) => !seen.has(d.id)).map((d) => d.id)
   line()
@@ -616,6 +634,12 @@ if (conc) {
   const over = conc.categories.flatMap((c) => c.over.map((id) => `${c.category}/${id} ${pct(c.share[id]!, 1)}`))
   line(`- Modül yoğunlaşması (B2): kategori projelerinin > %${Math.round(CONCENTRATION_MAX * 100)}’inde olan modül ${over.length} (hedef 0)${over.length ? ` · ${over.join(', ')}` : ''}: **${yes(over.length === 0)}**`)
   line(`- Kullanılan modül (B2): ${conc.used}/${MODULES.length} (hedef ≥ ${MODULES_USED_MIN}): **${yes(conc.used >= MODULES_USED_MIN)}**`)
+}
+if (planConc.length) {
+  // B2 review: the project measure above is ~80% the filler's seeded draw; the plan's own picks are the player who reads the card.
+  const over = planConc.flatMap((c) => c.over.map((id) => `${c.category}/${id} ${pct(c.share[id]!, 1)}`))
+  const share = planConc.reduce((a, c) => a + c.planShare * c.runs, 0) / Math.max(1, planConc.reduce((a, c) => a + c.runs, 0))
+  line(`- Plan seçimlerinde yoğunlaşma (B2 inceleme; karttaki tahmine göre seçen oyuncu): plan seçimi olan koşuların > %${Math.round(CONCENTRATION_MAX * 100)}’inde seçilen modül ${over.length} (hedef 0)${over.length ? ` · ${over.join(', ')}` : ''} · plan payı ${pct(share, 1)} (bilgi): **${yes(over.length === 0)}**`)
 }
 {
   // §15: the bad-decision policy must cost lives, not only minutes (bootstrap + vcRocket, same seeds).

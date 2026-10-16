@@ -68,7 +68,8 @@ describe('cacReasonText', () => {
 
 describe('focusChips', () => {
   it('the focused product gains paid users, the other loses them, in whole numbers; the same focus says nothing', () => {
-    const s = company(['web', 'game'], 2)
+    // Two categories with the same CATEGORY_CAC, so the focus only moves users between them.
+    const s = company(['mobile', 'game'], 2)
     s.finance.adBudget = 0.5 * s.finance.mrr
     recomputeDerived(s, content)
     const [a, b] = s.projects
@@ -80,6 +81,17 @@ describe('focusChips', () => {
     expect(c.gainN).toBe(Math.round(s.derived.channels.paid * 0.25))
     expect(c.lossN).toBe(c.gainN)
     expect(Number.isInteger(c.mrr)).toBe(true)
+  })
+
+  it("B1: focusing away from web's cheaper ads gains fewer users than web loses", () => {
+    const s = company(['web', 'game'], 2)
+    s.finance.adBudget = 0.5 * s.finance.mrr
+    recomputeDerived(s, content)
+    const [a, b] = s.projects
+    const c = focusChips(s, b!.id, null)
+    expect(c.gain).toBe(b!.name)
+    expect(c.loss).toBe(a!.name)
+    expect(c.gainN).toBeLessThan(c.lossN)
   })
 })
 

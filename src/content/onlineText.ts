@@ -77,6 +77,7 @@ export const ONLINE_TEXT: Record<string, string> = {
   'account.signOutAll': 'Tüm cihazlardan çık',
   'account.offline': 'Çevrimdışı oynuyorsun. Kayıt bu cihazda.',
   'account.signIn': 'Giriş yap',
+  'account.signInConfirm': 'Giriş ekranına geç? Onayla',
   'account.conflict': 'Başka cihazda daha ileri bir kayıt var ({stage} · {day}. gün).',
   'account.takeCloud': 'Buluttakini yükle',
   'account.keepLocal': 'Bu cihazdakini tut',

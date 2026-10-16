@@ -3,7 +3,7 @@
 // the near kerb, cars and a bus in both lanes and a few people on the pavements. Everything sits on the −z side
 // behind the office, so nothing here can hide a desk (the camera frames the office box only, frameFit).
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useBake } from './bake'
 import { hash01 } from './constants'
@@ -59,6 +59,9 @@ function Building({ b, x0, zFront }: Placed & { zFront: number }) {
   const cz = zFront - BUILDING_D / 2
   const frontMat = useMemo(() => (front ? new THREE.MeshStandardMaterial({ map: front, roughness: 0.75 }) : null), [front])
   const sideMat = useMemo(() => (side ? new THREE.MeshStandardMaterial({ map: side, roughness: 0.75, color: '#e9e6e2' }) : null), [side])
+  // Own materials over cached facade textures: freed with the building (a stage move rebuilds the street, F5).
+  useEffect(() => () => frontMat?.dispose(), [frontMat])
+  useEffect(() => () => sideMat?.dispose(), [sideMat])
   return (
     <group>
       <mesh geometry={GEO.box} material={mat(b.body)} scale={[b.w, h, BUILDING_D]} position={[cx, h / 2, cz]} receiveShadow />

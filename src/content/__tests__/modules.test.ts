@@ -89,6 +89,8 @@ describe('module text', () => {
       'module.measured.infra': ['{x}'], 'module.measured.every': ['{a}', '{b}'], 'module.measured.every1': ['{a}'],
       'release.moduleUsers': ['{module}', '{u}'], 'release.version': ['{project}', '{v}', '{n}'], 'bubble.moduleVersion': ['{project}', '{v}', '{n}', '{module}'],
       'module.est.rentBig': [], 'module.est.none': [],
+      // B2: a version past the slot cap opens none.
+      'release.versionFull': ['{project}', '{v}'], 'bubble.moduleVersionFull': ['{project}', '{v}', '{module}'],
     }
     for (const k of ['organicZero', 'noAds', 'capped', 'noUsers', 'gapBound']) need[`module.est.why.${k}`] = []
     for (const [k, params] of Object.entries(need)) {

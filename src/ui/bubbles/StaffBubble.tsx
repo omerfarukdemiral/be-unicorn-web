@@ -1,7 +1,7 @@
 // An employee who needs the player, answered right above their head (scene-first spec §2 rows 11–12). Same engine
 // actions as the Ekip panel: a leaver gets raise / talk / let go (a bored one the projects to move to first), a builder
 // with nothing to build gets the open projects (or a launcher to start one). From Pre-seed (E3) the worn out ask too:
-// burnt out (leave / slow down / let go), tired (slow down / leave / carry on), bored (the busiest projects).
+// burnt out (leave / slow down / let go), tired and not yet calm (slow down / leave / carry on), bored (the busiest projects).
 // Effects read as labelled chips, never a sentence.
 import { useShallow } from 'zustand/react/shallow'
 import { actionEnergy } from '../../engine/founder'

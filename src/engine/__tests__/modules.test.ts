@@ -5,7 +5,7 @@ import * as E from '../economy'
 import { averageLaunchedMaturity, computeOutputs, maturityRates, recomputeDerived } from '../derive'
 import { completeFounderAction } from '../founder'
 import { accrueMonth, checkReleases, ledgerOf, resolvePayday, updateWave } from '../loop'
-import { adFocusWarmup, adWeights, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
+import { adFocusWarmup, adWeights, focusPaidTotal, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
 import { createRngState, Rng } from '../rng'
 import { progressProjects } from '../tick'
 import { PROJECT_MODULE_IDS, type Action, type GameState, type ModuleEffectKind, type Project, type ProjectCategory, type ProjectModuleId, type TimedAction } from '../types'
@@ -93,10 +93,10 @@ describe('caps and mix', () => {
   it('a module on one of two projects moves the company by half its multiplier', () => {
     const s0 = company(['web', 'mobile'], 2)
     const s = withModules(s0, 0, ['paywall'])
-    // arpu: (0.85 × 1.15 + 1) / 2 against (0.85 + 1) / 2.
+    // arpu: (0.85 × 1.1 + 1) / 2 against (0.85 + 1) / 2 (B2: paywall 1.15 → 1.1, churn minus 1.04 → 1.05).
     const ratio = s.stats.arpu / s0.stats.arpu
-    expect(ratio).toBeCloseTo((B.CATEGORY_ARPU.web * 1.15 + B.CATEGORY_ARPU.mobile) / (B.CATEGORY_ARPU.web + B.CATEGORY_ARPU.mobile), 9)
-    expect(s.derived.projectMix![s.projects[0]!.id]!.mult).toEqual({ arpu: 1.15, organic: 0.85, churn: 1.04 })
+    expect(ratio).toBeCloseTo((B.CATEGORY_ARPU.web * 1.1 + B.CATEGORY_ARPU.mobile) / (B.CATEGORY_ARPU.web + B.CATEGORY_ARPU.mobile), 9)
+    expect(s.derived.projectMix![s.projects[0]!.id]!.mult).toEqual({ arpu: 1.1, organic: 0.85, churn: 1.05 })
   })
 })
 
@@ -116,8 +116,9 @@ describe('category boosts', () => {
     expect(mult('web', 'aiAssistant', 'arpu')).toBeCloseTo(1.12, 12)
   })
   it('referral on a game × 1.4 (its minus untouched); the caps still hold', () => {
-    expect(mult('game', 'referral', 'organic')).toBeCloseTo(1.308, 12)
-    expect(mult('game', 'referral', 'arpu')).toBeCloseTo(0.95, 12)
+    // B2: referral 1.22 → 1.15 (arpu minus 0.95 → 0.93), the boost kept on game.
+    expect(mult('game', 'referral', 'organic')).toBeCloseTo(1.21, 12)
+    expect(mult('game', 'referral', 'arpu')).toBeCloseTo(0.93, 12)
     const p = { id: 'p', category: 'game', modules: [{ id: 'referral', day: 0 }, { id: 'freemium', day: 0 }, { id: 'analytics', day: 0 }] } as Project
     expect(moduleMult(p, 'organic', 0)).toBe(B.MODULE_MULT_CAP.organic)
   })
@@ -134,12 +135,12 @@ describe('staleness', () => {
   })
   it('gains fade, minuses stay', () => {
     const p = { id: 'p', category: 'web', modules: [{ id: 'paywall', day: 0 }] } as Project
-    expect(moduleMult(p, 'arpu', 0)).toBeCloseTo(1.15, 12)
-    expect(moduleMult(p, 'arpu', 540)).toBeCloseTo(1.1125, 12)
-    expect(moduleMult(p, 'arpu', 720)).toBeCloseTo(1.075, 12)
+    expect(moduleMult(p, 'arpu', 0)).toBeCloseTo(1.1, 12)
+    expect(moduleMult(p, 'arpu', 540)).toBeCloseTo(1.075, 12)
+    expect(moduleMult(p, 'arpu', 720)).toBeCloseTo(1.05, 12)
     for (const day of [0, 540, 720, 2000]) {
       expect(moduleMult(p, 'organic', day)).toBeCloseTo(0.85, 12)
-      expect(moduleMult(p, 'churn', day)).toBeCloseTo(1.04, 12)
+      expect(moduleMult(p, 'churn', day)).toBeCloseTo(1.05, 12)
     }
   })
   it('refreshModule: 40% of the cash and work, no slot check, no wave, the day starts over', () => {
@@ -216,7 +217,7 @@ describe('buildModule errors', () => {
     const r = build(s, 0, 'feedback')
     expect(r.ok).toBe(true)
     expect(r.state.founder.energy).toBe(50 - B.MODULE_ENERGY)
-    expect(s.stats.cash - r.state.stats.cash).toBe(600)
+    expect(s.stats.cash - r.state.stats.cash).toBe(900)
   })
 
   it('success: cash − cashBase × 2^stage, one move, the build written, moduleStarted', () => {
@@ -355,12 +356,12 @@ describe('build and delivery', () => {
 })
 
 describe('upkeep', () => {
-  it('aiAssistant: infra + MRR × weight × 6%; it is in the burn', () => {
+  it('aiAssistant: infra + MRR × weight × 4%; it is in the burn', () => {
     const s0 = company(['ai', 'web'], 4)
     const s = withModules(s0, 0, ['aiAssistant'])
     const mix = s.derived.projectMix![s.projects[0]!.id]!
     expect(mix.weight).toBe(0.5)
-    expect(mix.upkeep).toBeCloseTo(s.finance.mrr * 0.5 * 0.06, 9)
+    expect(mix.upkeep).toBeCloseTo(s.finance.mrr * 0.5 * 0.04, 9)
     // The servers' bill on this MRR, plus the upkeep.
     const o = computeOutputs(s, content)
     const servers = E.infra(s.stats.users, s.finance.mrr, s.stage, o.fx.infraMult * policyMult(s, content, 'infra')) + o.fx.upkeep
@@ -372,12 +373,12 @@ describe('upkeep', () => {
     const s = withModules(company(['web', 'mobile'], 3), 0, ['freemium', 'onboarding', 'analytics'])
     const mix = s.derived.projectMix![s.projects[0]!.id]!
     const freemium = (s.stats.users / 1000) * 0.5 * 0.5 * B.INFRA_PER_1000_BY_STAGE[3]!
-    // MV2a (rule change on purpose): onboarding's upkeep 100 → 60 × 2^stage.
-    expect(mix.upkeep).toBeCloseTo(freemium + (60 + 150) * 8, 9)
+    // MV2a (rule change on purpose): onboarding's upkeep 100 → 60 × 2^stage; B2: onboarding 80, analytics 150 → 90.
+    expect(mix.upkeep).toBeCloseTo(freemium + (80 + 90) * 8, 9)
     const more = clone(s)
     more.stats.users *= 2
     recomputeDerived(more, content)
-    expect(more.derived.projectMix![s.projects[0]!.id]!.upkeep).toBeCloseTo(2 * freemium + 210 * 8, 9)
+    expect(more.derived.projectMix![s.projects[0]!.id]!.upkeep).toBeCloseTo(2 * freemium + 170 * 8, 9)
   })
 
   it('a payday infra deferral defers the module upkeep with it', () => {
@@ -408,7 +409,7 @@ describe('offers and suggestion', () => {
     expect(by.paywall).toMatchObject({ refresh: true, cost: Math.round(600 * 4 * 0.4) })
     expect(by.freemium!.error).toBe('invalid')
     expect(by.openApi!.error).toBe('notUnlocked')
-    expect(by.feedback).toMatchObject({ refresh: false, cost: 2_400, error: null })
+    expect(by.feedback).toMatchObject({ refresh: false, cost: 3_600, error: null })
     expect(by.feedback!.days).toBe(Math.ceil(moduleWork(s.projects[0]!, moduleDef('feedback')!) / s.derived.maturityPerDay![s.projects[0]!.id]!))
   })
 
@@ -556,6 +557,17 @@ describe('ad focus (W3, A1: weights route the paid users)', () => {
     }
   })
 
+  it('focus chips (B1): the paid total a focus promises is the paid channel the switch gives, CATEGORY_CAC included', () => {
+    const base = full(['web', 'mobile'], null)
+    for (const i of [0, 1]) {
+      const promised = focusPaidTotal(base, base.projects[i]!.id)
+      const after = full(['web', 'mobile'], i) // no adFocusDay: no warm-up, as the chip leaves it out
+      expect(after.derived.channels.paid / promised).toBeCloseTo(1, 9)
+    }
+    // Web's cheaper ads: focusing it buys more users than focusing mobile.
+    expect(focusPaidTotal(base, base.projects[0]!.id)).toBeGreaterThan(focusPaidTotal(base, base.projects[1]!.id))
+  })
+
   it('setAdFocus: locked tool, missing, unlaunched, same focus; set and clear', () => {
     const s = company(['game', 'api'], 2)
     const id = s.projects[0]!.id
@@ -615,7 +627,7 @@ describe('ad focus (W3, A1: weights route the paid users)', () => {
 
   it('focusPreview: promoting the higher-ARPU product earns more 3 months out than promoting the lower one', () => {
     const s = full(['game', 'ai'], null)
-    // game ARPU 0.8, ai 1.2 (balance.CATEGORY_ARPU).
+    // game ARPU 0.88, ai 1.2 (balance.CATEGORY_ARPU).
     expect(focusPreview(s, s.projects[1]!.id, 3)).toBeGreaterThan(focusPreview(s, s.projects[0]!.id, 3))
   })
 

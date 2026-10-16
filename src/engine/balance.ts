@@ -125,8 +125,23 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
  * (game), B2B price with little buzz (api). Means ≈ 0.99 / 1.04 and the rich end capped at 1.2: the first cut
  * (api 1.25, ai 1.45) moved the fastest Unicorn from day 1855 to 1378 in sim/minStageDays.ts.
  */
-export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.85, mobile: 1, api: 1.1, ai: 1.2, game: 0.8, marketplace: 1 }
+export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.94, mobile: 1, api: 1.1, ai: 1.2, game: 0.92, marketplace: 1 }
 export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1.1, api: 0.75, ai: 0.9, game: 1.35, marketplace: 1.15 }
+/**
+ * [DENGE B1] The Series C plateau sits right on the Unicorn gate: ~$16.2M MRR (1B / 12 / MULTIPLE_MAX_BY_STAGE[5])
+ * while MoM holds ≥ ~1%. Users settle where inflow (paid dominates late, ~15–20K/mo) meets churn, ~400–550K, so the
+ * ARPU factor decides the side of the line. At game 0.8 / web 0.85 single-category runs stalled at stage 5
+ * (sim, 24 seeds, bootstrap · vcRocket · niche · platform: game 12 · 3 · 17 · 4, web 19 · 5 · 20 · 1; others 23–24).
+ * The cure keeps the flavor instead of flattening the ARPU: game stays the poorest payer but grows in hits (updates
+ * and versions bring a 2× wave, which also lifts the MoM the multiple reads), web stays cheap (paid users at 0.85×
+ * the CAC: landing pages, SEO). CATEGORY_WAVE: updateWave × the project's factor; CATEGORY_CAC: derived.cac × the
+ * ad-weighted mean.
+ * [B2 review] B2's 10-slot cap and trimmed sellers took back part of the cure (24 seeds, Unicorn median: web vcRocket
+ * 75.4 → 87.5 dk, web platform 89.6 → 94.2 dk and 22/24, game vcRocket 76.0 → 82.0 dk): web ARPU .92 → .94 and CAC
+ * .85 → .8, game ARPU .88 → .92 (order game < web < mobile and one coin pip each kept).
+ */
+export const CATEGORY_WAVE: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1, api: 1, ai: 1, game: 2, marketplace: 1 }
+export const CATEGORY_CAC: Readonly<Record<ProjectCategory, number>> = { web: 0.8, mobile: 1, api: 1, ai: 1, game: 1, marketplace: 1 }
 
 // ---------------------------------------------------------------------------
 // Users (PLAN §5.4)
@@ -448,6 +463,14 @@ export const BRIDGE_CARD_ID = 'vc-bridge-loan'
 // Live round window (docs/CORE_LOOP.md §4.3, phase 2) ------------------------
 /** The round can start once valuation ≥ target × this ("şimdi mi, biraz daha mı?"). */
 export const ROUND_EARLY_RATIO = 0.6
+/**
+ * B2 review: a round priced under its target sells more of the company for the same check: equity × (1 + this ×
+ * (1 − price)), price = the live, half-locked price of the offer (√(at start × now), valuation / target in
+ * ROUND_OFFER_CLAMP), repriced weekly to the close. Started at the window's 0.6 and still there: +20%. Before, equity was fixed per size and the early price only trimmed the amount,
+ * which the table floor mostly absorbed, so "start the moment the window opens" was faster for the same equity
+ * (sim, platform: 66.9 against 69.6 dk at 49% each). Now waiting buys equity: a real "şimdi mi, biraz daha mı?".
+ */
+export const ROUND_EARLY_EQUITY = 0.5
 /**
  * Months of runway each size buys (on the new burn). [GAMEPLAY V2 §4.2: 12/18/24 → 8/12/16] The round is the breath of
  * the cash constraint: 8–16 months, so the next round is always in sight (DECISIONS #16 revised).
@@ -789,12 +812,16 @@ export const RELEASE_UPDATE_USER_SHARE = 0.003
 export const MODULE_COST_GROWTH = 2
 /**
  * MV2a version cycle (replaces the stage slot table [1, 1, 2, 3, 3, 4, 4]): the first 1.0 ships v1 with
- * MODULE_SLOTS_PER_VERSION slots; after that the shipped updates fill a version line of
+ * MODULE_SLOTS_AT[1] slots; after that the shipped updates fill a version line of
  * min(VERSION_UPDATES_MAX, VERSION_UPDATES_BASE^v) updates (v1→v2 2, v2→v3 4, 8, 16, then 32), and the update that
- * fills it ships v + 1: 3 more slots, the next module tier, every installed module refreshed. The bar shows the line
+ * fills it ships v + 1: its new slots, the next module tier, every installed module refreshed. The bar shows the line
  * from VERSION_FLOOR to 100% (display only: p.maturity stays 1, the economy reads it).
+ * B2 (was a flat 3 per version, no cap): slots in all at version v, flat past the last entry. A category offers 21–24
+ * modules; at 3 per version a v6 project held 18 of its ~21 buildable ones, so every run built nearly the same set
+ * (13–15 modules on > 80% of a category's projects). At 10 a project keeps under half its catalogue: what it leaves
+ * out is the choice. v2 still opens 3 (the cycle the player learned), then 2, 1, 1.
  */
-export const MODULE_SLOTS_PER_VERSION = 3
+export const MODULE_SLOTS_AT: readonly number[] = [0, 3, 6, 8, 9, 10]
 export const VERSION_FLOOR = 0.6
 export const VERSION_UPDATES_BASE = 2
 export const VERSION_UPDATES_MAX = 32
@@ -812,18 +839,22 @@ export const MODULE_ENERGY = 10
 /**
  * Every catalogue gain and minus is read as 1 + (x − 1) × this (the table keeps its readable numbers). MV2d pace lever
  * (0.12: with the table's own sizes bootstrap reached Unicorn in 37 dk, with 0.02 in 87): the pace is set here, and the
- * caps below stay about 1.8× the best single module's reach so no module fills a kind alone.
+ * caps below stay about 1.8× the best single module's reach so no module fills a kind alone. B2 (0.12 → 0.21, every cap's
+ * reach × 1.4): a project holds 10 modules instead of 15–21, so each one carries more; at 0.15 with the old caps the
+ * one-product runs off their own categories fell under the B1 bar (web 18–19/24, game 20/24 under vcRocket / platform).
+ * The best single module still reaches ≤ 75 % of a cap.
  */
-export const MODULE_EFFECT_SCALE = 0.12
+export const MODULE_EFFECT_SCALE = 0.21
 /** A delivered module's wave: × the update wave (1.3×: more than an update, less than a version's 2.5×); a refresh brings none. */
 export const MODULE_WAVE_MULT = 1.3
 /**
  * Per project and kind, the product of its modules is held here (churn, cac, updateWork and infra are floors, the rest
  * ceilings). The company mix is a weighted mean of the projects, so it never passes the best project's cap. MV2a
  * (round 3 starting caps 0.72 / 1.3 / 1.45 / 0.8 / 1.4 / 1.8 for churn / arpu / organic / cac / tam / wave): MV2d scaled
- * them with MODULE_EFFECT_SCALE (a cap is a reach, not a table number), so a few modules of one kind still fill it.
+ * them with MODULE_EFFECT_SCALE (a cap is a reach, not a table number), so a few modules of one kind still fill it. B2:
+ * each reach × 1.4 (arpu 1.052 → 1.073) with the 10-slot cap.
  */
-export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.92, arpu: 1.052, organic: 1.1, cac: 0.96, tam: 1.087, wave: 1.065, updateWork: 0.95, talk: 1.11, infra: 0.97 }
+export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.888, arpu: 1.073, organic: 1.14, cac: 0.944, tam: 1.122, wave: 1.091, updateWork: 0.93, talk: 1.154, infra: 0.958 }
 /** Kinds whose cap is a floor (lower is better). */
 export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork', 'infra']
 /**

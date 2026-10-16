@@ -124,12 +124,14 @@ export interface BotConfig {
   policyPlan: readonly PolicyId[]
   /**
    * Project modules (MV2d): a kind-weight plan. The bot builds the buildable offer with the best
-   * score = (w_kind × $equiv − upkeep) per $ of cost (see modules()); `$equiv` is the UI's own moduleEstimate. Empty /
+   * score = w_kind × $equiv × taste − upkeep − cost / payback (see modules()); `$equiv` is the UI's own moduleEstimate. Empty /
    * missing = builds none, and the run is then bit-identical to one from before modules existed.
    */
   modules?: ModulePlan
-  /** MV2d: also fill free slots with the engine's suggestion when the till is thick (see modules()). */
+  /** MV2d: also fill free slots when the till is thick (B2: by the bot's plan and taste, see fillOffer). */
   fillSlots?: boolean
+  /** B2: months a module must pay back in (PAYBACK_MONTHS by default): a thrifty founder wants it fast, a funded one waits. */
+  modulePayback?: number
   /**
    * E2 effort management (default on for the good bots, never for careless / the coast probes): pace and leave by fatigue,
    * builders moved by load, a lead on a big project. See manage().
@@ -158,7 +160,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'safe', furnishReserveMonths: 4, useSalesCalls: true,
     weights: { cash: 1, users: 20, morale: 200, equity: 3e6, reputation: 300 },
     policyPlan: ['remote-first', 'quality-gate', 'profit-share'],
-    modules: PLAN_MONEY, fillSlots: true,
+    modules: PLAN_MONEY, fillSlots: true, modulePayback: 12,
   },
   // Aggressive hiring, ads, earliest rounds.
   vcRocket: {
@@ -168,7 +170,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'large', pitchStyle: 'fast', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 80, morale: 100, equity: 5e5, reputation: 500 },
     policyPlan: ['hire-fast', 'crunch-culture', 'ads-first'],
-    modules: PLAN_GROWTH, fillSlots: true,
+    modules: PLAN_GROWTH, fillSlots: true, modulePayback: 18,
   },
   // One project, high price, small senior team, enterprise deals.
   niche: {
@@ -188,7 +190,7 @@ export const BOTS: Record<Archetype, BotConfig> = {
     roundEagerness: 1, roundSize: 'target', pitchStyle: 'bold', furnishReserveMonths: 3, useSalesCalls: false,
     weights: { cash: 1, users: 50, morale: 150, equity: 1e6, reputation: 300 },
     policyPlan: ['hire-fast', 'remote-first', 'ads-first'],
-    modules: PLAN_REACH, fillSlots: true,
+    modules: PLAN_REACH, fillSlots: true, modulePayback: 15,
   },
 }
 
@@ -987,9 +989,10 @@ const FILL_RUNWAY = 12
 
 /**
  * Project modules: one per day at most. A finished, live project with nothing building first refreshes an installed
- * module that went stale (< REFRESH_BELOW), else builds the buildable offer with the best plan score (MV2d):
- * score = (w × $equiv − upkeep) per $ of cost, where w is the plan's weight for the module's best gain kind and
- * $equiv the UI's own moduleEstimate (gross monthly gain, plus a share of the wave). The engine's offer check covers
+ * module that went stale (< REFRESH_BELOW), else builds the buildable offer with the best plan score (MV2d, B2):
+ * score = w × $equiv × taste − upkeep − cost / payback months, where w is the plan's weight for the module's best gain
+ * kind (jittered per run), $equiv the UI's own moduleEstimate (gross monthly gain, plus a share of the wave) and taste
+ * a per-run factor. The engine's offer check covers
  * tier, category, requires / excludes, slots, cash, energy and moves. Not while preparing for a crisis, and not in a
  * round week with one move left (the pitch needs it).
  */
@@ -1002,45 +1005,74 @@ function modules(c: Ctx, cfg: BotConfig): void {
     const offers = moduleLib.moduleOffers(c.s, p)
     const stale = offers.find((o) => o.refresh && o.error === null && moduleStrengthOf(c.s, p, o.id) < REFRESH_BELOW)
     // Boredom relief (the bot's "let modules() build now"): nobody has work and the plan finds nothing worth its cost, so
-    // the engine's own suggestion keeps the builders busy (a slot filled is better than a bored team).
+    // the filler keeps the builders busy (a slot filled is better than a bored team).
     const relief = c.s.time.day - (c.mem.bored ?? -99) <= 1
-    const suggested = relief ? moduleLib.suggestModule(c.s, p) : null
-    const fill = (suggested ? offers.find((o) => o.id === suggested && !o.refresh && o.error === null) : undefined) ??
-      (cfg.fillSlots ? fillOffer(c, p, offers) : undefined)
-    const planPick = stale ? null : bestPlanOffer(c, cfg.modules, p, offers)
-    const pick = stale ?? planPick ?? (fill && (relief || affordsWithRunway(c.s, fill.cost, moduleUpkeepOf(c.s, fill.id), FILL_RUNWAY)) ? fill : undefined)
+    // B2: the filler and the relief pick by the bot's own plan and taste (was the engine's one suggestion for every bot).
+    const fill = cfg.fillSlots || relief ? fillOffer(c, cfg, p, offers, relief) : undefined
+    const planPick = stale ? null : bestPlanOffer(c, cfg, p, offers)
+    const pick = stale ?? planPick ?? fill
     if (!pick || !affordsWithRunway(c.s, pick.cost, moduleUpkeepOf(c.s, pick.id), MODULE_RUNWAY)) continue
     c.mem.fillPick = !stale && !planPick ? 1 : 0
     if (c.act({ type: pick.refresh ? 'refreshModule' : 'buildModule', projectId: p.id, moduleId: pick.id })) return
   }
 }
 
-/**
- * The slot filler: one of the offers the till carries with FILL_RUNWAY months to spare, picked by a day-and-project hash
- * (not always the cheapest, so late modules get built too; deterministic, so a seed replays).
- */
-function fillOffer(c: Ctx, p: GameState['projects'][number], offers: ReturnType<typeof moduleLib.moduleOffers>): (typeof offers)[number] | undefined {
-  const open = offers
-    .filter((o) => !o.refresh && o.error === null && affordsWithRunway(c.s, o.cost, moduleUpkeepOf(c.s, o.id), FILL_RUNWAY))
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-  if (!open.length) return undefined
-  let h = c.s.time.day
-  for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return open[h % open.length]
+/** A per-run hash of a module id: the seed and the bot's kind, so two bots on one seed are two founders (no rng draw). */
+function runHash(c: Ctx, cfg: BotConfig, id: string): number {
+  let h = ((c.mem.seed ?? 0) * 2654435761) >>> 0
+  for (const ch of `${cfg.kind}:${id}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0
+  return h
 }
 
-/** A per-seed, per-module factor in [0.2, 1.8] (an integer hash, no rng draw, so nothing else in the run shifts). */
-function tasteOf(seed: number, id: string): number {
-  let h = (seed * 2654435761) >>> 0
-  for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0
-  return 0.2 + (1.6 * (h % 1000)) / 1000
+/** A per-run factor in [lo, hi] for an id (taste for a module, a kind's weight jitter), even on a log scale (1 sits mid-way for lo × hi = 1). */
+function runFactor(c: Ctx, cfg: BotConfig, id: string, lo: number, hi: number): number {
+  return lo * (hi / lo) ** ((runHash(c, cfg, id) % 1000) / 999)
 }
+
+/** The plan's weight for a module: its best gain kind, each kind's weight moved ±PLAN_JITTER per run. */
+function planWeight(c: Ctx, cfg: BotConfig, def: NonNullable<ReturnType<typeof moduleLib.moduleDef>>): number {
+  const plan = cfg.modules ?? {}
+  return Math.max(0, ...moduleLib.MODULE_KINDS.filter((k) => def.gains[k] !== undefined).map((k) => (plan[k] ?? 0) * runFactor(c, cfg, `kind:${k}`, 1 - PLAN_JITTER, 1 + PLAN_JITTER)))
+}
+
+/** Each run moves each kind's plan weight by up to this share (B2: a plan is a style, not a fixed ranking). */
+const PLAN_JITTER = 0.3
+
+/**
+ * The slot filler: one of the offers the till carries with FILL_RUNWAY months to spare (relief: any the bot can build),
+ * drawn by the run's hash weighted by plan weight × taste (B2: was a day-and-project hash over all offers alike, the
+ * same for every bot). Deterministic, so a seed replays.
+ */
+function fillOffer(c: Ctx, cfg: BotConfig, p: GameState['projects'][number], offers: ReturnType<typeof moduleLib.moduleOffers>, relief: boolean): (typeof offers)[number] | undefined {
+  const open = offers
+    .filter((o) => !o.refresh && o.error === null && (relief || affordsWithRunway(c.s, o.cost, moduleUpkeepOf(c.s, o.id), FILL_RUNWAY)))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+  if (!open.length) return undefined
+  const ws = open.map((o) => {
+    const def = moduleLib.moduleDef(o.id)
+    return def ? (0.15 + planWeight(c, cfg, def)) * runFactor(c, cfg, o.id, TASTE_MIN, TASTE_MAX) : 0
+  })
+  const total = ws.reduce((a, w) => a + w, 0)
+  const h = runHash(c, cfg, `fill:${p.id}:${Math.floor(c.s.time.day)}`)
+  let x = ((h % 10007) / 10007) * total
+  for (let i = 0; i < open.length; i++) {
+    x -= ws[i]!
+    if (x <= 0) return open[i]
+  }
+  return open[open.length - 1]
+}
+
+/** Taste: each run values each module differently, the way two founders would (deterministic per seed and bot). */
+const TASTE_MIN = 1 / 3
+const TASTE_MAX = 3
 
 /** Share of a wave's users counted as monthly gain in the plan score (a wave is a one-off, not a monthly flow). */
 const PLAN_WAVE_SHARE = 0.3
+/** Months a module's cost is spread over in the plan score (BotConfig.modulePayback overrides). */
+const PAYBACK_MONTHS = 12
 
-/** The affordable new offer with the best plan score per $ of cost; null when none scores above zero. */
-function bestPlanOffer(c: Ctx, plan: ModulePlan, p: GameState['projects'][number], offers: ReturnType<typeof moduleLib.moduleOffers>): ReturnType<typeof moduleLib.moduleOffers>[number] | null {
+/** The affordable new offer with the best plan score (monthly worth less upkeep and the cost spread); null when none scores above zero. */
+function bestPlanOffer(c: Ctx, cfg: BotConfig, p: GameState['projects'][number], offers: ReturnType<typeof moduleLib.moduleOffers>): ReturnType<typeof moduleLib.moduleOffers>[number] | null {
   const s = c.s
   const arpu = s.stats.users > 0 ? s.finance.mrr / s.stats.users : 0
   let best: (typeof offers)[number] | null = null
@@ -1050,12 +1082,13 @@ function bestPlanOffer(c: Ctx, plan: ModulePlan, p: GameState['projects'][number
     if (!affordsWithRunway(s, o.cost, moduleUpkeepOf(s, o.id), MODULE_RUNWAY)) continue
     const def = moduleLib.moduleDef(o.id)
     if (!def) continue
-    const w = Math.max(0, ...moduleLib.MODULE_KINDS.filter((k) => def.gains[k] !== undefined).map((k) => plan[k] ?? 0))
+    const w = planWeight(c, cfg, def)
     if (w <= 0) continue
     const est = moduleLib.moduleEstimate(s, p, o.id, c.content)
     const gross = est.net + est.upkeep + est.wave * arpu * PLAN_WAVE_SHARE
-    // Taste: each run values each module a little differently (0.2 to 1.8), the way two founders would; deterministic per seed.
-    const score = ((w * gross - est.upkeep) / Math.max(1, o.cost)) * tasteOf(c.mem.seed ?? 0, o.id)
+    // B2: the cost is spread over the bot's payback months (was divided out: per $, the $600 tier-1 modules beat every
+    // later one, so all runs held the same cheap set); slots are what runs out now, so the module worth most a month wins.
+    const score = w * gross * runFactor(c, cfg, o.id, TASTE_MIN, TASTE_MAX) - est.upkeep - o.cost / (cfg.modulePayback ?? PAYBACK_MONTHS)
     if (score > bestScore) {
       bestScore = score
       best = o

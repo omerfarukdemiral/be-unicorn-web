@@ -40,7 +40,7 @@ describe('widget registry', () => {
 })
 
 describe('cashFlow: one money vocabulary', () => {
-  it('Kasa net/gün, Yakıt and Kâr tahmini come from the same fields', () => {
+  it('Kasa net/gün, Burn and Kâr tahmini come from the same fields', () => {
     const f = cashFlow({
       stats: { cash: 20_000 } as never,
       finance: { mrr: 5_800, burn: 13_900, net: -8_100, ledger: { revenue: 0, salaries: 1_000, rent: 200, infra: 50, ads: 0, founder: 300 } } as never,

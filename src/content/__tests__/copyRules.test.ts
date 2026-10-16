@@ -15,6 +15,7 @@ import {
   ACTION_ERROR_TEXT,
   POST_MORTEM_TITLE,
 } from '../index'
+import * as C from '../index'
 
 function allStrings(): [string, string][] {
   const out: [string, string][] = []
@@ -58,6 +59,33 @@ function allStrings(): [string, string][] {
   return out
 }
 
+/** Every string reachable from the content barrel (concepts, goals, crises, names, ...), not just the tables above. */
+function everyContentString(): [string, string][] {
+  const out: [string, string][] = []
+  const seen = new Set<object>()
+  const walk = (where: string, v: unknown): void => {
+    if (typeof v === 'string') {
+      if (v) out.push([where, v])
+    } else if (v && typeof v === 'object' && !seen.has(v)) {
+      seen.add(v)
+      for (const [k, x] of Object.entries(v)) walk(`${where}.${k}`, x)
+    }
+  }
+  for (const [k, v] of Object.entries(C)) walk(k, v)
+  return out
+}
+
+/** Source of every non-test file under src/, comments stripped: catches copy hard-coded in a component. */
+const SOURCES = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}'], {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
+const stripComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+// "Yakıt" was renamed to burn; "Yakıtı kıs" slipped once. No \b here: JS treats ı as a non-word letter.
+const OLD_FUEL = /[Yy]ak[ıi]t/
+
 const STRINGS = allStrings()
 const hits = (re: RegExp): string[] => STRINGS.filter(([, v]) => re.test(v)).map(([k, v]) => `${k}: ${v}`)
 
@@ -83,11 +111,21 @@ describe('copy pass rules (T1)', () => {
   })
 
   it('glossary: old words are gone', () => {
-    expect(hits(/\bYakıt\b|\byakıt\b/)).toEqual([])
+    expect(hits(OLD_FUEL)).toEqual([])
     expect(hits(/Yollarınızı ayır/)).toEqual([])
     expect(hits(/Kuruluyor|\bKur\b/)).toEqual([])
     expect(hits(/Boş yuva|\byuva\b/)).toEqual([])
     expect(hits(/Tükenmiş|Ayrılmak üzere/)).toEqual([])
+  })
+
+  it('no Yakıt anywhere: every content string and every literal in src', () => {
+    const all = everyContentString()
+    expect(all.length).toBeGreaterThan(4000)
+    expect(all.filter(([, v]) => OLD_FUEL.test(v) || /m[üu]hendis/i.test(v)).map(([k, v]) => `${k}: ${v}`)).toEqual([])
+    expect(Object.keys(SOURCES).length).toBeGreaterThan(100)
+    const files = Object.entries(SOURCES).filter(([, src]) => OLD_FUEL.test(stripComments(src)))
+    expect(files.map(([f]) => f)).toEqual([])
+    expect(UI_TEXT['strip.runwayLowSub']).toBe('Burn’ü kıs ya da tura çık')
   })
 
   it('error lines name a reason, not one cryptic word', () => {

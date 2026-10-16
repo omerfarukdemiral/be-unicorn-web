@@ -5,7 +5,7 @@ import { runStatus, submissionOf } from '../../net/cloud'
 import * as B from '../balance'
 import { recomputeDerived } from '../derive'
 import { createEngine } from '../index'
-import { growthAsk, enterStage } from '../round'
+import { earlyEquityMult, growthAsk, enterStage } from '../round'
 import { migrate } from '../save'
 import type { EnterpriseCustomer, GameState } from '../types'
 import { boardTarget } from '../world'
@@ -88,14 +88,14 @@ describe('board quarter (§8.3)', () => {
     // Hit: MRR well past the target lifts the penalty, +reputation, one round-equity credit.
     const rep = s.stats.reputation
     s = api.step({ ...s, finance: { ...s.finance, enterpriseCustomers: [...s.finance.enterpriseCustomers, contract('whale', 50_000)] } }, 0.25)
-    const credit = s.derived.round!.sizes!.find((x) => x.size === 'target')!.equity
+    const credit = s.derived.round!.sizes!.find((x) => x.size === 'target')!.equity / earlyEquityMult(s.derived.round!.priceRatio)
     s = toQuarterEnd(s)
     expect(events(s, 'boardHit')).toHaveLength(1)
     expect(s.board).toMatchObject({ missed: 0, streak: 1, hits: 1, credit: 1 })
     expect(s.flags[B.BOARD_PENALTY_FLAG]).toBeUndefined()
     expect(s.stats.reputation).toBeCloseTo(Math.min(100, rep + B.BOARD_HIT_REPUTATION), 6)
     // The next round sells BOARD_HIT_EQUITY less.
-    expect(s.derived.round!.sizes!.find((x) => x.size === 'target')!.equity).toBeCloseTo(credit - B.BOARD_HIT_EQUITY, 6)
+    expect(s.derived.round!.sizes!.find((x) => x.size === 'target')!.equity / earlyEquityMult(s.derived.round!.priceRatio)).toBeCloseTo(credit - B.BOARD_HIT_EQUITY, 6)
   })
 
   it('no board before Series A; an older save from A on opens with its quarter (migration and lazily)', () => {

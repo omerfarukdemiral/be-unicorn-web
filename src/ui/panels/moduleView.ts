@@ -5,7 +5,7 @@
 import { CONTENT, MODULE_TEXT, moduleName } from '../../content'
 import * as B from '../../engine/balance'
 import { actionEnergy } from '../../engine/founder'
-import { buildStatus, moduleEstimate, moduleHeadlines, moduleLock, moduleMeasured, moduleUpkeepHint, projectVersion, versionProgress, type ModuleEstimate, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
+import { buildStatus, categoryModules, moduleDef, slotsAt, moduleEstimate, moduleHeadlines, moduleLock, moduleMeasured, moduleUpkeepHint, projectVersion, versionProgress, type ModuleEstimate, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
 import type { GameState, ModuleEffectKind, Project, ProjectModule, ProjectModuleId } from '../../engine/types'
 import type { Chip } from '../EffectChips'
 import { money, num, pct } from '../format'
@@ -90,6 +90,21 @@ export function relationChip(p: Project, est: ModuleEstimate): Chip | null {
   return { icon: 'branch', label: '', text, good: true, title: text }
 }
 
+/**
+ * The fork chip (B2 review): the modules of this product's catalogue that building this one shuts for good, e.g. on a
+ * mobile Paywall "Freemium, Uygulama içi satın alma ile olmaz". A module stays once built, so the card says it before the
+ * build, while the closed ones may still sit behind a later version. Red: it is a cost. null when it closes nothing.
+ */
+export function exclusionChip(p: Project, id: ProjectModuleId): Chip | null {
+  const def = moduleDef(id)
+  if (!def) return null
+  const have = new Set((p.modules ?? []).map((m) => m.id))
+  const shut = categoryModules(p.category).filter((d) => d.id !== id && !have.has(d.id) && (def.excludes?.includes(d.id) || d.excludes?.includes(id)))
+  if (!shut.length) return null
+  const text = t('module.rel.excluded', { module: shut.map((d) => moduleName(d.id, p.category)).join(', ') })
+  return { icon: 'lock', label: '', text, good: false, title: text }
+}
+
 /** The lock of a module not open yet, as a grey chip: "v3 ile açılır", "Önce Analitik", "Paywall varken olmaz". */
 export function lockChip(s: GameState, p: Project, id: ProjectModuleId): Chip | null {
   const lock = moduleLock(s, p, id)
@@ -105,8 +120,9 @@ export function lockChip(s: GameState, p: Project, id: ProjectModuleId): Chip | 
 
 /**
  * The offer card's chips (design §2.1): headline gain in its own unit (or "Şu an etkisi yok"), the main minus or the
- * rent ("Kira kazançtan büyük"), the cost with the days, then an optional synergy chip (the desk bubble leaves it out:
- * three chips there). The percent stays in the title.
+ * rent ("Kira kazançtan büyük"), the cost with the days, then the fork ("Freemium ile olmaz") when the build shuts
+ * another module, else an optional synergy chip (the desk bubble leaves the synergy out: three chips there, four with a
+ * fork). The percent stays in the title.
  */
 export function buildChips(s: GameState, p: Project, offer: ModuleOffer, withRelation = true): Chip[] {
   const title = MODULE_TEXT[offer.id].line
@@ -125,7 +141,11 @@ export function buildChips(s: GameState, p: Project, offer: ModuleOffer, withRel
     if (up > 0) out.push({ icon: 'building', label: '', text: t('module.est.rent', { v: money(up) }), good: false, title })
   }
   out.push(costChip(offer))
-  const rel = withRelation ? relationChip(p, est) : null
+  // The fork comes first: a build cannot be undone, so what it shuts beats the synergy for the last chip, and the desk
+  // bubble (three chips otherwise) carries it as a fourth: that one tap is where most builds happen.
+  const fork = exclusionChip(p, offer.id)
+  if (fork) out.push(fork)
+  const rel = withRelation && !fork ? relationChip(p, est) : null
   if (rel) out.push(rel)
   return out
 }
@@ -204,5 +224,5 @@ export function versionLine(s: GameState, p: Project): string {
 
 /** The locked preview before v1: "v1 · 3 slot açılır · %83". */
 export function previewLine(p: Project): string {
-  return t('module.slotsPreview', { n: B.MODULE_SLOTS_PER_VERSION, p: Math.round(p.maturity * 100) })
+  return t('module.slotsPreview', { n: slotsAt(1), p: Math.round(p.maturity * 100) })
 }

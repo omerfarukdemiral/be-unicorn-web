@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_CATEGORIES, type Project, type ProjectCategory } from '../../engine/types'
 import * as B from '../../engine/balance'
-import { effortOn } from '../../engine/effort'
+import { effortOn, founderProject, isBuilder } from '../../engine/effort'
 import { PROJECT_CATEGORY_TEXT, PROJECT_NAMES } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
@@ -19,6 +19,7 @@ import { previewLine, versionLine } from './moduleView'
 import { displayMaturity, projectVersion } from '../../engine/modules'
 import { AdFocusMark } from './AdFocus'
 import { LeadLine, SprintRow, TeamOf } from '../effort'
+import { Face } from '../bubbles/face'
 
 /** Turkish project name from content, unique within the run. */
 function nextProjectName(): string {
@@ -60,9 +61,9 @@ export const CATEGORY_COLOR: Record<ProjectCategory, string> = {
 function pips(v: number, steps: readonly number[]): number {
   return 1 + steps.filter((x) => v >= x).length
 }
-const TRAITS: readonly { key: 'time' | 'arpu' | 'organic'; icon: IconName; color: string; of: (c: ProjectCategory) => number }[] = [
+export const TRAITS: readonly { key: 'time' | 'arpu' | 'organic'; icon: IconName; color: string; of: (c: ProjectCategory) => number }[] = [
   { key: 'time', icon: 'hourglass', color: 'var(--color-g-runway)', of: (c) => pips(B.PROJECT_SIZE[c], [9, 11, 13]) },
-  { key: 'arpu', icon: 'coin', color: 'var(--color-g-cash)', of: (c) => pips(B.CATEGORY_ARPU[c], [0.9, 1.05, 1.15]) },
+  { key: 'arpu', icon: 'coin', color: 'var(--color-g-cash)', of: (c) => pips(B.CATEGORY_ARPU[c], [0.95, 1.05, 1.15]) },
   { key: 'organic', icon: 'trend', color: 'var(--color-g-users)', of: (c) => pips(B.CATEGORY_ORGANIC[c], [0.85, 1.05, 1.3]) },
 ]
 
@@ -184,6 +185,9 @@ function ProjectCard({ project: p }: { project: Project }) {
   const select = useGameStore((s) => s.select)
   const finished = p.launched && p.maturity >= 1
   const effort = useGameStore((s) => effortOn(s.state))
+  // A non-builder still on the project (an old save) keeps the drawer open so they can be taken off.
+  const builders = useGameStore((s) => s.state.employees.some((e) => isBuilder(e) || e.projectId === p.id))
+  const openPanel = useGameStore((s) => s.openPanel)
   return (
     <li className="px-1 py-3">
       <div className="flex items-center gap-2">
@@ -213,9 +217,16 @@ function ProjectCard({ project: p }: { project: Project }) {
         {/* From Pre-seed the count is supply / demand in the load's colour (E3); the garage keeps the head count. */}
         {effort ? <TeamOf project={p} /> : <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>}
         <LeadLine project={p} />
-        <Button size="sm" tone="ghost" icon={open ? 'chevronUp' : 'users'} onClick={() => setOpen((o) => !o)}>
-          {t('projects.assign')}
-        </Button>
+        {/* F4: no one who can build, nothing to assign: the button goes straight to hiring instead of an empty drawer. */}
+        {builders ? (
+          <Button size="sm" tone="ghost" icon={open ? 'chevronUp' : 'users'} onClick={() => setOpen((o) => !o)}>
+            {t('projects.assign')}
+          </Button>
+        ) : (
+          <Button size="sm" tone="ghost" icon="plus" onClick={() => openPanel({ kind: 'team' }, { root: true })}>
+            {t('team.hire')}
+          </Button>
+        )}
       </div>
       <div className="mt-1 flex flex-col gap-1.5">
         <SprintRow project={p} />
@@ -241,14 +252,47 @@ export function ProductUsers({ projectId, className = 'mt-1' }: { projectId: str
   )
 }
 
+/**
+ * F4: the founder heads the list as a read-only row (they code on founderProject() when idle, no assign action), then
+ * the builders only: marketing / sales / ops add nothing to a project (effort.isBuilder); one already on it (an old save)
+ * stays listed so it can be taken off. No builder: one line and "İşe al".
+ */
 export function AssignList({ project }: { project: Project }) {
   const employees = useGameStore(useShallow((s) => s.state.employees))
   const projects = useGameStore(useShallow((s) => s.state.projects))
+  const founder = useGameStore(
+    useShallow((s) => {
+      const on = founderProject(s.state)
+      const run = s.state.founder.currentAction
+      return { onId: on?.id, onName: on?.name, busy: run ? t(`founder.${run.kind}`) : undefined }
+    }),
+  )
   const dispatch = useGameStore((s) => s.dispatch)
-  if (employees.length === 0) return <p className="font-text mt-2 text-[11px] text-ink-2">{t('team.empty')}</p>
-  const sorted = employees.slice().sort((a, b) => rank(a.dept) - rank(b.dept))
+  const openPanel = useGameStore((s) => s.openPanel)
+  const here = founder.onId === project.id
+  const status = here ? t('projects.founderHere') : founder.busy ? t('founder.busy', { action: founder.busy }) : founder.onName
+  const sorted = employees.filter((e) => isBuilder(e) || e.projectId === project.id).sort((a, b) => rank(a.dept) - rank(b.dept))
+  const noBuilder = !employees.some(isBuilder)
   return (
     <ul className="mt-2 flex flex-col gap-0.5">
+      <li data-founder-row="" className={cx('flex min-h-11 items-center gap-2 rounded-control px-2', here && 'bg-brand-soft')}>
+        <Face id="founder" size={28} color="var(--color-brand)" />
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{t('founder.you')}</span>
+        {status && (
+          <span className="inline-flex max-w-32 items-center gap-1 truncate text-[10.5px] text-ink-2">
+            {here && <span className="size-1.5 shrink-0 rounded-full bg-positive" />}
+            {status}
+          </span>
+        )}
+      </li>
+      {noBuilder && (
+        <li className="flex flex-col items-start gap-1.5 px-2 pt-1">
+          <span className="font-text text-[11px] text-ink-2">{t('projects.assignEmpty')}</span>
+          <Button size="sm" icon="plus" onClick={() => openPanel({ kind: 'team' }, { root: true })}>
+            {t('team.hire')}
+          </Button>
+        </li>
+      )}
       {sorted.map((e) => {
         const here = e.projectId === project.id
         const elsewhere = e.projectId && !here ? projects.find((x) => x.id === e.projectId)?.name : undefined

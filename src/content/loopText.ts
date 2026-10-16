@@ -69,6 +69,9 @@ export const LOOP_TEXT: Record<string, string> = {
   'decision.defaultAfter': 'Cevapsız kalırsa {d} gün sonra: {v}',
   'receipt.net': 'Net',
   'receipt.adUsers': 'Reklam: +{n} kullanıcı',
+  // F3: what the month held back (a quiet solo month closes with no desk; the receipt is where the player sees it)
+  'receipt.rentDeferred': 'Kira ertelendi',
+  'receipt.founderSkipped': 'Maaşını almadın',
   'receipt.runway': 'Runway',
   'receipt.runwayMove': '{a} → {b}',
   'receipt.growth': 'büyüme {v} → {m}×',

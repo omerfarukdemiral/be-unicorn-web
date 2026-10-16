@@ -104,11 +104,12 @@ describe('panel rows', () => {
     expect(sad.every((o) => o.error === 'insufficientCash')).toBe(true)
   })
 
-  // MV2a (rule change on purpose): tiers by version replace the stage gate; the web catalogue has 6 tier-1 modules.
+  // MV2a (rule change on purpose): tiers by version replace the stage gate. B2: the web catalogue has 10 tier-1 modules
+  // (notifications, support and cicd moved down, usagePricing joined web), so v1's 3 slots are a choice.
   it('tier-locked modules stay out of the suggestions', () => {
     const s = company(['web'], 0)
     const ids = suggestModules(s, s.projects[0]!, 30).map((o) => o.id)
-    expect(ids.sort()).toEqual(['analytics', 'feedback', 'landingPages', 'paywall', 'referral', 'seo'])
+    expect(ids.sort()).toEqual(['analytics', 'cicd', 'feedback', 'landingPages', 'notifications', 'paywall', 'referral', 'seo', 'support', 'usagePricing'])
     expect(moduleOffers(s, s.projects[0]!).filter((o) => o.error === 'notUnlocked').length).toBeGreaterThan(0)
   })
 

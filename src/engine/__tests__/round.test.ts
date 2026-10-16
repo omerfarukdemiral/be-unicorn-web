@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { findUsersPreview } from '../founder'
 import { createEngine } from '../index'
-import { closeRound, diligenceFactor, diligenceNow, lockedPrice, meetingWeeksFor, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { closeRound, diligenceFactor, earlyEquityMult, diligenceNow, lockedPrice, meetingWeeksFor, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
 import { Rng, createRngState } from '../rng'
 import type { DiligenceItem, GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
@@ -65,6 +65,34 @@ describe('round window (erken tur penceresi)', () => {
   })
 })
 
+describe('early start costs equity (B2 review)', () => {
+  it('a round started under the target sells more equity; at or past it, the size table as is', () => {
+    expect(earlyEquityMult(1)).toBe(1)
+    expect(earlyEquityMult(1.2)).toBe(1)
+    expect(earlyEquityMult(B.ROUND_EARLY_RATIO)).toBeCloseTo(1 + B.ROUND_EARLY_EQUITY * (1 - B.ROUND_EARLY_RATIO), 12)
+    const early = api.applyAction(launched(usersFor(target * 0.65)), { type: 'startRound' }).state
+    const late = api.applyAction(launched(usersFor(target * 1.05)), { type: 'startRound' }).state
+    expect(late.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'target', 0), 9)
+    expect(early.round!.offer.equity).toBeGreaterThan(late.round!.offer.equity * 1.1)
+    // The size row shows the same price before the start (the UI draws, never computes).
+    const view = launched(usersFor(target * 0.65)).derived.round!
+    expect(view.sizes!.find((x) => x.size === 'target')!.equity).toBeCloseTo(roundEquityFor(1, 'target', 0) * earlyEquityMult(view.priceRatio), 9)
+  })
+
+  it('the extra follows the live, half-locked price each week: growing into the target during the round takes most of it back', () => {
+    const early = api.applyAction(launched(usersFor(target * 0.65)), { type: 'startRound' }).state
+    const r0 = early.round!
+    expect(r0.earlyMult).toBeCloseTo(earlyEquityMult(r0.priceAtStart!), 12)
+    // Valuation doubles before the first week passes: the price is √(start × now), the equity follows it down.
+    const grown = refresh({ ...early, finance: { ...early.finance, valuation: early.finance.valuation * 2 } })
+    const wk = api.step(grown, 7).round!
+    expect(wk.earlyMult!).toBeLessThan(r0.earlyMult!)
+    expect(wk.offer.equity).toBeCloseTo((r0.offer.equity / r0.earlyMult!) * wk.earlyMult!, 9)
+    // A down round carries none (its own price), and a round from an older save keeps the equity it signed.
+    expect(api.step({ ...early, round: { ...r0, earlyMult: undefined } }, 7).round!.offer.equity).toBeCloseTo(r0.offer.equity, 12)
+  })
+})
+
 describe('round size (8 / 12 / 16 months ↔ equity)', () => {
   it('more months = more money and more equity; the amount follows the new burn inside the table band', () => {
     const s = launched(usersFor(400_000))
@@ -72,7 +100,7 @@ describe('round size (8 / 12 / 16 months ↔ equity)', () => {
     expect(sizes.map((x) => x.months)).toEqual([B.ROUND_RUNWAY_MONTHS.small, B.ROUND_RUNWAY_MONTHS.target, B.ROUND_RUNWAY_MONTHS.large])
     expect(sizes[0]!.equity).toBeLessThan(sizes[1]!.equity)
     expect(sizes[1]!.equity).toBeLessThan(sizes[2]!.equity)
-    expect(sizes[1]!.equity).toBeCloseTo(B.ROUND_EQUITY[1]!, 6)
+    expect(sizes[1]!.equity).toBeCloseTo(B.ROUND_EQUITY[1]! * earlyEquityMult(s.derived.round!.priceRatio), 6)
     for (const o of sizes) {
       expect(o.amount).toBeGreaterThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MIN * (o.months / B.ROUND_RUNWAY_MONTHS.target) - 1)
       expect(o.amount).toBeLessThanOrEqual(B.ROUND_AMOUNT[1]! * B.ROUND_AMOUNT_TABLE_MAX * (o.months / B.ROUND_RUNWAY_MONTHS.target) + 1)
@@ -120,7 +148,7 @@ describe('round size (8 / 12 / 16 months ↔ equity)', () => {
     expect(r.ok).toBe(true)
     expect(r.state.round!.size).toBe('large')
     expect(r.state.round!.months).toBe(B.ROUND_RUNWAY_MONTHS.large)
-    expect(r.state.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'large', 0), 6)
+    expect(r.state.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'large', 0) * earlyEquityMult(r.state.round!.priceAtStart!), 6)
     expect(api.applyAction(s, { type: 'startRound', size: 'huge' as never }).error).toBe('invalid')
   })
 
@@ -128,9 +156,9 @@ describe('round size (8 / 12 / 16 months ↔ equity)', () => {
     expect(roundEquityFor(4, 'target', 0, 0, 2 * B.BOARD_HIT_EQUITY)).toBeCloseTo(roundEquityFor(4, 'target', 0) - 2 * B.BOARD_HIT_EQUITY, 9)
     const base = launched(usersFor(450_000))
     const s = refresh({ ...base, board: { quarterStart: 0, targetMrr: 0, missed: 0, streak: 2, credit: 2 } })
-    expect(s.derived.round!.sizes!.find((x) => x.size === 'large')!.equity).toBeCloseTo(roundEquityFor(1, 'large', 0, 0, 2 * B.BOARD_HIT_EQUITY), 9)
+    expect(s.derived.round!.sizes!.find((x) => x.size === 'large')!.equity).toBeCloseTo(roundEquityFor(1, 'large', 0, 0, 2 * B.BOARD_HIT_EQUITY) * earlyEquityMult(s.derived.round!.priceRatio), 9)
     const r = api.applyAction(s, { type: 'startRound', size: 'large' })
-    expect(r.state.round!.offer.equity).toBeCloseTo(roundEquityFor(1, 'large', 0) - 2 * B.BOARD_HIT_EQUITY, 6)
+    expect(r.state.round!.offer.equity).toBeCloseTo((roundEquityFor(1, 'large', 0) - 2 * B.BOARD_HIT_EQUITY) * earlyEquityMult(r.state.round!.priceAtStart!), 6)
     // Spent only at the close (a failed round keeps it); a quarter hit while the round runs stays for the next one.
     expect(r.state.board!.credit).toBe(2)
     const closing = structuredClone({ ...r.state, board: { ...r.state.board!, credit: 3 } })
@@ -370,7 +398,8 @@ describe('a round can fail (GAMEPLAY V2 §6.3)', () => {
     // The view carries the down round's terms per size (the UI draws, never computes).
     for (const o of s.derived.round!.sizes!) {
       expect(o.down!.amount).toBeCloseTo(o.amount * B.DOWN_ROUND_AMOUNT, 6)
-      expect(o.down!.equity).toBeCloseTo(Math.min(B.ROUND_EQUITY_MAX, o.equity * B.DOWN_ROUND_EQUITY), 9)
+      // The down round has its own price: the early-start equity (B2 review) does not stack on it.
+      expect(o.down!.equity).toBeCloseTo(Math.min(B.ROUND_EQUITY_MAX, (o.equity / earlyEquityMult(s.derived.round!.priceRatio)) * B.DOWN_ROUND_EQUITY), 9)
       expect(o.down!.offer).toBeGreaterThan(0)
     }
     s = api.step(s, B.ROUND_RETRY_DAYS)
@@ -379,7 +408,7 @@ describe('a round can fail (GAMEPLAY V2 §6.3)', () => {
     const down = api.applyAction(s, { type: 'startRound', down: true })
     expect(down.ok).toBe(true)
     expect(down.state.round!.down).toBe(true)
-    expect(down.state.round!.offer.equity).toBeCloseTo(Math.min(B.ROUND_EQUITY_MAX, normal.round!.offer.equity * B.DOWN_ROUND_EQUITY), 9)
+    expect(down.state.round!.offer.equity).toBeCloseTo(Math.min(B.ROUND_EQUITY_MAX, (normal.round!.offer.equity / earlyEquityMult(normal.round!.priceAtStart!)) * B.DOWN_ROUND_EQUITY), 9)
     expect(down.state.round!.baseAmount).toBeCloseTo(normal.round!.baseAmount! * B.DOWN_ROUND_AMOUNT, 6)
     expect(down.state.derived.round!.downRound).toBe(true)
     // One-time: the stage's down round is used.

@@ -17,6 +17,8 @@ import {
   moduleMult,
   moduleWork,
   projectSlots,
+  slotsAt,
+  slotsOpened,
   projectVersion,
   updateSize,
   versionProgress,
@@ -46,15 +48,23 @@ describe('catalogue', () => {
   })
 
   it('a project sees 22–24 modules; every version up to the tier max has room to choose', () => {
-    const want: Record<ProjectCategory, number> = { mobile: 22, web: 23, ai: 23, api: 24, game: 23, marketplace: 24 }
+    // B2: usagePricing joins web (its pricing fork with paywall and teamPlans).
+    const want: Record<ProjectCategory, number> = { mobile: 22, web: 24, ai: 23, api: 24, game: 23, marketplace: 24 }
     for (const cat of PROJECT_CATEGORIES) {
       const list = categoryModules(cat)
       expect(list.length, cat).toBe(want[cat])
-      // Cumulative options at v ≥ the slots v opens (3 × v), so a version is a choice, never a forced fill.
+      // B2: cumulative options at v ≥ twice the slots v has (slotsAt), so a version is a choice, never a forced fill.
       for (let v = 1; v <= B.MODULE_TIER_MAX; v++) {
-        expect(list.filter((m) => m.tier <= v).length, `${cat} v${v}`).toBeGreaterThan(B.MODULE_SLOTS_PER_VERSION * v)
+        expect(list.filter((m) => m.tier <= v).length, `${cat} v${v}`).toBeGreaterThanOrEqual(2 * slotsAt(v))
       }
     }
+  })
+
+  it('B2: slots 3, 6, 8, 9, 10, then flat; v1 and v2 open 3 each, past the cap a version opens none', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 9].map(slotsAt)).toEqual([0, 3, 6, 8, 9, 10, 10, 10, 10])
+    expect([1, 2, 3, 4, 5, 6, 9].map(slotsOpened)).toEqual([3, 3, 2, 1, 1, 0, 0])
+    // Under half of any category's catalogue fits at the cap.
+    for (const cat of PROJECT_CATEGORIES) expect(slotsAt(99), cat).toBeLessThan(categoryModules(cat).length / 2)
   })
 
   it('relations point at real modules a project of that category can hold; prerequisites open no later; forks both ways', () => {
@@ -81,11 +91,11 @@ describe('catalogue', () => {
     for (const m of MODULES) expect(Boolean(m.minus || m.upkeep || m.debt > 0 || m.sizeAdd > 0 || m.requires?.length), m.id).toBe(true)
   })
 
-  it('the round-2 nine keep their effects (onboarding upkeep 100 → 60 on purpose)', () => {
-    expect(moduleDef('paywall')).toMatchObject({ gains: { arpu: 1.15 }, minus: { organic: 0.85, churn: 1.04 }, cashBase: 600, work: 0.1 })
+  it('the round-2 nine keep their ids (B2 retuned paywall 1.15 → 1.1 and the onboarding upkeep 60 → 80 on purpose)', () => {
+    expect(moduleDef('paywall')).toMatchObject({ gains: { arpu: 1.1 }, minus: { organic: 0.85, churn: 1.05 }, cashBase: 600, work: 0.1 })
     expect(moduleDef('openApi')).toMatchObject({ gains: { churn: 0.88, tam: 1.1 }, catBoost: { api: 1.5 }, debt: 3, sizeAdd: 2 })
     const s = company(['web'], 3)
-    expect(moduleDef('onboarding')!.upkeep!(s, 1, 0)).toBe(60 * 8)
+    expect(moduleDef('onboarding')!.upkeep!(s, 1, 0)).toBe(80 * 8)
   })
 })
 
@@ -156,7 +166,7 @@ describe('version cycle', () => {
     // v2 → v3 takes 4 updates.
     for (let i = 1; i <= 3; i++) expect(shipUpdate(s)).toMatchObject({ version: 2, minor: i })
     expect(shipUpdate(s)).toMatchObject({ version: 3 })
-    expect(projectSlots(s, p).total).toBe(9)
+    expect(projectSlots(s, p).total).toBe(8)
   })
 
   it('the gap and the work still gate updates; a module build pauses the line', () => {
@@ -240,21 +250,21 @@ describe('synergies', () => {
   const p = (cat: ProjectCategory, ids: ProjectModuleId[], day = 0): Project => ({ id: 'p', category: cat, modules: ids.map((id) => ({ id, day })) }) as Project
 
   it('the gain of the module that lists it: 1 + (x − 1)(1 + k); the partner itself does not change', () => {
-    expect(moduleMult(p('web', ['referral']), 'organic', 0)).toBeCloseTo(1.22, 12)
-    expect(moduleMult(p('web', ['referral', 'onboarding']), 'organic', 0)).toBeCloseTo(1 + 0.22 * 1.5, 12)
+    expect(moduleMult(p('web', ['referral']), 'organic', 0)).toBeCloseTo(1.15, 12)
+    expect(moduleMult(p('web', ['referral', 'onboarding']), 'organic', 0)).toBeCloseTo(1 + 0.15 * 1.5, 12)
     // onboarding lists referral (churn +0.3); referral has no churn gain.
-    expect(moduleMult(p('web', ['onboarding']), 'churn', 0)).toBeCloseTo(0.9, 12)
-    expect(moduleMult(p('web', ['referral', 'onboarding']), 'churn', 0)).toBeCloseTo(1 - 0.1 * 1.3, 12)
+    expect(moduleMult(p('web', ['onboarding']), 'churn', 0)).toBeCloseTo(0.96, 12)
+    expect(moduleMult(p('web', ['referral', 'onboarding']), 'churn', 0)).toBeCloseTo(1 - 0.04 * 1.3, 12)
   })
 
   it('two partners add their k; the category boost comes first; staleness fades the boosted gain', () => {
     // openApi on web with integrations: churn 1 − 0.12 × 1.5, integrations' own churn 1 − 0.08 × 1.5.
     expect(moduleMult(p('web', ['openApi', 'integrations']), 'churn', 0)).toBeCloseTo((1 - 0.12 * 1.5) * (1 - 0.08 * 1.5), 12)
-    // referral on a game: (1.308 − 1) × 1.5 = 1.462, held at the organic cap; half of the gain at full staleness.
+    // referral on a game: (1.21 − 1) × 1.5 = 1.315 (B2: referral 1.22 → 1.15, under the organic cap); half of the gain at full staleness.
     const g = p('game', ['referral', 'onboarding'])
-    expect(moduleMult(g, 'organic', 0)).toBe(B.MODULE_MULT_CAP.organic)
+    expect(moduleMult(g, 'organic', 0)).toBeCloseTo(1 + 0.21 * 1.5, 12)
     g.modules![0]!.day = -B.MODULE_STALE_DAYS
-    expect(moduleMult(g, 'organic', 0)).toBeCloseTo(1 + 0.308 * 1.5 * B.MODULE_STALE_FLOOR, 12)
+    expect(moduleMult(g, 'organic', 0)).toBeCloseTo(1 + 0.21 * 1.5 * B.MODULE_STALE_FLOOR, 12)
   })
 
   it('updateWork synergy (Otomatik test + Geri bildirim): a floor kind, cicd .85 → .775', () => {
@@ -325,7 +335,7 @@ describe('moduleEstimate', () => {
     expect(pay.users).toBeLessThan(0)
     const an = est(web, 'analytics')
     expect(an.users).toBeGreaterThan(0)
-    expect(an.upkeep).toBe(150 * 8)
+    expect(an.upkeep).toBe(90 * 8)
     expect(an.net).toBeCloseTo(an.users * web.stats.arpu + an.mrr + an.infra - an.upkeep, 9)
     const ai = company(['ai'], 3)
     expect(est(ai, 'modelRouter').infra).toBeGreaterThan(0)
@@ -373,9 +383,9 @@ describe('moduleEstimate', () => {
     expect(est(company(['web'], 3), 'paywall').zero).toBeUndefined()
   })
 
-  it('synergy chip: the partner and the extra points ("Onboarding ile +%11"), an installed partner first', () => {
+  it('synergy chip: the partner and the extra points ("Onboarding ile +%7"), an installed partner first', () => {
     const s = company(['web'], 3)
-    expect(est(s, 'referral').synergy).toEqual({ with: 'onboarding', pct: 11 })
+    expect(est(s, 'referral').synergy).toEqual({ with: 'onboarding', pct: 7 })
     // openApi lists webhooks (api only) and integrations (web): on web only integrations is offered.
     expect(est(s, 'openApi').synergy).toEqual({ with: 'integrations', pct: 6 })
     const both = company(['api'], 3)
@@ -475,6 +485,25 @@ describe('a round-2 save (§1.6)', () => {
     expect(later.projects[0]!.version).toBe(2)
     expect(later.projects[0]!.modules!.map((m) => m.id)).toEqual(['feedback', 'referral', 'analytics', 'onboarding'])
     for (const v of [later.stats.users, later.stats.cash, later.finance.mrr, later.finance.burn]) expect(Number.isFinite(v)).toBe(true)
+  })
+
+  it('B2: a save over the slot cap (15 installed at v5, or no version field) keeps all 15; a new build meets noFreeSlot', () => {
+    const ids: ProjectModuleId[] = ['feedback', 'referral', 'paywall', 'analytics', 'seo', 'landingPages', 'onboarding', 'notifications', 'support', 'cicd', 'templates', 'teamPlans', 'security', 'openApi', 'integrations']
+    for (const keepVersion of [true, false]) {
+      const s0 = withModules(company(['web'], 4), 0, ids, 10)
+      const raw = JSON.parse(serialize(s0)) as { version: number; state: GameState }
+      const rp = raw.state.projects[0]!
+      if (keepVersion) rp.version = 5
+      else delete rp.version
+      const s = deserialize(JSON.stringify(raw))!
+      const p = s.projects[0]!
+      expect(projectVersion(p), String(keepVersion)).toBe(5)
+      expect(p.modules!.map((m) => m.id)).toEqual(ids)
+      expect(projectSlots(s, p)).toEqual({ used: 10, total: 10 })
+      expect(moduleError(s, p, 'abTest')).toBe('noFreeSlot')
+      const later = api.step(s, 30)
+      expect(later.projects[0]!.modules).toHaveLength(15)
+    }
   })
 
   it('a running build of an old id above the version still delivers', () => {

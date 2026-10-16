@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { STAGES } from '../../content'
-import { keepLocalSave, saveNow, signOut, takeCloudSave, useCloud } from '../../net/cloud'
-import { useGameStore } from '../../store/gameStore'
+import { goSignIn, keepLocalSave, saveNow, signOut, takeCloudSave, useCloud } from '../../net/cloud'
+import { useTwoStep } from '../hooks'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { Button, cx } from '../primitives'
@@ -15,6 +15,19 @@ function agoText(at: number, now: number): string {
   if (s < 5) return t('account.justNow')
   if (s < 60) return t('account.agoS', { v: s })
   return t('account.agoM', { v: Math.round(s / 60) })
+}
+
+/**
+ * Offline play › Giriş yap reloads into the sign-in card, so it takes two taps (F5: one stray tap looked like the run
+ * being thrown back to the menu). The run is saved first and "Devam et" brings it back after signing in.
+ */
+export function SignInButton({ className }: { className?: string }) {
+  const [armed, tap] = useTwoStep()
+  return (
+    <Button size="sm" tone={armed ? 'danger' : 'primary'} icon={armed ? 'warning' : 'mail'} className={className} onClick={() => tap('signIn', goSignIn)}>
+      {armed ? t('account.signInConfirm') : t('account.signIn')}
+    </Button>
+  )
 }
 
 export function AccountSection() {
@@ -36,17 +49,7 @@ export function AccountSection() {
         </div>
         <p className="font-text text-xs text-ink-2">{t('account.offline')}</p>
         {c.backend === 'online' && (
-          <Button
-            size="sm"
-            tone="primary"
-            icon="mail"
-            onClick={() => {
-              useGameStore.getState().save()
-              window.location.reload()
-            }}
-          >
-            {t('account.signIn')}
-          </Button>
+          <SignInButton />
         )}
       </section>
     )

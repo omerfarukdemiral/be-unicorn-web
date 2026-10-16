@@ -592,6 +592,100 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
     expect(s.finance.deferred).toBe(0)
   })
 
+  /** F3: a solo garage founder (no hires, no project) on the eve of the first payday. */
+  const solo = (): GameState => api.step(api.createGame({ seed: 1 }), 29.5)
+  const kinds = (s: GameState) => s.events.map((e) => e.kind)
+
+  it('F3: a solo founder short on cash gets no desk; the default order closes the month on its receipt', () => {
+    for (const cash of [1_400, 600]) {
+      const eve = solo()
+      expect(eve.employees).toHaveLength(0)
+      const energy = eve.founder.energy
+      const s = payWith(eve, () => cash)
+      expect(s.finance.pendingPayday).toBeUndefined()
+      expect(kinds(s)).not.toContain('paydayShort')
+      expect(kinds(s)).not.toContain('paydayAutoResolved')
+      expect(kinds(s)).not.toContain('payrollMissed')
+      expect(kinds(s).filter((k) => k === 'payday')).toHaveLength(1)
+      expect(s.finance.lastReceipt!.salaries).toBe(0)
+      expect(s.finance.payrollMissed).toBeFalsy()
+      expect(s.stats.cash).toBeGreaterThanOrEqual(0)
+      // Rent is paid before the founder's own pay: $1.4K covers the rent, not the $1.2K living cost; $600 the same.
+      expect(s.finance.deferred ?? 0).toBe(0)
+      expect(s.founder.energy).toBeLessThan(energy)
+      // The receipt says what the quiet month held back (no desk showed it).
+      expect(s.finance.lastReceipt!.founderSkipped).toBeGreaterThan(0)
+      expect(s.finance.lastReceipt!.rentDeferred).toBeUndefined()
+    }
+  })
+
+  it('F3: a solo founder with no revenue, short month after month, never sees paydayShort and no clock while cash ≥ 0', () => {
+    // $4K: two months paid in full, then short every month (rent paid, own pay skipped, then rent deferred) to day 200.
+    const start = api.createGame({ seed: 1 })
+    let s: GameState = { ...start, stats: { ...start.stats, cash: 4_000 } }
+    let seen = 0
+    let shorts = 0
+    let paydays = 0
+    let rentHeld = 0
+    for (let d = 0; d < 200; d++) {
+      s = api.step(s, 1)
+      for (const e of s.events) {
+        if (e.id <= seen) continue
+        if (e.kind === 'paydayShort' || e.kind === 'paydayAutoResolved') shorts++
+        if (e.kind === 'payday') {
+          paydays++
+          if (s.finance.lastReceipt?.rentDeferred) rentHeld++
+        }
+      }
+      seen = s.events[s.events.length - 1]?.id ?? seen
+      if (s.stats.cash >= 0) expect(s.finance.payrollMissed).toBeFalsy()
+    }
+    expect(paydays).toBe(6)
+    expect(shorts).toBe(0)
+    // The money loop still runs: the rent the till could not cover is owed.
+    expect(s.finance.deferred).toBeGreaterThan(0)
+    // Every deferred rent is on that month's receipt.
+    expect(rentHeld).toBeGreaterThan(0)
+  })
+
+  it('F3: a till within $0.5 of the bill pays it (ledger dust opens no desk)', () => {
+    const eve = team()
+    // The month's bill: what a full till pays on the receipt (no loan, nothing deferred, cash moves only on payday).
+    const due = payWith(eve, () => 1_000_000).finance.lastReceipt!.paid
+    expect(due).toBeGreaterThan(salaries(eve))
+    const s = payWith(eve, () => due - 0.3)
+    expect(s.finance.pendingPayday).toBeUndefined()
+    expect(kinds(s)).not.toContain('paydayShort')
+    expect(kinds(s)).toContain('payday')
+    // The cents are forgiven: the till ends at zero, not -$0.30, so no missed payroll and the one-time angel stays.
+    expect(s.stats.cash).toBeGreaterThanOrEqual(0)
+    expect(s.stats.cash).toBeLessThan(1)
+    expect(s.finance.payrollMissed).toBeFalsy()
+    expect(kinds(s)).not.toContain('payrollMissed')
+    expect(s.director?.angelUsed ?? false).toBe(eve.director?.angelUsed ?? false)
+    // A team a few dollars short still gets the desk.
+    expect(payWith(eve, () => due - 5).finance.pendingPayday).toBeDefined()
+  })
+
+  it('F3: a desk on a zero-salary month (old save, "Kasayı koru"): salaries half cost no morale and no clock', () => {
+    const eve = solo()
+    const s = payWith(eve, () => 600)
+    const l = s.finance.lastReceipt!
+    const pending: GameState = {
+      ...s,
+      stats: { ...s.stats, cash: 1_000 },
+      finance: { ...s.finance, pendingPayday: { day: Math.floor(s.time.day), ledger: { revenue: 0, salaries: 0, rent: l.rent, infra: l.infra, ads: 0, founder: l.founder }, deferredBefore: 0, interest: 0, runwayBefore: null } },
+    }
+    const keep: PaydayChoice = { salaries: 'half', rent: 'defer', infra: 'defer', ads: 'cut', founder: 'skip' }
+    const out = resolve(pending, keep)
+    expect(out.ok).toBe(true)
+    expect(out.state.finance.payrollMissed).toBeFalsy()
+    expect(out.state.flags['wagesOwed']).toBeFalsy()
+    expect(kinds(out.state)).not.toContain('payrollMissed')
+    // The same answer with salaries 'full' lands on the same morale: no PAYDAY_HALF_MORALE on a month with no wages.
+    expect(out.state.stats.morale).toBeCloseTo(resolve(pending, { ...keep, salaries: 'full' }).state.stats.morale, 6)
+  })
+
   it('an old save has nothing deferred and no desk (migration and the lazy default)', () => {
     const s = api.step(api.createGame({ seed: 1 }), 40)
     const v3 = structuredClone(s) as unknown as { finance: Record<string, unknown> }

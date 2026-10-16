@@ -21,7 +21,7 @@ import { GrowthPanel } from './GrowthPanel'
 import { MultipleCap } from './RoundSection'
 import { launchGain, priceGate, releaseGain, releaseName } from '../loopUi'
 import { DetailBody } from '../DetailPanel'
-import { ProjectsPanel } from './ProjectsPanel'
+import { AssignList, ProjectsPanel } from './ProjectsPanel'
 import { Suggestions } from './ModulesSection'
 import { momentText } from '../Moments'
 import { company } from '../../engine/__tests__/moduleFixtures'
@@ -350,7 +350,8 @@ describe('center screens (H5b)', () => {
       for (let i = 0; i < 800 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
       expect(store().state.decisions.active).toBeDefined()
       expect(store().ui.overlay).toBeNull()
-      expect(store().state.time.speed).toBe(1)
+      // A card never drops the chosen 4× (F1).
+      expect(store().state.time.speed).toBe(4)
     }
   })
 
@@ -497,3 +498,102 @@ describe('project modules (W2c)', () => {
   })
 })
 
+
+describe('Projeler > Ata with no one to assign (F4)', () => {
+  beforeEach(() => {
+    vi.spyOn(React, 'useSyncExternalStore').mockImplementation((_subscribe, getSnapshot) => getSnapshot())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    useGameStore.setState({ state: initial.state, ui: initial.ui })
+  })
+  const assign = (s: GameState): string => {
+    useGameStore.setState({ state: s })
+    return renderToStaticMarkup(createElement(AssignList, { project: s.projects[0]! }))
+  }
+  const solo = (): GameState => {
+    const s = company(['web'], 0)
+    s.employees = []
+    for (const p of s.projects) {
+      p.assignedIds = []
+      delete p.leadId
+    }
+    return s
+  }
+
+  it('a solo founder sees themself coding on the project, one line and "İşe al", not a dead "Ekip yok"', () => {
+    const html = assign(solo())
+    expect(html).toContain('data-founder-row')
+    expect(html).toContain(t('founder.you'))
+    expect(html).toContain(t('projects.founderHere'))
+    expect(html).toContain(t('projects.assignEmpty'))
+    expect(html).toContain(t('team.hire'))
+    expect(html).not.toContain(t('team.empty'))
+    expect(html).not.toContain('aria-pressed')
+  })
+
+  it('the founder busy on an action reads "Şu an: …" instead of coding', () => {
+    const s = solo()
+    s.founder.currentAction = { kind: 'findUsers', startDay: s.time.day, endDay: s.time.day + 3 }
+    const html = assign(s)
+    expect(html).toContain(t('founder.busy', { action: t('founder.findUsers') }))
+    expect(html).not.toContain(t('projects.founderHere'))
+  })
+
+  it('the card swaps "Ata" for "İşe al" while there is no builder', () => {
+    useGameStore.setState({ state: solo() })
+    const html = renderToStaticMarkup(createElement(ProjectsPanel))
+    expect(html).toContain(t('team.hire'))
+    expect(html).not.toContain(`>${t('projects.assign')}<`)
+  })
+
+  it('marketing / sales / ops are not listed: they add nothing to a project, so the hire line shows', () => {
+    const s = company(['web'], 2)
+    s.employees = s.employees.filter((e) => e.dept !== 'eng' && e.dept !== 'product')
+    expect(s.employees.length).toBeGreaterThan(0)
+    const html = assign(s)
+    expect(html).not.toContain('aria-pressed')
+    expect(html).toContain(t('projects.assignEmpty'))
+  })
+
+  it('a marketer already on the project (old save, bubble) stays listed so they can be taken off', () => {
+    const s = company(['web'], 2)
+    s.employees = s.employees.filter((e) => e.dept !== 'eng' && e.dept !== 'product')
+    const m = s.employees[0]!
+    for (const p of s.projects) p.assignedIds = []
+    s.projects[0]!.assignedIds = [m.id]
+    m.projectId = s.projects[0]!.id
+    const html = assign(s)
+    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1)
+    expect(html).toContain(m.name)
+    const card = renderToStaticMarkup(createElement(ProjectsPanel))
+    expect(card).toContain(`>${t('projects.assign')}<`)
+  })
+
+  it('a non-builder\'s detail offers no project to join, only the one they are on', () => {
+    const s = company(['web', 'game'], 2)
+    const m = s.employees.find((e) => e.dept !== 'eng' && e.dept !== 'product')!
+    delete m.projectId
+    for (const p of s.projects) p.assignedIds = p.assignedIds.filter((x) => x !== m.id)
+    useGameStore.setState({ state: s })
+    const detail = () => renderToStaticMarkup(createElement(DetailBody, { selection: { kind: 'employee', id: m.id } }))
+    expect(detail()).not.toContain(t('detail.project'))
+    m.projectId = s.projects[0]!.id
+    s.projects[0]!.assignedIds.push(m.id)
+    useGameStore.setState({ state: { ...s } })
+    const html = detail()
+    expect(html).toContain(s.projects[0]!.name)
+    expect(html).not.toContain(s.projects[1]!.name)
+  })
+
+  it('a normal team still lists its builders under the founder, and the card keeps "Ata"', () => {
+    const s = company(['web'], 2)
+    const builders = s.employees.filter((e) => e.dept === 'eng' || e.dept === 'product').length
+    expect(builders).toBeGreaterThan(0)
+    const html = assign(s)
+    expect((html.match(/aria-pressed/g) ?? []).length).toBe(builders)
+    expect(html).not.toContain(t('projects.assignEmpty'))
+    const card = renderToStaticMarkup(createElement(ProjectsPanel))
+    expect(card).toContain(`>${t('projects.assign')}<`)
+  })
+})

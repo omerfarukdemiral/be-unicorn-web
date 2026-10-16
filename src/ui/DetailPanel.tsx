@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_NAME_MAX, TEAM_ADJ_BONUS } from '../engine/balance'
 import { teamClusteredEmployees } from '../engine/office'
-import { effortOn } from '../engine/effort'
+import { effortOn, isBuilder } from '../engine/effort'
 import { nameKey } from '../engine/names'
 import { FOUNDER_SLOT_ID, type Employee, type Project, type Slot } from '../engine/types'
 import { DEPT_TEXT, FURNITURE, PROJECT_CATEGORY_TEXT } from '../content'
@@ -330,33 +330,36 @@ function EmployeeDetail({ id }: { id: string }) {
       {effort && (
         <ChipRow chips={[loadChip(effort.load), ...hiddenLossChip(effort.fatigueFactor), ...(effort.fit && current ? fitChips(CATEGORY_ICON[current.category]) : [])]} />
       )}
-      <section>
-        <SectionTitle>{t('detail.project')}</SectionTitle>
-        {projects.length === 0 ? (
-          <p className="text-xs text-ink-2">{t('projects.empty')}</p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {projects.map((p) => {
-              const on = e.projectId === p.id
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => (on ? tap(p.id, () => dispatch({ type: 'assign', employeeId: e.id, projectId: null })) : dispatch({ type: 'assign', employeeId: e.id, projectId: p.id }))}
-                  className={cx(
-                    'inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold pointer-coarse:min-h-11',
-                    on && armed === p.id ? 'border-negative bg-surface text-negative-ink' : on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink',
-                  )}
-                >
-                  <Icon name={on && armed === p.id ? 'warning' : CATEGORY_ICON[p.category]} size={13} />
-                  {on && armed === p.id ? t('team.removeConfirm') : p.name}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </section>
+      {(isBuilder(e) || current) && (
+        <section>
+          <SectionTitle>{t('detail.project')}</SectionTitle>
+          {projects.length === 0 ? (
+            <p className="text-xs text-ink-2">{t('projects.empty')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {/* Marketing / sales / ops add nothing to a project (effort.isBuilder): only the one they are on, to take them off. */}
+              {projects.filter((p) => isBuilder(e) || p.id === e.projectId).map((p) => {
+                const on = e.projectId === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => (on ? tap(p.id, () => dispatch({ type: 'assign', employeeId: e.id, projectId: null })) : dispatch({ type: 'assign', employeeId: e.id, projectId: p.id }))}
+                    className={cx(
+                      'inline-flex min-h-9 items-center gap-1 rounded-control border px-3 text-xs font-semibold pointer-coarse:min-h-11',
+                      on && armed === p.id ? 'border-negative bg-surface text-negative-ink' : on ? 'border-brand bg-brand-soft text-brand-ink' : 'border-border text-ink-2 hover:bg-surface-2 hover:text-ink',
+                    )}
+                  >
+                    <Icon name={on && armed === p.id ? 'warning' : CATEGORY_ICON[p.category]} size={13} />
+                    {on && armed === p.id ? t('team.removeConfirm') : p.name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
       {effort && (
         <section className="flex flex-col gap-1.5">
           <PersonEffortRows e={e} />

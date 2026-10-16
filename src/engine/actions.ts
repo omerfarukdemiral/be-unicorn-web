@@ -1,4 +1,5 @@
 // applyAction(state, action): pure. Invalid actions return ok:false + error code and the untouched input state.
+import type { FurnitureItem } from '../content/index'
 import * as B from './balance'
 import { learnConcept, minimizeConcept } from './concepts'
 import { answerDecision } from './decisions'
@@ -7,7 +8,7 @@ import { applyEffects, applyMorale, unlockTool } from './effects'
 import { buildersOf, effortOn, hasOpenWork, isBuilder, isSprinting, onLeave } from './effort'
 import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
 import { checkSale } from './endgame'
-import { anchorOf, findPartnerSlot, findSlot, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots, syncSeats } from './office'
+import { anchorOf, autoDeskItem, findPartnerSlot, findSlot, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots, placementSpec, syncSeats } from './office'
 import { applySnapshot, autoPlace, previewSnapshot, cellKey, coveredCells, dropEmptyFreeSlots, autoSeat, liftItem, putItem, refusalError, storeDecor, typeCaps, typeUse, validateLayout } from './layout'
 import { SAVED_LAYOUT_MAX, captureLayout, cleanLayoutName } from './layoutPlans'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
@@ -35,7 +36,6 @@ import {
   type PolicyId,
   type Slot,
 } from './types'
-import type { FurnitureItem } from '../content/index'
 import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, type EngineContent } from './util'
 import { acquireError, acquireRival, openSegment, segmentError } from './world'
 
@@ -65,7 +65,7 @@ export function applyAction(state: GameState, action: Action, content: EngineCon
 // Team
 // ---------------------------------------------------------------------------
 
-const hire: Handler<'hire'> = ({ s }, a) => {
+const hire: Handler<'hire'> = ({ s, content }, a) => {
   const c = s.candidates.find((x) => x.id === a.candidateId)
   if (!c) return 'notFound'
   let slot: Slot | undefined
@@ -76,6 +76,18 @@ const hire: Handler<'hire'> = ({ s }, a) => {
   } else {
     // Grid §3/§5: a free desk by the hire's team (a spare ring desk may be carried there first); else any free desk.
     slot = autoSeat(s.office, c.dept)
+    if (!slot && a.autoDesk) {
+      // F6: refusing here sent the player to the shop, the desk got bought and the hire was never retried
+      // ("para gidiyor, kişi gelmiyor"). The panel's hire now buys the desk too, auto placed by the hire's team
+      // (grid §3, desk cap included); any failure costs nothing (clone).
+      const item = autoDeskItem(s, content)
+      const place = item && autoPlace(s.office, placementSpec(item), { team: c.dept })
+      if (!item || !place) return 'noFreeSlot'
+      if (s.stats.cash < item.price) return 'insufficientCash'
+      storeDecor(s.office, place.bumped)
+      slot = putItem(s.office, place, item.id, placementSpec(item))
+      boughtOn(s, item, slot)
+    }
     if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
   }
   hireCandidate(s, c, slot?.id)
@@ -288,7 +300,7 @@ const placeItem: Handler<'placeItem'> = ({ s, content }, a) => {
   const item = furnitureById(content, a.itemId)
   if (!item) return 'notFound'
   if (item.stageUnlock > s.stage) return 'notUnlocked'
-  const spec = { slotType: item.slotType, size: item.size === 2 ? (2 as const) : (1 as const) }
+  const spec = placementSpec(item)
   const team = deskTeam(item)
   let slot: Slot
   if (a.slotId !== undefined) {
@@ -319,13 +331,22 @@ const placeItem: Handler<'placeItem'> = ({ s, content }, a) => {
     storeDecor(s.office, place.bumped)
     slot = putItem(s.office, place, item.id, spec)
   }
+  boughtOn(s, item, slot)
+  return null
+}
+
+/**
+ * The bill and the effects of an item just written onto `slot` (placeItem and the F6 auto-desk hire share it, so
+ * the scene's furniture pop fires for both): cash, the desk's team label, reputation, tools, the activity line.
+ */
+function boughtOn(s: GameState, item: FurnitureItem, slot: Slot): void {
   s.stats.cash -= item.price
+  const team = deskTeam(item)
   if (team !== undefined && slot.team === undefined) slot.team = team
   if (item.effects.reputation !== undefined) s.stats.reputation = Math.min(100, s.stats.reputation + item.effects.reputation)
   if (item.effects.enablesTool) unlockTool(s, item.effects.enablesTool)
   pushActivity(s, 'itemPlaced', { item: item.id, slot: slot.id })
   pushEvent(s, { kind: 'itemPlaced', refId: slot.id })
-  return null
 }
 
 /** Empties an item's slots, team label included (a canonical slot gets its rotation back, free slots go). */

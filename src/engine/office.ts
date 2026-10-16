@@ -204,11 +204,16 @@ export function findAutoSlotFor(office: OfficeState, spec: PlacementSpec): Slot 
   return p?.slotId !== undefined ? (findSlot(office, p.slotId) ?? null) : null
 }
 
+/** The footprint autoPlace needs for a furniture item. */
+export function placementSpec(item: FurnitureItem): PlacementSpec {
+  return { slotType: item.slotType, size: item.size === 2 ? 2 : 1 }
+}
+
 /** findAutoSlotFor by furniture id; null for unknown items or a full office. */
 export function findAutoSlot(state: GameState, itemId: string, content: EngineContent): Slot | null {
   const item = furnitureById(content, itemId)
   if (!item) return null
-  return findAutoSlotFor(state.office, { slotType: item.slotType, size: item.size === 2 ? 2 : 1 })
+  return findAutoSlotFor(state.office, placementSpec(item))
 }
 
 /** Desk slot an employee can sit on: desk type, open ring, not founder, free. */
@@ -224,6 +229,24 @@ export function firstFreeDesk(office: OfficeState): Slot | undefined {
 /** True when no desk is free but one more may still be bought (the desk cap is not reached). */
 export function onlyEmptyDeskSlots(office: OfficeState): boolean {
   return !firstFreeDesk(office) && typeUse(office).desk < typeCaps(office).desk
+}
+
+/** The cheapest desk the stage allows: what a one-tap hire buys when no desk stands free (F6). */
+export function autoDeskItem(state: GameState, content: EngineContent): FurnitureItem | undefined {
+  let best: FurnitureItem | undefined
+  for (const f of content.furniture) if (f.slotType === 'desk' && f.stageUnlock <= state.stage && (!best || f.price < best.price)) best = f
+  return best
+}
+
+/**
+ * What a hire with `autoDesk` adds on top of the salary: 0 with a free desk, the auto desk's price when an empty
+ * desk slot can take one, null when no desk slot is open (a ring has to open first).
+ */
+export function hireDeskCost(state: GameState, content: EngineContent): number | null {
+  if (firstFreeDesk(state.office)) return 0
+  // Same placement as the hire's auto desk (grid autoPlace, desk cap included), so the price shown is what it buys.
+  const item = autoDeskItem(state, content)
+  return item && autoPlace(state.office, placementSpec(item)) ? item.price : null
 }
 
 /** Placed items (anchor slots only) in open rings. */

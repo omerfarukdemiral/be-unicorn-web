@@ -655,6 +655,11 @@ export interface RoundState {
   pitchWeeks?: number
   /** Price ratio (valuation / target) when the round started: half of the price is locked at the start. */
   priceAtStart?: number
+  /**
+   * B2 review: the early-start factor (earlyEquityMult of the live, half-locked price) offer.equity carries now; it follows
+   * the price every week until the close. Absent on a down round and on a round from an older save (equity as signed).
+   */
+  earlyMult?: number
   /** What decided the amount at the last weekly re-size: the table floor, the burn × months, or the table ceiling. */
   amountBy?: 'floor' | 'burn' | 'ceiling'
   /** Week (1-based, weeks done) whose meeting waits for the player's choice; undefined = none open. */
@@ -921,6 +926,9 @@ export interface MonthReceipt {
   usersDelta?: number
   /** A1: users the ads brought over the month ("Reklam: +n kullanıcı"); missing = no ads. */
   adUsers?: number
+  /** F3: what this payday held back (desk answer or the quiet default order): rent deferred, the founder's own pay skipped. */
+  rentDeferred?: number
+  founderSkipped?: number
   stage?: StageIndex
   burnMultiple?: number
   /** users / reachable market (0–1). */
@@ -1709,7 +1717,8 @@ export interface GameState {
 
 export type Action =
   // Team
-  | { type: 'hire'; candidateId: string; deskSlotId?: SlotId }
+  /** `autoDesk` (the Team panel): no free desk → buy the cheapest open desk onto the auto slot first, all or nothing. */
+  | { type: 'hire'; candidateId: string; deskSlotId?: SlotId; autoDesk?: boolean }
   | { type: 'fire'; employeeId: EmployeeId }
   | { type: 'renameProject'; projectId: string; name: string }
   | { type: 'assignDesk'; employeeId: EmployeeId; slotId: SlotId | null }

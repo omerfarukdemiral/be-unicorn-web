@@ -7,7 +7,8 @@ import { writeFileSync } from 'node:fs'
 import { cpus } from 'node:os'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, POLICY_IDS, SECONDS_PER_DAY, balance } from '../src/engine/index'
-import { MODULES, moduleDef } from '../src/engine/modules'
+import { MODULES } from '../src/engine/modules'
+import { CONCENTRATION_MAX, MODULES_USED_MIN, moduleConcentration, planConcentration, type CategoryPlanConcentration, type ModuleConcentration } from './moduleStats'
 import { PLAN_GROWTH, PLAN_MONEY, PLAN_REACH, PLAN_RETENTION, CRISIS_WINDOW_DAYS, DAYS_10_MIN, DEATH_TRACE_DAYS, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type ModulePlan, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
@@ -114,6 +115,9 @@ const QUICK = arg('quick', 0) > 0
 const PLANS: [string, ModulePlan][] = [['para (bootstrap)', PLAN_MONEY], ['büyüme (vcRocket)', PLAN_GROWTH], ['tutundurma (niche)', PLAN_RETENTION], ['erişim (platform)', PLAN_REACH]]
 const TOUR_CATEGORIES = ['web', 'mobile', 'api', 'marketplace', 'ai', 'game'] as const
 const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
+/** B2: module pick concentration, filled by the module section and read by the criteria. */
+let conc: ModuleConcentration | null = null
+let planConc: CategoryPlanConcentration[] = []
 {
   const sp = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}, content: RunSpec['content'] = 'full'): RunSpec => ({ kind, policy, overrides, content })
   const always: RunSpec[] = [
@@ -128,7 +132,9 @@ const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
     sp('careless', 'best', { modules: {} }),
     // MV2d: plan freedom (the bootstrap seeds with each of the four module plans) and the category tour.
     ...PLANS.map(([, plan]) => sp('bootstrap', 'best', { modules: plan })),
-    ...TOUR_CATEGORIES.map((c) => sp('bootstrap', 'best', { firstCategory: c, extraCategories: [] })),
+    // B1: the tour runs under all four bots (a category can be fine for one plan and stall for another), plus module-less.
+    ...ARCHETYPES.flatMap((a) => TOUR_CATEGORIES.map((c) => sp(a, 'best', { firstCategory: c, extraCategories: [] }))),
+    ...TOUR_CATEGORIES.map((c) => sp('bootstrap', 'best', { firstCategory: c, extraCategories: [], modules: {} })),
     // E2: the same bots without effort management (the stage-arrival baseline of the acceptance band).
     ...ARCHETYPES.map((a) => sp(a, 'best', NO_EFFORT)),
   ]
@@ -422,7 +428,7 @@ line()
 
 line('## Modüller v2 (MV2d)')
 line()
-line('Botlar sabit liste yerine tür-ağırlık planıyla kurar: skor = (ağırlık × $karşılık − kira) / maliyet, $karşılık arayüzdeki `moduleEstimate`. Koşu sonu, proje başına.')
+line('Botlar sabit liste yerine tür-ağırlık planıyla kurar: skor = ağırlık × $karşılık × zevk − kira − maliyet / geri dönüş ayı (B2; para 12, büyüme 18, erişim 15, tutundurma 12 ay), $karşılık arayüzdeki `moduleEstimate`; zevk ve tür ağırlıkları seed ve bota göre değişir. Slot: v1 3, v2 6, v3 8, v4 9, v5+ 10. Koşu sonu, proje başına.')
 line()
 line('| Bot | Sürüm (medyan / en yüksek) | Kurulu modül (medyan) | Açık slot (medyan) | Dolu / açık slot | Plan seçimi / slot doldurucu (kurulan) | Tier dağılımı T1·T2·T3·T4·T5 |')
 line('|---|---|---|---|---|---|---|')
@@ -437,30 +443,7 @@ for (const [name, runs] of moduleRows) {
 }
 line()
 {
-  line('Baskınlık: bir kategorinin koşularının > %90’ında planın kendi seçtiği (doldurucu değil) kurulu modül, T1 çekirdek hariç; yalnızca gerçek seçim olan katmanlarda (projeler katmanın %80’inden azını kuruyorsa) sayılır, bir katmanı tümden kuran herkes tek modülü üstün kılmaz. Plan skoru sıfırın altındaysa bot boş slotu gün ve projeye bağlı bir karma ile doldurur (rastgele ama tekrarlanabilir); “Plan seçimi / doldurucu” sütunu hangisinin kaç modül kurduğunu gösterir.')
-  line()
   const all = [...byArch.values()].flat()
-  const byCat = new Map<string, BotRun[]>()
-  for (const r of all) for (const cat of new Set(r.projectsEnd.map((p) => p.category))) byCat.set(cat, [...(byCat.get(cat) ?? []), r])
-  const dominant: string[] = []
-  for (const [cat, runs] of byCat) {
-    const count = new Map<string, number>()
-    for (const r of runs) for (const id of new Set(r.projectsEnd.filter((p) => p.category === cat).flatMap((p) => p.ids).filter((id) => r.planIds[id]))) count.set(id, (count.get(id) ?? 0) + 1)
-    // A tier is a real choice only when the projects leave a good part of it unbuilt; a tier that 15 slots nearly empty
-    // (the T3 line at v3+) is built whole by anyone, which says nothing about one module being better.
-    const projs = runs.flatMap((r) => r.projectsEnd.filter((p) => p.category === cat))
-    const choice = (tier: number) => {
-      const cands = MODULES.filter((d) => d.tier === tier && (d.categories === undefined || d.categories.includes(cat as never))).length
-      const mean = projs.length ? sumOf(projs.map((p) => p.tiers.filter((x) => x === tier).length)) / projs.length : 0
-      return mean < 0.8 * cands
-    }
-    for (const [id, n] of count) {
-      const def = moduleDef(id)
-      if (n / runs.length > 0.9 && def && def.tier > 1 && choice(def.tier)) dominant.push(`${cat}/${id} ${pct(n, runs.length)}`)
-    }
-  }
-  line(`Baskın modül (hedef: yok): **${dominant.length === 0 ? 'EVET' : 'HAYIR'}** · ${dominant.length ? dominant.join(', ') : 'yok'}`)
-  line()
   line('Plan özgürlüğü (bootstrap seed’leri, dört plan; Unicorn medyanı 15 % içinde olmalı):')
   line()
   line('| Plan | Unicorn | Medyan | İflas |')
@@ -487,6 +470,56 @@ line()
     Object.keys(ids).forEach((k) => seen.add(k))
     const bare = runMany('bootstrap', 'best', { firstCategory: cat, extraCategories: [], modules: {} })
     line(`| ${cat} | ${uniCount(runs)}/${SEEDS} | ${fmtMin(uniOf(runs))} | ${runs.filter(failedRun).length} | ${uniCount(bare)}/${SEEDS} · ${fmtMin(uniOf(bare))} | ${Object.entries(ids).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} |`)
+  }
+  line()
+  // B1: every category under every bot (single category, best decisions). The gate: >= 85% of the seeds reach Unicorn.
+  line('Kategori × bot (tek kategori, Unicorn / seed · medyan):')
+  line()
+  line(`| Kategori | ${ARCHETYPES.join(' | ')} |`)
+  line(`|---|${ARCHETYPES.map(() => '---').join('|')}|`)
+  const tourMin = Math.ceil(0.85 * SEEDS)
+  const weak: string[] = []
+  for (const cat of TOUR_CATEGORIES) {
+    const cells = ARCHETYPES.map((a) => {
+      const runs = runMany(a, 'best', { firstCategory: cat, extraCategories: [] })
+      if (uniCount(runs) < tourMin) weak.push(`${cat}/${a} ${uniCount(runs)}`)
+      return `${uniCount(runs)}/${SEEDS} · ${fmtMin(uniOf(runs))}`
+    })
+    line(`| ${cat} | ${cells.join(' | ')} |`)
+  }
+  line()
+  line(`Her kategori her botta ≥ ${tourMin}/${SEEDS} Unicorn: **${weak.length === 0 ? 'EVET' : 'HAYIR'}**${weak.length ? ` · zayıf: ${weak.join(', ')}` : ''}`)
+  // B2: module pick concentration over every good-bot run (the archetypes and the category × bot tour), per category.
+  line()
+  line(`Modül yoğunlaşması (B2): koşu sonunda kategorinin projelerinin kaçında kurulu; arketip koşuları + kategori × bot turu. Hedef: hiçbir modül > %${Math.round(CONCENTRATION_MAX * 100)}, en az ${MODULES_USED_MIN}/${MODULES.length} modül kullanılmış.`)
+  line()
+  line('| Kategori | Proje | > %80 | En sık 5 | İlk 3 seçim (farklı küme) |')
+  line('|---|---|---|---|---|')
+  const tourRuns = ARCHETYPES.flatMap((a) => TOUR_CATEGORIES.flatMap((cat) => runMany(a, 'best', { firstCategory: cat, extraCategories: [] })))
+  conc = moduleConcentration([...all, ...tourRuns])
+  for (const cat of conc.categories) {
+    const top = Object.entries(cat.share).slice(0, 5).map(([id, v]) => `${id} ${pct(v, 1)}`).join(', ')
+    line(`| ${cat.category} | ${cat.projects} | ${cat.over.length ? cat.over.join(', ') : '—'} | ${top} | ${cat.firstThreeSets}/${cat.projects} |`)
+  }
+  const archOnly = moduleConcentration(all)
+  line()
+  line(`Kullanılan modül: ${conc.used}/${MODULES.length}${conc.unused.length ? ` (kurulmayan: ${conc.unused.join(', ')})` : ''}. Yalnız arketip koşularında (kategorileri sabit, bilgi): > %80 olan ${archOnly.categories.reduce((a, c) => a + c.over.length, 0)} modül · ${archOnly.categories.map((c) => `${c.category} ${c.over.join('/') || '—'}`).join(' · ')}.`)
+  // B2 review: the same tour, only the builds the plan chose by the card's estimate (the filler's draw left out).
+  planConc = planConcentration(
+    ARCHETYPES.flatMap((a) =>
+      TOUR_CATEGORIES.flatMap((cat) =>
+        runMany(a, 'best', { firstCategory: cat, extraCategories: [] }).map((r) => ({ category: cat, planIds: r.planIds, fillBuilt: r.fillBuilt, built: sumOf(r.modulesBuilt) })),
+      ),
+    ),
+  )
+  line()
+  line('Plan seçimleri (B2 inceleme): kategori × bot turunda yalnız botun karttaki tahmine göre seçtiği modüller (slot doldurucunun çekilişi hariç); pay = planın seçtiği koşu / plan seçimi olan koşu.')
+  line()
+  line('| Kategori | Plan payı (kurulan) | Plan seçimi olan koşu | > %80 | En sık 5 plan seçimi |')
+  line('|---|---|---|---|---|')
+  for (const c of planConc) {
+    const top = Object.entries(c.share).slice(0, 5).map(([id, v]) => `${id} ${pct(v, 1)}`).join(', ')
+    line(`| ${c.category} | ${pct(c.planShare, 1)} | ${c.planRuns}/${c.runs} | ${c.over.length ? c.over.join(', ') : '—'} | ${top || '—'} |`)
   }
   for (const r of all) Object.keys(r.moduleIds).forEach((k) => seen.add(k))
   const unseen = MODULES.filter((d) => !seen.has(d.id)).map((d) => d.id)
@@ -597,6 +630,17 @@ crit('Careless iflas', band(careless.filter(failedRun).length, careless.length, 
 crit('greedyGood iflas', band(v2('greedyGood').filter(failedRun).length, SEEDS, 0.15, 0.3))
 crit('coaster Unicorn (E1 nihai)', band(uniCount(v2('coaster')), SEEDS, 0, 0))
 crit('coasterModules Unicorn (W2b anti-coast)', band(uniCount(v2('coasterModules')), SEEDS, 0, 0))
+if (conc) {
+  const over = conc.categories.flatMap((c) => c.over.map((id) => `${c.category}/${id} ${pct(c.share[id]!, 1)}`))
+  line(`- Modül yoğunlaşması (B2): kategori projelerinin > %${Math.round(CONCENTRATION_MAX * 100)}’inde olan modül ${over.length} (hedef 0)${over.length ? ` · ${over.join(', ')}` : ''}: **${yes(over.length === 0)}**`)
+  line(`- Kullanılan modül (B2): ${conc.used}/${MODULES.length} (hedef ≥ ${MODULES_USED_MIN}): **${yes(conc.used >= MODULES_USED_MIN)}**`)
+}
+if (planConc.length) {
+  // B2 review: the project measure above is ~80% the filler's seeded draw; the plan's own picks are the player who reads the card.
+  const over = planConc.flatMap((c) => c.over.map((id) => `${c.category}/${id} ${pct(c.share[id]!, 1)}`))
+  const share = planConc.reduce((a, c) => a + c.planShare * c.runs, 0) / Math.max(1, planConc.reduce((a, c) => a + c.runs, 0))
+  line(`- Plan seçimlerinde yoğunlaşma (B2 inceleme; karttaki tahmine göre seçen oyuncu): plan seçimi olan koşuların > %${Math.round(CONCENTRATION_MAX * 100)}’inde seçilen modül ${over.length} (hedef 0)${over.length ? ` · ${over.join(', ')}` : ''} · plan payı ${pct(share, 1)} (bilgi): **${yes(over.length === 0)}**`)
+}
 {
   // §15: the bad-decision policy must cost lives, not only minutes (bootstrap + vcRocket, same seeds).
   const gaps = worstRuns.map(([a, runs]) => {

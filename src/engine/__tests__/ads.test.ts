@@ -261,7 +261,7 @@ describe('cacFactors and the reason line', () => {
     s.finance.adFocusDay = s.time.day - 3
     recomputeDerived(s, content)
     const f = cacFactors(s)
-    expect(f.map((x) => x.key)).toEqual(['crisis', 'spend', 'market', 'focus', 'maturity', 'stage', 'modules', 'policy'])
+    expect(f.map((x) => x.key)).toEqual(['crisis', 'spend', 'market', 'focus', 'maturity', 'stage', 'category', 'modules', 'policy'])
     const prod = f.filter((x) => x.key !== 'stage').reduce((a, x) => a * x.value, 1)
     expect(prod * base(s)).toBeCloseTo(s.derived.cac, 6)
     expect(f.find((x) => x.key === 'crisis')).toMatchObject({ value: 4, source: 'crisis:cac-war' })

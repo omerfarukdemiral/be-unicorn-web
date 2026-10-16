@@ -1,7 +1,7 @@
 // Gauge registry (PLAN §2 "Kullan", docs/LAYOUT.md §5): each unlocked HudWidget maps to one card. The same component
 // draws the Metrikler card (`variant="panel"`) and the top-bar pin (`variant="bar"`, h40, no bars). The four fixed
 // gauges (Kasa, Runway, Kullanıcı, Moral) are drawn by the top bar itself (layout/TopMetrics.tsx). Widgets only display engine numbers; money goes through cashFlow() (one definition, §2.3):
-// Yakıt = the month's total cost, Kâr tahmini = Gelir − Yakıt, Kasa shows the daily net.
+// Burn = the month's total cost, Kâr tahmini = Gelir − Burn, Kasa shows the daily net.
 // Look (docs/DESIGN.md): neutral chip on a warm card; each gauge owns a hue (WIDGET_COLOR) used on its icon (on a
 // ~12% tile) and on its thin bar / sparkline / stacked ramp. Values stay ink (AA). Red only for real danger
 // (LAYOUT §4.1: usable cash < 0, runway < 3, morale < 28); other thresholds are amber (energy / energy-ink).
@@ -282,7 +282,7 @@ export function runwayTone(runway: number | null): RunwayTone {
   return 'red'
 }
 
-/** Yakıt: the month's total cost, founder living cost included. Revenue is NOT subtracted (that is Kâr tahmini). */
+/** Burn: the month's total cost, founder living cost included. Revenue is NOT subtracted (that is Kâr tahmini). */
 function BurnWidget({ variant }: WidgetProps) {
   const b = useGameStore(useShallow((s) => ({ burn: cashFlow(s.state).burn, ...s.state.finance.burnBreakdown })))
   const RAMP = ramp(WIDGET_COLOR.burnBreakdown)
@@ -320,7 +320,7 @@ function RetentionWidget({ variant }: WidgetProps) {
   )
 }
 
-/** Kâr tahmini: Gelir − Yakıt = net per month (the only place the monthly net is shown). */
+/** Kâr tahmini: Gelir − Burn = net per month (the only place the monthly net is shown). */
 function ProfitWidget({ variant }: WidgetProps) {
   const { hist, mrr, burn, net } = useGameStore(
     useShallow((s) => {

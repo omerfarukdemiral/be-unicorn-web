@@ -12,7 +12,7 @@ Bu belge Defter kartları (Kazanımlar) için yazıldı. Balon, karar kartı ve 
 2. **Biri konuşuyor.** Her cümlenin bir sahibi var: Nevin, Hakan, Can, Elif, Bora ya da Aylin. Sahibi belli olmayan, "genel doğru" tonundaki cümle yazılmaz.
 3. **Sen diye konuş.** Özne oyuncu, onun şirketi ya da onun ekibi olur. "Şirketler…", "Girişimciler…", "İnsan…" gibi genel özne kullanılmaz.
 4. **Somut ol.** Soyut isim yığını ("değer yaratımı", "sürdürülebilir büyüme") yerine oyunda gördüğü şeyi söyle: kasa, kullanıcı, maaş, reklam, proje, moral.
-5. **Kısa ve düz.** Bir cümlede tek fikir olsun. Yan cümle zinciri ve noktalı virgül kullanılmaz. Metafor en fazla bir tane olur ve oyundaki bir şeye dayanır (yakıt, kasa, kapı çalmak).
+5. **Kısa ve düz.** Bir cümlede tek fikir olsun. Yan cümle zinciri ve noktalı virgül kullanılmaz. Metafor en fazla bir tane olur ve oyundaki bir şeye dayanır (burn, kasa, kapı çalmak).
 6. **Hafif espri serbest, vaaz yasak.** Karakter bıyık altından gülebilir. Oyuncuyu azarlamaz, ona akıl vermez, suçlamaz.
 7. **Sayı konuşur.** "Sen nerede gördün?" satırında oyuncunun kendi sayısı yoksa satır boştur.
 8. **İngilizce terim kalabilir ama yalnız kalmaz.** Runway, burn, churn, LTV:CAC, SAFE, dilution ve cap table oyunda nasıl geçiyorsa öyle kalır. Kartta ilk geçtiği yerde Türkçesi sezdirilir: "Runway, yani kasanın kaç ay yettiği." Terim parantez içinde ders gibi açıklanmaz.

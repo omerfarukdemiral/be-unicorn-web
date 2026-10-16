@@ -32,7 +32,11 @@ export function BubbleTail({ className, style }: { className?: string; style?: C
   )
 }
 
-/** Speaker line: kind mark (tiny icon on a light tile of `color`) + speaker name as a .ui-label, then an optional topic in ink. */
+/**
+ * Speaker line: kind mark (tiny icon on a light tile of `color`) + speaker name as a .ui-label, then an optional topic in ink.
+ * The text wraps instead of truncating (C1): an open card's topic is often the question itself
+ * ("Sen · Kervan.io için sıradaki modül: Ödeme altyapısı?"), and an ellipsis hid exactly the part being asked.
+ */
 export function SpeakerLine({ icon, color, speaker, topic, className }: { icon?: IconName; color?: string; speaker?: string; topic?: string; className?: string }) {
   if (!icon && !speaker && !topic) return null
   return (
@@ -46,7 +50,7 @@ export function SpeakerLine({ icon, color, speaker, topic, className }: { icon?:
           <Icon name={icon} size={11} className="shrink-0 text-ink" />
         ))}
       {(speaker || topic) && (
-        <span className="min-w-0 truncate">
+        <span data-speaker-text="" className="min-w-0 break-words leading-4">
           {speaker}
           {speaker && topic && ' · '}
           {topic && <span className="text-ink">{topic}</span>}

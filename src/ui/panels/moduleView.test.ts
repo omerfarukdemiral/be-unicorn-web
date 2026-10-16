@@ -17,7 +17,7 @@ import { releaseName } from '../loopUi'
 import { momentText } from '../Moments'
 import { TierGroups } from './ModulesSection'
 import { ProjectsPanel } from './ProjectsPanel'
-import { buildChips, founderBuildCost, measuredLine, previewLine, rentChip, versionLine } from './moduleView'
+import { buildChips, exclusionChip, founderBuildCost, measuredLine, previewLine, rentChip, versionLine } from './moduleView'
 
 const est = (over: Partial<ModuleEstimate>): ModuleEstimate => ({ users: 0, mrr: 0, infra: 0, tam: 0, wave: 0, upkeep: 0, net: 0, ...over })
 
@@ -61,13 +61,38 @@ describe('offer chips (estimate)', () => {
     expect(first.good).toBeNull()
   })
 
-  it('the desk bubble leaves the synergy chip out', () => {
+  it('the desk bubble leaves the synergy chip out (a fork is the only fourth)', () => {
     const s = company(['web'], 3)
     const p = s.projects[0]!
     for (const o of moduleOffers(s, p)) {
       if (o.refresh || o.error) continue
-      expect(buildChips(s, p, o, false).length).toBeLessThanOrEqual(3)
+      const chips = buildChips(s, p, o, false)
+      expect(chips.length).toBeLessThanOrEqual(exclusionChip(p, o.id) ? 4 : 3)
     }
+  })
+
+  it('a build that shuts a module says so before the build, on the card and in the bubble (B2 review)', () => {
+    const s = company(['mobile'], 1)
+    const p = s.projects[0]!
+    const offer = moduleOffers(s, p).find((o) => o.id === 'paywall')!
+    // Both sides of the fork open at v1: the category's own seller sits next to Paywall (it opened at v2 before).
+    for (const [cat, seller] of [['mobile', 'inAppPurchase'], ['game', 'shop'], ['marketplace', 'promotedListings']] as const) {
+      const c = company([cat], 1)
+      const o = moduleOffers(c, c.projects[0]!).find((x) => x.id === seller)
+      expect(o && !o.refresh && o.error === null, seller).toBe(true)
+    }
+    const fork = t('module.rel.excluded', { module: 'Freemium, Uygulama içi satın alma' })
+    for (const withRelation of [true, false]) {
+      const chip = buildChips(s, p, offer, withRelation).find((c) => c.icon === 'lock')!
+      expect(chip.text).toBe(fork)
+      expect(chip.good).toBe(false)
+    }
+    // Only the modules of this catalogue: a game Paywall names the Shop, never the mobile In-app purchase.
+    const g = company(['game'], 1)
+    expect(exclusionChip(g.projects[0]!, 'paywall')!.text).toBe(t('module.rel.excluded', { module: 'Freemium, Oyun içi mağaza' }))
+    // The other side of the fork names Paywall; a module that shuts nothing has no fork chip.
+    expect(exclusionChip(p, 'inAppPurchase')!.text).toBe(t('module.rel.excluded', { module: 'Paywall' }))
+    expect(exclusionChip(p, 'aso')).toBeNull()
   })
 })
 

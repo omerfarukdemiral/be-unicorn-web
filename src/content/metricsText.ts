@@ -1,6 +1,6 @@
 // Keyed Turkish UI text for the Metrikler tab and the gauge cards (docs/LAYOUT.md §2.3, §5).
 // Merged into UI_TEXT by the content barrel (index.ts). `hud.*` keys here only ADD wording; the money words follow
-// one definition: Yakıt = the month's total cost, Kâr tahmini = Gelir − Yakıt, Kasa shows the daily net.
+// one definition: Burn = the month's total cost, Kâr tahmini = Gelir − Burn, Kasa shows the daily net.
 export const METRICS_TEXT: Record<string, string> = {
   'metrics.group.pinned': 'Sabitli',
   'metrics.group.money': 'Para',

@@ -69,28 +69,41 @@ const syn = (w: ProjectModuleId, kind: ModuleEffectKind, k: number): ModuleSyner
 
 /**
  * The catalogue (MV2a, design §1.4): a shared core of 15 (the 9 round-2 ids kept) plus 8–9 per category, tiers 1–5,
- * prerequisites, synergies and two forks (paywall ↔ freemium, paywall ↔ usagePricing). Every module has a minus
- * (upkeep, debt, a negative multiplier, heavier updates or a prerequisite that costs a slot).
+ * prerequisites, synergies and forks. Every module has a minus (upkeep, debt, a negative multiplier, heavier updates or
+ * a prerequisite that costs a slot).
+ * B2 (module diversity): ~20 modules sat on nearly every project. With 10 slots (MODULE_SLOTS_AT) a project now keeps
+ * under half its catalogue; the pricing model is a fork per category (paywall against freemium, usagePricing and the
+ * category's own seller: inAppPurchase, shop, promotedListings; usagePricing against teamPlans on web); the cheap
+ * staples that every plan took first were trimmed (paywall 1.15 → 1.1, referral 1.22 → 1.15, feedback churn .94 → .96
+ * and $600 → $900, onboarding churn .9 → .96, the category ARPU sellers 1.12–1.15 → 1.08–1.1, docs, sdks, reviews,
+ * search, leaderboard, dailyRewards, templates, liveEvents) and the upkeep modules that never paid got cheaper bills
+ * (analytics, support, notifications, cicd, seo, landingPages, sandbox, slaPlans, localization, multiRegion,
+ * aiAssistant 6 → 4 %). notifications, support and cicd open at v1, so v1's 3 slots choose among ~10. Each pricing path
+ * keeps a later ARPU step: adminPanel no longer needs teamPlans (the usagePricing path on web), battlePass needs
+ * liveEvents instead of shop (a premium game sells a season pass too).
+ * B2 review: a module cannot be removed, so both sides of a fork open together: the category sellers (inAppPurchase,
+ * shop, promotedListings) are tier 1 like paywall (they opened at v2, so at v1 Paywall was the only seller and shut
+ * them unseen), and the offer card names what a build shuts (exclusionChip, "Freemium ile olmaz").
  */
 export const MODULES: readonly ModuleDef[] = [
   // Core: the round-2 nine (same ids and effects; onboarding's upkeep 100 → 60, tiers instead of stages).
-  { id: 'feedback', tier: 1, synergies: [syn('support', 'churn', 0.5)], work: 0.1, cashBase: 600, gains: { churn: 0.94, wave: 1.25, talk: 1.5 }, minus: { updateWork: 1.25 }, sizeAdd: 0, debt: 0 },
-  { id: 'referral', tier: 1, synergies: [syn('onboarding', 'organic', 0.5)], work: 0.12, cashBase: 800, gains: { organic: 1.22 }, minus: { arpu: 0.95 }, catBoost: { game: 1.4, mobile: 1.4, marketplace: 1.4 }, sizeAdd: 1, debt: 0 },
-  { id: 'paywall', tier: 1, excludes: ['freemium', 'usagePricing'], synergies: [syn('abTest', 'arpu', 0.5)], work: 0.1, cashBase: 600, gains: { arpu: 1.15 }, minus: { organic: 0.85, churn: 1.04 }, sizeAdd: 0, debt: 0 },
-  { id: 'onboarding', tier: 2, synergies: [syn('referral', 'churn', 0.3)], work: 0.15, cashBase: 1_000, gains: { churn: 0.9, cac: 0.95 }, upkeep: stageScaled(60), sizeAdd: 1, debt: 1 },
-  { id: 'analytics', tier: 1, synergies: [syn('landingPages', 'cac', 0.5)], work: 0.12, cashBase: 1_500, gains: { cac: 0.88, organic: 1.05 }, upkeep: stageScaled(150), sizeAdd: 0, debt: 0 },
+  { id: 'feedback', tier: 1, synergies: [syn('support', 'churn', 0.5)], work: 0.1, cashBase: 900, gains: { churn: 0.96, wave: 1.25, talk: 1.5 }, minus: { updateWork: 1.25 }, sizeAdd: 0, debt: 0 },
+  { id: 'referral', tier: 1, synergies: [syn('onboarding', 'organic', 0.5)], work: 0.12, cashBase: 1_000, gains: { organic: 1.15 }, minus: { arpu: 0.93 }, catBoost: { game: 1.4, marketplace: 1.2 }, sizeAdd: 1, debt: 0 },
+  { id: 'paywall', tier: 1, excludes: ['freemium', 'usagePricing', 'inAppPurchase', 'shop', 'promotedListings'], synergies: [syn('abTest', 'arpu', 0.5)], work: 0.1, cashBase: 600, gains: { arpu: 1.1 }, minus: { organic: 0.85, churn: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'onboarding', tier: 2, synergies: [syn('referral', 'churn', 0.3)], work: 0.15, cashBase: 2_000, gains: { churn: 0.96, cac: 0.95 }, upkeep: stageScaled(80), sizeAdd: 1, debt: 1 },
+  { id: 'analytics', tier: 1, synergies: [syn('landingPages', 'cac', 0.5)], work: 0.12, cashBase: 1_500, gains: { cac: 0.88, organic: 1.05 }, upkeep: stageScaled(90), sizeAdd: 0, debt: 0 },
   {
-    id: 'freemium', tier: 2, excludes: ['paywall'], synergies: [syn('referral', 'organic', 0.3)], work: 0.15, cashBase: 1_500, gains: { organic: 1.35 }, minus: { arpu: 0.85 },
+    id: 'freemium', tier: 2, excludes: ['paywall'], synergies: [syn('referral', 'organic', 0.3)], work: 0.15, cashBase: 1_500, gains: { organic: 1.3 }, minus: { arpu: 0.9 },
     upkeep: (s, w) => (s.stats.users / 1000) * w * 0.5 * (B.INFRA_PER_1000_BY_STAGE[s.stage] ?? 0), sizeAdd: 0, debt: 0,
   },
   { id: 'openApi', tier: 3, synergies: [syn('webhooks', 'churn', 0.5), syn('integrations', 'churn', 0.5)], work: 0.3, cashBase: 6_000, gains: { churn: 0.88, tam: 1.1 }, catBoost: { api: 1.5 }, sizeAdd: 2, debt: 3 },
-  { id: 'localization', tier: 4, synergies: [syn('cityLaunch', 'tam', 0.3), syn('multiRegion', 'tam', 0.3)], work: 0.25, cashBase: 8_000, gains: { tam: 1.25 }, minus: { cac: 1.08 }, upkeep: stageScaled(300), sizeAdd: 0, debt: 0 },
-  { id: 'aiAssistant', tier: 4, synergies: [syn('rag', 'arpu', 0.3)], work: 0.35, cashBase: 15_000, gains: { arpu: 1.12, churn: 0.95 }, catBoost: { ai: 1.5 }, upkeep: (_s, w, mrr) => mrr * w * 0.06, sizeAdd: 0, debt: 3 },
+  { id: 'localization', tier: 4, synergies: [syn('cityLaunch', 'tam', 0.3), syn('multiRegion', 'tam', 0.3)], work: 0.25, cashBase: 8_000, gains: { tam: 1.25 }, minus: { cac: 1.08 }, upkeep: stageScaled(200), sizeAdd: 0, debt: 0 },
+  { id: 'aiAssistant', tier: 4, synergies: [syn('rag', 'arpu', 0.3)], work: 0.35, cashBase: 15_000, gains: { arpu: 1.12, churn: 0.95 }, catBoost: { ai: 1.5 }, upkeep: (_s, w, mrr) => mrr * w * 0.04, sizeAdd: 0, debt: 3 },
   // Core, new in MV2a.
-  { id: 'notifications', tier: 2, synergies: [syn('dailyRewards', 'churn', 0.5)], work: 0.1, cashBase: 1_200, gains: { churn: 0.93, wave: 1.15 }, upkeep: stageScaled(80), sizeAdd: 0, debt: 0 },
-  { id: 'support', tier: 2, synergies: [syn('feedback', 'churn', 0.3)], work: 0.08, cashBase: 1_500, gains: { churn: 0.92, talk: 1.3 }, upkeep: stageScaled(150), sizeAdd: 0, debt: 0 },
-  { id: 'cicd', tier: 2, synergies: [syn('feedback', 'updateWork', 0.5)], work: 0.15, cashBase: 1_200, gains: { updateWork: 0.85 }, upkeep: stageScaled(60), sizeAdd: 0, debt: -1 },
-  { id: 'abTest', tier: 3, requires: ['analytics'], synergies: [syn('paywall', 'arpu', 0.5)], work: 0.12, cashBase: 3_000, gains: { arpu: 1.06, cac: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'notifications', tier: 1, synergies: [syn('dailyRewards', 'churn', 0.5)], work: 0.1, cashBase: 1_200, gains: { churn: 0.93, wave: 1.15 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
+  { id: 'support', tier: 1, synergies: [syn('feedback', 'churn', 0.3)], work: 0.08, cashBase: 1_500, gains: { churn: 0.92, talk: 1.3 }, upkeep: stageScaled(90), sizeAdd: 0, debt: 0 },
+  { id: 'cicd', tier: 1, synergies: [syn('feedback', 'updateWork', 0.5)], work: 0.15, cashBase: 1_200, gains: { updateWork: 0.85 }, upkeep: stageScaled(30), sizeAdd: 0, debt: -1 },
+  { id: 'abTest', tier: 3, requires: ['analytics'], synergies: [syn('paywall', 'arpu', 0.5)], work: 0.12, cashBase: 3_000, gains: { arpu: 1.08, cac: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
   { id: 'security', tier: 3, work: 0.15, cashBase: 5_000, gains: { churn: 0.96, tam: 1.06 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: -4 },
   { id: 'sso', tier: 5, categories: ['web', 'api', 'ai', 'marketplace'], requires: ['security'], work: 0.2, cashBase: 20_000, gains: { tam: 1.08, arpu: 1.06 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 2 },
   // Mobil
@@ -98,22 +111,22 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'crashReports', tier: 1, categories: ['mobile'], synergies: [syn('feedback', 'churn', 0.5)], work: 0.06, cashBase: 500, gains: { churn: 0.95 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
   { id: 'deepLinks', tier: 2, categories: ['mobile'], synergies: [syn('referral', 'organic', 0.5)], work: 0.1, cashBase: 1_000, gains: { organic: 1.08 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
   { id: 'offlineMode', tier: 2, categories: ['mobile'], work: 0.15, cashBase: 1_500, gains: { churn: 0.92 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 1 },
-  { id: 'inAppPurchase', tier: 2, categories: ['mobile'], work: 0.12, cashBase: 1_500, gains: { arpu: 1.12 }, minus: { organic: 0.96 }, sizeAdd: 0, debt: 0 },
+  { id: 'inAppPurchase', tier: 1, categories: ['mobile'], excludes: ['paywall'], work: 0.12, cashBase: 1_500, gains: { arpu: 1.08 }, minus: { organic: 0.96 }, sizeAdd: 0, debt: 0 },
   { id: 'widgets', tier: 3, categories: ['mobile'], synergies: [syn('notifications', 'churn', 0.3)], work: 0.12, cashBase: 3_000, gains: { churn: 0.94, wave: 1.1 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
   { id: 'tabletApp', tier: 3, categories: ['mobile'], work: 0.2, cashBase: 4_000, gains: { tam: 1.1 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
   { id: 'watchApp', tier: 4, categories: ['mobile'], requires: ['widgets'], work: 0.2, cashBase: 8_000, gains: { churn: 0.95, tam: 1.04 }, minus: { updateWork: 1.2 }, sizeAdd: 1, debt: 0 },
   // Web
-  { id: 'seo', tier: 1, categories: ['web'], synergies: [syn('templates', 'organic', 0.5)], work: 0.08, cashBase: 600, gains: { organic: 1.15 }, upkeep: stageScaled(80), sizeAdd: 0, debt: 0 },
-  { id: 'landingPages', tier: 1, categories: ['web'], synergies: [syn('analytics', 'cac', 0.5)], work: 0.06, cashBase: 600, gains: { cac: 0.92 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
-  { id: 'templates', tier: 2, categories: ['web'], work: 0.1, cashBase: 1_200, gains: { organic: 1.08, churn: 0.96 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
-  { id: 'teamPlans', tier: 2, categories: ['web'], synergies: [syn('paywall', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.12 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
+  { id: 'seo', tier: 1, categories: ['web'], synergies: [syn('templates', 'organic', 0.5)], work: 0.08, cashBase: 600, gains: { organic: 1.15 }, upkeep: stageScaled(60), sizeAdd: 0, debt: 0 },
+  { id: 'landingPages', tier: 1, categories: ['web'], synergies: [syn('analytics', 'cac', 0.5)], work: 0.06, cashBase: 600, gains: { cac: 0.92 }, upkeep: stageScaled(30), sizeAdd: 0, debt: 0 },
+  { id: 'templates', tier: 2, categories: ['web'], work: 0.1, cashBase: 1_500, gains: { organic: 1.06, churn: 0.97 }, minus: { updateWork: 1.08 }, sizeAdd: 0, debt: 0 },
+  { id: 'teamPlans', tier: 2, categories: ['web'], excludes: ['usagePricing'], synergies: [syn('paywall', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.08 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
   { id: 'integrations', tier: 3, categories: ['web'], synergies: [syn('openApi', 'churn', 0.5)], work: 0.2, cashBase: 4_000, gains: { churn: 0.92, tam: 1.04 }, sizeAdd: 1, debt: 2 },
-  { id: 'adminPanel', tier: 3, categories: ['web'], requires: ['teamPlans'], work: 0.15, cashBase: 4_000, gains: { arpu: 1.06, churn: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
-  { id: 'pwa', tier: 4, categories: ['web'], work: 0.2, cashBase: 7_000, gains: { tam: 1.12 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
-  { id: 'auditLog', tier: 5, categories: ['web'], requires: ['adminPanel'], work: 0.2, cashBase: 15_000, gains: { tam: 1.08, churn: 0.95 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 2 },
-  // Yapay Zekâ (usagePricing is shared with api)
-  { id: 'evals', tier: 1, categories: ['ai'], work: 0.08, cashBase: 700, gains: { churn: 0.95, wave: 1.1 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
-  { id: 'usagePricing', tier: 1, categories: ['ai', 'api'], excludes: ['paywall'], work: 0.08, cashBase: 800, gains: { arpu: 1.12 }, minus: { churn: 1.04 }, sizeAdd: 0, debt: 0 },
+  { id: 'adminPanel', tier: 3, categories: ['web'], work: 0.15, cashBase: 4_000, gains: { arpu: 1.06, churn: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'pwa', tier: 4, categories: ['web'], work: 0.2, cashBase: 6_000, gains: { tam: 1.15 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
+  { id: 'auditLog', tier: 5, categories: ['web'], requires: ['adminPanel'], work: 0.2, cashBase: 12_000, gains: { tam: 1.1, churn: 0.95 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 2 },
+  // Yapay Zekâ (usagePricing is shared with api and web)
+  { id: 'evals', tier: 1, categories: ['ai'], work: 0.08, cashBase: 1_000, gains: { churn: 0.95, wave: 1.1 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
+  { id: 'usagePricing', tier: 1, categories: ['ai', 'api', 'web'], excludes: ['paywall', 'teamPlans'], work: 0.08, cashBase: 800, gains: { arpu: 1.12 }, minus: { churn: 1.04 }, sizeAdd: 0, debt: 0 },
   { id: 'rag', tier: 2, categories: ['ai'], synergies: [syn('evals', 'churn', 0.5)], work: 0.15, cashBase: 1_500, gains: { churn: 0.9 }, upkeep: stageScaled(120), sizeAdd: 1, debt: 0 },
   { id: 'modelRouter', tier: 2, categories: ['ai'], work: 0.12, cashBase: 1_500, gains: { infra: 0.85 }, minus: { churn: 1.02 }, sizeAdd: 0, debt: 0 },
   { id: 'guardrails', tier: 3, categories: ['ai'], synergies: [syn('evals', 'tam', 0.3)], work: 0.15, cashBase: 4_000, gains: { tam: 1.1, churn: 0.97 }, minus: { updateWork: 1.1 }, sizeAdd: 0, debt: 0 },
@@ -121,33 +134,33 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'fineTune', tier: 4, categories: ['ai'], requires: ['evals'], work: 0.3, cashBase: 10_000, gains: { arpu: 1.1, churn: 0.93 }, upkeep: stageScaled(400), sizeAdd: 1, debt: 2 },
   { id: 'agents', tier: 5, categories: ['ai'], requires: ['rag'], work: 0.35, cashBase: 20_000, gains: { arpu: 1.12, organic: 1.08 }, minus: { infra: 1.15 }, sizeAdd: 2, debt: 3 },
   // API
-  { id: 'docs', tier: 1, categories: ['api'], work: 0.06, cashBase: 500, gains: { cac: 0.9, churn: 0.96 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'docs', tier: 1, categories: ['api'], work: 0.06, cashBase: 1_200, gains: { cac: 0.96, churn: 0.97 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
   { id: 'rateLimit', tier: 1, categories: ['api'], work: 0.06, cashBase: 600, gains: { infra: 0.85 }, minus: { churn: 1.03 }, sizeAdd: 0, debt: 0 },
-  { id: 'sdks', tier: 2, categories: ['api'], synergies: [syn('docs', 'organic', 0.5)], work: 0.15, cashBase: 1_500, gains: { organic: 1.12, churn: 0.95 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
+  { id: 'sdks', tier: 2, categories: ['api'], synergies: [syn('docs', 'organic', 0.5)], work: 0.15, cashBase: 1_800, gains: { organic: 1.08, churn: 0.97 }, minus: { updateWork: 1.15 }, sizeAdd: 1, debt: 0 },
   { id: 'webhooks', tier: 2, categories: ['api'], work: 0.1, cashBase: 1_200, gains: { churn: 0.92 }, sizeAdd: 0, debt: 1 },
-  { id: 'sandbox', tier: 2, categories: ['api'], work: 0.1, cashBase: 1_200, gains: { cac: 0.9, organic: 1.05 }, upkeep: stageScaled(80), sizeAdd: 0, debt: 0 },
+  { id: 'sandbox', tier: 2, categories: ['api'], work: 0.1, cashBase: 1_200, gains: { cac: 0.9, organic: 1.05 }, upkeep: stageScaled(50), sizeAdd: 0, debt: 0 },
   { id: 'usageDashboard', tier: 3, categories: ['api'], synergies: [syn('usagePricing', 'churn', 0.5)], work: 0.12, cashBase: 3_000, gains: { churn: 0.94, arpu: 1.03 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
-  { id: 'slaPlans', tier: 3, categories: ['api'], synergies: [syn('multiRegion', 'arpu', 0.3)], work: 0.1, cashBase: 4_000, gains: { arpu: 1.1, tam: 1.05 }, upkeep: stageScaled(200), sizeAdd: 0, debt: 0 },
-  { id: 'multiRegion', tier: 4, categories: ['api'], requires: ['rateLimit'], work: 0.3, cashBase: 10_000, gains: { tam: 1.12, churn: 0.95 }, upkeep: stageScaled(500), sizeAdd: 1, debt: 2 },
+  { id: 'slaPlans', tier: 3, categories: ['api'], synergies: [syn('multiRegion', 'arpu', 0.3)], work: 0.1, cashBase: 4_000, gains: { arpu: 1.06, tam: 1.05 }, upkeep: stageScaled(150), sizeAdd: 0, debt: 0 },
+  { id: 'multiRegion', tier: 4, categories: ['api'], requires: ['rateLimit'], work: 0.3, cashBase: 10_000, gains: { tam: 1.12, churn: 0.95 }, upkeep: stageScaled(300), sizeAdd: 1, debt: 2 },
   // Oyun
-  { id: 'leaderboard', tier: 1, categories: ['game'], synergies: [syn('guilds', 'churn', 0.5)], work: 0.06, cashBase: 500, gains: { churn: 0.94, organic: 1.06 }, minus: { infra: 1.05 }, sizeAdd: 0, debt: 0 },
-  { id: 'dailyRewards', tier: 1, categories: ['game'], synergies: [syn('notifications', 'churn', 0.5)], work: 0.06, cashBase: 600, gains: { churn: 0.9 }, minus: { arpu: 0.97 }, sizeAdd: 0, debt: 0 },
-  { id: 'liveEvents', tier: 2, categories: ['game'], work: 0.1, cashBase: 1_200, gains: { wave: 1.3, churn: 0.96 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
-  { id: 'shop', tier: 2, categories: ['game'], synergies: [syn('battlePass', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.15 }, minus: { organic: 0.94 }, sizeAdd: 0, debt: 0 },
-  { id: 'battlePass', tier: 3, categories: ['game'], requires: ['shop'], work: 0.15, cashBase: 3_500, gains: { arpu: 1.1, churn: 0.95 }, minus: { updateWork: 1.2 }, sizeAdd: 0, debt: 0 },
+  { id: 'leaderboard', tier: 1, categories: ['game'], synergies: [syn('guilds', 'churn', 0.5)], work: 0.06, cashBase: 1_000, gains: { churn: 0.97, organic: 1.05 }, minus: { infra: 1.08 }, sizeAdd: 0, debt: 0 },
+  { id: 'dailyRewards', tier: 1, categories: ['game'], synergies: [syn('notifications', 'churn', 0.5)], work: 0.06, cashBase: 600, gains: { churn: 0.93 }, minus: { arpu: 0.96 }, sizeAdd: 0, debt: 0 },
+  { id: 'liveEvents', tier: 2, categories: ['game'], work: 0.1, cashBase: 1_200, gains: { wave: 1.25, churn: 0.97 }, minus: { updateWork: 1.15 }, sizeAdd: 0, debt: 0 },
+  { id: 'shop', tier: 1, categories: ['game'], excludes: ['paywall'], synergies: [syn('battlePass', 'arpu', 0.3)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.1 }, minus: { organic: 0.94 }, sizeAdd: 0, debt: 0 },
+  { id: 'battlePass', tier: 3, categories: ['game'], requires: ['liveEvents'], work: 0.15, cashBase: 3_500, gains: { arpu: 1.08, churn: 0.96 }, minus: { updateWork: 1.2 }, sizeAdd: 0, debt: 0 },
   { id: 'guilds', tier: 3, categories: ['game'], work: 0.2, cashBase: 4_000, gains: { churn: 0.9, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
   { id: 'ugcEditor', tier: 4, categories: ['game'], work: 0.25, cashBase: 8_000, gains: { organic: 1.1, churn: 0.94 }, sizeAdd: 1, debt: 2 },
   { id: 'crossPlay', tier: 4, categories: ['game'], work: 0.3, cashBase: 9_000, gains: { tam: 1.15 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 3 },
   { id: 'esports', tier: 5, categories: ['game'], requires: ['leaderboard', 'guilds'], work: 0.25, cashBase: 18_000, gains: { organic: 1.12, tam: 1.05 }, upkeep: stageScaled(300), sizeAdd: 0, debt: 0 },
   // Pazar Yeri
-  { id: 'reviews', tier: 1, categories: ['marketplace'], synergies: [syn('search', 'organic', 0.3)], work: 0.08, cashBase: 600, gains: { organic: 1.1, churn: 0.96 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
-  { id: 'payments', tier: 1, categories: ['marketplace'], synergies: [syn('buyerProtection', 'churn', 0.3)], work: 0.1, cashBase: 800, gains: { churn: 0.92, arpu: 1.05 }, upkeep: stageScaled(100), sizeAdd: 0, debt: 0 },
+  { id: 'reviews', tier: 1, categories: ['marketplace'], synergies: [syn('search', 'organic', 0.3)], work: 0.08, cashBase: 800, gains: { organic: 1.06 }, minus: { updateWork: 1.05 }, sizeAdd: 0, debt: 0 },
+  { id: 'payments', tier: 1, categories: ['marketplace'], synergies: [syn('buyerProtection', 'churn', 0.3)], work: 0.1, cashBase: 800, gains: { churn: 0.93, arpu: 1.05 }, upkeep: stageScaled(100), sizeAdd: 0, debt: 0 },
   { id: 'sellerDashboard', tier: 2, categories: ['marketplace'], work: 0.15, cashBase: 1_500, gains: { tam: 1.1, churn: 0.95 }, minus: { updateWork: 1.1 }, sizeAdd: 1, debt: 0 },
-  { id: 'search', tier: 2, categories: ['marketplace'], synergies: [syn('reviews', 'arpu', 0.5)], work: 0.12, cashBase: 1_500, gains: { arpu: 1.06, cac: 0.95 }, minus: { infra: 1.08 }, sizeAdd: 0, debt: 0 },
-  { id: 'promotedListings', tier: 2, categories: ['marketplace'], work: 0.08, cashBase: 1_200, gains: { arpu: 1.12 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
+  { id: 'search', tier: 2, categories: ['marketplace'], synergies: [syn('reviews', 'arpu', 0.5)], work: 0.12, cashBase: 2_000, gains: { arpu: 1.04, cac: 0.95 }, minus: { infra: 1.1 }, sizeAdd: 0, debt: 0 },
+  { id: 'promotedListings', tier: 1, categories: ['marketplace'], excludes: ['paywall'], work: 0.08, cashBase: 1_200, gains: { arpu: 1.08 }, minus: { organic: 0.95 }, sizeAdd: 0, debt: 0 },
   { id: 'buyerProtection', tier: 3, categories: ['marketplace'], requires: ['payments'], work: 0.1, cashBase: 3_000, gains: { churn: 0.9 }, minus: { arpu: 0.97 }, sizeAdd: 0, debt: 0 },
   { id: 'shipping', tier: 3, categories: ['marketplace'], synergies: [syn('sellerDashboard', 'tam', 0.3)], work: 0.2, cashBase: 4_000, gains: { tam: 1.1, churn: 0.95 }, upkeep: stageScaled(150), sizeAdd: 1, debt: 1 },
-  { id: 'recommendations', tier: 4, categories: ['marketplace'], requires: ['search'], work: 0.25, cashBase: 9_000, gains: { arpu: 1.08, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
+  { id: 'recommendations', tier: 4, categories: ['marketplace'], requires: ['search'], work: 0.25, cashBase: 9_000, gains: { arpu: 1.1, organic: 1.05 }, minus: { infra: 1.1 }, sizeAdd: 1, debt: 0 },
   { id: 'cityLaunch', tier: 5, categories: ['marketplace'], synergies: [syn('localization', 'tam', 0.3)], work: 0.2, cashBase: 15_000, gains: { tam: 1.15 }, minus: { cac: 1.06 }, sizeAdd: 0, debt: 0 },
 ]
 
@@ -389,13 +402,14 @@ export function snapProjects(s: GameState): void {
 }
 
 /**
- * Paid users a month under `focus`: today's paid channel at the CAC the focus's module mix gives (the ad weights move
- * it; the warm-up is left out on both sides).
+ * Paid users a month under `focus`: today's paid channel at the CAC the focus's ad weights give, module mix × category
+ * factor per product as derive.ts weighs them (B1: web's cheaper ads move the chip too); the warm-up is left out on
+ * both sides.
  */
 export function focusPaidTotal(s: GameState, focus: ProjectId | null): number {
   const day = s.time.day
   const paid = s.derived.channels.paid
-  const cacMix = (ws: { p: Project; w: number }[]) => wMean(ws, (p) => moduleMult(p, 'cac', day))
+  const cacMix = (ws: { p: Project; w: number }[]) => wMean(ws, (p) => moduleMult(p, 'cac', day)) * wMean(ws, (p) => B.CATEGORY_CAC[p.category] ?? 1)
   const cur = cacMix(adWeights(s))
   const next = cacMix(adWeights(s, focus))
   return next > 0 ? (paid * cur) / next : paid
@@ -494,16 +508,31 @@ export function projectMix(s: GameState, mrr = s.finance.mrr, ws = projectWeight
 
 // MV2a version cycle ----------------------------------------------------------------------------------------------
 
+/** Slots a project has in all at version v (MODULE_SLOTS_AT, flat past its last entry; 0 before v1). */
+export function slotsAt(v: number): number {
+  const at = B.MODULE_SLOTS_AT
+  return at[Math.max(0, Math.min(at.length - 1, Math.floor(v)))]!
+}
+
+/** Slots version v opens on its release (3 at v1 and v2, then fewer; 0 past the cap). */
+export function slotsOpened(v: number): number {
+  return Math.max(0, slotsAt(v) - slotsAt(v - 1))
+}
+
 /**
  * The project's version: 0 before its first 1.0, then 1, 2 … (checkReleases writes p.version). An old save at 1.0
- * without the field reads as max(1, ceil((modules + a running new build) / MODULE_SLOTS_PER_VERSION)), so its modules
- * and the build it was allowed under the old stage table (3 installed + a 4th at stage 5–6) always fit.
+ * without the field reads as the smallest v whose slots hold its modules and a running new build (at least 1, at
+ * most the slot cap's version), so what it was allowed under the old stage table always fits. B2: a save that
+ * installed more than the cap keeps them all; only a new build meets noFreeSlot.
  */
 export function projectVersion(p: Project): number {
   if (p.version !== undefined) return p.version
   if (!p.launched || p.maturity < 1) return 0
   const used = (p.modules?.length ?? 0) + (p.build && !p.build.refresh ? 1 : 0)
-  return Math.max(1, Math.ceil(used / B.MODULE_SLOTS_PER_VERSION))
+  const last = B.MODULE_SLOTS_AT.length - 1
+  let v = 1
+  while (v < last && slotsAt(v) < used) v++
+  return v
 }
 
 /** Updates the line after version v needs: min(VERSION_UPDATES_MAX, VERSION_UPDATES_BASE^v) (v1 → v2: 2). */
@@ -526,10 +555,13 @@ export function displayMaturity(s: GameState, p: Project): number {
   return B.VERSION_FLOOR + (1 - B.VERSION_FLOOR) * versionProgress(s, p)
 }
 
-/** Slots on a project: used (installed + a new build) of total (MODULE_SLOTS_PER_VERSION × version). */
+/**
+ * Slots on a project: used (installed + a new build) of total (slotsAt(version)). An old save above the cap shows
+ * used = total (the extra modules stay installed, no new one fits).
+ */
 export function projectSlots(_s: GameState, p: Project): { used: number; total: number } {
-  const total = B.MODULE_SLOTS_PER_VERSION * projectVersion(p)
-  const used = (p.modules?.length ?? 0) + (p.build && !p.build.refresh ? 1 : 0)
+  const total = slotsAt(projectVersion(p))
+  const used = Math.min(total, (p.modules?.length ?? 0) + (p.build && !p.build.refresh ? 1 : 0))
   return { used, total }
 }
 

@@ -13,6 +13,7 @@ import { ReflectionBubble } from './ReflectionBubble'
 import { PersonBubble } from './PersonBubble'
 import { StaffBubble } from './StaffBubble'
 import { renderWorldBubble } from './worldBubble'
+import { routeCandidates } from '../../render/WorldBubbles'
 import { company } from '../../engine/__tests__/moduleFixtures'
 import { moduleAsk } from '../../engine/modules'
 import { MODULE_TEXT, moduleName } from '../../content'
@@ -274,7 +275,13 @@ describe('module question at the desk (W2c)', () => {
     expect(pill).not.toContain('Diğerleri')
     openBubble(key)
     const out = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
-    expect(out).toContain(MODULE_TEXT[ask.moduleId].line)
+    // The markup escapes an apostrophe ("Google'dan").
+    expect(out).toContain(MODULE_TEXT[ask.moduleId].line.replace(/'/g, '&#x27;'))
+    // C1: the open header carries the whole question and wraps instead of cutting it with an ellipsis.
+    const header = out.match(/<span data-speaker-text="" class="([^"]*)">([\s\S]*?)<\/span><\/span>/)
+    expect(header).not.toBeNull()
+    expect(header![1]).not.toMatch(/truncate|line-clamp|nowrap/)
+    expect(header![2]).toContain(`${st.projects[0]!.name} için sıradaki modül: ${name}?`)
     expect(out).toContain('>Ekle<')
     expect(out).toContain('Diğerleri')
     // gain + (minus or upkeep) + cost: three chips at most, one move on the button.
@@ -334,6 +341,15 @@ describe('effort bubbles (E3)', () => {
     for (const label of ['Yavaşlat', 'İzin ver', 'Devam']) expect(out).toContain(label)
     expect(out).toContain('−%15')
     expect(out).toContain('−%20')
+  })
+
+  it('tired: "Yavaşlat" closes the card and the pill does not come back (F2)', () => {
+    const { id } = withTired(70)
+    expect(routeCandidates(store().state, { bubbleOpen: null }).some((l) => l.key === `staff:${id}`)).toBe(true)
+    openBubble(`staff:${id}`)
+    expect(store().dispatch({ type: 'setPace', employeeId: id, pace: 'calm' }).ok).toBe(true)
+    expect(store().ui.bubbleOpen).toBeNull()
+    expect(routeCandidates(store().state, { bubbleOpen: null }).some((l) => l.key === `staff:${id}`)).toBe(false)
   })
 
   it('burnout: leave is the main move, then slow down and let go', () => {

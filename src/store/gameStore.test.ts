@@ -22,12 +22,14 @@ import { CODEX_KEY, readCodex, readUiSave, UI_KEY, writeCodex } from './save'
 import {
   achievementsBadge,
   blockingOverlay,
+  CARD_EVENT_KINDS,
   codexAfter,
   codexCount,
   effectiveSpeed,
   hasImportantMoment,
   hasInterrupt,
   IMPORTANT_EVENT_KINDS,
+  isUrgentCard,
   offerWaiting,
   panelSelection,
   pauseReasonsOf,
@@ -39,6 +41,20 @@ import {
 import type { Overlay } from './types'
 
 const store = () => useGameStore.getState()
+
+/** At 4×, a project past the MVP threshold: its release (a moment, not a card) slows the run to 1×. */
+function slowByRelease(): void {
+  store().dispatch({ type: 'startProject', category: 'web' })
+  store().dispatch({ type: 'setSpeed', speed: 4 })
+  useGameStore.setState((st) => ({ state: { ...st.state, projects: st.state.projects.map((p) => ({ ...p, maturity: 0.25, releaseLevel: 0 })) } }))
+  for (let i = 0; i < 40 && store().state.time.speed === 4; i++) store().tick(SECONDS_PER_DAY / 8)
+}
+
+/** Ticks at 4× until the engine shows its next decision card (the bubble arrives collapsed). */
+function untilCard(): NonNullable<GameState['decisions']['active']> {
+  for (let i = 0; i < 4000 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+  return store().state.decisions.active!
+}
 
 /** Plays `seconds` of real time at the current speed in 60 fps frames; the "player" opens concepts from the badge. */
 function play(seconds: number, onDay?: (day: number) => void) {
@@ -456,10 +472,8 @@ describe('focus (CORE_LOOP phase 0)', () => {
   })
 
   it('the 4× restore waits while a bubble is open', () => {
-    store().dispatch({ type: 'setSpeed', speed: 4 })
-    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
-    const card = store().state.decisions.active!
-    store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 })
+    slowByRelease()
+    expect(store().state.time.speed).toBe(1)
     store().setBubbleOpen('staff:y')
     for (let i = 0; i < 200; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.speed).toBe(1)
@@ -532,10 +546,8 @@ describe('focus (CORE_LOOP phase 0)', () => {
   })
 
   it('at 4× an important moment slows the run to 1× (not a pause); 2× is left alone', () => {
-    store().dispatch({ type: 'setSpeed', speed: 4 })
-    // Run until the engine shows a decision card (an important moment).
-    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
-    expect(store().state.decisions.active).toBeDefined()
+    slowByRelease()
+    expect(store().state.events.some((e) => e.kind === 'release')).toBe(true)
     expect(store().state.time.speed).toBe(1)
     expect(effectiveSpeed(store())).toBe(1)
     expect(store().ui.slowdownAt).not.toBeNull()
@@ -543,30 +555,27 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(sets.at(-1)?.action).toEqual({ type: 'setSpeed', speed: 1 })
     expect(store().ui.slowdownResumeDay).not.toBeNull()
 
-    // The moment dealt with (card answered), SLOWDOWN_WINDOW_DAYS later 4× is back, through the replay too.
-    const card = store().state.decisions.active!
-    expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
-    const answeredDay = store().state.time.day
+    // SLOWDOWN_WINDOW_DAYS later 4× is back, through the replay too.
+    const slowDay = store().state.time.day
     for (let i = 0; i < 200 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.speed).toBe(4)
-    expect(store().state.time.day).toBeGreaterThanOrEqual(answeredDay + SLOWDOWN_WINDOW_DAYS - 1e-9)
+    expect(store().state.time.day).toBeGreaterThanOrEqual(slowDay + SLOWDOWN_WINDOW_DAYS - 1)
     expect(store().ui.slowdownResumeDay).toBeNull()
     expect(store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed').at(-1)?.action).toEqual({ type: 'setSpeed', speed: 4 })
 
     // Same moment at 2×: no change.
     store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
+    store().dispatch({ type: 'startProject', category: 'web' })
     store().dispatch({ type: 'setSpeed', speed: 2 })
-    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
-    expect(store().state.decisions.active).toBeDefined()
+    useGameStore.setState((st) => ({ state: { ...st.state, projects: st.state.projects.map((p) => ({ ...p, maturity: 0.25, releaseLevel: 0 })) } }))
+    for (let i = 0; i < 40; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.events.some((e) => e.kind === 'release')).toBe(true)
     expect(store().state.time.speed).toBe(2)
   })
 
   it('a speed the player picks during the slowdown window wins: no 4× restore', () => {
-    store().dispatch({ type: 'setSpeed', speed: 4 })
-    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
+    slowByRelease()
     expect(store().state.time.speed).toBe(1)
-    const card = store().state.decisions.active!
-    store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 })
     store().dispatch({ type: 'setSpeed', speed: 2 })
     expect(store().ui.slowdownResumeDay).toBeNull()
     const day = store().state.time.day
@@ -576,11 +585,81 @@ describe('focus (CORE_LOOP phase 0)', () => {
 
   it('the slowdown can be turned off', () => {
     store().setSlowOnMoments(false)
-    store().dispatch({ type: 'setSpeed', speed: 4 })
-    for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
-    expect(store().state.decisions.active).toBeDefined()
+    slowByRelease()
+    expect(store().state.events.some((e) => e.kind === 'release')).toBe(true)
     expect(store().state.time.speed).toBe(4)
     store().setSlowOnMoments(true)
+  })
+
+  it('F1: a decision card never drops 4×; open it pauses, answered the chosen 4× runs on at once', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    const card = untilCard()
+    // Arrived collapsed: the world keeps the player's 4×, no auto setSpeed in the replay.
+    expect(store().state.time.speed).toBe(4)
+    expect(effectiveSpeed(store())).toBe(4)
+    expect(store().ui.slowdownResumeDay).toBeNull()
+    expect(store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed').map((a) => a.action)).toEqual([{ type: 'setSpeed', speed: 4 }])
+    // Expanded: a focus pause, the chosen speed untouched.
+    store().setDecisionExpanded(true)
+    expect(store().ui.pauseReasons).toEqual(['decision'])
+    expect(effectiveSpeed(store())).toBe(0)
+    expect(store().state.time.speed).toBe(4)
+    // Answered: 4× right away, a tick moves the world at 4×.
+    expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
+    expect(store().ui.pauseReasons).toEqual([])
+    expect(effectiveSpeed(store())).toBe(4)
+    const day = store().state.time.day
+    store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.day - day).toBeCloseTo(0.5, 5)
+    expect(store().state.time.speed).toBe(4)
+  })
+
+  it('F1: the phone path (scene bubble open, answered) and several cards in a row keep 4×', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    for (let n = 0; n < 3; n++) {
+      const card = untilCard()
+      expect(card, `card ${n}`).toBeDefined()
+      expect(store().state.time.speed).toBe(4)
+      store().setBubbleOpen(`decision:${card.cardId}`)
+      expect(effectiveSpeed(store())).toBe(0)
+      expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
+      expect(store().ui.bubbleOpen).toBeNull()
+      expect(effectiveSpeed(store())).toBe(4)
+    }
+    expect(store().exportReplay().actions.some((a) => a.action.type === 'setSpeed' && a.action.speed === 1)).toBe(false)
+  })
+
+  it('F1: a collapsed card does not hold a release slowdown at 1×', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    const card = untilCard()
+    slowByRelease()
+    expect(store().state.time.speed).toBe(1)
+    const slowDay = store().state.time.day
+    for (let i = 0; i < 200 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    // Still unanswered, still collapsed: 4× came back on schedule.
+    expect(store().state.decisions.active?.cardId).toBe(card.cardId)
+    expect(store().state.time.speed).toBe(4)
+    expect(store().state.time.day).toBeLessThan(slowDay + SLOWDOWN_WINDOW_DAYS + 1)
+  })
+
+  it('F1 review: an urgent card (landlord notice, 7 g default) slows 4× and holds 1× until it is answered', () => {
+    expect(isUrgentCard('landlord-notice')).toBe(true)
+    expect(isUrgentCard('remote-vs-office')).toBe(false)
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    useGameStore.setState((st) => ({ state: { ...st.state, decisions: { ...st.state.decisions, active: undefined, queue: ['landlord-notice'] } } }))
+    for (let i = 0; i < 400 && store().state.decisions.active?.cardId !== 'landlord-notice'; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.decisions.active?.cardId).toBe('landlord-notice')
+    // Arrived collapsed: 1×, so its 7-day default takes ~14 s, not ~3.5 s.
+    expect(store().state.time.speed).toBe(1)
+    const shown = store().state.time.day
+    for (let i = 0; i < 8 * (SLOWDOWN_WINDOW_DAYS + 1); i++) store().tick(SECONDS_PER_DAY / 8)
+    // Still unanswered: still 1×, the restore waits on it.
+    expect(store().state.decisions.active?.cardId).toBe('landlord-notice')
+    expect(store().state.time.day).toBeGreaterThan(shown + SLOWDOWN_WINDOW_DAYS)
+    expect(store().state.time.speed).toBe(1)
+    expect(store().dispatch({ type: 'answerDecision', cardId: 'landlord-notice', optionIndex: 0 }).ok).toBe(true)
+    for (let i = 0; i < 400 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(4)
   })
 })
 
@@ -603,7 +682,7 @@ describe('core loop phase 1 (store side)', () => {
     expect(hasImportantMoment(s, withEvent(s, 'payrollMissed', 1))).toBe(true)
   })
 
-  it('at 4× a tight payday slows the run to 1×', () => {
+  it('at 4× a payday that crosses below 3 months of runway slows the run to 1×', () => {
     store().newGame({ seed: 7, founderXp: 0, runIndex: 0 })
     store().setSlowOnMoments(true)
     // Almost no cash, half a day before payday: day 30 leaves well under 3 months of runway.
@@ -738,11 +817,14 @@ describe('review fixes (store side)', () => {
     expect(hasImportantMoment(s, receipt(8, 6))).toBe(false)
   })
 
-  it('4× slows for every decision card (not only the stage\'s first), and for versions but not updates after 1.0', () => {
+  it('decision cards never slow 4× (F1); versions do, updates after 1.0 do not', () => {
     const s = store().state
     const card = (history: GameState['decisions']['history']): GameState => ({ ...s, decisions: { ...s.decisions, history }, events: [...s.events, ev(s, 'decisionShown', { refId: 'x' })] })
-    expect(hasImportantMoment(s, card([]))).toBe(true)
-    expect(hasImportantMoment(s, card([{ cardId: 'early-sidegig', optionIndex: 0, day: s.time.day }]))).toBe(true)
+    expect(hasImportantMoment(s, card([]))).toBe(false)
+    // An urgent card (its default lands in days) is the exception (F1 review).
+    expect(hasImportantMoment(s, { ...s, events: [...s.events, ev(s, 'decisionShown', { refId: 'emergency-loan' })] })).toBe(isUrgentCard('emergency-loan'))
+    expect(isUrgentCard('emergency-loan')).toBe(true)
+    expect(hasImportantMoment(s, card([{ cardId: 'early-sidegig', optionIndex: 0, day: s.time.day }]))).toBe(false)
     const rel = (update?: number): GameState => ({
       ...s,
       releases: [{ id: 'rel-x', day: 0, projectId: 'p', projectName: 'P', level: 5, users: 1, mrr: 0, ...(update !== undefined ? { update } : {}) }],
@@ -1005,13 +1087,13 @@ describe('center screens (docs/GAMEPLAY_V2.md §14.3)', () => {
     expect(store().ui.overlay).toBeNull()
   })
 
-  it('stats open + decisionShown: the screen closes, 4× drops to 1×, the tick goes on', () => {
+  it('stats open + decisionShown: the screen closes, 4× stays (F1), the tick goes on', () => {
     store().dispatch({ type: 'setSpeed', speed: 4 })
     store().openOverlay({ kind: 'stats' })
     for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.decisions.active).toBeDefined()
     expect(store().ui.overlay).toBeNull()
-    expect(store().state.time.speed).toBe(1)
+    expect(store().state.time.speed).toBe(4)
     const day = store().state.time.day
     store().tick(SECONDS_PER_DAY)
     expect(store().state.time.day).toBeGreaterThan(day)
@@ -1021,13 +1103,14 @@ describe('center screens (docs/GAMEPLAY_V2.md §14.3)', () => {
     const s = store().state
     for (const k of ['decisionShown', 'roundWindow', 'payrollMissed', 'paydayShort', 'crisis', 'roundFailed', 'loanCalled']) {
       expect(hasInterrupt(s, withEvent(k)), k).toBe(true)
-      expect(hasImportantMoment(s, withEvent(k)), k).toBe(true)
+      // Cards close a center screen but never slow 4× (F1): an open card pauses on its own.
+      expect(hasImportantMoment(s, withEvent(k)), k).toBe(!CARD_EVENT_KINDS.has(k as GameEvent['kind']))
     }
     for (const k of ['hired', 'release', 'payday', 'goalDone', 'conceptQueued']) expect(hasInterrupt(s, withEvent(k)), k).toBe(false)
     // A crisis showing what it is slows 4× down but does not close the screen.
     expect(hasImportantMoment(s, withEvent('crisisRevealed'))).toBe(true)
     expect(hasInterrupt(s, withEvent('crisisRevealed'))).toBe(false)
-    expect(IMPORTANT_EVENT_KINDS.has('paydayShort')).toBe(true)
+    expect(IMPORTANT_EVENT_KINDS.has('paydayShort')).toBe(false)
   })
 })
 

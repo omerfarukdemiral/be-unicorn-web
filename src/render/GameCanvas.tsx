@@ -6,6 +6,8 @@ import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 import { useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react'
 import { NeutralToneMapping } from 'three'
+import { noteExit } from '../store/session'
+import { GL_LOSSES_TO_LOW_POWER, watchContextLoss } from './contextLoss'
 import type { GameState } from '../engine/types'
 import type { ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
@@ -21,6 +23,8 @@ export interface GameCanvasProps {
   className?: string
   /** Show ambient office lines above characters (ui pref "Ofis sohbetlerini göster"). */
   ambientBubbles?: boolean
+  /** WebGL context lost (F5): App writes the save while a run is on screen (never the title screen's placeholder). */
+  onContextLost?: () => void
 }
 
 function stepZoom(delta: 1 | -1): void {
@@ -75,7 +79,10 @@ function useZoomGestures() {
 /** Dev only: ?power=full never drops to lowPower (a software-GL screenshot run would otherwise always decline). */
 const FORCE_FULL_POWER = import.meta.env.DEV && new URLSearchParams(location.search).get('power') === 'full'
 
-export function GameCanvas({ renderBubble, mockState, className, ambientBubbles = true }: GameCanvasProps = {}) {
+export function GameCanvas({ renderBubble, mockState, className, ambientBubbles = true, onContextLost }: GameCanvasProps = {}) {
+  // onCreated runs once: read the latest callback through a ref.
+  const lostRef = useRef(onContextLost)
+  lostRef.current = onContextLost
   const [lowPower, setLowPower] = useState(() => !FORCE_FULL_POWER && detectLowPower())
   const gestures = useZoomGestures()
   // Canvas-level settings do not depend on the stage (only the street traffic does, read in the scene).
@@ -109,6 +116,15 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
         // ground rendered khaki, pastel walls grey). Neutral keeps hue and saturation of the palette.ts colours.
         onCreated={(state) => {
           state.gl.toneMapping = NeutralToneMapping
+          watchContextLoss(state.gl.domElement, {
+            onLost: (n) => {
+              console.warn('[render] WebGL context lost', n)
+              noteExit({ glLost: n })
+              lostRef.current?.()
+              if (n >= GL_LOSSES_TO_LOW_POWER && !FORCE_FULL_POWER) setLowPower(true)
+            },
+            onRestored: () => state.invalidate(),
+          })
           // Dev only: perf probes (draw calls, mesh counts) read the renderer and scene from here.
           if (import.meta.env.DEV) (window as unknown as { __r3f?: unknown }).__r3f = state
         }}

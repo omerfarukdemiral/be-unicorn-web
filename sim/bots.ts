@@ -17,6 +17,8 @@ import {
   hasOpenWork,
   onLeave,
   previewSpend,
+  freeCash,
+  heldWages,
   serialize,
   typeCaps,
   typeUse,
@@ -555,8 +557,16 @@ function fixedBurn(s: GameState): number {
   return Math.max(0, s.finance.burn - s.finance.adBudget)
 }
 
+/**
+ * Cash a one-off spend can use: the bank less what the next payday already owes (the month accrued so far, a desk
+ * still open, deferrals) and wages held by a policy. A purchase one tick before payday must not eat payroll.
+ */
+function spendable(s: GameState): number {
+  return freeCash(s) - heldWages(s)
+}
+
 function affordable(s: GameState, reserve: number, price: number): boolean {
-  return s.stats.cash > reserve + price
+  return spendable(s) > reserve + price
 }
 
 /** Desks, desk upgrades, common-area auras and rooms. */
@@ -658,7 +668,7 @@ function hiring(c: Ctx, cfg: BotConfig): void {
   if (freeDesks(c.s) === 0) {
     const ring = nextLockedRing(c.s.office)
     const cost = c.s.office.rings.find((r) => r.index === ring)?.openCost ?? Infinity
-    if (ring !== null && c.s.stats.cash > cost * 2 + reserve) act({ type: 'openRing', ring })
+    if (ring !== null && spendable(c.s) > cost * 2 + reserve) act({ type: 'openRing', ring })
     if (freeDesks(c.s) === 0) return
   }
   // A hire needs a desk item on a free slot (PLAN §4.2).
@@ -1106,10 +1116,12 @@ function moduleUpkeepOf(s: GameState, id: ProjectModuleId): number {
  * keeps the same months of a quarter of its gross burn (a profit can turn into a loss with the next storm).
  */
 const CUSHION_BURN_SHARE = 0.25
-function affordsWithRunway(s: GameState, cost: number, upkeep: number, months: number): boolean {
+export function affordsWithRunway(s: GameState, cost: number, upkeep: number, months: number): boolean {
   const after = previewSpend(s, { cashDelta: -cost, burnDelta: upkeep })
+  if (after.paydayShort) return false
   if (after.runwayAfter !== null) return after.runwayAfter >= months
-  return s.stats.cash - cost >= months * CUSHION_BURN_SHARE * (s.finance.burn + upkeep)
+  // Profitable: the cushion is counted on the cash payday leaves (the month already owed is not the bot's to spend).
+  return spendable(s) - cost >= months * CUSHION_BURN_SHARE * (s.finance.burn + upkeep)
 }
 
 /**

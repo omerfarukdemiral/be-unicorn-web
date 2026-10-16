@@ -319,6 +319,11 @@ function deathDayOf(c: CashCore): number | null {
   return c.first + B.PAYDAY_EVERY_DAYS * (Math.floor(a / -c.net) + 1)
 }
 
+/** Cash an item upgrade takes: the new price less the old piece's refund (upgradeItem pays exactly this). */
+export function upgradeCost(cur: { price: number }, next: { price: number }): number {
+  return Math.max(0, next.price - cur.price * B.SELL_REFUND)
+}
+
 /**
  * What a commit button would do to the money (§4.4): `cashDelta` is paid now (a purchase: negative), `burnDelta` is
  * added to the monthly burn (a hire: its salary). Death day at payday granularity.

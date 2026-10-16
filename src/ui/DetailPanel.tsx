@@ -15,7 +15,9 @@ import { Icon, type IconName } from './icons'
 import { castName } from './bubbles/speaker'
 import { t } from './i18n'
 import { fixed, money, pct } from './format'
-import { Bar, Button, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './primitives'
+import { Bar, Button, CostPreview, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './primitives'
+import { useSpendPreview } from './widgets'
+import { upgradeCost } from '../engine/loopSelectors'
 import { moraleTone } from './theme'
 import { useIsMobile, useTwoStep } from './hooks'
 import { effectTags } from './panels/ShopPanel'
@@ -186,6 +188,12 @@ export function DetailBody({ selection }: { selection: Selection }) {
 // Slot
 // ---------------------------------------------------------------------------
 
+/** A slot spend's money line: the same CostPreview (red when the next payday comes up short) Shop and Market show. */
+function PaydayPreview({ cash, burn, className }: { cash: number; burn: number; className?: string }) {
+  const preview = useSpendPreview(cash, burn)
+  return <CostPreview preview={preview} className={cx('self-start justify-self-start', className)} />
+}
+
 function SlotDetail({ id }: { id: string }) {
   const { slots, rings, employees, cash } = useGameStore(
     useShallow((s) => ({ slots: s.state.office.slots, rings: s.state.office.rings, employees: s.state.employees, cash: s.state.stats.cash })),
@@ -219,6 +227,7 @@ function SlotDetail({ id }: { id: string }) {
         <Button tone="primary" icon="plus" disabled={!inOrder || cash < ring.openCost} onClick={() => dispatch({ type: 'openRing', ring: ring.index })}>
           {`${t('shop.ringCost', { cost: money(ring.openCost) })} · ${t('shop.ringRent', { v: money(ring.rentPerMonth) })}`}
         </Button>
+        {inOrder && <PaydayPreview cash={-ring.openCost} burn={ring.rentPerMonth} />}
       </div>
     )
   }
@@ -269,10 +278,13 @@ function SlotDetail({ id }: { id: string }) {
 
       {item && !isFounder && (
         <section className="grid grid-cols-2 gap-2">
-          {upgrade && (
-            <Button className="col-span-2" tone="primary" icon="arrowUp" disabled={cash < upgrade.price} onClick={() => dispatch({ type: 'upgradeItem', slotId: slot.id, toItemId: upgrade.id })}>
-              {t('detail.upgrade', { item: upgrade.name, v: money(upgrade.price) })}
-            </Button>
+          {upgrade && item && (
+            <>
+              <Button className="col-span-2" tone="primary" icon="arrowUp" disabled={cash < upgradeCost(item, upgrade)} onClick={() => dispatch({ type: 'upgradeItem', slotId: slot.id, toItemId: upgrade.id })}>
+                {t('detail.upgrade', { item: upgrade.name, v: money(upgradeCost(item, upgrade)) })}
+              </Button>
+              <PaydayPreview cash={-upgradeCost(item, upgrade)} burn={(upgrade.upkeep ?? 0) - (item.upkeep ?? 0)} className="col-span-2" />
+            </>
           )}
           <Button
             icon="move"

@@ -12,7 +12,8 @@ import { ChipRow, type Chip } from '../EffectChips'
 import { pct } from '../format'
 import { t } from '../i18n'
 import { Icon, type IconName } from '../icons'
-import { Button, cx, Ring, SectionTitle } from '../primitives'
+import { Button, CostPreview, cx, Ring, SectionTitle } from '../primitives'
+import { useSpendPreview } from '../widgets'
 import { CATEGORY_COLOR } from './ProjectsPanel'
 import { buildChips, costChip, founderBuildCost, headlineChip, lockedChips, measuredLine, versionLine, type MeasuredLine } from './moduleView'
 
@@ -204,8 +205,14 @@ function StrengthBar({ v }: { v: number }) {
   )
 }
 
-/** The row shell: icon tile, name + one sentence, chips and the commit button under them. */
-function Row({ id, category, name, line, chips, action, reason, locked, measured }: { id: ProjectModuleId; category: Project['category']; name: string; line: string; chips: readonly Chip[]; action?: ReactNode; reason?: string | null; locked?: boolean; measured?: MeasuredLine | null }) {
+/** The build's cash against the next payday: the same red line Shop, Market and hires show (warning only, Ekle still works). */
+export function ModuleCostPreview({ cost, className }: { cost: number; className?: string }) {
+  const preview = useSpendPreview(-cost, 0)
+  return <CostPreview preview={preview} className={className} />
+}
+
+/** The row shell: icon tile, name + one sentence, chips and the commit button under them; `cost` adds the payday preview. */
+function Row({ id, category, name, line, chips, action, reason, locked, measured, cost }: { id: ProjectModuleId; category: Project['category']; name: string; line: string; chips: readonly Chip[]; action?: ReactNode; reason?: string | null; locked?: boolean; measured?: MeasuredLine | null; cost?: number }) {
   return (
     <li className={cx('flex flex-col gap-2 rounded-control border border-border p-2.5', locked && 'bg-surface-2/40 opacity-70')}>
       <div className="flex items-start gap-2.5">
@@ -219,6 +226,7 @@ function Row({ id, category, name, line, chips, action, reason, locked, measured
         {action}
       </div>
       <ChipRow chips={chips} />
+      {cost !== undefined && <ModuleCostPreview cost={cost} className="self-start" />}
       {measured && (
         <span data-measured="" className={cx('font-text flex items-center gap-1 text-[12px] font-semibold', measured.good === true ? 'text-positive-ink' : measured.good === false ? 'text-negative-ink' : 'text-ink-2')}>
           <Icon name="trend" size={12} />
@@ -321,6 +329,7 @@ function OfferRow({ project: p, offer, onDone }: { project: Project; offer: Modu
       line={MODULE_TEXT[offer.id].line}
       chips={chips}
       locked={locked}
+      cost={locked ? undefined : offer.cost}
       reason={locked ? null : reasonOf(offer.error)}
       action={locked ? undefined : <BuildButton id={offer.id} project={p} offer={offer} onDone={onDone} />}
     />
@@ -355,7 +364,7 @@ function BuildRow({ project: p }: { project: Project }) {
 }
 
 /** An installed module: what it does; once it slips, the Yenile row with the cost, the days and the strength it returns to. */
-function InstalledRow({ project: p, id, onDone }: { project: Project; id: ProjectModuleId; onDone: () => void }) {
+export function InstalledRow({ project: p, id, onDone }: { project: Project; id: ProjectModuleId; onDone: () => void }) {
   const st = useGameStore((s) => s.state)
   const m = p.modules?.find((x) => x.id === id)
   const offer = moduleOffers(st, p).find((o) => o.id === id && o.refresh)
@@ -381,6 +390,7 @@ function InstalledRow({ project: p, id, onDone }: { project: Project; id: Projec
         line={MODULE_TEXT[id].line}
         chips={chips}
         reason={strength < 1 ? reasonOf(offer.error) : null}
+        cost={strength < 1 ? offer.cost : undefined}
         measured={measured}
         action={strength < 1 ? <BuildButton id={id} project={p} refresh offer={offer} onDone={onDone} /> : undefined}
       />

@@ -16,7 +16,7 @@ import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, modul
 import { checkName, nameKey } from './names'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
-import { idleBuilders } from './loopSelectors'
+import { idleBuilders, upgradeCost } from './loopSelectors'
 import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
@@ -439,7 +439,7 @@ const upgradeItem: Handler<'upgradeItem'> = ({ s, content }, a) => {
   if (!cur || !next) return 'notFound'
   if (cur.upgradesTo !== next.id || cur.size !== next.size || cur.slotType !== next.slotType) return 'invalid'
   if (next.stageUnlock > s.stage) return 'notUnlocked'
-  const cost = Math.max(0, next.price - cur.price * B.SELL_REFUND)
+  const cost = upgradeCost(cur, next)
   if (s.stats.cash < cost) return 'insufficientCash'
   s.stats.cash -= cost
   for (const x of s.office.slots) if (x.id === anchor.id || x.spanOf === anchor.id) x.itemId = next.id

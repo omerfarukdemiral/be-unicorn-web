@@ -23,7 +23,7 @@ import { stageText, t } from '../i18n'
 import { useTwoStep } from '../hooks'
 import { requestOverlay } from '../modalQueue'
 import { PAYDAY_LINES, paydayView, type PaydayDesk } from '../overlays/paydayView'
-import { buildChips, MODULE_ICON, useBuildCost } from '../panels/ModulesSection'
+import { buildChips, MODULE_ICON, ModuleCostPreview, useBuildCost } from '../panels/ModulesSection'
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
 import { cx, IconBadge } from '../primitives'
 import { candidateFit, fitChips } from '../effort'
@@ -391,6 +391,7 @@ function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string 
           </span>
         </span>
         <ChipRow chips={chips} />
+        <ModuleCostPreview cost={offer.cost} className="self-start" />
       </div>
       <ChoiceRow
         primary

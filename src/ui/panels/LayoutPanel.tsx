@@ -19,7 +19,8 @@ import { stageName } from '../theme'
 import { Icon } from '../icons'
 import { t } from '../i18n'
 import { useCanEditLayout } from '../layoutEditGate'
-import { Button, Chip, cx } from '../primitives'
+import { Button, Chip, CostPreview, cx } from '../primitives'
+import { useSpendPreview } from '../widgets'
 import { DEPT_COLOR, soft } from '../theme'
 import { Avatar } from './TeamPanel'
 
@@ -459,8 +460,8 @@ function Missing() {
   )
 }
 
-/** Footer counts and the spend: "Parça 9/20", and what Bitti will cost (red when the cash cannot cover it). */
-function SpendLine() {
+/** Footer counts and the spend: "Parça 9/20", and what Bitti will cost (red when the cash or the next payday cannot cover it). */
+export function SpendLine() {
   const { spend, cash, pieces, cap } = useGameStore(
     useShallow((s) => {
       const e = s.ui.layoutEdit
@@ -470,6 +471,10 @@ function SpendLine() {
     }),
   )
   const full = pieces >= cap
+  // Against the next payday, not the raw cash (the owed month stays): the same red line the Shop shows; Bitti still works.
+  const preview = useSpendPreview(-spend, 0)
+  const short = spend > cash
+  const red = short || preview.paydayShort
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between text-[13px] font-semibold">
@@ -479,8 +484,11 @@ function SpendLine() {
         </span>
       </div>
       {spend > 0 && (
-        <div data-layout-spend="" className={cx('tabular font-text text-[13px] font-semibold', spend > cash ? 'text-negative-ink' : 'text-ink')}>
-          {spend > cash ? t('layout.spendShort', { v: money(spend) }) : t('layout.spend', { v: money(spend) })}
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <span data-layout-spend="" data-danger={red ? '' : undefined} className={cx('tabular font-text text-[13px] font-semibold', red ? 'text-negative-ink' : 'text-ink')}>
+            {short ? t('layout.spendShort', { v: money(spend) }) : t('layout.spend', { v: money(spend) })}
+          </span>
+          <CostPreview preview={preview} />
         </div>
       )}
     </div>

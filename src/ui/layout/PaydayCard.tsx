@@ -8,7 +8,7 @@ import { useGameStore } from '../../store/gameStore'
 import { money } from '../format'
 import { Icon } from '../icons'
 import { t } from '../i18n'
-import { useMomentSource } from '../Moments'
+import { heldText, useMomentSource } from '../Moments'
 import { soft, WIDGET_COLOR } from '../theme'
 import { ledgerMoney } from '../widgets'
 
@@ -29,6 +29,7 @@ export function PaydayCard() {
   if (!receipt) return null
   const r = receipt.r
   const color = WIDGET_COLOR.burnBreakdown
+  const held = heldText(r)
   return (
     <button
       key={receipt.key}
@@ -51,6 +52,7 @@ export function PaydayCard() {
       <span className="mt-1.5 block text-[12px] text-ink-2">
         {t('top.paydayCardCash', { v: ledgerMoney(r.cashAfter + r.paid) })} → <b className="font-semibold text-ink">{ledgerMoney(r.cashAfter)}</b>
       </span>
+      {held && <span className="mt-1 block text-[12px] font-semibold text-negative-ink">{held}</span>}
     </button>
   )
 }

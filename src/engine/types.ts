@@ -854,6 +854,9 @@ export interface MonthReceipt {
   usersDelta?: number
   /** A1: users the ads brought over the month ("Reklam: +n kullanıcı"); missing = no ads. */
   adUsers?: number
+  /** F3: what this payday held back (desk answer or the quiet default order): rent deferred, the founder's own pay skipped. */
+  rentDeferred?: number
+  founderSkipped?: number
   stage?: StageIndex
   burnMultiple?: number
   /** users / reachable market (0–1). */

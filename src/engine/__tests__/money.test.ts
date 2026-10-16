@@ -613,6 +613,9 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
       // Rent is paid before the founder's own pay: $1.4K covers the rent, not the $1.2K living cost; $600 the same.
       expect(s.finance.deferred ?? 0).toBe(0)
       expect(s.founder.energy).toBeLessThan(energy)
+      // The receipt says what the quiet month held back (no desk showed it).
+      expect(s.finance.lastReceipt!.founderSkipped).toBeGreaterThan(0)
+      expect(s.finance.lastReceipt!.rentDeferred).toBeUndefined()
     }
   })
 
@@ -623,12 +626,16 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
     let seen = 0
     let shorts = 0
     let paydays = 0
+    let rentHeld = 0
     for (let d = 0; d < 200; d++) {
       s = api.step(s, 1)
       for (const e of s.events) {
         if (e.id <= seen) continue
         if (e.kind === 'paydayShort' || e.kind === 'paydayAutoResolved') shorts++
-        if (e.kind === 'payday') paydays++
+        if (e.kind === 'payday') {
+          paydays++
+          if (s.finance.lastReceipt?.rentDeferred) rentHeld++
+        }
       }
       seen = s.events[s.events.length - 1]?.id ?? seen
       if (s.stats.cash >= 0) expect(s.finance.payrollMissed).toBeFalsy()
@@ -637,6 +644,8 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
     expect(shorts).toBe(0)
     // The money loop still runs: the rent the till could not cover is owed.
     expect(s.finance.deferred).toBeGreaterThan(0)
+    // Every deferred rent is on that month's receipt.
+    expect(rentHeld).toBeGreaterThan(0)
   })
 
   it('F3: a till within $0.5 of the bill pays it (ledger dust opens no desk)', () => {
@@ -648,6 +657,12 @@ describe('the payday desk (GAMEPLAY V2 §6.1)', () => {
     expect(s.finance.pendingPayday).toBeUndefined()
     expect(kinds(s)).not.toContain('paydayShort')
     expect(kinds(s)).toContain('payday')
+    // The cents are forgiven: the till ends at zero, not -$0.30, so no missed payroll and the one-time angel stays.
+    expect(s.stats.cash).toBeGreaterThanOrEqual(0)
+    expect(s.stats.cash).toBeLessThan(1)
+    expect(s.finance.payrollMissed).toBeFalsy()
+    expect(kinds(s)).not.toContain('payrollMissed')
+    expect(s.director?.angelUsed ?? false).toBe(eve.director?.angelUsed ?? false)
     // A team a few dollars short still gets the desk.
     expect(payWith(eve, () => due - 5).finance.pendingPayday).toBeDefined()
   })

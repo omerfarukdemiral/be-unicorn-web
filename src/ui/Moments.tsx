@@ -90,6 +90,12 @@ export function adUsersText(r: Pick<MonthReceipt, 'adUsers'>): string | null {
   return r.adUsers && r.adUsers >= 1 ? t('receipt.adUsers', { n: num(r.adUsers) }) : null
 }
 
+/** F3: "Kira ertelendi · Maaşını almadın" when the month held something back, else null. */
+export function heldText(r: Pick<MonthReceipt, 'rentDeferred' | 'founderSkipped'>): string | null {
+  const parts = [r.rentDeferred ? t('receipt.rentDeferred') : null, r.founderSkipped ? t('receipt.founderSkipped') : null].filter((x): x is string => !!x)
+  return parts.length ? parts.join(' · ') : null
+}
+
 /** Plain one-line text of a moment (strip title attribute, screen readers). */
 export function momentText(m: Moment): string {
   switch (m.kind) {
@@ -97,7 +103,8 @@ export function momentText(m: Moment): string {
       const r = m.receipt
       const runway = receiptRunway(r)
       const ads = adUsersText(r)
-      const line = t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: (ads ? ` · ${ads}` : '') + (runway ? ` · ${t('receipt.runway')} ${runway}` : '') })
+      const held = heldText(r)
+      const line = t('strip.receipt', { m: r.month + 1, p: neg(r.paid), n: sgn(r.net), r: (held ? ` · ${held}` : '') + (ads ? ` · ${ads}` : '') + (runway ? ` · ${t('receipt.runway')} ${runway}` : '') })
       return m.next ? `${line} · ${teaserText(m.next)}` : line
     }
     case 'release':

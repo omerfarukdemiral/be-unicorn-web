@@ -65,10 +65,11 @@ export function payday(s: GameState, content: EngineContent): void {
   s.stats.cash -= loan.interest + loan.repay
   s.finance.ledger = emptyLedger()
   // Nothing in the till at all (cash ≤ 0): nothing to choose between, the month is missed as before (the clock starts).
-  // Under half a dollar short is ledger dust (infra runs ~$0.005 with no team): the till pays it.
+  // Under half a dollar short is ledger dust (infra runs ~$0.005 with no team): the till pays it and the cents are
+  // forgiven, so a till that had money never goes below zero over them (no missed payroll, no angel spent on dust).
   const short = s.stats.cash < due - 0.5 && s.stats.cash > 0
   if (!short) {
-    s.stats.cash -= due
+    s.stats.cash = s.stats.cash > 0 ? Math.max(0, s.stats.cash - due) : s.stats.cash - due
     clearDeferred(s)
   }
   // On the desk before the covenant check: the month waiting is still owed, so runway judges it as a paid month would.
@@ -110,6 +111,9 @@ interface MonthClose {
   interest: number
   repay: number
   runwayBefore: number | null
+  /** F3: rent deferred and the founder's pay skipped this payday (the receipt says so). */
+  rentDeferred?: number
+  founderSkipped?: number
 }
 
 /** The month receipt (unrounded in lastReceipt, rounded in receipts), the stage's lowest runway, the payday beat. */
@@ -147,6 +151,8 @@ function closeMonth(s: GameState, content: EngineContent, l: MonthLedger, m: Mon
     adBudget: s.finance.adBudget,
     usersDelta: usersDelta(s),
     ...(l.adUsers ? { adUsers: l.adUsers } : {}),
+    ...(m.rentDeferred ? { rentDeferred: m.rentDeferred } : {}),
+    ...(m.founderSkipped ? { founderSkipped: m.founderSkipped } : {}),
     stage: s.stage,
     ...(s.derived.penetration !== undefined ? { penetration: s.derived.penetration } : {}),
   }
@@ -259,7 +265,17 @@ export function resolvePayday(s: GameState, content: EngineContent, choice: Payd
   if (s.finance.deferred < 0.5) clearDeferred(s)
   s.finance.pendingPayday = undefined
   const loanPaid = (p.interest ?? 0) + (p.loanRepay ?? 0)
-  closeMonth(s, content, l, { paid: paid + loanPaid, net: l.revenue - paid - loanPaid - deferAdd, interest: p.interest ?? 0, repay: p.loanRepay ?? 0, runwayBefore: p.runwayBefore ?? null })
+  const rentDeferred = choice.rent === 'pay' ? 0 : l.rent
+  const founderSkipped = choice.founder === 'pay' ? 0 : (l.founder ?? 0)
+  closeMonth(s, content, l, {
+    paid: paid + loanPaid,
+    net: l.revenue - paid - loanPaid - deferAdd,
+    interest: p.interest ?? 0,
+    repay: p.loanRepay ?? 0,
+    runwayBefore: p.runwayBefore ?? null,
+    ...(rentDeferred >= 0.5 ? { rentDeferred } : {}),
+    ...(founderSkipped >= 0.5 ? { founderSkipped } : {}),
+  })
   const overCap = (s.finance.deferred ?? 0) > B.DEFER_CAP_MONTHS * s.finance.burn
   missedPayroll(s, content, (choice.salaries !== 'full' && !noWages) || overCap)
   return true

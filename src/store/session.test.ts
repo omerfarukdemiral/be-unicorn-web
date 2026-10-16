@@ -39,6 +39,39 @@ describe('run mark + auto-resume', () => {
     }
   })
 
+  it("sign-in/out reloads: the reload's own unload checkpoint cannot set the mark again or relabel the exit", async () => {
+    for (const by of ['signIn', 'signOut']) {
+      const s = await fresh()
+      s.markRunOnScreen(300)
+      s.leavePage(by)
+      expect(s.isLeaving()).toBe(true)
+      // pagehide / visibilitychange→hidden fire during the reload while the loop is still attached
+      s.markRunOnScreen(300)
+      s.noteExit({ day: 300, hidden: true })
+      expect(s.readRunMark()).toBeNull()
+      expect(s.readExitNote()?.by).toBe(by)
+      expect(s.classifyExit(s.readExitNote())).toBe('deliberate')
+    }
+  })
+
+  it('the mark says whether the run had no account (an offline run comes back offline after a reload)', async () => {
+    const s = await fresh()
+    s.markRunOnScreen(765)
+    expect(s.readRunMark()?.offline).toBeUndefined()
+    let account = false
+    s.setRunOfflineProbe(() => !account)
+    s.markRunOnScreen(765)
+    expect(s.readRunMark()?.offline).toBe(true)
+    account = true
+    s.markRunOnScreen(766)
+    expect(s.readRunMark()?.offline).toBeUndefined()
+    s.setRunOfflineProbe(() => {
+      throw new Error('x')
+    })
+    s.markRunOnScreen(767)
+    expect(s.readRunMark()?.day).toBe(767)
+  })
+
   it('no save to load (or one that throws) drops the mark', async () => {
     const s = await fresh()
     s.markRunOnScreen(10)

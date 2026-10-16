@@ -19,6 +19,9 @@ const ERR_MAX_CHARS = 160
 export interface RunMark {
   at: number
   day: number
+  /** The run was played without an account: after a reload it comes back offline even when the sign-in card would
+   * show (backend up, no token). A signed-in run whose token expired keeps the card. */
+  offline?: boolean
 }
 
 export interface ExitNote {
@@ -73,14 +76,42 @@ function remove(kind: 'session' | 'local', key: string): void {
 
 // --- run mark ---------------------------------------------------------------------------------------------------
 
-export function markRunOnScreen(day: number, now = Date.now()): void {
-  writeJson('session', RUN_MARK_KEY, { at: now, day: Math.floor(day) } satisfies RunMark)
+/** Set once this page is on its way out by choice (sign-in, sign-out): the reload's own pagehide/visibilitychange
+ * checkpoint must not write the mark or the exit note back. In memory only, so the next page starts clear. */
+let leaving = false
+/** Whether the run on screen has no account (set by the App from the cloud state). */
+let offlineProbe: () => boolean = () => false
+export function setRunOfflineProbe(fn: () => boolean): void {
+  offlineProbe = fn
 }
 
-/** Before a deliberate reload or at game over: the next boot shows the start card. */
+export function markRunOnScreen(day: number, now = Date.now()): void {
+  if (leaving) return
+  const mark: RunMark = { at: now, day: Math.floor(day) }
+  try {
+    if (offlineProbe()) mark.offline = true
+  } catch {
+    /* unknown: treat as signed in (the card shows) */
+  }
+  writeJson('session', RUN_MARK_KEY, mark)
+}
+
+/** At game over: the next boot shows the start card (the page stays; a new run marks again). */
 export function clearRunOnScreen(by: string, now = Date.now()): void {
   remove('session', RUN_MARK_KEY)
   noteExit({ by }, now)
+}
+
+/** Before a deliberate reload (sign-in, sign-out): clears the mark and freezes it and the exit note until the page
+ * is gone, so the reload's unload checkpoint cannot set the mark again or relabel the exit as 'background'. */
+export function leavePage(by: string, now = Date.now()): void {
+  clearRunOnScreen(by, now)
+  leaving = true
+}
+
+/** True after leavePage: the unload checkpoint skips its save too (the exit already wrote it, under the right owner). */
+export function isLeaving(): boolean {
+  return leaving
 }
 
 export function readRunMark(): RunMark | null {
@@ -115,6 +146,7 @@ export function resumeAfterReload(load: () => boolean, now = Date.now()): boolea
 // --- exit note --------------------------------------------------------------------------------------------------
 
 export function noteExit(patch: Partial<ExitNote>, now = Date.now()): void {
+  if (leaving) return
   const cur = readJson<ExitNote>('local', EXIT_KEY)
   const base: ExitNote = cur && !cur.by ? cur : { at: now, day: 0, hidden: false, glLost: 0 }
   const next: ExitNote = { ...base, ...patch, at: now }

@@ -3,7 +3,7 @@
 // F5: one throwing step never freezes the game (the next frame is always armed; three in a row pause it), and every
 // autosave refreshes the run mark and the exit note (store/session.ts) so a reload resumes the run and names the cause.
 import { useGameStore } from './gameStore'
-import { markRunOnScreen, noteExit } from './session'
+import { isLeaving, markRunOnScreen, noteExit } from './session'
 
 const AUTOSAVE_MS = 10_000
 /** Clamp long frames (tab switch, debugger) so a hitch never fast-forwards the sim. */
@@ -23,6 +23,8 @@ function errText(e: unknown): string {
 
 /** Saves and refreshes the run mark + exit note (never throws). */
 function checkpoint(hidden: boolean): void {
+  // Sign-in/out already saved and cleared the mark before reloading; the reload's pagehide must not undo that.
+  if (isLeaving()) return
   const store = useGameStore.getState()
   try {
     store.save()

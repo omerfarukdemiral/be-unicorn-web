@@ -11,7 +11,7 @@ import { ObjectPreview } from './render/ObjectPreview'
 import { startLoop } from './store/loop'
 import { useGameStore } from './store/gameStore'
 import { readProfile, readSave } from './store/save'
-import { markRunOnScreen, previousExit, resumeAfterReload, startExitNote } from './store/session'
+import { markRunOnScreen, previousExit, readRunMark, resumeAfterReload, setRunOfflineProbe, startExitNote } from './store/session'
 import { ErrorCatch } from './ui/ErrorCatch'
 import { GameUI } from './ui/GameUI'
 import { renderWorldBubble } from './ui/bubbles'
@@ -299,10 +299,16 @@ export default function App() {
 
   // F5: the page reloaded under a run (tab discarded in the background, killed under memory pressure, a crash): the
   // same run comes back paused instead of the start card. Once per page load, after the cloud boot settled ('ready'
-  // = the same moment "Devam et" would be offered); an expired sign-in ('login') keeps the card.
+  // = the same moment "Devam et" would be offered). On 'login' a run that was played offline goes back offline (the
+  // backend is up but there never was a token); an expired sign-in keeps the card.
   const resumeTried = useRef(false)
   useLayoutEffect(() => {
-    if (started || mock || phase !== 'ready' || resumeTried.current) return
+    if (started || mock || resumeTried.current) return
+    if (phase === 'login' && readRunMark()?.offline) {
+      playOffline()
+      return
+    }
+    if (phase !== 'ready') return
     resumeTried.current = true
     if (resumeAfterReload(() => useGameStore.getState().load())) setStarted(true)
   }, [phase, started, mock])
@@ -310,6 +316,7 @@ export default function App() {
   useEffect(() => {
     if (!started || mock) return
     setRunOnScreen(true)
+    setRunOfflineProbe(() => !useCloud.getState().account)
     const day = useGameStore.getState().state.time.day
     markRunOnScreen(day)
     startExitNote(day)

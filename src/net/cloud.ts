@@ -14,7 +14,7 @@ import { deserialize, serialize } from '../engine'
 import type { GameState } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import { clearSave, readProfile, readSave, readSaveMeta, setSaveOwner, writeProfile, writeSave } from '../store/save'
-import { clearRunOnScreen } from '../store/session'
+import { leavePage } from '../store/session'
 import {
   backendStatus,
   currentSession,
@@ -281,7 +281,7 @@ export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void
   await logout({ all: opts.everywhere })
   setSaveOwner(null)
   useCloud.setState({ ...initial, phase: 'login', backend: useCloud.getState().backend })
-  clearRunOnScreen('signOut')
+  leavePage('signOut')
   if (typeof window !== 'undefined') window.location.reload()
 }
 
@@ -289,7 +289,7 @@ export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void
  * auto-resume of the run: the run mark is cleared first, store/session.ts). */
 export function goSignIn(): void {
   useGameStore.getState().save()
-  clearRunOnScreen('signIn')
+  leavePage('signIn')
   if (typeof window !== 'undefined') window.location.reload()
 }
 

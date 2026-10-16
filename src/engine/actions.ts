@@ -8,7 +8,8 @@ import { buildersOf, effortOn, hasOpenWork, isBuilder, isSprinting, onLeave } fr
 import { actionEnergy, movesError, renewContract, renewError, spendMoves, startFounderAction } from './founder'
 import { checkSale } from './endgame'
 import { anchorOf, findPartnerSlot, findSlot, isFreeDesk, isRingUnlocked, nextLockedRing, onlyEmptyDeskSlots, syncSeats } from './office'
-import { applySnapshot, autoPlace, cellKey, coveredCells, dropEmptyFreeSlots, autoSeat, liftItem, putItem, refusalError, storeDecor, typeCaps, typeUse, validateLayout } from './layout'
+import { applySnapshot, autoPlace, previewSnapshot, cellKey, coveredCells, dropEmptyFreeSlots, autoSeat, liftItem, putItem, refusalError, storeDecor, typeCaps, typeUse, validateLayout } from './layout'
+import { SAVED_LAYOUT_MAX, captureLayout, cleanLayoutName } from './layoutPlans'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag, projectVersion } from './modules'
 import { checkName, nameKey } from './names'
@@ -439,6 +440,32 @@ const applyLayout: Handler<'applyLayout'> = ({ s }, a) => {
   return null
 }
 
+/** Saves the edit draft as a named layout (grid step 6): free, outside the draft, so Vazgeç keeps it. */
+const saveLayout: Handler<'saveLayout'> = ({ s }, a) => {
+  const name = cleanLayoutName(a.name ?? '')
+  if (!name) return 'invalid'
+  const res = previewSnapshot(s.office, a.draft)
+  if ('error' in res) return res.error
+  if (!res.check.ok) return refusalError(res.check.reason!)
+  const saved = (s.office.saved ??= [])
+  const layout = captureLayout(res.office, name)
+  if (a.replace !== undefined) {
+    if (!Number.isInteger(a.replace) || !saved[a.replace]) return 'notFound'
+    saved[a.replace] = layout
+    return null
+  }
+  if (saved.length >= SAVED_LAYOUT_MAX) return 'officeFull'
+  saved.push(layout)
+  return null
+}
+
+const deleteLayout: Handler<'deleteLayout'> = ({ s }, a) => {
+  const saved = s.office.saved ?? []
+  if (!Number.isInteger(a.index) || !saved[a.index]) return 'notFound'
+  saved.splice(a.index, 1)
+  return null
+}
+
 const openRing: Handler<'openRing'> = ({ s }, a) => {
   const ring = s.office.rings.find((r) => r.index === a.ring)
   if (!ring) return 'notFound'
@@ -727,6 +754,8 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   sellItem,
   moveItem,
   applyLayout,
+  saveLayout,
+  deleteLayout,
   upgradeItem,
   openRing,
   startProject,

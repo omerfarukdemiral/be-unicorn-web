@@ -355,8 +355,17 @@ export interface LayoutSnapshot {
   walls?: WallPiece[]
 }
 
-export interface SavedLayout extends LayoutSnapshot {
+/**
+ * A named layout (grid step 6): pieces by catalogue id / kind and cell, not by slot id, so it can be applied again
+ * after a stage move. Applying it never buys: what the company does not own shows as missing.
+ */
+export interface SavedLayout {
   name: string
+  /** Stage it was saved on. */
+  stage: StageIndex
+  items: { itemId: FurnitureId; x: number; z: number; r: 0 | 1 | 2 | 3; team?: Dept }[]
+  decor: { kind: DecorKind; x: number; z: number; r: 0 | 1 | 2 | 3 }[]
+  walls: WallPiece[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1725,6 +1734,9 @@ export type Action =
   | { type: 'moveItem'; fromSlotId: SlotId; toSlotId?: SlotId; toCell?: CellPlacement }
   /** Commits an edited layout in one step: re-validated, atomic (grid §4). */
   | { type: 'applyLayout'; draft: LayoutSnapshot }
+  /** Saves `draft` (a legal arrangement of this office) under `name`, at most SAVED_LAYOUT_MAX; `replace` overwrites one. */
+  | { type: 'saveLayout'; name: string; draft: LayoutSnapshot; replace?: number }
+  | { type: 'deleteLayout'; index: number }
   | { type: 'upgradeItem'; slotId: SlotId; toItemId: FurnitureId }
   | { type: 'openRing'; ring: number }
   // Projects

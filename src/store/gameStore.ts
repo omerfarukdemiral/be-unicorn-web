@@ -42,10 +42,24 @@ const INTERRUPTS: readonly GameEventKind[] = [
 export const INTERRUPT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(INTERRUPTS)
 
 /**
- * Events that bring a card (a decision, the payday desk, a crisis card via bringCrisisCard). They never slow 4×: an
- * open card pauses through pauseReasons and the player's chosen speed comes back as it closes (F1, DECISIONS #35).
+ * Events that bring a card (a decision, the payday desk). They never slow 4×: an open card pauses through pauseReasons
+ * and the player's chosen speed comes back as it closes (F1, DECISIONS #35). The one exception is an urgent card
+ * (isUrgentCard): its default lands in days, so it slows 4× like a moment and holds 1× until it is answered.
  */
-export const CARD_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(['decisionShown', 'paydayShort', 'crisis'])
+export const CARD_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(['decisionShown', 'paydayShort'])
+
+const URGENT_CARD_IDS: ReadonlySet<string> = new Set(
+  DECISIONS.filter((c) => c.category === 'crisis' || (c.defaultAfterDays !== undefined && c.defaultAfterDays > 0 && c.defaultAfterDays < B.DECISION_DEFAULT_AFTER_DAYS)).map((c) => c.id),
+)
+
+/**
+ * A card whose default answers it in days, not the usual DECISION_DEFAULT_AFTER_DAYS: a crisis or rescue card
+ * (emergency-loan 14 g), the landlord notice (7 g), the board review (30 g). At 4× (0.5 s a day) its default would
+ * land in seconds while it sits collapsed, so it keeps the old 1× slowdown and hold (F1 review fix).
+ */
+export function isUrgentCard(cardId: string | undefined): boolean {
+  return cardId !== undefined && URGENT_CARD_IDS.has(cardId)
+}
 
 /** Events that are worth watching at 1×: at 4× they slow the run down (never pause). Cards are not among them. */
 export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
@@ -85,7 +99,7 @@ export const PAYDAY_SLOW_RUNWAY_MONTHS = 3
  * 4× is not dropped every ~25 s (review fix):
  * - a release only for a new version or a module, not for the updates after 1.0;
  * - a payday only when runway CROSSES below PAYDAY_SLOW_RUNWAY_MONTHS, not on every tight month.
- * Cards never count (CARD_EVENT_KINDS): an open card pauses and the chosen speed stays.
+ * Cards never count (CARD_EVENT_KINDS): an open card pauses and the chosen speed stays; an urgent card does (isUrgentCard).
  */
 export function hasImportantMoment(prev: GameState, next: GameState): boolean {
   const since = lastEventId(prev)
@@ -98,6 +112,7 @@ export function hasImportantMoment(prev: GameState, next: GameState): boolean {
       continue
     }
     if (IMPORTANT_EVENT_KINDS.has(e.kind)) return true
+    if (e.kind === 'decisionShown' && isUrgentCard(e.refId)) return true
     if (e.kind === 'payday') {
       const rc = next.finance.lastReceipt
       const after = rc ? rc.runwayAfter : next.finance.runway
@@ -155,9 +170,9 @@ function effortCrisisStep(prev: GameState, next: GameState): void {
   }
   const open = hold.employeeIds.some((id) => inCrisis(next, id))
   if (open && next.time.day < hold.untilDay) return
-  // A payday or a focus pause that came in during the hold keeps the 1×: the speed comes back only once it is dealt
-  // with. A collapsed card does not hold it (an open one pauses through pauseReasons).
-  if (next.finance.pendingPayday || ui.pauseReasons.length > 0) return
+  // A payday, an urgent card or a focus pause that came in during the hold keeps the 1×: the speed comes back only once
+  // it is dealt with. A collapsed normal card does not hold it (an open one pauses through pauseReasons).
+  if (next.finance.pendingPayday || isUrgentCard(next.decisions.active?.cardId) || ui.pauseReasons.length > 0) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: null } }))
   if (next.time.speed === 1) autoSetSpeed(hold.prevSpeed)
 }
@@ -646,8 +661,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
  * - a concept that arrived never shows as a scene bubble: it counts on the Kazanımlar badge at once, its visitor
  *   stands silently (tap → card) and, once the visitor's stay is over, it moves to the shelf (minimizeConcept);
  * - an interrupting event (a card, the round window, a missed payroll…) closes an open center screen;
- * - at 4× an important event (never a card) slows the run to 1× (a real setSpeed: the player sees and may undo it) for
- *   SLOWDOWN_WINDOW_DAYS game days once the moment is dealt with (no payday waiting, no focus pause), then 4×
+ * - at 4× an important event (never a normal card; an urgent one, see isUrgentCard, does) slows the run to 1× (a real setSpeed: the player sees and may undo it) for
+ *   SLOWDOWN_WINDOW_DAYS game days once the moment is dealt with (no payday or urgent card waiting, no focus pause), then 4×
  *   comes back the same way; a new moment in the window pushes the restore later, a player setSpeed cancels it;
  * - a card shown goes into the Keşif record (storage errors are swallowed by save.ts: play never breaks on them).
  * Engine changes go through dispatch, so the replay log reproduces them.
@@ -674,9 +689,9 @@ function afterStep(prev: GameState, next: GameState): void {
     return
   }
   if (ui.slowdownResumeDay === null) return
-  // The window counts from when the moment is dealt with: a payday still waiting (or a new moment) moves it on. A
-  // collapsed card does not: it lets time run, and an open one already stops ticks through pauseReasons.
-  const waiting = !!next.finance.pendingPayday || hasImportantMoment(prev, next)
+  // The window counts from when the moment is dealt with: a payday or an urgent card still waiting (or a new moment)
+  // moves it on. A collapsed normal card does not: it lets time run, and an open one stops ticks through pauseReasons.
+  const waiting = !!next.finance.pendingPayday || isUrgentCard(next.decisions.active?.cardId) || hasImportantMoment(prev, next)
   if (waiting) {
     if (resumeDay > ui.slowdownResumeDay) useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: resumeDay } }))
     return

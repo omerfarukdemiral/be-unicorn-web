@@ -29,6 +29,7 @@ import {
   hasImportantMoment,
   hasInterrupt,
   IMPORTANT_EVENT_KINDS,
+  isUrgentCard,
   offerWaiting,
   panelSelection,
   pauseReasonsOf,
@@ -640,6 +641,26 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().state.time.speed).toBe(4)
     expect(store().state.time.day).toBeLessThan(slowDay + SLOWDOWN_WINDOW_DAYS + 1)
   })
+
+  it('F1 review: an urgent card (landlord notice, 7 g default) slows 4× and holds 1× until it is answered', () => {
+    expect(isUrgentCard('landlord-notice')).toBe(true)
+    expect(isUrgentCard('remote-vs-office')).toBe(false)
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    useGameStore.setState((st) => ({ state: { ...st.state, decisions: { ...st.state.decisions, active: undefined, queue: ['landlord-notice'] } } }))
+    for (let i = 0; i < 400 && store().state.decisions.active?.cardId !== 'landlord-notice'; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.decisions.active?.cardId).toBe('landlord-notice')
+    // Arrived collapsed: 1×, so its 7-day default takes ~14 s, not ~3.5 s.
+    expect(store().state.time.speed).toBe(1)
+    const shown = store().state.time.day
+    for (let i = 0; i < 8 * (SLOWDOWN_WINDOW_DAYS + 1); i++) store().tick(SECONDS_PER_DAY / 8)
+    // Still unanswered: still 1×, the restore waits on it.
+    expect(store().state.decisions.active?.cardId).toBe('landlord-notice')
+    expect(store().state.time.day).toBeGreaterThan(shown + SLOWDOWN_WINDOW_DAYS)
+    expect(store().state.time.speed).toBe(1)
+    expect(store().dispatch({ type: 'answerDecision', cardId: 'landlord-notice', optionIndex: 0 }).ok).toBe(true)
+    for (let i = 0; i < 400 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(4)
+  })
 })
 
 describe('core loop phase 1 (store side)', () => {
@@ -800,6 +821,9 @@ describe('review fixes (store side)', () => {
     const s = store().state
     const card = (history: GameState['decisions']['history']): GameState => ({ ...s, decisions: { ...s.decisions, history }, events: [...s.events, ev(s, 'decisionShown', { refId: 'x' })] })
     expect(hasImportantMoment(s, card([]))).toBe(false)
+    // An urgent card (its default lands in days) is the exception (F1 review).
+    expect(hasImportantMoment(s, { ...s, events: [...s.events, ev(s, 'decisionShown', { refId: 'emergency-loan' })] })).toBe(isUrgentCard('emergency-loan'))
+    expect(isUrgentCard('emergency-loan')).toBe(true)
     expect(hasImportantMoment(s, card([{ cardId: 'early-sidegig', optionIndex: 0, day: s.time.day }]))).toBe(false)
     const rel = (update?: number): GameState => ({
       ...s,

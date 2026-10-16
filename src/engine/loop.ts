@@ -549,7 +549,7 @@ export function freezeModuleMeasures(s: GameState): void {
  * RELEASE_UPDATE_MIN_DAYS × the policies' releaseGap), so the beat keeps coming in every stage. A project seen for the first time (old save) is
  * set silently.
  * MV2a version cycle: the 1.0 ships v1. Every update then counts into the version line (v{n}.{minor}); the one that
- * fills it (versionUpdates(v)) ships v + 1 instead: a VERSION_WAVE_MULT wave, 3 more slots (projectSlots), the next
+ * fills it (versionUpdates(v)) ships v + 1 instead: a VERSION_WAVE_MULT wave, its new slots (slotsOpened), the next
  * tier, and every installed module restamped fresh (VERSION_REFRESHES_MODULES).
  */
 export function checkReleases(s: GameState, content: EngineContent): void {

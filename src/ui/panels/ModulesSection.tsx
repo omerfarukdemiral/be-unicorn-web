@@ -414,7 +414,7 @@ export function ModuleStrip({ project: p }: { project: Project }) {
           <span className="size-2 rounded-full bg-border-strong/60" />
         </span>
       ))}
-      <span data-slot-count="" className="tabular ml-auto pr-1 text-xs font-semibold text-ink-2">{t('module.slots', { used: mods.length + (build && !build.refresh ? 1 : 0), total })}</span>
+      <span data-slot-count="" className="tabular ml-auto pr-1 text-xs font-semibold text-ink-2">{t('module.slots', { used: Math.min(total, mods.length + (build && !build.refresh ? 1 : 0)), total })}</span>
     </button>
   )
 }

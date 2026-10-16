@@ -45,11 +45,12 @@ describe('module caps', () => {
   })
 
   it('with the real caps a kind that is full reads "capped" on the next offer (Şu an etkisi yok)', () => {
-    const ids = categoryModules('mobile').map((d) => d.id).filter((id) => id !== 'aso')
+    // B2: every mobile module but deepLinks and paywall (the freemium side of the fork; paywall's organic minus would hold it under).
+    const ids = categoryModules('mobile').map((d) => d.id).filter((id) => id !== 'deepLinks' && id !== 'paywall')
     const full = withModules(company(['mobile'], 3), 0, ids)
     const p = full.projects[0]!
     expect(moduleMult(p, 'organic', full.time.day)).toBeCloseTo(B.MODULE_MULT_CAP.organic!, 9)
-    expect(moduleEstimate(full, p, 'aso', CONTENT).zero).toBe('capped')
+    expect(moduleEstimate(full, p, 'deepLinks', CONTENT).zero).toBe('capped')
     // One module in: the same offer still counts.
     const one = withModules(company(['mobile'], 3), 0, ['referral'])
     expect(moduleEstimate(one, one.projects[0]!, 'aso', CONTENT).zero).toBeUndefined()

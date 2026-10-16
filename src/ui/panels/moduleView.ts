@@ -5,7 +5,7 @@
 import { CONTENT, MODULE_TEXT, moduleName } from '../../content'
 import * as B from '../../engine/balance'
 import { actionEnergy } from '../../engine/founder'
-import { buildStatus, moduleEstimate, moduleHeadlines, moduleLock, moduleMeasured, moduleUpkeepHint, projectVersion, versionProgress, type ModuleEstimate, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
+import { buildStatus, slotsAt, moduleEstimate, moduleHeadlines, moduleLock, moduleMeasured, moduleUpkeepHint, projectVersion, versionProgress, type ModuleEstimate, type ModuleHeadline, type ModuleOffer } from '../../engine/modules'
 import type { GameState, ModuleEffectKind, Project, ProjectModule, ProjectModuleId } from '../../engine/types'
 import type { Chip } from '../EffectChips'
 import { money, num, pct } from '../format'
@@ -204,5 +204,5 @@ export function versionLine(s: GameState, p: Project): string {
 
 /** The locked preview before v1: "v1 · 3 slot açılır · %83". */
 export function previewLine(p: Project): string {
-  return t('module.slotsPreview', { n: B.MODULE_SLOTS_PER_VERSION, p: Math.round(p.maturity * 100) })
+  return t('module.slotsPreview', { n: slotsAt(1), p: Math.round(p.maturity * 100) })
 }

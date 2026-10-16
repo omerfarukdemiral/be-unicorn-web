@@ -4,9 +4,9 @@
 // They are items of the ONE notification strip: `useMomentSource` turns fresh engine events into moments,
 // `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
 // The receipt ends on one teaser: the next storm on the horizon, "→ 12g · Yatırımcı kışı" ("?" until revealed, §5.1).
-import * as B from '../engine/balance'
 import type { GameState, MonthReceipt } from '../engine/types'
 import { moduleName } from '../content'
+import { slotsOpened } from '../engine/modules'
 import type { Panel } from '../store/types'
 import type { IconName } from './icons'
 import { t } from './i18n'
@@ -103,7 +103,7 @@ export function momentText(m: Moment): string {
     case 'release':
       // A module delivery: "Proje: Modül yayında" (a refresh brings no users, so no wave).
       if (m.module) return `${m.project}: ${t('release.module', { module: m.module })}${m.users > 0 ? ` · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}` : ''}`
-      if (isVersionRelease(m)) return `${t('release.version', { project: m.project, v: m.version!, n: B.MODULE_SLOTS_PER_VERSION })} · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}`
+      if (isVersionRelease(m)) return `${versionReleaseLine(m.project, m.version!)} · ${t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}`
       return t('strip.release', { project: m.project, level: releaseName(m.level, m.update, undefined, m.version, m.minor), u: Math.round(m.users), m: money(m.mrr) })
     case 'outcome':
       return t('outcome.line', { option: m.option, effects: m.effects })
@@ -139,7 +139,7 @@ export function MomentLine({ m }: { m: Moment }) {
             {m.module
               ? `${m.project}: ${releaseName(m.level, m.update, m.module)}`
               : isVersionRelease(m)
-                ? t('release.version', { project: m.project, v: m.version!, n: B.MODULE_SLOTS_PER_VERSION })
+                ? versionReleaseLine(m.project, m.version!)
                 : t('release.title', { project: m.project, level: releaseName(m.level, m.update, undefined, m.version, m.minor) })}
           </span>
           {(!m.module || m.users > 0) && <span className="font-medium text-positive-ink"> · {t('release.wave', { u: Math.round(m.users), m: money(m.mrr) })}</span>}
@@ -155,3 +155,9 @@ export function MomentLine({ m }: { m: Moment }) {
   }
 }
 
+
+/** A version release's line: its new slots ("+2 slot"), or "modüller tazelendi" once a version opens none (B2 cap). */
+function versionReleaseLine(project: string, v: number): string {
+  const n = slotsOpened(v)
+  return n > 0 ? t('release.version', { project, v, n }) : t('release.versionFull', { project, v })
+}

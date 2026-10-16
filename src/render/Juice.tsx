@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { GameState, ReleaseEntry } from '../engine/types'
 import { UI_TEXT, moduleName } from '../content'
-import { MODULE_SLOTS_PER_VERSION } from '../engine/balance'
+import { slotsOpened } from '../engine/modules'
 import { CELL } from './constants'
 import { Confetti } from './Effects'
 import { pathFromDoor, type XZ } from './layout'
@@ -235,7 +235,9 @@ function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boole
   const line = r.module
     ? text('release.module', { module: moduleName(r.module, category) })
     : isVersion
-      ? text('release.version', { project: r.projectName, v: r.version!, n: MODULE_SLOTS_PER_VERSION })
+      ? slotsOpened(r.version!) > 0
+        ? text('release.version', { project: r.projectName, v: r.version!, n: slotsOpened(r.version!) })
+        : text('release.versionFull', { project: r.projectName, v: r.version! })
       : r.version !== undefined && r.minor !== undefined
         ? text('release.banner', { level: text('release.minor', { v: r.version, m: r.minor }) })
         : text('release.banner', { level })

@@ -794,12 +794,16 @@ export const RELEASE_UPDATE_USER_SHARE = 0.003
 export const MODULE_COST_GROWTH = 2
 /**
  * MV2a version cycle (replaces the stage slot table [1, 1, 2, 3, 3, 4, 4]): the first 1.0 ships v1 with
- * MODULE_SLOTS_PER_VERSION slots; after that the shipped updates fill a version line of
+ * MODULE_SLOTS_AT[1] slots; after that the shipped updates fill a version line of
  * min(VERSION_UPDATES_MAX, VERSION_UPDATES_BASE^v) updates (v1→v2 2, v2→v3 4, 8, 16, then 32), and the update that
- * fills it ships v + 1: 3 more slots, the next module tier, every installed module refreshed. The bar shows the line
+ * fills it ships v + 1: its new slots, the next module tier, every installed module refreshed. The bar shows the line
  * from VERSION_FLOOR to 100% (display only: p.maturity stays 1, the economy reads it).
+ * B2 (was a flat 3 per version, no cap): slots in all at version v, flat past the last entry. A category offers 21–24
+ * modules; at 3 per version a v6 project held 18 of its ~21 buildable ones, so every run built nearly the same set
+ * (13–15 modules on > 80% of a category's projects). At 10 a project keeps under half its catalogue: what it leaves
+ * out is the choice. v2 still opens 3 (the cycle the player learned), then 2, 1, 1.
  */
-export const MODULE_SLOTS_PER_VERSION = 3
+export const MODULE_SLOTS_AT: readonly number[] = [0, 3, 6, 8, 9, 10]
 export const VERSION_FLOOR = 0.6
 export const VERSION_UPDATES_BASE = 2
 export const VERSION_UPDATES_MAX = 32
@@ -817,18 +821,22 @@ export const MODULE_ENERGY = 10
 /**
  * Every catalogue gain and minus is read as 1 + (x − 1) × this (the table keeps its readable numbers). MV2d pace lever
  * (0.12: with the table's own sizes bootstrap reached Unicorn in 37 dk, with 0.02 in 87): the pace is set here, and the
- * caps below stay about 1.8× the best single module's reach so no module fills a kind alone.
+ * caps below stay about 1.8× the best single module's reach so no module fills a kind alone. B2 (0.12 → 0.21, every cap's
+ * reach × 1.4): a project holds 10 modules instead of 15–21, so each one carries more; at 0.15 with the old caps the
+ * one-product runs off their own categories fell under the B1 bar (web 18–19/24, game 20/24 under vcRocket / platform).
+ * The best single module still reaches ≤ 75 % of a cap.
  */
-export const MODULE_EFFECT_SCALE = 0.12
+export const MODULE_EFFECT_SCALE = 0.21
 /** A delivered module's wave: × the update wave (1.3×: more than an update, less than a version's 2.5×); a refresh brings none. */
 export const MODULE_WAVE_MULT = 1.3
 /**
  * Per project and kind, the product of its modules is held here (churn, cac, updateWork and infra are floors, the rest
  * ceilings). The company mix is a weighted mean of the projects, so it never passes the best project's cap. MV2a
  * (round 3 starting caps 0.72 / 1.3 / 1.45 / 0.8 / 1.4 / 1.8 for churn / arpu / organic / cac / tam / wave): MV2d scaled
- * them with MODULE_EFFECT_SCALE (a cap is a reach, not a table number), so a few modules of one kind still fill it.
+ * them with MODULE_EFFECT_SCALE (a cap is a reach, not a table number), so a few modules of one kind still fill it. B2:
+ * each reach × 1.4 (arpu 1.052 → 1.073) with the 10-slot cap.
  */
-export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.92, arpu: 1.052, organic: 1.1, cac: 0.96, tam: 1.087, wave: 1.065, updateWork: 0.95, talk: 1.11, infra: 0.97 }
+export const MODULE_MULT_CAP: Readonly<Partial<Record<ModuleEffectKind, number>>> = { churn: 0.888, arpu: 1.073, organic: 1.14, cac: 0.944, tam: 1.122, wave: 1.091, updateWork: 0.93, talk: 1.154, infra: 0.958 }
 /** Kinds whose cap is a floor (lower is better). */
 export const MODULE_MULT_FLOOR_KINDS: readonly ModuleEffectKind[] = ['churn', 'cac', 'updateWork', 'infra']
 /**

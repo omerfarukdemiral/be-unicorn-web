@@ -7,7 +7,8 @@ import { writeFileSync } from 'node:fs'
 import { cpus } from 'node:os'
 import { CONTENT } from '../src/content/index'
 import { ARCHETYPES, POLICY_IDS, SECONDS_PER_DAY, balance } from '../src/engine/index'
-import { MODULES, moduleDef } from '../src/engine/modules'
+import { MODULES } from '../src/engine/modules'
+import { CONCENTRATION_MAX, MODULES_USED_MIN, moduleConcentration, type ModuleConcentration } from './moduleStats'
 import { PLAN_GROWTH, PLAN_MONEY, PLAN_REACH, PLAN_RETENTION, CRISIS_WINDOW_DAYS, DAYS_10_MIN, DEATH_TRACE_DAYS, DAYS_5_MIN, LOAN_SURVIVE_DAYS, RIVAL_EARLY_DAYS, V2_BOT_KINDS, playBot, type BotConfig, type BotKind, type BotRun, type DecisionPolicy, type ModulePlan, type V2BotKind } from './bots'
 
 function arg(name: string, fallback: number): number
@@ -114,6 +115,8 @@ const QUICK = arg('quick', 0) > 0
 const PLANS: [string, ModulePlan][] = [['para (bootstrap)', PLAN_MONEY], ['büyüme (vcRocket)', PLAN_GROWTH], ['tutundurma (niche)', PLAN_RETENTION], ['erişim (platform)', PLAN_REACH]]
 const TOUR_CATEGORIES = ['web', 'mobile', 'api', 'marketplace', 'ai', 'game'] as const
 const NO_EFFORT: Partial<BotConfig> = { effort: false, sprint: false }
+/** B2: module pick concentration, filled by the module section and read by the criteria. */
+let conc: ModuleConcentration | null = null
 {
   const sp = (kind: BotKind, policy: DecisionPolicy = 'best', overrides: Partial<BotConfig> = {}, content: RunSpec['content'] = 'full'): RunSpec => ({ kind, policy, overrides, content })
   const always: RunSpec[] = [
@@ -424,7 +427,7 @@ line()
 
 line('## Modüller v2 (MV2d)')
 line()
-line('Botlar sabit liste yerine tür-ağırlık planıyla kurar: skor = (ağırlık × $karşılık − kira) / maliyet, $karşılık arayüzdeki `moduleEstimate`. Koşu sonu, proje başına.')
+line('Botlar sabit liste yerine tür-ağırlık planıyla kurar: skor = ağırlık × $karşılık × zevk − kira − maliyet / geri dönüş ayı (B2; para 12, büyüme 18, erişim 15, tutundurma 12 ay), $karşılık arayüzdeki `moduleEstimate`; zevk ve tür ağırlıkları seed ve bota göre değişir. Slot: v1 3, v2 6, v3 8, v4 9, v5+ 10. Koşu sonu, proje başına.')
 line()
 line('| Bot | Sürüm (medyan / en yüksek) | Kurulu modül (medyan) | Açık slot (medyan) | Dolu / açık slot | Plan seçimi / slot doldurucu (kurulan) | Tier dağılımı T1·T2·T3·T4·T5 |')
 line('|---|---|---|---|---|---|---|')
@@ -439,30 +442,7 @@ for (const [name, runs] of moduleRows) {
 }
 line()
 {
-  line('Baskınlık: bir kategorinin koşularının > %90’ında planın kendi seçtiği (doldurucu değil) kurulu modül, T1 çekirdek hariç; yalnızca gerçek seçim olan katmanlarda (projeler katmanın %80’inden azını kuruyorsa) sayılır, bir katmanı tümden kuran herkes tek modülü üstün kılmaz. Plan skoru sıfırın altındaysa bot boş slotu gün ve projeye bağlı bir karma ile doldurur (rastgele ama tekrarlanabilir); “Plan seçimi / doldurucu” sütunu hangisinin kaç modül kurduğunu gösterir.')
-  line()
   const all = [...byArch.values()].flat()
-  const byCat = new Map<string, BotRun[]>()
-  for (const r of all) for (const cat of new Set(r.projectsEnd.map((p) => p.category))) byCat.set(cat, [...(byCat.get(cat) ?? []), r])
-  const dominant: string[] = []
-  for (const [cat, runs] of byCat) {
-    const count = new Map<string, number>()
-    for (const r of runs) for (const id of new Set(r.projectsEnd.filter((p) => p.category === cat).flatMap((p) => p.ids).filter((id) => r.planIds[id]))) count.set(id, (count.get(id) ?? 0) + 1)
-    // A tier is a real choice only when the projects leave a good part of it unbuilt; a tier that 15 slots nearly empty
-    // (the T3 line at v3+) is built whole by anyone, which says nothing about one module being better.
-    const projs = runs.flatMap((r) => r.projectsEnd.filter((p) => p.category === cat))
-    const choice = (tier: number) => {
-      const cands = MODULES.filter((d) => d.tier === tier && (d.categories === undefined || d.categories.includes(cat as never))).length
-      const mean = projs.length ? sumOf(projs.map((p) => p.tiers.filter((x) => x === tier).length)) / projs.length : 0
-      return mean < 0.8 * cands
-    }
-    for (const [id, n] of count) {
-      const def = moduleDef(id)
-      if (n / runs.length > 0.9 && def && def.tier > 1 && choice(def.tier)) dominant.push(`${cat}/${id} ${pct(n, runs.length)}`)
-    }
-  }
-  line(`Baskın modül (hedef: yok): **${dominant.length === 0 ? 'EVET' : 'HAYIR'}** · ${dominant.length ? dominant.join(', ') : 'yok'}`)
-  line()
   line('Plan özgürlüğü (bootstrap seed’leri, dört plan; Unicorn medyanı 15 % içinde olmalı):')
   line()
   line('| Plan | Unicorn | Medyan | İflas |')
@@ -508,6 +488,21 @@ line()
   }
   line()
   line(`Her kategori her botta ≥ ${tourMin}/${SEEDS} Unicorn: **${weak.length === 0 ? 'EVET' : 'HAYIR'}**${weak.length ? ` · zayıf: ${weak.join(', ')}` : ''}`)
+  // B2: module pick concentration over every good-bot run (the archetypes and the category × bot tour), per category.
+  line()
+  line(`Modül yoğunlaşması (B2): koşu sonunda kategorinin projelerinin kaçında kurulu; arketip koşuları + kategori × bot turu. Hedef: hiçbir modül > %${Math.round(CONCENTRATION_MAX * 100)}, en az ${MODULES_USED_MIN}/${MODULES.length} modül kullanılmış.`)
+  line()
+  line('| Kategori | Proje | > %80 | En sık 5 | İlk 3 seçim (farklı küme) |')
+  line('|---|---|---|---|---|')
+  const tourRuns = ARCHETYPES.flatMap((a) => TOUR_CATEGORIES.flatMap((cat) => runMany(a, 'best', { firstCategory: cat, extraCategories: [] })))
+  conc = moduleConcentration([...all, ...tourRuns])
+  for (const cat of conc.categories) {
+    const top = Object.entries(cat.share).slice(0, 5).map(([id, v]) => `${id} ${pct(v, 1)}`).join(', ')
+    line(`| ${cat.category} | ${cat.projects} | ${cat.over.length ? cat.over.join(', ') : '—'} | ${top} | ${cat.firstThreeSets}/${cat.projects} |`)
+  }
+  const archOnly = moduleConcentration(all)
+  line()
+  line(`Kullanılan modül: ${conc.used}/${MODULES.length}${conc.unused.length ? ` (kurulmayan: ${conc.unused.join(', ')})` : ''}. Yalnız arketip koşularında (kategorileri sabit, bilgi): > %80 olan ${archOnly.categories.reduce((a, c) => a + c.over.length, 0)} modül · ${archOnly.categories.map((c) => `${c.category} ${c.over.join('/') || '—'}`).join(' · ')}.`)
   for (const r of all) Object.keys(r.moduleIds).forEach((k) => seen.add(k))
   const unseen = MODULES.filter((d) => !seen.has(d.id)).map((d) => d.id)
   line()
@@ -617,6 +612,11 @@ crit('Careless iflas', band(careless.filter(failedRun).length, careless.length, 
 crit('greedyGood iflas', band(v2('greedyGood').filter(failedRun).length, SEEDS, 0.15, 0.3))
 crit('coaster Unicorn (E1 nihai)', band(uniCount(v2('coaster')), SEEDS, 0, 0))
 crit('coasterModules Unicorn (W2b anti-coast)', band(uniCount(v2('coasterModules')), SEEDS, 0, 0))
+if (conc) {
+  const over = conc.categories.flatMap((c) => c.over.map((id) => `${c.category}/${id} ${pct(c.share[id]!, 1)}`))
+  line(`- Modül yoğunlaşması (B2): kategori projelerinin > %${Math.round(CONCENTRATION_MAX * 100)}’inde olan modül ${over.length} (hedef 0)${over.length ? ` · ${over.join(', ')}` : ''}: **${yes(over.length === 0)}**`)
+  line(`- Kullanılan modül (B2): ${conc.used}/${MODULES.length} (hedef ≥ ${MODULES_USED_MIN}): **${yes(conc.used >= MODULES_USED_MIN)}**`)
+}
 {
   // §15: the bad-decision policy must cost lives, not only minutes (bootstrap + vcRocket, same seeds).
   const gaps = worstRuns.map(([a, runs]) => {

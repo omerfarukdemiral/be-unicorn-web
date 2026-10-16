@@ -728,7 +728,9 @@ export const UI_TEXT: Record<string, string> = {
   'release.moduleUsersSub': '+{u} kullanıcı',
   'release.moduleUsers': '{module} yayında · +{u} kullanıcı',
   'release.version': '{project} v{v} yayında · +{n} slot',
+  'release.versionFull': '{project} v{v} yayında · modüller tazelendi',
   'bubble.moduleVersion': '{project} v{v} yayında, {n} yeni slot. Sıradaki: {module}?',
+  'bubble.moduleVersionFull': '{project} v{v} yayında. Sıradaki: {module}?',
   // Ads: one company budget, the focus picks the product (owner decision, W3).
   'ads.focus': 'Reklam odağı',
   'ads.focusCompany': 'Şirket',

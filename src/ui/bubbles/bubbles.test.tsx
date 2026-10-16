@@ -275,7 +275,8 @@ describe('module question at the desk (W2c)', () => {
     expect(pill).not.toContain('Diğerleri')
     openBubble(key)
     const out = html(createElement(DeskBubble, { bubbleKey: key, topic: 'module', refId: id }))
-    expect(out).toContain(MODULE_TEXT[ask.moduleId].line)
+    // The markup escapes an apostrophe ("Google'dan").
+    expect(out).toContain(MODULE_TEXT[ask.moduleId].line.replace(/'/g, '&#x27;'))
     // C1: the open header carries the whole question and wraps instead of cutting it with an ellipsis.
     const header = out.match(/<span data-speaker-text="" class="([^"]*)">([\s\S]*?)<\/span><\/span>/)
     expect(header).not.toBeNull()

@@ -2,14 +2,15 @@
 // fatigue bar and at most one state glyph (tired > low morale > bored; a gold star for a project lead). One drei <Html>
 // at the origin holds every plate; one frame callback projects each seat and writes the transform straight to the
 // element (no React state per frame). Plates never take taps, bubbles win (a plate that touches a bubble, or belongs
-// to someone with one, fades), and they thin out: icon + bar at the farthest zoom or when two plates crowd.
+// to someone with one, fades), and they thin out: icon + bar at the farthest zoom or when two plates crowd, and a
+// plate right behind another one (touching seats) steps aside.
 import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { memo, useMemo, useRef } from 'react'
 import { Vector3 } from 'three'
 import type { GameState } from '../engine/types'
 import { DEPT_COLORS } from './palette'
-import { fatigueTone, crowdedIds, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, shortName, type PlateGlyph } from './headPlate'
+import { fatigueTone, crowdedIds, hasOwnBubble, stackedIds, plateCompact, plateGlyph, plateSalary, plateShown, shortName, type PlateGlyph } from './headPlate'
 import { useHtmlPortal } from './htmlPortal'
 import { DEPT_PATH, GLYPH_PATH } from './plateIcons'
 import { seatedRegistry, speakerPositions } from './sceneRegistry'
@@ -150,6 +151,7 @@ export function HeadPlates() {
       anchors.push({ id, x, y })
     }
     const crowded = crowdedIds(anchors)
+    const stacked = stackedIds(anchors)
     const bubbles = measure ? shownBubbles() : null
     const bubbleEls = measure ? [...document.querySelectorAll<HTMLElement>('[data-bubble-key]')].filter((el) => el.style.visibility !== 'hidden' && el.style.opacity !== '0') : null
     for (const [id, r] of refs.current) {
@@ -167,7 +169,7 @@ export function HeadPlates() {
         measured.current.set(id, { own, overlap })
       }
       const m = measured.current.get(id)
-      const shown = !!p && plateShown({ seated: true, covered: gate.current.covered, ownBubble: !!m?.own, overlapsBubble: !!m?.overlap })
+      const shown = !!p && !stacked.has(id) && plateShown({ seated: true, covered: gate.current.covered, ownBubble: !!m?.own, overlapsBubble: !!m?.overlap })
       if (p) {
         // Centered over the anchor, bottom edge on it.
         el.style.transform = `translate3d(${Math.round(p[0])}px, ${Math.round(p[1])}px, 0) translate(-50%, -100%)`

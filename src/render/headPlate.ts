@@ -80,6 +80,22 @@ export function crowdedIds(anchors: readonly { id: string; x: number; y: number 
   return out
 }
 
+/**
+ * Compact plates still stack when seats touch (a team island seen from a phone): within `min` px only the plate
+ * nearest the camera (lowest on screen) stays, the ones behind it step aside. Ids to hide.
+ */
+export const STACK_PX = 30
+export function stackedIds(anchors: readonly { id: string; x: number; y: number }[], min = STACK_PX): Set<string> {
+  const kept: { x: number; y: number }[] = []
+  const out = new Set<string>()
+  const order = [...anchors].sort((a, b) => b.y - a.y || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  for (const a of order) {
+    if (kept.some((k) => Math.hypot(a.x - k.x, a.y - k.y) < min)) out.add(a.id)
+    else kept.push(a)
+  }
+  return out
+}
+
 /** A pop sprite is never smaller than `minPx` on screen: scale = max(base, minPx / pxPerWorldUnit). */
 export const popScale = (base: number, pxPerUnit: number, minPx = 20): number => (pxPerUnit > 0 ? Math.max(base, minPx / pxPerUnit) : base)
 

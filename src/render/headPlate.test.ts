@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../engine/balance'
 import type { Employee, PersonEffort } from '../engine/types'
-import { CROWD_PX, LOW_MORALE, crowdedIds, fatigueTone, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, popScale, shortName } from './headPlate'
+import { CROWD_PX, LOW_MORALE, STACK_PX, crowdedIds, stackedIds, fatigueTone, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, popScale, shortName } from './headPlate'
 
 const emp = (over: Partial<Employee>): Employee =>
   ({ id: 'e1', name: 'Ebru Kaya', dept: 'eng', quality: 1, salary: 1700, status: 'working', statusSinceDay: 0, hiredDay: 0, deskSlotId: 'd1', projectId: 'p1', morale: 70, ...over }) as Employee
@@ -69,6 +69,13 @@ describe('head plate (H1): when it shows', () => {
     const set = crowdedIds([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: CROWD_PX - 1, y: 0 }, { id: 'c', x: 300, y: 0 }])
     expect([...set].sort()).toEqual(['a', 'b'])
     expect(crowdedIds([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: CROWD_PX, y: 0 }]).size).toBe(0)
+  })
+
+  it('stacking (grid step 6): of plates closer than STACK_PX the front one stays, the ones behind step aside', () => {
+    // b is in front (lower on screen); a sits right behind it, c behind a but clear of b, d far away.
+    const hide = stackedIds([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 10, y: 12 }, { id: 'c', x: -20, y: -25 }, { id: 'd', x: 300, y: 0 }])
+    expect([...hide].sort()).toEqual(['a'])
+    expect(stackedIds([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: STACK_PX, y: 0 }]).size).toBe(0)
   })
 })
 

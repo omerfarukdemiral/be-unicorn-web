@@ -185,7 +185,8 @@ function ProjectCard({ project: p }: { project: Project }) {
   const select = useGameStore((s) => s.select)
   const finished = p.launched && p.maturity >= 1
   const effort = useGameStore((s) => effortOn(s.state))
-  const builders = useGameStore((s) => s.state.employees.some(isBuilder))
+  // A non-builder still on the project (an old save) keeps the drawer open so they can be taken off.
+  const builders = useGameStore((s) => s.state.employees.some((e) => isBuilder(e) || e.projectId === p.id))
   const openPanel = useGameStore((s) => s.openPanel)
   return (
     <li className="px-1 py-3">
@@ -253,7 +254,8 @@ export function ProductUsers({ projectId, className = 'mt-1' }: { projectId: str
 
 /**
  * F4: the founder heads the list as a read-only row (they code on founderProject() when idle, no assign action), then
- * the builders only: marketing / sales / ops add nothing to a project (effort.isBuilder). No builder: one line and "İşe al".
+ * the builders only: marketing / sales / ops add nothing to a project (effort.isBuilder); one already on it (an old save)
+ * stays listed so it can be taken off. No builder: one line and "İşe al".
  */
 export function AssignList({ project }: { project: Project }) {
   const employees = useGameStore(useShallow((s) => s.state.employees))
@@ -269,7 +271,8 @@ export function AssignList({ project }: { project: Project }) {
   const openPanel = useGameStore((s) => s.openPanel)
   const here = founder.onId === project.id
   const status = here ? t('projects.founderHere') : founder.busy ? t('founder.busy', { action: founder.busy }) : founder.onName
-  const sorted = employees.filter(isBuilder).sort((a, b) => rank(a.dept) - rank(b.dept))
+  const sorted = employees.filter((e) => isBuilder(e) || e.projectId === project.id).sort((a, b) => rank(a.dept) - rank(b.dept))
+  const noBuilder = !employees.some(isBuilder)
   return (
     <ul className="mt-2 flex flex-col gap-0.5">
       <li data-founder-row="" className={cx('flex min-h-11 items-center gap-2 rounded-control px-2', here && 'bg-brand-soft')}>
@@ -282,7 +285,7 @@ export function AssignList({ project }: { project: Project }) {
           </span>
         )}
       </li>
-      {sorted.length === 0 && (
+      {noBuilder && (
         <li className="flex flex-col items-start gap-1.5 px-2 pt-1">
           <span className="font-text text-[11px] text-ink-2">{t('projects.assignEmpty')}</span>
           <Button size="sm" icon="plus" onClick={() => openPanel({ kind: 'team' }, { root: true })}>

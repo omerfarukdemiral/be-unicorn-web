@@ -556,6 +556,36 @@ describe('Projeler > Ata with no one to assign (F4)', () => {
     expect(html).toContain(t('projects.assignEmpty'))
   })
 
+  it('a marketer already on the project (old save, bubble) stays listed so they can be taken off', () => {
+    const s = company(['web'], 2)
+    s.employees = s.employees.filter((e) => e.dept !== 'eng' && e.dept !== 'product')
+    const m = s.employees[0]!
+    for (const p of s.projects) p.assignedIds = []
+    s.projects[0]!.assignedIds = [m.id]
+    m.projectId = s.projects[0]!.id
+    const html = assign(s)
+    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1)
+    expect(html).toContain(m.name)
+    const card = renderToStaticMarkup(createElement(ProjectsPanel))
+    expect(card).toContain(`>${t('projects.assign')}<`)
+  })
+
+  it('a non-builder\'s detail offers no project to join, only the one they are on', () => {
+    const s = company(['web', 'game'], 2)
+    const m = s.employees.find((e) => e.dept !== 'eng' && e.dept !== 'product')!
+    delete m.projectId
+    for (const p of s.projects) p.assignedIds = p.assignedIds.filter((x) => x !== m.id)
+    useGameStore.setState({ state: s })
+    const detail = () => renderToStaticMarkup(createElement(DetailBody, { selection: { kind: 'employee', id: m.id } }))
+    expect(detail()).not.toContain(t('detail.project'))
+    m.projectId = s.projects[0]!.id
+    s.projects[0]!.assignedIds.push(m.id)
+    useGameStore.setState({ state: { ...s } })
+    const html = detail()
+    expect(html).toContain(s.projects[0]!.name)
+    expect(html).not.toContain(s.projects[1]!.name)
+  })
+
   it('a normal team still lists its builders under the founder, and the card keeps "Ata"', () => {
     const s = company(['web'], 2)
     const builders = s.employees.filter((e) => e.dept === 'eng' || e.dept === 'product').length

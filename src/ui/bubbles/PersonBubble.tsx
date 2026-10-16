@@ -5,7 +5,7 @@
 // further in the panel (Detay); the Ekip panel stays the list.
 import { useShallow } from 'zustand/react/shallow'
 import { DEPT_TEXT } from '../../content'
-import { effortOn } from '../../engine/effort'
+import { effortOn, isBuilder } from '../../engine/effort'
 import type { EmployeeId } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import type { Chip } from '../EffectChips'
@@ -44,7 +44,9 @@ export function PersonBubble({ bubbleKey, employeeId }: { bubbleKey: string; emp
   // A bored or idle builder opens with "Projeye ata: …" (the pick, with its load move); the list keeps the rest.
   const sug = assignSuggestion(state, e)
   const pick = sug?.fit?.project.id
-  const list = [...(project ? [project] : []), ...projects.filter((p) => p.id !== e.projectId && p.id !== pick)].slice(0, MAX_PROJECTS)
+  // Marketing / sales / ops add nothing to a project (effort.isBuilder): no list, only the one they are on (an old save) to take them off.
+  const builder = isBuilder(e)
+  const list = [...(project ? [project] : []), ...(builder ? projects.filter((p) => p.id !== e.projectId && p.id !== pick) : [])].slice(0, MAX_PROJECTS)
   return (
     <Expandable
       bubbleKey={bubbleKey}
@@ -82,7 +84,7 @@ export function PersonBubble({ bubbleKey, employeeId }: { bubbleKey: string; emp
             )
           })}
         </>
-      ) : pick ? null : (
+      ) : pick || !builder ? null : (
         <ChoiceRow primary label={t('bubble.startProject')} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'projects' }))} />
       )}
       <PersonEffortRows e={e} skipAssign />

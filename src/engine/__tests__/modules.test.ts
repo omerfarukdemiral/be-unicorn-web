@@ -5,7 +5,7 @@ import * as E from '../economy'
 import { averageLaunchedMaturity, computeOutputs, maturityRates, recomputeDerived } from '../derive'
 import { completeFounderAction } from '../founder'
 import { accrueMonth, checkReleases, ledgerOf, resolvePayday, updateWave } from '../loop'
-import { adFocusWarmup, adWeights, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
+import { adFocusWarmup, adWeights, focusPaidTotal, focusPreview, projectWeights, MODULE_KINDS, MODULES, moduleCost, moduleDef, moduleMult, moduleOffers, moduleStrength, moduleWork, projectMix, projectSlots, suggestModule, updateSize } from '../modules'
 import { createRngState, Rng } from '../rng'
 import { progressProjects } from '../tick'
 import { PROJECT_MODULE_IDS, type Action, type GameState, type ModuleEffectKind, type Project, type ProjectCategory, type ProjectModuleId, type TimedAction } from '../types'
@@ -555,6 +555,17 @@ describe('ad focus (W3, A1: weights route the paid users)', () => {
       const bound = E.paidPerMonth(s.finance.adBudget, cacBase * 0.85 * modifierMult(s, 'cac') * policyMult(s, content, 'cac'), s.derived.penetration ?? 0)
       expect(s.derived.channels.paid).toBeLessThanOrEqual(bound + 1e-9)
     }
+  })
+
+  it('focus chips (B1): the paid total a focus promises is the paid channel the switch gives, CATEGORY_CAC included', () => {
+    const base = full(['web', 'mobile'], null)
+    for (const i of [0, 1]) {
+      const promised = focusPaidTotal(base, base.projects[i]!.id)
+      const after = full(['web', 'mobile'], i) // no adFocusDay: no warm-up, as the chip leaves it out
+      expect(after.derived.channels.paid / promised).toBeCloseTo(1, 9)
+    }
+    // Web's cheaper ads: focusing it buys more users than focusing mobile.
+    expect(focusPaidTotal(base, base.projects[0]!.id)).toBeGreaterThan(focusPaidTotal(base, base.projects[1]!.id))
   })
 
   it('setAdFocus: locked tool, missing, unlaunched, same focus; set and clear', () => {

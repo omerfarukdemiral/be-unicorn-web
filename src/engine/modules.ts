@@ -399,13 +399,14 @@ export function snapProjects(s: GameState): void {
 }
 
 /**
- * Paid users a month under `focus`: today's paid channel at the CAC the focus's module mix gives (the ad weights move
- * it; the warm-up is left out on both sides).
+ * Paid users a month under `focus`: today's paid channel at the CAC the focus's ad weights give, module mix × category
+ * factor per product as derive.ts weighs them (B1: web's cheaper ads move the chip too); the warm-up is left out on
+ * both sides.
  */
 export function focusPaidTotal(s: GameState, focus: ProjectId | null): number {
   const day = s.time.day
   const paid = s.derived.channels.paid
-  const cacMix = (ws: { p: Project; w: number }[]) => wMean(ws, (p) => moduleMult(p, 'cac', day))
+  const cacMix = (ws: { p: Project; w: number }[]) => wMean(ws, (p) => moduleMult(p, 'cac', day)) * wMean(ws, (p) => B.CATEGORY_CAC[p.category] ?? 1)
   const cur = cacMix(adWeights(s))
   const next = cacMix(adWeights(s, focus))
   return next > 0 ? (paid * cur) / next : paid

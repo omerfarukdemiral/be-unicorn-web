@@ -10,6 +10,7 @@ import { BARE_HOVER, cx, IconButton } from '../primitives'
 import { useCloud } from '../../net/cloud'
 import { toggleAchievements, toggleLeaderboard } from '../shortcuts'
 import { tryBeginLayoutEdit, useCanEditLayout } from '../layoutEditGate'
+import { storedPieces } from '../../store/layoutEdit'
 
 /** Gear → settings in the single panel (again closes it). */
 export function toggleSettings() {
@@ -60,8 +61,33 @@ export function LayoutEditButton({ size }: { size: number }) {
   const allowed = useCanEditLayout()
   const editing = useGameStore((s) => s.ui.layoutEdit !== null)
   const commit = useGameStore((s) => s.commitLayoutEdit)
+  const stored = useGameStore((s) => storedPieces(s.state.office))
+  const seen = useGameStore((s) => s.ui.storageSeen)
+  const markSeen = useGameStore((s) => s.markStorageSeen)
+  // First read after a load or a new run: what is in storage now is not news. Fewer later (placed): catch up.
+  useEffect(() => {
+    if (seen === null || stored < seen) markSeen()
+  }, [seen, stored, markSeen])
   if (!allowed) return null
-  return <IconButton icon="move" label={t('layout.openTitle')} title={t('layout.openTitle')} onClick={() => (editing ? commit() : tryBeginLayoutEdit())} size={size} active={editing} bare />
+  // A stage move put pieces away: one chip by the edit button until the edit mode opens (on Depo).
+  const fresh = !editing && seen !== null && stored > seen ? stored - seen : 0
+  return (
+    <span className="inline-flex shrink-0 items-center">
+      <IconButton icon="move" label={t('layout.openTitle')} title={t('layout.openTitle')} onClick={() => (editing ? commit() : tryBeginLayoutEdit())} size={size} active={editing} bare />
+      {fresh > 0 && (
+        <button
+          type="button"
+          data-storage-chip=""
+          title={t('layout.storageTitle')}
+          onClick={() => tryBeginLayoutEdit(undefined, 'storage')}
+          className="tabular -ml-1 inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-brand/12 px-2 text-[12px] font-bold text-brand-ink transition-colors hover:bg-brand/20"
+        >
+          <Icon name="bag" size={14} />
+          {t('layout.storageChip', { n: fresh })}
+        </button>
+      )}
+    </span>
+  )
 }
 
 /** One short pop when the badge grows (a new concept or goal): the only notice an achievement gets. */

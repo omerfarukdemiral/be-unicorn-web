@@ -7,13 +7,13 @@
 import { PAINT_KIND, decorDef } from '../content/decor'
 import { cellKey, decorBill, decorCells, decorShape, isWallKind, itemPieces, nextDecorId, previewSnapshot, rightDir, ringOfCell, type CellKey, type LayoutRefusal, type Rotation } from '../engine/layout'
 import { teamIslands, type TeamCluster } from '../engine/office'
-import { FOUNDER_SLOT_ID, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type WallPiece } from '../engine/types'
+import { FOUNDER_SLOT_ID, type SavedLayout, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type WallPiece } from '../engine/types'
 
 /** Undo depth (one snapshot is well under 10 KB). */
 export const UNDO_MAX = 100
 
-/** Why a change was refused: a layout rule, the fixed founder desk, cash, or a malformed draft. */
-export type EditRefusal = LayoutRefusal | 'founder' | 'invalid' | 'cash'
+/** Why a change was refused: a layout rule, the fixed founder desk, cash, a malformed draft, or a plan that found no fit. */
+export type EditRefusal = LayoutRefusal | 'founder' | 'invalid' | 'cash' | 'plan'
 
 /** A wall segment: which wall and which cell column / row along it. */
 export interface WallSeg {
@@ -45,6 +45,10 @@ export interface LayoutEdit {
   armed?: Armed | null
   /** Turn of the armed floor piece. */
   armedRot?: Rotation
+  /** The saved layout applied last and the undo depth it was applied at: its missing pieces show until undone. */
+  fromSaved?: { layout: SavedLayout; depth: number } | null
+  /** Panel tab to open on (the storage chip opens Depo). */
+  tab?: string
 }
 
 /** A functional piece where the draft puts it. */
@@ -80,9 +84,12 @@ export type LayoutOp =
   | { kind: 'hang'; at: WallSeg }
   | { kind: 'moveWall'; from: WallSeg; to: WallSeg }
   | { kind: 'remove' }
+  /** A whole-office plan (preset, Otomatik düzenle, a saved layout) as one undoable step; null = it found no fit. */
+  | { kind: 'plan'; draft: LayoutSnapshot | null; saved?: SavedLayout }
 
-export function startEdit(office: OfficeState): LayoutEdit {
+export function startEdit(office: OfficeState, tab?: string): LayoutEdit {
   return {
+    ...(tab ? { tab } : {}),
     draft: { slots: {}, decor: (office.decor ?? []).map((p) => ({ ...p, pos: { ...p.pos } })), walls: (office.walls ?? []).map((w) => ({ ...w })) },
     undo: [],
     redo: [],
@@ -94,6 +101,11 @@ export function startEdit(office: OfficeState): LayoutEdit {
     armed: null,
     armedRot: 0,
   }
+}
+
+/** Decor and wall pieces waiting in storage (paint jobs are not pieces): the storage chip's count. */
+export function storedPieces(office: OfficeState): number {
+  return (office.storage ?? []).reduce((n, x) => n + (x.kind !== PAINT_KIND && decorDef(x.kind) ? x.n : 0), 0)
 }
 
 /** Cash the draft spends on Bitti (new pieces not covered by storage, paint jobs). */
@@ -329,10 +341,17 @@ export function reduceLayoutEdit(office: OfficeState, e: LayoutEdit, op: LayoutO
       const cp = prev ? { ...prev, team: op.team } : { x: piece.x, z: piece.z, r: piece.r, team: op.team }
       return push(e, { ...e.draft, slots: { ...e.draft.slots, [piece.id]: cp } }, piece.id)
     }
+    case 'plan': {
+      if (!op.draft) return refuse({ ...e, ...NO_SEL }, [], [], 'plan', now)
+      const same = JSON.stringify(op.draft) === JSON.stringify(e.draft)
+      const next = same ? { ...e, ...NO_SEL, refused: null, armedCancel: false } : push(e, op.draft, null)
+      return { ...next, armed: null, fromSaved: op.saved ? { layout: op.saved, depth: next.undo.length } : null }
+    }
     case 'undo': {
       const draft = e.undo[e.undo.length - 1]
       if (!draft) return e
-      return { ...e, draft, undo: e.undo.slice(0, -1), redo: [...e.redo, e.draft], decorSel: null, wallSel: null, refused: null, armedCancel: false }
+      const fromSaved = e.fromSaved && e.undo.length - 1 >= e.fromSaved.depth ? e.fromSaved : null
+      return { ...e, draft, undo: e.undo.slice(0, -1), redo: [...e.redo, e.draft], decorSel: null, wallSel: null, refused: null, armedCancel: false, fromSaved }
     }
     case 'redo': {
       const draft = e.redo[e.redo.length - 1]

@@ -9,7 +9,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { DEPT_TEXT, FURNITURE } from '../../content'
 import { DECOR, PAINT_KIND, PAINT_PRICE, PAINT_SWATCHES, decorDef, type DecorDef, type DecorGroup } from '../../content/decor'
 import * as B from '../../engine/balance'
-import { decorBill, decorCap, isWallKind, paintable } from '../../engine/layout'
+import { decorBill, decorCap, isWallKind, paintable, previewSnapshot } from '../../engine/layout'
+import { LAYOUT_PRESETS, SAVED_LAYOUT_MAX, LAYOUT_NAME_MAX, islandHeads, missingPieces, type LayoutPreset, type MissingPiece } from '../../engine/layoutPlans'
 import { DEPTS, type Dept } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { draftIslands, draftPieces, draftSpend, wallAt } from '../../store/layoutEdit'
@@ -165,8 +166,8 @@ function Swatch({ kind, size = 36, color }: { kind: string; size?: number; color
   )
 }
 
-type Tab = 'desks' | 'separator' | 'floor' | 'wall' | 'storage'
-const TABS: Tab[] = ['desks', 'separator', 'floor', 'wall', 'storage']
+type Tab = 'desks' | 'plans' | 'separator' | 'floor' | 'wall' | 'storage'
+const TABS: Tab[] = ['desks', 'plans', 'separator', 'floor', 'wall', 'storage']
 
 function PieceCard({ def, armed, stored, onArm }: { def: DecorDef; armed: boolean; stored: number; onArm: () => void }) {
   const stage = useGameStore((s) => s.state.stage)
@@ -286,6 +287,178 @@ function HowLine() {
   return <p className={cx('font-text text-[13px]', armed ? 'font-semibold text-brand-ink' : 'text-ink-2')}>{t(key)}</p>
 }
 
+/** Mini plan of each preset (desk cells on a 9×7 floor, the founder in the middle): read at a glance, no render. */
+const PRESET_CELLS: Record<LayoutPreset, [number, number][]> = {
+  classic: [[4, 1], [2, 3], [6, 3], [4, 5], [1, 1], [7, 1], [1, 5], [7, 5], [4, 0], [0, 3], [8, 3], [4, 6]],
+  islands: [[1, 1], [2, 1], [3, 1], [1, 2], [2, 2], [3, 2], [5, 1], [6, 1], [7, 1], [5, 2], [6, 2], [7, 2], [1, 4], [2, 4], [3, 4], [1, 5], [2, 5], [3, 5], [5, 4], [6, 4], [7, 4], [5, 5], [6, 5], [7, 5]],
+  open: [0, 1, 2, 3, 5, 6, 7, 8].flatMap((x) => [[x, 0], [x, 1], [x, 2], [x, 4], [x, 5], [x, 6]] as [number, number][]),
+  rows: [0, 1, 2, 3, 5, 6, 7, 8].flatMap((x) => [[x, 0], [x, 2], [x, 4], [x, 6]] as [number, number][]),
+}
+
+function PresetPlan({ preset }: { preset: LayoutPreset }) {
+  return (
+    <svg viewBox="0 0 9 7" className="h-9 w-12 shrink-0" aria-hidden="true">
+      {PRESET_CELLS[preset].map(([x, z]) => (
+        <rect key={`${x},${z}`} x={x + 0.12} y={z + 0.12} width={0.76} height={0.76} rx={0.18} className="fill-ink-3" />
+      ))}
+      <rect x={4.1} y={3.1} width={0.8} height={0.8} rx={0.2} className="fill-brand" />
+    </svg>
+  )
+}
+
+/** The arrangements a tap gives (each one a draft step: Geri al undoes it, Vazgeç drops it, nothing is bought). */
+function Plans() {
+  const apply = useGameStore((s) => s.applyLayoutPlan)
+  const { heads, seated } = useGameStore(
+    useShallow((s) => {
+      const e = s.ui.layoutEdit
+      const dept = new Map(s.state.employees.map((x) => [x.id, x.dept]))
+      const built = e ? previewSnapshot(s.state.office, e.draft) : null
+      const office = built && !('error' in built) ? built.office : s.state.office
+      return { heads: islandHeads(office, (id) => dept.get(id)), seated: s.state.employees.filter((x) => x.deskSlotId && x.deskSlotId !== 'founder').length }
+    }),
+  )
+  return (
+    <div className="flex flex-col gap-3" data-layout-plans="">
+      <Missing />
+      <div className="grid grid-cols-2 gap-1.5">
+        {LAYOUT_PRESETS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            data-preset={p}
+            title={t(`layout.presetTitle.${p}`)}
+            onClick={() => apply({ kind: 'preset', preset: p })}
+            className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border-2 border-transparent bg-surface-2/70 p-1.5 text-left transition-colors hover:bg-surface-2"
+          >
+            <PresetPlan preset={p} />
+            <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">{t(`layout.preset.${p}`)}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <Button tone="routine" icon="sparkle" onClick={() => apply({ kind: 'auto' })} title={t('layout.autoTitle')} data-layout-auto="">
+          {t('layout.auto')}
+        </Button>
+        {seated > 0 && (
+          <span className="ml-auto flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-ink-2" data-island-count="">
+            <span className="tabular truncate">{t('layout.islandCount', { n: heads, m: seated })}</span>
+            {heads > 0 && <span className="tabular shrink-0 rounded-md bg-positive/10 px-1.5 py-[3px] text-[12px] font-bold text-positive-ink">{t('team.islandChip', { v: BONUS_PCT })}</span>}
+          </span>
+        )}
+      </div>
+      <SavedLayouts />
+    </div>
+  )
+}
+
+function SavedLayouts() {
+  const saved = useGameStore(useShallow((s) => (s.state.office.saved ?? []).map((x) => `${x.stage}|${x.name}`)))
+  const apply = useGameStore((s) => s.applyLayoutPlan)
+  const save = useGameStore((s) => s.saveLayout)
+  const del = useGameStore((s) => s.deleteSavedLayout)
+  const [name, setName] = useState('')
+  const full = saved.length >= SAVED_LAYOUT_MAX
+  const submit = () => {
+    const res = save(name.trim() || t('layout.defaultName', { n: saved.length + 1 }))
+    if (res?.ok) setName('')
+  }
+  return (
+    <div className="flex flex-col gap-1.5" data-saved-layouts="">
+      <span className="ui-label text-ink-2">{t('layout.saved')}</span>
+      {saved.length === 0 && <span className="font-text text-[13px] text-ink-3">{t('layout.savedEmpty')}</span>}
+      {saved.map((row, i) => {
+        const [stage, label] = [Number(row.split('|')[0]), row.slice(row.indexOf('|') + 1)]
+        return (
+          <div key={i} className="flex items-center gap-1.5 rounded-xl bg-surface-2/70 py-1 pl-2 pr-1">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[13px] font-bold text-ink">{label}</span>
+              <span className="truncate text-[11px] font-semibold text-ink-3">{t('layout.savedStage', { stage: stageName(stage as never) })}</span>
+            </span>
+            <Button size="sm" tone="routine" onClick={() => apply({ kind: 'saved', index: i })}>
+              {t('layout.apply')}
+            </Button>
+            <button type="button" onClick={() => del(i)} title={t('layout.deleteTitle')} aria-label={t('layout.deleteTitle')} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-negative-ink">
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+        )
+      })}
+      {full ? (
+        <span className="font-text text-[12px] font-semibold text-ink-2">{t('layout.savedFull')}</span>
+      ) : (
+        <form
+          className="flex items-center gap-1.5"
+          onSubmit={(ev) => {
+            ev.preventDefault()
+            submit()
+          }}
+        >
+          <input
+            value={name}
+            maxLength={LAYOUT_NAME_MAX}
+            onChange={(ev) => setName(ev.target.value)}
+            placeholder={t('layout.defaultName', { n: saved.length + 1 })}
+            aria-label={t('layout.namePlaceholder')}
+            className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-ink outline-none placeholder:text-ink-3 focus:border-brand"
+          />
+          <Button tone="routine" icon="save" type="submit">
+            {t('layout.save')}
+          </Button>
+        </form>
+      )}
+    </div>
+  )
+}
+
+/** What the applied saved layout still lacks: decor rows arm the piece (bought on Bitti like any new piece), furniture is in the shop. */
+function Missing() {
+  const rows = useGameStore(
+    useShallow((s) => {
+      const e = s.ui.layoutEdit
+      if (!e?.fromSaved) return [] as string[]
+      return missingPieces(s.state.office, e.draft, e.fromSaved.layout).map((m) => `${m.item ? 1 : 0}|${m.n}|${m.kind}`)
+    }),
+  )
+  const op = useGameStore((s) => s.layoutEditOp)
+  if (!rows.length) return null
+  const list: MissingPiece[] = rows.map((r) => {
+    const [item, n, ...kind] = r.split('|')
+    return { item: item === '1', n: Number(n), kind: kind.join('|') }
+  })
+  return (
+    <div className="flex flex-col gap-1.5 rounded-2xl border border-dashed border-negative-ink/40 p-2" data-layout-missing="">
+      <span className="ui-label text-negative-ink">{t('layout.missing')}</span>
+      <span className="font-text text-[12px] text-ink-2">{t('layout.missingLine')}</span>
+      {list.map((m) => {
+        const item = m.item ? FURNITURE.find((f) => f.id === m.kind) : undefined
+        const def = m.item ? undefined : decorDef(m.kind)
+        const name = item?.name ?? (m.kind === PAINT_KIND ? t('layout.paint') : (def?.name ?? m.kind))
+        const price = item ? t('layout.inShop') : money(m.kind === PAINT_KIND ? PAINT_PRICE : (def?.price ?? 0))
+        const body = (
+          <>
+            {m.item ? <Icon name={item?.slotType === 'desk' ? 'desk' : 'sofa'} size={18} className="shrink-0 text-ink-3" /> : <Swatch kind={m.kind} size={24} />}
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+              {name} ×{m.n}
+            </span>
+            <span className="tabular shrink-0 text-[12px] font-semibold text-ink-2">{price}</span>
+          </>
+        )
+        // A decor row arms the piece; paint has its swatches on the Duvar tab.
+        return def ? (
+          <button key={m.kind} type="button" onClick={() => op({ kind: 'arm', armed: { kind: m.kind } })} className="flex min-h-11 items-center gap-2 rounded-xl bg-surface-2/70 px-2 text-left hover:bg-surface-2">
+            {body}
+          </button>
+        ) : (
+          <div key={m.kind} className="flex min-h-11 items-center gap-2 rounded-xl px-2">
+            {body}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Footer counts and the spend: "Parça 9/20", and what Bitti will cost (red when the cash cannot cover it). */
 function SpendLine() {
   const { spend, cash, pieces, cap } = useGameStore(
@@ -352,7 +525,8 @@ function Refusal() {
 
 export function LayoutPanel() {
   const allowed = useCanEditLayout()
-  const [tab, setTab] = useState<Tab>('desks')
+  const initial = useGameStore((s) => s.ui.layoutEdit?.tab)
+  const [tab, setTab] = useState<Tab>(TABS.includes(initial as Tab) ? (initial as Tab) : 'desks')
   const decorPicked = useGameStore((s) => !!(s.ui.layoutEdit?.decorSel || s.ui.layoutEdit?.wallSel))
   const itemPicked = useGameStore((s) => !!s.ui.layoutEdit?.selected)
   const { canUndo, canRedo } = useGameStore(useShallow((s) => ({ canUndo: (s.ui.layoutEdit?.undo.length ?? 0) > 0, canRedo: (s.ui.layoutEdit?.redo.length ?? 0) > 0 })))
@@ -376,6 +550,7 @@ export function LayoutPanel() {
           </Chip>
         ))}
       </div>
+      {tab === 'plans' && <Plans />}
       {tab === 'separator' && <Catalogue group="separator" />}
       {tab === 'floor' && <Catalogue group="floor" />}
       {tab === 'wall' && <Catalogue group="wall" />}

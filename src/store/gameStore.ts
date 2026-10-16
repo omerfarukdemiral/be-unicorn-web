@@ -11,11 +11,12 @@ import { create } from 'zustand'
 import { DECISIONS } from '../content'
 import { applyAction, createGame, step } from '../engine'
 import { applySnapshot } from '../engine/layout'
+import { autoArrangeDraft, presetDraft, savedDraft } from '../engine/layoutPlans'
 import * as B from '../engine/balance'
-import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type NewGameOptions } from '../engine/types'
+import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type LayoutSnapshot, type NewGameOptions, type SavedLayout } from '../engine/types'
 import { clearSave, readCodex, readProfile, readSave, readUiSave, writeCodex, writeProfile, writeSave, writeUiSave } from './save'
 import { addPin, autoPin, defaultPins, removePin } from './metricPins'
-import { isDirty, reduceLayoutEdit, startEdit } from './layoutEdit'
+import { isDirty, reduceLayoutEdit, startEdit, storedPieces } from './layoutEdit'
 import { CENTER_KINDS, type Codex, type GameStore, type Overlay, type Panel, type PauseReason, type ReplayLog, type Selection, type UiState, type ZoomLevel } from './types'
 
 export { SAVE_KEY } from './save'
@@ -240,6 +241,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   seenGoals: saved.seenGoals ?? [],
   codex: readCodex(),
   layoutEdit: null,
+  storageSeen: null,
 })
 
 /** UI fields that survive newGame()/load() (player preferences of this session, top-bar pins included). */
@@ -632,14 +634,15 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     set({ ui: next })
     persistUi(next)
   },
-  beginLayoutEdit() {
+  beginLayoutEdit(tab) {
     const { ui, state } = get()
     if (ui.layoutEdit || state.gameOver || blockingOverlay(ui) || ui.overlay?.kind === 'payday') return false
     set((s) => ({
       ui: withPause(
         {
           ...s.ui,
-          layoutEdit: startEdit(s.state.office),
+          layoutEdit: startEdit(s.state.office, tab),
+          storageSeen: storedPieces(s.state.office),
           panel: { kind: 'layout' },
           panelBack: null,
           overlay: centerOpen(s.ui) ? null : s.ui.overlay,
@@ -690,6 +693,37 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     const res = get().dispatch({ type: 'applyLayout', draft: e.draft })
     if (!res.ok) set((s) => ({ ui: withPause({ ...s.ui, layoutEdit: e, panel: { kind: 'layout' }, panelBack: null }, s.state) }))
     return res
+  },
+  applyLayoutPlan(plan) {
+    const { ui, state } = get()
+    const e = ui.layoutEdit
+    if (!e) return false
+    const live = state.office
+    const dept = new Map(state.employees.map((x) => [x.id, x.dept]))
+    const deptOf = (id: string) => dept.get(id)
+    let draft: LayoutSnapshot | null = null
+    let saved: SavedLayout | undefined
+    if (plan.kind === 'preset') draft = presetDraft(live, e.draft, plan.preset, deptOf)
+    else if (plan.kind === 'auto') draft = autoArrangeDraft(live, e.draft, deptOf)
+    else {
+      saved = live.saved?.[plan.index]
+      draft = saved ? (savedDraft(live, e.draft, saved, deptOf)?.draft ?? null) : null
+    }
+    get().layoutEditOp({ kind: 'plan', draft, ...(saved ? { saved } : {}) })
+    return draft !== null
+  },
+  saveLayout(name, replace) {
+    const e = get().ui.layoutEdit
+    if (!e) return null
+    return get().dispatch({ type: 'saveLayout', name, draft: e.draft, ...(replace !== undefined ? { replace } : {}) })
+  },
+  deleteSavedLayout(index) {
+    if (!get().ui.layoutEdit) return null
+    return get().dispatch({ type: 'deleteLayout', index })
+  },
+  markStorageSeen() {
+    const n = storedPieces(get().state.office)
+    if (get().ui.storageSeen !== n) set((s) => ({ ui: { ...s.ui, storageSeen: n } }))
   },
   markGoalsSeen() {
     const { ui, state } = get()

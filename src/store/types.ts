@@ -2,6 +2,7 @@
 // Render/UI read `state` via selectors and change it only through `dispatch(action)`.
 import type { Action, ActionErrorCode, ActionResult, ConceptId, DecisionCardId, EmployeeId, GameSpeed, GameState, HudWidget, NewGameOptions, ProjectId, SlotId, TimedAction, VisitorId } from '../engine/types'
 import type { LayoutEdit, LayoutOp } from './layoutEdit'
+import type { LayoutPreset } from '../engine/layoutPlans'
 
 export type Selection =
   | { kind: 'slot'; id: SlotId }
@@ -152,6 +153,11 @@ export interface UiState {
   codex: Codex
   /** Office edit mode (PC only, grid §4): the draft and its undo stack. Set = the `layout` pause, the layout panel. */
   layoutEdit: LayoutEdit | null
+  /**
+   * Stored decor pieces the player has seen (grid step 6): set on load and when the edit mode opens. More in storage
+   * than this (a stage move put pieces away) shows the "n parça depoda" chip by the edit button. null = not read yet.
+   */
+  storageSeen: number | null
 }
 
 /** Seed + ordered actions of the current run (PLAN §8.3 reproducible bug reports). */
@@ -212,12 +218,21 @@ export interface GameStore {
   markGoalsSeen(): void
 
   // Office edit mode (grid §4). The caller checks the device (ui/layoutEditGate): phones never get here.
-  /** Opens the edit mode on the live office (pauses; the layout panel replaces any panel). false when a modal or the end blocks it. */
-  beginLayoutEdit(): boolean
+  /** Opens the edit mode on the live office (pauses; the layout panel replaces any panel, on `tab` if given). false when a modal or the end blocks it. */
+  beginLayoutEdit(tab?: string): boolean
   /** One draft op (select, move, turn, team label, undo / redo). */
   layoutEditOp(op: LayoutOp): void
   /** Vazgeç: drops the draft, nothing is charged or moved. */
   cancelLayoutEdit(): void
   /** Bitti: one applyLayout for the whole draft. A refusal keeps the edit mode open with the reason. */
   commitLayoutEdit(): ActionResult | null
+  /** A preset, Otomatik düzenle or a saved layout becomes the draft (one undo step; nothing is bought). false = no fit. */
+  applyLayoutPlan(plan: LayoutPlanRef): boolean
+  /** Saves the draft as a named layout (engine saveLayout; outside the draft, so Vazgeç keeps it). */
+  saveLayout(name: string, replace?: number): ActionResult | null
+  deleteSavedLayout(index: number): ActionResult | null
+  /** The storage chip's count catches up with storage (null state: read it now). */
+  markStorageSeen(): void
 }
+
+export type LayoutPlanRef = { kind: 'preset'; preset: LayoutPreset } | { kind: 'auto' } | { kind: 'saved'; index: number }

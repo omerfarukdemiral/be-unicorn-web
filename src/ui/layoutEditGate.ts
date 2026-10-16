@@ -41,7 +41,7 @@ export function useCanEditLayout(): boolean {
 }
 
 /** O key / "Ofisi düzenle" button: opens the edit mode on a PC, does nothing anywhere else. */
-export function tryBeginLayoutEdit(env: PointerEnv = readPointerEnv()): boolean {
+export function tryBeginLayoutEdit(env: PointerEnv = readPointerEnv(), tab?: string): boolean {
   if (!layoutEditAllowed(env)) return false
-  return useGameStore.getState().beginLayoutEdit()
+  return useGameStore.getState().beginLayoutEdit(tab)
 }

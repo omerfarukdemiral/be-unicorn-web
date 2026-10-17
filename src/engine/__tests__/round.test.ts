@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import * as B from '../balance'
 import { findUsersPreview } from '../founder'
 import { createEngine } from '../index'
-import { closeRound, diligenceFactor, earlyEquityMult, diligenceNow, lockedPrice, meetingWeeksFor, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
+import { closeRound, roundWeeksRange, diligenceFactor, earlyEquityMult, diligenceNow, lockedPrice, meetingWeeksFor, offerFactor, priceRatio, roundAmountFor, roundEquityFor } from '../round'
 import { Rng, createRngState } from '../rng'
 import type { DiligenceItem, GameState } from '../types'
 import { fakeCard, fakeContent } from './fixtures'
@@ -249,7 +249,12 @@ describe('round weeks: live offer + four meetings', () => {
     expect(meetingWeeksFor(8)).toEqual([1, 3, 4, 6])
     expect(meetingWeeksFor(12)).toEqual([1, 4, 6, 10])
     const s = api.applyAction(launched(usersFor(450_000)), { type: 'startRound' }).state
-    expect(B.ROUND_WEEKS_MIN).toBeLessThanOrEqual(s.round!.weeksTotal)
+    // The garage's angel round runs shorter (fix round 2): its own range.
+    const [wMin, wMax] = roundWeeksRange(1)
+    expect(wMin).toBeLessThan(B.ROUND_WEEKS_MIN)
+    expect(s.round!.weeksTotal).toBeGreaterThanOrEqual(wMin)
+    expect(s.round!.weeksTotal).toBeLessThanOrEqual(wMax)
+    expect(roundWeeksRange(2)).toEqual([B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX])
     expect(s.round!.meetingWeeks).toEqual(meetingWeeksFor(s.round!.weeksTotal))
     expect(['numbers', 'visionary', 'network']).toContain(s.round!.investorStyle)
   })

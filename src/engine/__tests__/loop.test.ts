@@ -209,15 +209,20 @@ describe('next step chain (sıradaki adım)', () => {
     expect(v.mrr * 12 * v.multiple * v.blend + v.preFade).toBeCloseTo(v.total, 6)
   })
 
-  it('garage: goals, not moves: idea → launch → users → traction → grow (no find / desk / hire links)', () => {
+  it('garage: idea → first hire (solo, before the MVP) → launch → users → traction → grow (no find / desk links)', () => {
     let s = api.createGame({ seed: 1 })
     expect(nextStep(s).id).toBe('idea')
     expect(s.derived.nextStep?.id).toBe('idea')
     s = api.applyAction(s, { type: 'startProject', category: 'web' }).state
-    // Straight to the MVP goal: alone, with a hire, with ads — the way there is the player's (2026-10-08).
+    // Fix round 2: a solo founder is offered the first hire (the playtest sat 106 days alone); one hire and it is gone.
+    expect(nextStep(s).id).toBe('hire')
+    s = api.applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id, autoDesk: true }).state
+    expect(s.employees).toHaveLength(1)
     const launch = nextStep(s)
     expect(launch.id).toBe('launch')
     expect(launch.progress).toBeGreaterThanOrEqual(0)
+    // Launching alone skips it too: the suggestion never sends a live company back.
+    expect(nextStep({ ...s, employees: [], projects: s.projects.map((p) => ({ ...p, maturity: 0.3, launched: true })) }).id).not.toBe('hire')
     s = { ...s, projects: s.projects.map((p) => ({ ...p, maturity: 0.3, launched: true, releaseLevel: 1 })), stats: { ...s.stats, users: 10 } }
     expect(nextStep(s).id).toBe('users')
     s = { ...s, stats: { ...s.stats, users: 60 } }
@@ -229,7 +234,7 @@ describe('next step chain (sıradaki adım)', () => {
     s = { ...s, finance: { ...s.finance, mrr: 2000 } }
     expect(nextStep(s).id).toBe('grow')
     // Links are numbered along the chain.
-    expect(nextStep(s).index).toBe(5)
+    expect(nextStep(s).index).toBe(6)
   })
 
   it('a ready or running round is the last link', () => {

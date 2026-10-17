@@ -25,8 +25,10 @@ import {
  * Chain order; round / roundWait / grow share the last link. Goals, not moves (playtest 2026-10-08, "tek yol
  * dayatılmasın"): the old findUsers → desk → hire links told everyone to open the same way; how the player gets to
  * the MVP and the users (alone, with a hire, with ads, with sales) is theirs. The ids stay in NEXT_STEP_IDS for saves.
+ * Fix round 2 (playtest 2026-10-17: 106 solo garage days, no hire, nothing happening): a solo founder before the MVP
+ * is offered the first hire once (a suggestion, skipped by launching alone): one builder halves the road to the MVP.
  */
-const CHAIN: readonly NextStepId[] = ['idea', 'launch', 'users', 'traction', 'round']
+const CHAIN: readonly NextStepId[] = ['idea', 'hire', 'launch', 'users', 'traction', 'round']
 const CHAIN_TOTAL = CHAIN.length
 
 function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = {}): NextStep {
@@ -44,7 +46,7 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
 }
 
 /**
- * First unmet link of: idea → release (MVP) → users → traction → round.
+ * First unmet link of: idea → (solo garage: first hire) → release (MVP) → users → traction → round.
  * 'traction' is the garage / pre-seed valuation link before revenue: valuation there is launched × $150K + users ×
  * $400 + releases (max 5) × $15K (economy.valuationPreRevenue, GAMEPLAY V2 §4.1): users and releases, not hires.
  * Links that are done stay done (a later stage never sends the player back to "pick an idea" once a project runs).
@@ -52,6 +54,7 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
 export function nextStep(s: GameState): NextStep {
   if (s.projects.length === 0) return step('idea')
   if (!s.projects.some((p) => p.launched)) {
+    if (s.stage === 0 && s.employees.length === 0 && s.candidates.length > 0) return step('hire')
     const best = s.projects.reduce((m, p) => Math.max(m, p.maturity), 0)
     return step('launch', { progress: clamp01(best / B.MVP_MATURITY), target: B.MVP_MATURITY })
   }

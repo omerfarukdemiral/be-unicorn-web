@@ -112,6 +112,11 @@ const STYLE_FIT: Record<InvestorStyle, ReadonlySet<RoundPitch>> = {
   network: new Set(['coinvestor', 'fix', 'rival', 'keep']),
 }
 
+/** A round's length range in weeks toward `target` (the first one is shorter: ROUND_WEEKS_BY_TARGET). */
+export function roundWeeksRange(target: number): readonly [number, number] {
+  return B.ROUND_WEEKS_BY_TARGET[target] ?? [B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX]
+}
+
 /** Weeks the four meetings fall on: spread over the round, the first after week 1, the last ≥ 2 weeks before the end. */
 export function meetingWeeksFor(weeksTotal: number): number[] {
   const last = Math.max(1, weeksTotal - 2)
@@ -345,8 +350,8 @@ export function roundView(s: GameState, stars: number): RoundView | undefined {
     ceiling: B.ROUND_OFFER_CEIL,
     pitchBonus: r ? live(r).pitchBonus : 0,
     pitchCap: B.PITCH_BONUS_CAP,
-    weeksMin: B.ROUND_WEEKS_MIN,
-    weeksMax: B.ROUND_WEEKS_MAX,
+    weeksMin: roundWeeksRange(targetStage)[0],
+    weeksMax: roundWeeksRange(targetStage)[1],
     diligence,
     growthAsk: growthAsk(s),
   }
@@ -419,7 +424,8 @@ export function startRound(s: GameState, rng: Rng, stars = 0, size: RoundSize = 
   // repriced each week on the live price (repriceEquity).
   const earlyMult = down ? undefined : earlyEquityMult(priceRatio(s.finance.valuation, targetValuation))
   const equity = down ? downEquity(normal) : normal * earlyMult!
-  const weeks = rng.int(B.ROUND_WEEKS_MIN, B.ROUND_WEEKS_MAX)
+  const [wMin, wMax] = roundWeeksRange(target)
+  const weeks = rng.int(wMin, wMax)
   const investorStyle = rng.pick(INVESTOR_STYLES)
   const diligence = diligenceNow(s)
   const r: RoundState = {

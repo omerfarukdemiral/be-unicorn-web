@@ -458,6 +458,12 @@ export const VALUATION_KEEP_PRE_REVENUE_FLOOR = true
 // ---------------------------------------------------------------------------
 export const ROUND_WEEKS_MIN = 8
 export const ROUND_WEEKS_MAX = 12
+/**
+ * Fix round 2 (the garage dragged): the first round, garage → Pre-seed, is an angel cheque and runs shorter. Index =
+ * target stage; a missing entry runs ROUND_WEEKS_MIN–MAX. (Longer growth rounds did not move the Unicorn time: the
+ * valuation keeps growing while a round runs.)
+ */
+export const ROUND_WEEKS_BY_TARGET: Readonly<Partial<Record<number, readonly [number, number]>>> = { 1: [6, 8] }
 export const BRIDGE_CARD_ID = 'vc-bridge-loan'
 
 // Live round window (docs/CORE_LOOP.md §4.3, phase 2) ------------------------

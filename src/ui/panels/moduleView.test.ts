@@ -129,13 +129,13 @@ describe('measured line', () => {
 })
 
 describe('version line, labels, cost', () => {
-  it('v1 reads "v2 · %60"; a running build names itself with its days', () => {
+  it('v1 reads "v2 hazırlanıyor · %60" (one version on the card: the badge v1, the line the next); a running build names itself with its days', () => {
     const s = company(['web'], 2)
     s.projects[0]!.version = 1
     s.projects[0]!.lineUpdates = 0
-    expect(versionLine(s, s.projects[0]!)).toBe('v2 · %60')
+    expect(versionLine(s, s.projects[0]!)).toBe('v2 hazırlanıyor · %60')
     s.projects[0]!.lineUpdates = 1
-    expect(versionLine(s, s.projects[0]!)).toBe('v2 · %80')
+    expect(versionLine(s, s.projects[0]!)).toBe('v2 hazırlanıyor · %80')
     expect(previewLine({ ...s.projects[0]!, maturity: 0.83 })).toBe('v1 · 3 slot açılır · %83')
   })
 
@@ -182,7 +182,7 @@ describe('project card and lists', () => {
     expect(html).toContain('data-version-badge=""')
     expect(html).toContain('>v2<')
     expect(html).toContain('data-version-bar=""')
-    expect(html).toContain('v3 · %')
+    expect(html).toContain('v3 hazırlanıyor · %')
     expect(html).toContain('data-slot-count=""')
     expect(html).toContain('0/6')
     const u = clone(s)

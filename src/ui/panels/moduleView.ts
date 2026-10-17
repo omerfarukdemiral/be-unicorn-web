@@ -213,7 +213,7 @@ export function measuredLine(s: GameState, p: Project, m: ProjectModule): Measur
 
 // Project card version line (design §1.1, MV2c) ----------------------------------------------------------------------
 
-/** The version bar's text: "v3 · %72" toward the next version, or "Davet sistemi geliştiriliyor · ≈12g" while a module builds. */
+/** The version bar's text: "v4 hazırlanıyor · %72" toward the next version, or "Davet sistemi geliştiriliyor · ≈12g" while a module builds. */
 export function versionLine(s: GameState, p: Project): string {
   const b = buildStatus(s, p)
   if (b && !b.refresh) return t('module.buildingEta', { module: moduleName(b.id, p.category), d: b.days ?? '–' })

@@ -689,7 +689,7 @@ export const UI_TEXT: Record<string, string> = {
   'module.company': 'Şirkete: {v}',
   // Version cycle, offers, measured effect, relations (design §1, §2; the UI passes the {params}).
   'module.version': 'v{v}',
-  'module.toVersion': 'v{v} · %{p}',
+  'module.toVersion': 'v{v} hazırlanıyor · %{p}',
   'module.slots': '{used}/{total}',
   'module.slotsOpen': 'v{v} yayında · +{n} slot',
   'module.slotsPreview': 'v1 · {n} slot açılır · %{p}',

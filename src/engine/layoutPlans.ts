@@ -7,7 +7,7 @@
 import { PAINT_KIND } from '../content/decor'
 import { autoPlace, autoPlaceDecor, cellKey, cellOpen, decorBill, decorCap, decorCells, decorCount, dropEmptyFreeSlots, frontDir, gridHalf, inGrid, itemPieces, liftItem, nextDecorId, previewSnapshot, putItem, rightDir, stageFixtures, storeDecor, validateLayout, wallSegments, type Placement, type Rotation } from './layout'
 import { isRingUnlocked, teamClusters, type PlacementSpec } from './office'
-import { DEPTS, FOUNDER_SLOT_ID, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type SavedLayout, type SlotId, type SlotType, type StageIndex, type WallPiece } from './types'
+import { DEPTS, FOUNDER_SLOT_ID, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type NewItem, type OfficeState, type SavedLayout, type SlotId, type SlotType, type StageIndex, type WallPiece } from './types'
 
 export type LayoutPreset = 'classic' | 'islands' | 'open' | 'rows'
 /** Order in the Düzenler tab: today's default first. */
@@ -42,6 +42,8 @@ interface Lifted {
   cells: GridPos[]
   /** The draft's own entry for it (absent: the draft leaves it where the live office has it). */
   cp?: LayoutSnapshot['slots'][string]
+  /** Bought in the draft (its `buy` key): it stays a purchase wherever the plan puts it. */
+  buyKey?: string
 }
 
 interface Trial {
@@ -73,11 +75,14 @@ function liftAll(live: OfficeState, draft: LayoutSnapshot): Trial | null {
     const z = cp?.z ?? p.anchor.pos.z
     wanted.set(cellKey(x, z), p.anchor.id)
   }
+  // Items bought in the draft are pieces too ("+key"), so a plan arranges them with the rest.
+  for (const n of draft.buy ?? []) wanted.set(cellKey(n.x, n.z), `+${n.key}`)
   const lifted: Lifted[] = []
   for (const it of itemPieces(office)) {
     const liveId = wanted.get(cellKey(it.anchor.pos.x, it.anchor.pos.z))
     const src = liveId ? liveById.get(liveId) : undefined
-    if (!liveId || !src) return null
+    const buyKey = liveId?.startsWith('+') ? liveId.slice(1) : undefined
+    if (!liveId || (!src && buyKey === undefined)) return null
     lifted.push({
       id: liveId,
       itemId: it.anchor.itemId!,
@@ -88,6 +93,7 @@ function liftAll(live: OfficeState, draft: LayoutSnapshot): Trial | null {
       home: { x: it.anchor.pos.x, z: it.anchor.pos.z, r: it.rotation },
       cells: it.cells.map((c) => ({ x: c.pos.x, z: c.pos.z })),
       ...(draft.slots[liveId] ? { cp: draft.slots[liveId] } : {}),
+      ...(buyKey !== undefined ? { buyKey } : {}),
     })
     liftItem(office, it.cells)
   }
@@ -181,8 +187,13 @@ function restoreDecor(t: Trial, pieces: readonly DecorPiece[]): void {
 /** The trial as a draft over the live office; null if the whole is not legal (it always is by construction). */
 function toDraft(t: Trial, walls?: WallPiece[]): LayoutSnapshot | null {
   const slots: LayoutSnapshot['slots'] = {}
+  const buy: NewItem[] = []
   for (const [id, cp] of t.placed) {
     const p = t.lifted.find((x) => x.id === id)!
+    if (p.buyKey !== undefined) {
+      buy.push({ key: p.buyKey, itemId: p.itemId, x: cp.x, z: cp.z, r: cp.r, ...(cp.team !== undefined ? { team: cp.team } : {}) })
+      continue
+    }
     if (cp.home) {
       // The draft's own entry (if it had one) puts it back on these cells; else the live office already does.
       if (p.cp) slots[id] = { ...p.cp, ...(cp.team !== undefined ? { team: cp.team } : {}) }
@@ -191,7 +202,7 @@ function toDraft(t: Trial, walls?: WallPiece[]): LayoutSnapshot | null {
     }
     slots[id] = { x: cp.x, z: cp.z, r: cp.r, ...(cp.team !== undefined ? { team: cp.team } : {}) }
   }
-  const draft: LayoutSnapshot = { slots, decor: (t.office.decor ?? []).map((p) => ({ ...p, pos: { ...p.pos } })), walls: (walls ?? t.office.walls ?? []).map((w) => ({ ...w })) }
+  const draft: LayoutSnapshot = { slots, decor: (t.office.decor ?? []).map((p) => ({ ...p, pos: { ...p.pos } })), walls: (walls ?? t.office.walls ?? []).map((w) => ({ ...w })), ...(buy.length ? { buy: buy.sort((a, b) => a.key.localeCompare(b.key)) } : {}) }
   const res = previewSnapshot(t.live, draft)
   return 'error' in res || !res.check.ok ? null : draft
 }

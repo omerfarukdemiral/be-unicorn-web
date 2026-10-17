@@ -216,3 +216,18 @@ describe('missingPieces', () => {
     expect(missingPieces(o, bought, saved)).toEqual([])
   })
 })
+
+describe('plans and desks bought in the draft (grid v2)', () => {
+  it('a preset or Otomatik düzenle moves a desk bought in the draft and keeps it a purchase', () => {
+    const live = filled(2, 3, 6)
+    const draft: LayoutSnapshot = { slots: {}, decor: live.decor ?? [], walls: live.walls ?? [], buy: [{ key: 'n1', itemId: 'desk-basic', x: -5, z: 4, r: 0 }] }
+    expect(previewSnapshot(live, draft)).toMatchObject({ check: { ok: true } })
+    for (const out of [...LAYOUT_PRESETS.map((p) => presetDraft(live, draft, p, deptOf)), autoArrangeDraft(live, draft, deptOf)]) {
+      expect(out).not.toBeNull()
+      expect(out!.buy).toHaveLength(1)
+      expect(out!.buy![0]).toMatchObject({ key: 'n1', itemId: 'desk-basic' })
+      const res = previewSnapshot(live, out!)
+      expect('error' in res ? res.error : res.check.ok).toBe(true)
+    }
+  })
+})

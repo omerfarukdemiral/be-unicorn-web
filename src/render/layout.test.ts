@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { computeLayout, furnishedBox, idleSpots, lPath, meetingSeats, pathFromDoor, seatPoint, type OfficeLayout, type XZ } from './layout'
 import { createMockState } from './mockState'
 import { CELL } from './constants'
-import { gridHalf } from '../engine/layout'
+import { gridHalf, validateLayout } from '../engine/layout'
+import { isFreeFloor } from './nav'
 import { buildOffice, stageRingCount } from '../engine/office'
 
 describe('render layout', () => {
@@ -72,6 +73,32 @@ describe('render layout', () => {
         // Every leg except the final step onto the target stays off furniture.
         for (let i = 0; i < path.length - 2; i++) expect(hits(L, path[i]!, path[i + 1]!)).toBe(false)
       }
+    }
+  })
+
+  it('walkers come in through the clear door zone and go round separators', () => {
+    // Pre-seed, both rings open: desks on ring 1, a wall of panels right along the door zone's edge (as legal as it gets).
+    const o = buildOffice(1, 2)
+    for (const s of o.slots) if (s.type === 'desk' && s.ring === 1) s.itemId = 'desk-basic'
+    o.decor = [[2, -4], [2, -3], [2, -2], [3, -2], [4, -2]].map(([x, z], i) => ({ id: `p${i}`, kind: 'panel', pos: { x: x!, z: z! }, rotation: 0 as const }))
+    o.decor.pop()
+    expect(validateLayout(o).ok).toBe(true)
+    const L = computeLayout(o.slots, o.rings, 1, o.decor)
+    expect(isFreeFloor(L, L.door.inside)).toBe(true)
+    const crosses = (a: XZ, b: XZ) => {
+      const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.05)
+      for (let k = 0; k <= n; k++) {
+        const x = a[0] + ((b[0] - a[0]) * k) / n
+        const z = a[1] + ((b[1] - a[1]) * k) / n
+        if (L.obstacles.some((q) => x > q.minX && x < q.maxX && z > q.minZ && z < q.maxZ)) return true
+      }
+      return false
+    }
+    for (const s of o.slots.filter((x) => x.itemId)) {
+      const seat = seatPoint(L.slotWorld.get(s.id)!, s.rotation)
+      const path = pathFromDoor(seat, L)
+      expect(Math.hypot(path.at(-1)![0] - seat[0], path.at(-1)![1] - seat[1])).toBeLessThan(1e-6)
+      for (let i = 0; i < path.length - 2; i++) expect(crosses(path[i]!, path[i + 1]!)).toBe(false)
     }
   })
 

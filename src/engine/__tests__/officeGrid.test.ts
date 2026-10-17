@@ -348,11 +348,11 @@ describe('moves and layouts (actions)', () => {
   })
 })
 
-/** A Series A column cell inside ring 3 (free floor on the Seed office). */
+/** A Series A column cell off the corners (the posts stand on the outer ring only; free wall-row floor on the Seed office). */
 const columnCell = (stage: StageIndex): [number, number] =>
   stageFixtures(stage)
     .columns.map(([x, z]) => [worldToGrid(x), worldToGrid(z)] as [number, number])
-    .find(([x, z]) => ringOfCell({ x, z }) <= 3)!
+    .find(([x, z]) => Math.min(Math.abs(x), Math.abs(z)) === 3)!
 
 describe('stage move carry-over', () => {
   it('carries free desks and separators; floor decor, wall pieces and paint jobs to storage', () => {
@@ -438,12 +438,18 @@ describe('saves', () => {
 
   it('v5 → v6: a piece on a cell the one grid now keeps clear (a moved column) is re-placed; its sitter follows', () => {
     // data/saveV5.json was written by the v5 engine (grid 4fb2172): a Seed-sized Series A office with a seated desk
-    // moved onto (−3,3) and a panel on (−3,−3), both column cells on the v2 grid.
+    // moved onto (−3,3) and a panel on (−3,−3), column cells on the first v2 grid. The posts stand on the outer ring
+    // only now (fix round 2026-10-18 §3), so the two pieces are moved onto today's posts (−6,3) and (−6,−3) first.
+    const onPosts = (raw: { state: GameState }) => {
+      for (const x of raw.state.office.slots) if (x.pos.x === -3 && x.pos.z === 3) x.pos = { x: -6, z: 3 }
+      for (const p of raw.state.office.decor!) if (p.pos.x === -3 && p.pos.z === -3) p.pos = { x: -6, z: -3 }
+    }
     const raw = structuredClone(saveV5) as unknown as { version: number; state: GameState }
+    onPosts(raw)
     expect(raw.version).toBe(5)
     expect(validateLayout(raw.state.office).ok).toBe(false)
     const old = raw.state.office
-    const moved = old.slots.find((x) => x.pos.x === -3 && x.pos.z === 3 && x.itemId)!
+    const moved = old.slots.find((x) => x.pos.x === -6 && x.pos.z === 3 && x.itemId)!
     const sitter = moved.occupantId!
     const s = deserialize(JSON.stringify(raw))!
     expect(s.meta.saveVersion).toBe(6)
@@ -452,15 +458,16 @@ describe('saves', () => {
     const keep = (o: OfficeState) => o.slots.filter((x) => x.itemId && x.occupantId !== sitter).map((x) => [x.id, x.pos.x, x.pos.z, x.rotation])
     expect(keep(s.office)).toEqual(keep(old))
     const seat = s.office.slots.find((x) => x.occupantId === sitter)!
-    expect([seat.pos.x, seat.pos.z]).not.toEqual([-3, 3])
+    expect([seat.pos.x, seat.pos.z]).not.toEqual([-6, 3])
     expect(seat.itemId).toBe(moved.itemId)
     expect(s.employees.find((e) => e.id === sitter)!.deskSlotId).toBe(seat.id)
-    expect(s.office.decor!.map((p) => p.id).sort()).toEqual(old.decor!.filter((p) => !(p.pos.x === -3 && p.pos.z === -3)).map((p) => p.id).sort())
+    expect(s.office.decor!.map((p) => p.id).sort()).toEqual(old.decor!.filter((p) => !(p.pos.x === -6 && p.pos.z === -3)).map((p) => p.id).sort())
     expect(s.office.storage).toEqual([{ kind: 'panel', n: 1 }])
     // A legal v5 office loads untouched.
     const fine = structuredClone(saveV5) as unknown as { version: number; state: GameState }
+    onPosts(fine)
     fine.state.office.slots = fine.state.office.slots.filter((x) => x.id !== moved.id)
-    fine.state.office.decor = fine.state.office.decor!.filter((p) => !(p.pos.x === -3 && p.pos.z === -3))
+    fine.state.office.decor = fine.state.office.decor!.filter((p) => !(p.pos.x === -6 && p.pos.z === -3))
     fine.state.employees = fine.state.employees.map((e) => (e.id === sitter ? { ...e, deskSlotId: undefined } : e))
     expect(validateLayout(fine.state.office).ok).toBe(true)
     expect(deserialize(JSON.stringify(fine))!.office.slots).toEqual(fine.state.office.slots)

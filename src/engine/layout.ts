@@ -159,7 +159,7 @@ export const STAIRS_LEN = GRID_CELL * 3
 
 /**
  * The stage's fixed cells, from its bounds only: the door on the back wall above the ring square's last column with
- * the 2×2 cells inside it kept clear, the columns of stages 3–5 (on walkway cells, never on a ring slot), the Series B
+ * the 2×2 cells inside it kept clear, the columns of stages 3–5 (one outer ring of posts on walkway cells, never on a ring slot), the Series B
  * stairs, the garage shelf and the founder desk's cell. Memoised per stage.
  */
 export function stageFixtures(stage: StageIndex): Fixtures {
@@ -177,11 +177,13 @@ export function stageFixtures(stage: StageIndex): Fixtures {
   if (stage >= 3 && stage <= 5) {
     const slots = new Set<CellKey>()
     for (let r = 1; r <= stageRingCount(stage); r++) for (const s of buildRingSlots(r)) slots.add(cellKey(s.pos.x, s.pos.z))
-    // On every third cell (multiples of 3, inside the wall row), skipping the founder's square, ring slots and the door zone.
+    // One ring of posts on every third cell (multiples of 3, inside the wall row), skipping ring slots and the door
+    // zone. Only the outer ring: a post on every third cell across the whole floor read as a forest round a small
+    // team (fix round 2026-10-18 §3); the middle stays open.
     const m = Math.floor((h - 1) / 3) * 3
     for (let x = -m; x <= m; x += 3) {
       for (let z = -m; z <= m; z += 3) {
-        if (Math.max(Math.abs(x), Math.abs(z)) <= 1) continue
+        if (Math.max(Math.abs(x), Math.abs(z)) !== m) continue
         const k = cellKey(x, z)
         if (slots.has(k) || zone.has(k)) continue
         columns.push([axisToWorld(x), axisToWorld(z)])

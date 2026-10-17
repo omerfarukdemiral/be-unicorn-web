@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { computeLayout, furnishedBox, idleSpots, lPath, meetingSeats, pathFromDoor, seatPoint, type OfficeLayout, type XZ } from './layout'
 import { createMockState } from './mockState'
+import { CELL } from './constants'
+import { gridHalf } from '../engine/layout'
+import { buildOffice, stageRingCount } from '../engine/office'
 
 describe('render layout', () => {
   it('mock states are JSON-serializable for every stage', () => {
@@ -35,13 +38,16 @@ describe('render layout', () => {
     expect(p[p.length - 1]).toEqual([2, 3])
   })
 
-  it('ring 1 keeps a walkway gap from the founder desk', () => {
-    const s = createMockState(3)
-    const L = computeLayout(s.office.slots, s.office.rings, 3)
-    const f = L.itemCenter.get('founder')!.pos
-    for (const slot of s.office.slots.filter((x) => x.ring === 1)) {
-      const p = L.slotWorld.get(slot.id)!
-      expect(Math.max(Math.abs(p[0] - f[0]), Math.abs(p[1] - f[1]))).toBeGreaterThan(2)
+  it('one grid: a slot sits on its cell × CELL, the walls and ring boxes stand on cell edges', () => {
+    for (const st of [0, 1, 2, 3, 4, 5, 6] as const) {
+      const o = buildOffice(st, stageRingCount(st))
+      const L = computeLayout(o.slots, o.rings, st)
+      for (const slot of o.slots) expect(L.slotWorld.get(slot.id)).toEqual([slot.pos.x * CELL, slot.pos.z * CELL])
+      const h = gridHalf(st)
+      expect(L.bounds).toEqual({ minX: -(h + 0.5) * CELL, maxX: (h + 0.5) * CELL, minZ: -(h + 0.5) * CELL, maxZ: (h + 0.5) * CELL })
+      for (const b of L.bands) for (const v of [b.box.minX, b.box.maxX, b.box.minZ, b.box.maxZ]) expect(Math.abs(((v / CELL + 0.5) % 1) + 0) % 1).toBeCloseTo(0)
+      // Ring 1 is the founder's neighbour row now: no cross-aisle.
+      expect(Math.max(...o.slots.filter((x) => x.ring === 1).map((x) => Math.max(Math.abs(L.slotWorld.get(x.id)![0]), Math.abs(L.slotWorld.get(x.id)![1]))))).toBe(CELL)
     }
   })
 
@@ -71,10 +77,11 @@ describe('render layout', () => {
 
   it('columns never stand on a slot cell', () => {
     for (const st of [3, 4, 5] as const) {
-      const s = createMockState(st)
-      const L = computeLayout(s.office.slots, s.office.rings, st)
+      const o = buildOffice(st, stageRingCount(st))
+      const L = computeLayout(o.slots, o.rings, st)
+      expect(L.columns.length).toBeGreaterThan(4)
       for (const c of L.columns) {
-        for (const p of L.slotWorld.values()) expect(Math.max(Math.abs(p[0] - c[0]), Math.abs(p[1] - c[1]))).toBeGreaterThanOrEqual(1.1)
+        for (const p of L.slotWorld.values()) expect(Math.max(Math.abs(p[0] - c[0]), Math.abs(p[1] - c[1]))).toBeGreaterThanOrEqual(CELL - 1e-9)
       }
     }
   })

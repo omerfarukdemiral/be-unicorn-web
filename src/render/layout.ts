@@ -1,6 +1,7 @@
 // Pure scene layout derived from office slots: floor bounds, ring bands, door, walk targets.
 // No game formulas here — only geometry for drawing and walking.
-import { decorShape } from '../engine/layout'
+import { STAIRS_LEN, decorShape, stageFixtures } from '../engine/layout'
+import { ringDistance } from '../engine/office'
 import { FOUNDER_SLOT_ID, type DecorPiece, type RingState, type Slot, type SlotId, type StageIndex } from '../engine/types'
 import { CELL, gridToWorld, hashString, rotateXZ } from './constants'
 import { findPath, isFreeFloor } from './nav'
@@ -55,22 +56,6 @@ export interface OfficeLayout {
   columns: XZ[]
 }
 
-function boxOfCells(cells: Slot[], pad: number): Box | null {
-  if (cells.length === 0) return null
-  let minX = Infinity
-  let maxX = -Infinity
-  let minZ = Infinity
-  let maxZ = -Infinity
-  for (const s of cells) {
-    const [x, z] = gridToWorld(s.pos)
-    minX = Math.min(minX, x)
-    maxX = Math.max(maxX, x)
-    minZ = Math.min(minZ, z)
-    maxZ = Math.max(maxZ, z)
-  }
-  return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad }
-}
-
 /** Local blocked rect of a model (CELL units, front/chair side = +z), leaving seats reachable. */
 function footprint(shape: ShapeKey, span: boolean): { hx: number; z0: number; z1: number } {
   const wide = span ? 0.5 : 0
@@ -106,10 +91,6 @@ function rotatedBox(c: XZ, yaw: number, hx: number, z0: number, z1: number): Box
   return out
 }
 
-function union(a: Box, b: Box): Box {
-  return { minX: Math.min(a.minX, b.minX), maxX: Math.max(a.maxX, b.maxX), minZ: Math.min(a.minZ, b.minZ), maxZ: Math.max(a.maxZ, b.maxZ) }
-}
-
 function expand(b: Box, d: number): Box {
   return { minX: b.minX - d, maxX: b.maxX + d, minZ: b.minZ - d, maxZ: b.maxZ + d }
 }
@@ -127,34 +108,33 @@ function bandRects(outer: Box, inner: Box | null): Box[] {
 }
 
 export function computeLayout(slots: readonly Slot[], rings: readonly RingState[], stage: StageIndex, decor: readonly DecorPiece[] = []): OfficeLayout {
-  const pad = CELL * 0.55
   const slotWorld = new Map<SlotId, XZ>()
   for (const s of slots) slotWorld.set(s.id, gridToWorld(s.pos))
 
+  // Everything stands on cell edges: ring r's box is its Chebyshev square (2r − 1 cells out) edge to edge, the outer
+  // ring's runs on to the walls (one more cell row, where pieces may stand against the wall).
   const maxRing = slots.reduce((m, s) => Math.max(m, s.ring), 0)
+  const square = (cells: number): Box => ({ minX: -cells * CELL, maxX: cells * CELL, minZ: -cells * CELL, maxZ: cells * CELL })
   const bands: RingBand[] = []
   let prev: Box | null = null
   for (let r = 0; r <= maxRing; r++) {
-    const own = boxOfCells(
-      slots.filter((s) => s.ring === r),
-      pad,
-    )
-    if (!own && !prev) continue
-    const box: Box = prev ? (own ? union(prev, own) : prev) : own!
+    if (!slots.some((s) => s.ring === r)) continue
+    const box = square(r === 0 ? 0.5 : r === maxRing ? ringDistance(r) + 1.5 : ringDistance(r) + 0.5)
     const ringState = rings.find((x) => x.index === r)
     const unlocked = r === 0 || (ringState ? ringState.unlocked : true)
     bands.push({ ring: r, unlocked, rects: bandRects(box, prev), box })
     prev = box
   }
 
-  const fallback: Box = { minX: -CELL * 2, maxX: CELL * 2, minZ: -CELL * 2, maxZ: CELL * 2 }
-  const bounds = expand(prev ?? fallback, CELL * 0.35)
+  const fallback: Box = square(2.5)
+  const bounds = maxRing > 0 ? prev! : fallback
   const unlockedBands = bands.filter((b) => b.unlocked)
   const walkBox = expand(unlockedBands[unlockedBands.length - 1]?.box ?? bounds, -CELL * 0.1)
   const center: XZ = [(bounds.minX + bounds.maxX) / 2, (bounds.minZ + bounds.maxZ) / 2]
   const radius = Math.hypot(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) / 2
 
-  const doorX = Math.max(bounds.minX + CELL * 0.8, bounds.maxX - CELL * 1.1)
+  // Over the ring square's last column (layout.stageFixtures: the 2×2 cells inside it stay clear).
+  const doorX = (maxRing > 0 ? ringDistance(maxRing) : 1) * CELL
   const door = {
     pos: [doorX, bounds.minZ] as XZ,
     inside: [doorX, bounds.minZ + CELL * 0.6] as XZ,
@@ -189,25 +169,14 @@ export function computeLayout(slots: readonly Slot[], rings: readonly RingState[
     obstacles.push(rotatedBox(c.pos, c.yaw, f.hx, f.z0, f.z1))
   }
 
-  // Columns on a coarse grid, skipping any spot that would land on a slot cell or in the doorway.
-  const columns: XZ[] = []
-  if (stage >= 3 && stage <= 5) {
-    const step = CELL * 3
-    const slotPts = [...slotWorld.values()]
-    for (let x = bounds.minX + step; x < bounds.maxX - CELL; x += step) {
-      for (let z = bounds.minZ + step; z < bounds.maxZ - CELL; z += step) {
-        const c: XZ = [x + CELL * 0.5, z + CELL * 0.5]
-        if (Math.hypot(c[0], c[1]) <= CELL * 1.5) continue
-        if (slotPts.some((p) => Math.max(Math.abs(p[0] - c[0]), Math.abs(p[1] - c[1])) < CELL * 0.75)) continue
-        if (Math.abs(c[0] - door.pos[0]) < CELL * 0.7 && c[1] < door.inside[1] + CELL) continue
-        columns.push(c)
-        obstacles.push({ minX: c[0] - 0.11, maxX: c[0] + 0.11, minZ: c[1] - 0.11, maxZ: c[1] + 0.11 })
-      }
-    }
-  }
+  // Columns (stages 3–5) on walkway cells, exactly where the engine keeps pieces off them.
+  const columns: XZ[] = stage >= 3 && stage <= 5 ? stageFixtures(stage).columns.map((c) => [c[0], c[1]] as XZ) : []
+  for (const c of columns) obstacles.push({ minX: c[0] - 0.11, maxX: c[0] + 0.11, minZ: c[1] - 0.11, maxZ: c[1] + 0.11 })
 
-  // Series B stairs along the back-left corner (drawn in Office.tsx).
-  if (stage === 4) obstacles.push({ minX: bounds.minX, maxX: bounds.minX + 0.95, minZ: bounds.minZ, maxZ: bounds.minZ + 4.6 })
+  // Series B stairs along the back of the left wall (drawn in Office.tsx).
+  if (stage === 4) obstacles.push({ minX: bounds.minX, maxX: bounds.minX + 0.95, minZ: bounds.minZ, maxZ: bounds.minZ + STAIRS_LEN })
+  // The garage's metal shelf in the back-left corner cell.
+  if (stage === 0) obstacles.push({ minX: bounds.minX, maxX: bounds.minX + CELL, minZ: bounds.minZ, maxZ: bounds.minZ + 0.5 })
 
   // Floor decor (rugs are walked on): a separator is a thin wall across its cell, other pieces a small block.
   for (const p of decor) {

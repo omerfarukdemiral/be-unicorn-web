@@ -2,17 +2,18 @@
 // seats, stage moves and the v4 → v5 save migration.
 import { describe, expect, it } from 'vitest'
 import { computeLayout } from '../../render/layout'
-import { CELL, CENTER_GAP, gridToWorld } from '../../render/constants'
+import { CELL, gridToWorld } from '../../render/constants'
 import { createMockState } from '../../render/mockState'
 import { applyAction, createGame } from '../index'
-import { autoPlace, autoPlaceDecor, cellKey, decorCap, gridHalf, nearestFreeDesk, ringOfCell, stageFixtures, typeCaps, validateLayout, worldToGrid } from '../layout'
+import { autoPlace, autoPlaceDecor, cellKey, decorCap, frontDir, gridHalf, nearestFreeDesk, repairOffice, ringHalf, ringOfCell, stageFixtures, typeCaps, validateLayout, worldToGrid } from '../layout'
 import { buildOffice, findAutoSlotFor, relocateOffice, stageRingCount } from '../office'
 import { enterStage } from '../round'
 import { deserialize, serialize } from '../save'
 import { FOUNDER_SLOT_ID, SAVE_VERSION, type DecorPiece, type GameState, type OfficeState, type StageIndex } from '../types'
 import golden from './data/officeGolden.json'
 import saveV4 from './data/saveV4.json'
-import { autoFill, goldenNow, layoutOf, moveChain } from './officeGolden'
+import saveV5 from './data/saveV5.json'
+import { autoFill, goldenNow, moveChain } from './officeGolden'
 
 const STAGES = [0, 1, 2, 3, 4, 5, 6] as StageIndex[]
 type Golden = { canonical: unknown[]; autoFill: { order: unknown; layout: unknown }[]; moveChain: unknown[]; mock: unknown[] }
@@ -26,41 +27,58 @@ const rich = (stage: StageIndex, office?: OfficeState): GameState => {
   return { ...s, stage, office: office ?? buildOffice(stage, stageRingCount(stage)), stats: { ...s.stats, cash: 1e12 } }
 }
 
-describe('no player-visible change (golden from master 2fca964)', () => {
-  it('canonical offices, auto placement order, stage moves and scene layouts are unchanged', () => {
+/** The cell a world coordinate had before grid v2 (the 0.9 founder cross-aisle): the golden was written with it. */
+const oldToGrid = (w: number): number => (Math.abs(w) < 1.65 ? 0 : Math.sign(w) * Math.round((Math.abs(w) - 0.9) / 1.5))
+type GoldenLayout = { bounds: unknown; slotWorld: [string, [number, number]][]; door: { inside: [number, number] } }
+const cellsOf = (L: GoldenLayout, toGrid: (w: number) => number) => L.slotWorld.map(([id, [x, z]]) => [id, toGrid(x), toGrid(z)])
+
+describe('same offices on one grid (golden from master 2fca964)', () => {
+  it('canonical offices, auto placement order and stage moves are unchanged; every slot lands on its old cell', () => {
     const now = JSON.parse(JSON.stringify(goldenNow())) as Golden
     expect(now.canonical).toEqual(G.canonical)
     STAGES.forEach((st) => {
       expect(now.autoFill[st]!.order, `auto order s${st}`).toEqual(G.autoFill[st]!.order)
-      expect(now.autoFill[st]!.layout, `layout s${st}`).toEqual(G.autoFill[st]!.layout)
-      expect(now.mock[st], `mock s${st}`).toEqual(G.mock[st])
+      const a = now.autoFill[st]!.layout as GoldenLayout
+      const b = G.autoFill[st]!.layout as GoldenLayout
+      expect(cellsOf(a, worldToGrid), `cells s${st}`).toEqual(cellsOf(b, oldToGrid))
+      // The room is the same size: the cross-aisle became the row along the walls.
+      expect(a.bounds, `bounds s${st}`).toEqual(b.bounds)
+      const m = now.mock[st] as GoldenLayout
+      expect(cellsOf(m, worldToGrid), `mock s${st}`).toEqual(cellsOf(G.mock[st] as GoldenLayout, oldToGrid))
     })
     expect(JSON.parse(JSON.stringify(moveChain()))).toEqual(G.moveChain)
   })
 
-  it('engine grid geometry mirrors render: worldToGrid inverts gridToWorld, fixtures match computeLayout', () => {
+  it('engine grid geometry mirrors render: linear cells, worldToGrid inverts gridToWorld, fixtures match computeLayout', () => {
     expect(CELL).toBe(1.5)
-    expect(CENTER_GAP).toBeCloseTo(0.9)
+    expect(gridToWorld({ x: 1, z: -2 })).toEqual([1.5, -3])
     for (let v = -12; v <= 12; v++) expect(worldToGrid(gridToWorld({ x: v, z: 0 })[0])).toBe(v)
+    for (let v = -12; v <= 12; v++) expect(worldToGrid(v * CELL + CELL * 0.49)).toBe(v)
     for (const st of STAGES) {
       const L = computeLayout(buildOffice(st, stageRingCount(st)).slots, [], st)
       const fx = stageFixtures(st)
-      expect(fx.columns.map((c) => c.map((v) => +v.toFixed(6)))).toEqual(L.columns.map((c) => c.map((v) => +v.toFixed(6))))
+      expect(fx.columns).toEqual(L.columns)
       expect(fx.door).toEqual({ x: worldToGrid(L.door.inside[0]), z: worldToGrid(L.door.inside[1]) })
-      expect(fx.door).toEqual({ x: gridHalf(st), z: -gridHalf(st) })
+      expect(fx.door).toEqual({ x: ringHalf(st), z: -gridHalf(st) })
+      expect(L.bounds.minZ).toBeCloseTo(-(gridHalf(st) + 0.5) * CELL)
+      // The door zone: the door cell, its neighbour toward the corner and the two cells in front of them.
+      expect(fx.doorZone.map((c) => cellKey(c.x, c.z)).sort()).toEqual([cellKey(ringHalf(st), -gridHalf(st)), cellKey(gridHalf(st), -gridHalf(st)), cellKey(ringHalf(st), -ringHalf(st)), cellKey(gridHalf(st), -ringHalf(st))].sort())
     }
   })
 })
 
 describe('grid model', () => {
-  it('rings become zones; type caps are today’s canonical counts', () => {
+  it('rings become zones; the wall row is the outer ring; type caps are today’s canonical counts', () => {
     expect(ringOfCell({ x: 0, z: 0 })).toBe(0)
     expect([1, 2, 3, 4, 5].map((d) => ringOfCell({ x: d, z: 0 }))).toEqual([1, 2, 2, 3, 3])
+    expect(ringOfCell({ x: 2, z: 0 }, 0)).toBe(1)
+    expect(ringOfCell({ x: 4, z: -4 }, 1)).toBe(2)
     for (let r = 1; r <= 6; r++) for (const s of buildOffice(5, 6).slots.filter((x) => x.ring === r)) expect(ringOfCell(s.pos)).toBe(r)
     const desks = [1, 2, 3, 4, 5, 6].map((r) => typeCaps(buildOffice(5, r)).desk)
     expect(desks).toEqual([4, 8, 12, 21, 28, 36])
     expect(typeCaps(buildOffice(6, 6))).toEqual({ desk: 36, common: 8, room: 12, special: 4 })
     expect(STAGES.map(decorCap)).toEqual([6, 12, 20, 30, 45, 60, 80])
+    expect(STAGES.map(gridHalf)).toEqual([2, 4, 6, 8, 10, 12, 12])
   })
 
   it('every canonical office is valid, furnished or not, at every ring count', () => {
@@ -71,58 +89,68 @@ describe('grid model', () => {
   })
 })
 
+const desk = (id: string, x: number, z: number, rotation: 0 | 1 | 2 | 3, stage: StageIndex = 1) => ({ id, ring: ringOfCell({ x, z }, stage), type: 'desk' as const, pos: { x, z }, rotation, itemId: 'desk-basic', free: true as const })
+
 describe('validateLayout', () => {
-  it('refuses cells outside, in locked rings, on fixtures and on other pieces', () => {
+  it('refuses cells outside, in locked rings, on fixtures, in the door zone and on other pieces', () => {
     const o = buildOffice(1, 1)
-    expect(validateLayout({ ...o, decor: [panel('a', 4, 0)] }).reason).toBe('outside')
+    expect(validateLayout({ ...o, decor: [panel('a', 5, 0)] }).reason).toBe('outside')
     expect(validateLayout({ ...o, decor: [panel('a', 2, 2)] }).reason).toBe('locked')
-    expect(validateLayout({ ...o, decor: [panel('a', 0, 0)] }).reason).toBe('fixture')
-    expect(validateLayout({ ...o, decor: [panel('a', 3, -3)] }).reason).toBe('locked')
+    // The row along the walls is the outer ring's.
+    expect(validateLayout({ ...o, decor: [panel('a', -4, 0)] }).reason).toBe('locked')
+    expect(validateLayout({ ...o, decor: [panel('a', 0, 0)] }).reason).toBe('overlap')
+    expect(validateLayout({ ...buildOffice(3, 4), decor: [panel('a', ...columnCell(3))] }).reason).toBe('fixture')
     const open = buildOffice(1, 2)
-    expect(validateLayout({ ...open, decor: [panel('a', 3, -3)] })).toMatchObject({ ok: false, reason: 'fixture', bad: ['3,-3'] })
+    expect(validateLayout({ ...open, decor: [panel('a', -4, 0)] }).ok).toBe(true)
+    // Door (3,−4): it and (4,−4), (3,−3), (4,−3) stay clear.
+    for (const [x, z] of [[3, -4], [4, -4], [3, -3], [4, -3]] as const) expect(validateLayout({ ...open, decor: [panel('a', x, z)] })).toMatchObject({ ok: false, reason: 'doorZone', bad: [cellKey(x, z)] })
+    expect(validateLayout({ ...open, slots: [...open.slots, desk('f1', 4, -3, 3)] }).reason).toBe('doorZone')
     expect(validateLayout({ ...open, decor: [panel('a', 2, 2), panel('b', 2, 2)] }).reason).toBe('overlap')
     // A rug lies under a desk, but not under another rug.
     expect(validateLayout({ ...open, decor: [{ ...panel('r', 1, 1, 'rug') }, panel('b', 2, 2)] }).ok).toBe(true)
     expect(validateLayout({ ...open, decor: [{ ...panel('r', 1, 1, 'rug') }, { ...panel('s', 2, 2, 'rug') }] }).reason).toBe('overlap')
   })
 
-  it('blocksDoor when the door is boxed in, sealsDesk when a front is cut off', () => {
+  it('desks need only their chair side: side by side, back to back, a row of 4, against a wall', () => {
     const o = buildOffice(1, 2)
-    // Door (3,-3): its two floor neighbours are (2,-3) and (3,-2).
-    expect(validateLayout({ ...o, decor: [panel('a', 2, -3), panel('b', 3, -2)] })).toMatchObject({ ok: false, reason: 'blocksDoor' })
-    // A desk next to the cross-aisle is always reached through it.
-    const d0 = { ...o, slots: o.slots.map((s) => (s.id === 'r2-s0' ? { ...s, itemId: 'desk-basic' } : s)) }
-    expect(validateLayout({ ...d0, decor: [[-2, -2], [0, -2]].map(([x, z], i) => panel(`p${i}`, x!, z!)) }).ok).toBe(true)
-    // A corner desk at (-3,-3) facing +z: its front (-3,-2) walled off on its two other sides.
-    const d = { ...o, slots: [...o.slots, { id: 'f1', ring: 2, type: 'desk' as const, pos: { x: -3, z: -3 }, rotation: 0 as const, itemId: 'desk-basic', free: true as const }] }
-    const ring = [[-2, -2], [-3, -1]].map(([x, z], i) => panel(`p${i}`, x!, z!))
-    expect(validateLayout({ ...d, decor: ring.slice(0, 1) }).ok).toBe(true)
-    expect(validateLayout({ ...d, decor: ring })).toMatchObject({ ok: false, reason: 'sealsDesk', bad: ['-3,-3'] })
-    // A piece right on the front cell seals it too.
-    expect(validateLayout({ ...d, decor: [panel('f', -3, -2)] }).reason).toBe('sealsDesk')
+    const ok = (...xs: ReturnType<typeof desk>[]) => validateLayout({ ...o, slots: [...o.slots, ...xs] })
+    expect(ok(desk('f1', -3, 2, 0), desk('f2', -2, 2, 0)).ok).toBe(true)
+    // Back to back: desk tops touching, chairs on the far sides.
+    expect(ok(desk('f1', -3, 1, 2), desk('f2', -3, 2, 0)).ok).toBe(true)
+    // A row of four along the left wall row, all chairs into the room.
+    expect(ok(desk('f1', -4, -1, 3), desk('f2', -4, 0, 3), desk('f3', -4, 1, 3), desk('f4', -4, 2, 3)).ok).toBe(true)
+    // Against the back wall, chairs facing the room.
+    expect(ok(desk('f1', -2, -4, 0), desk('f2', -1, -4, 0)).ok).toBe(true)
+    // Chairs facing each other with no aisle between them.
+    expect(ok(desk('f1', -3, 1, 0), desk('f2', -3, 2, 2)).ok).toBe(true)
   })
 
-  it('two facing desks may share one aisle cell', () => {
+  it('sealing a chair in is refused', () => {
     const o = buildOffice(1, 2)
-    const desk = (id: string, x: number, z: number, rotation: 0 | 2) => ({ id, ring: ringOfCell({ x, z }), type: 'desk' as const, pos: { x, z }, rotation, itemId: 'desk-basic', free: true as const })
-    const facing = { ...o, slots: [...o.slots, desk('f1', -3, -1, 2), desk('f2', -3, -3, 0)] }
-    expect(validateLayout(facing).ok).toBe(true)
-    // The shared cell's last other way in walled: both are sealed.
-    expect(validateLayout({ ...facing, decor: [panel('a', -2, -2)] }).reason).toBe('sealsDesk')
+    // Corner desk at (−4,−4) facing +z: its chair half is open on its right and in front; panels on both seal it.
+    const d = { ...o, slots: [...o.slots, desk('f1', -4, -4, 0)] }
+    expect(validateLayout({ ...d, decor: [panel('a', -3, -4)] }).ok).toBe(true)
+    expect(validateLayout({ ...d, decor: [panel('a', -3, -4), panel('b', -4, -3)] })).toMatchObject({ ok: false, reason: 'sealsDesk', bad: ['-4,-4'] })
+    // Other items need the cell in front of them: a sofa facing a panel is cut off.
+    const sofa = { ...o, slots: o.slots.map((x) => (x.id === 'r2-s4' ? { ...x, itemId: 'plants' } : x)) }
+    const s6 = sofa.slots.find((x) => x.id === 'r2-s4')!
+    const f = frontDir(s6.rotation)
+    expect(validateLayout(sofa).ok).toBe(true)
+    expect(validateLayout({ ...sofa, decor: [panel('a', s6.pos.x + f.x, s6.pos.z + f.z)] }).reason).toBe('sealsDesk')
   })
 
   it('type and decor caps', () => {
     const o = buildOffice(0, 1)
-    // Garage: 3 back + 3 left segments and a cap of 6; paint is free of the cap.
+    // Garage: 5 back + 5 left segments and a cap of 6; paint is free of the cap.
     const walls = (['back', 'left'] as const).flatMap((wall) => [-1, 0, 1].map((seg) => ({ wall, seg, kind: 'poster' })))
     expect(validateLayout({ ...o, walls }).ok).toBe(true)
     expect(validateLayout({ ...o, walls, decor: [panel('l', 1, 1, 'lamp')] }).reason).toBe('decorCap')
     expect(validateLayout({ ...o, walls: [...walls, { wall: 'back', seg: 0, kind: 'paint', color: '#fff' }, { wall: 'left', seg: 0, kind: 'paint', color: '#fff' }] }).ok).toBe(true)
-    const desks = { ...o, slots: [...o.slots.map((s) => (s.ring === 1 ? { ...s, itemId: 'desk-basic' } : s)), { id: 'f1', ring: 1, type: 'desk' as const, pos: { x: -1, z: 1 }, rotation: 0 as const, itemId: 'desk-basic', free: true as const }] }
+    const desks = { ...o, slots: [...o.slots.map((s) => (s.ring === 1 ? { ...s, itemId: 'desk-basic' } : s)), desk('f1', -1, 1, 0, 0)] }
     expect(validateLayout(desks).reason).toBe('typeCap')
   })
 
-  it('a room across the founder cross-aisle closes that aisle node', () => {
+  it('canonical rooms on the ring-3 row are valid', () => {
     const o = buildOffice(2, 3)
     const slots = o.slots.map((s) => ({ ...s }))
     const rooms = slots.filter((s) => s.type === 'room' && s.pos.z === -5)
@@ -168,30 +196,34 @@ describe('autoPlace', () => {
 
   it('tiers 3–4: free cells once the canonical cells are covered; null at the type cap', () => {
     const o = buildOffice(1, 2)
-    // Every empty canonical desk cell is covered by decor: the desk goes to a free cell, facing the founder first.
-    o.decor = o.slots.filter((s) => s.type === 'desk' && s.ring > 0).map((s, i) => panel(`p${i}`, s.pos.x, s.pos.z))
+    // Ring 1 furnished, every empty ring-2 desk cell under decor: the desk goes to a free cell.
+    for (const s of o.slots) if (s.type === 'desk' && s.ring === 1) s.itemId = 'desk-basic'
+    o.decor = o.slots.filter((s) => s.type === 'desk' && s.ring === 2).map((s, i) => panel(`p${i}`, s.pos.x, s.pos.z))
+    expect(validateLayout(o).ok).toBe(true)
     const p = autoPlace(o, { slotType: 'desk', size: 1 })!
     expect(p.slotId).toBeUndefined()
     expect(p.bumped).toEqual([])
-    expect(validateLayout({ ...o, slots: [...o.slots, { id: 'f1', ring: ringOfCell(p.pos), type: 'desk', pos: p.pos, rotation: p.rotation, itemId: 'x', free: true }] }).ok).toBe(true)
+    expect(validateLayout({ ...o, slots: [...o.slots, { id: 'f1', ring: ringOfCell(p.pos, 1), type: 'desk', pos: p.pos, rotation: p.rotation, itemId: 'x', free: true }] }).ok).toBe(true)
     const full8 = buildOffice(1, 2)
     for (const s of full8.slots) if (s.type === 'desk' && s.ring > 0) s.itemId = 'desk-basic'
     expect(autoPlace(full8, { slotType: 'desk', size: 1 })).toBeNull()
   })
 
-  it('worst case: cells jammed by decor → the nearest decor goes to storage (max 3), then the canonical slot', () => {
-    const o = buildOffice(0, 1)
+  it('worst case: cells jammed by decor → the decor nearest the centre goes to storage (max 3)', () => {
+    // Pre-seed with only ring 1 open: the founder's 3×3. Three desks, the fourth slot and every corner under a panel,
+    // which walls the ring in: nothing can be added until decor makes way.
+    const o = buildOffice(1, 1)
     for (const id of ['r1-s0', 'r1-s2', 'r1-s3']) o.slots.find((s) => s.id === id)!.itemId = 'desk-basic'
-    o.decor = [panel('a', 0, 1), panel('b', -1, -1), panel('c', -1, 1), panel('d', 1, 1)]
-    expect(validateLayout(o).ok).toBe(true)
+    o.decor = [panel('a', 0, 1), panel('b', -1, -1), panel('c', -1, 1), panel('d', 1, 1), panel('e', 1, -1)]
     const p = autoPlace(o, { slotType: 'desk', size: 1 })!
-    expect(p).toMatchObject({ slotId: 'r1-s1', bumped: ['a'] })
-    // Through the action: the panel lands in storage and the desk on r1-s1.
-    const r = applyAction(rich(0, o), { type: 'placeItem', itemId: 'desk-basic' })
+    expect(p.bumped.length).toBeGreaterThan(0)
+    expect(p.bumped.length).toBeLessThanOrEqual(3)
+    expect(p.bumped[0]).toBe('a')
+    // Through the action: the panels land in storage, the desk on a cell, and the office is legal.
+    const r = applyAction(rich(1, o), { type: 'placeItem', itemId: 'desk-basic' })
     expect(r.ok).toBe(true)
-    expect(r.state.office.slots.find((s) => s.id === 'r1-s1')!.itemId).toBe('desk-basic')
-    expect(r.state.office.storage).toEqual([{ kind: 'panel', n: 1 }])
-    expect(r.state.office.decor!.map((x) => x.id)).toEqual(['b', 'c', 'd'])
+    expect(r.state.office.storage).toEqual([{ kind: 'panel', n: p.bumped.length }])
+    expect(validateLayout(r.state.office).ok).toBe(true)
   })
 
   it('decor auto placement keeps the office valid', () => {
@@ -256,17 +288,17 @@ describe('moves and layouts (actions)', () => {
     expect(back.state.office.slots.find((x) => x.id === 'r1-s1')!.occupantId).toBe(e.id)
   })
 
-  it('moveItem refuses a door block, a sealed desk, a fixture and a locked cell', () => {
+  it('moveItem refuses the door zone, a sealed desk, a fixture and a cell off the grid', () => {
     let s = rich(1, buildOffice(1, 2))
     for (const id of ['r1-s0', 'r1-s1']) s = applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: id }).state
-    s = { ...s, office: { ...s.office, decor: [panel('a', 2, -3)] } }
-    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: 3, z: -2, r: 0 } }).error).toBe('blocksDoor')
-    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: 3, z: -3, r: 0 } }).error).toBe('slotOccupied')
+    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: 3, z: -3, r: 0 } }).error).toBe('blocksDoor')
+    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: 0, z: 0, r: 0 } }).error).toBe('slotOccupied')
     expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: 5, z: 0, r: 0 } }).error).toBe('slotLocked')
-    // r1-s1 (0,1) faces −z into the cross-aisle; a desk right there seals nothing (the aisle runs on), but one on
-    // the cell in front of a ring-2 desk does.
-    s = applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: 'r2-s0' }).state
-    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: -1, z: -2, r: 0 } }).error).toBe('sealsDesk')
+    // Desks right against each other are fine; a corner desk whose chair the move walls in is not.
+    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: -1, z: 1, r: 0 } }).ok).toBe(true)
+    s = { ...s, office: { ...s.office, slots: [...s.office.slots, { id: 'f9', ring: 2, type: 'desk', pos: { x: -4, z: -4 }, rotation: 0, itemId: 'desk-basic', free: true }], decor: [panel('a', -3, -4)] } }
+    expect(validateLayout(s.office).ok).toBe(true)
+    expect(applyAction(s, { type: 'moveItem', fromSlotId: 'r1-s0', toCell: { x: -4, z: -3, r: 0 } }).error).toBe('sealsDesk')
   })
 
   it('applyLayout: moves, labels and decor from storage in one step; atomic on a refusal', () => {
@@ -284,7 +316,7 @@ describe('moves and layouts (actions)', () => {
     expect(r.state.stats.cash).toBe(s.stats.cash)
     // Decor that is neither placed nor stored is a purchase: a piece the stage does not sell yet is refused.
     expect(applyAction(s, { type: 'applyLayout', draft: { slots: {}, decor: [panel('d1', -3, 0, 'glass')] } }).error).toBe('notUnlocked')
-    const bad = applyAction(s, { type: 'applyLayout', draft: { slots: { 'r1-s0': { x: 2, z: -3, r: 0 }, 'r1-s1': { x: 3, z: -2, r: 0 } }, decor: [] } })
+    const bad = applyAction(s, { type: 'applyLayout', draft: { slots: { 'r1-s0': { x: -2, z: 2, r: 0 }, 'r1-s1': { x: 4, z: -3, r: 0 } }, decor: [] } })
     expect(bad).toMatchObject({ ok: false, error: 'blocksDoor' })
     expect(bad.state).toBe(s)
   })
@@ -295,6 +327,12 @@ describe('moves and layouts (actions)', () => {
     expect(applyAction(s, { type: 'placeItem', itemId: 'desk-basic' }).state.office.slots.find((x) => x.id === 'r1-s0')!.itemId).toBeUndefined()
   })
 })
+
+/** A Series A column cell inside ring 3 (free floor on the Seed office). */
+const columnCell = (stage: StageIndex): [number, number] =>
+  stageFixtures(stage)
+    .columns.map(([x, z]) => [worldToGrid(x), worldToGrid(z)] as [number, number])
+    .find(([x, z]) => ringOfCell({ x, z }) <= 3)!
 
 describe('stage move carry-over', () => {
   it('carries free desks and separators; floor decor, wall pieces and paint jobs to storage', () => {
@@ -314,8 +352,7 @@ describe('stage move carry-over', () => {
   })
 
   it('a piece on a new fixture (a Series A column) is re-placed and keeps its seat', () => {
-    const fx = stageFixtures(3)
-    const col = [...fx.noPiece].map((k) => k.split(',').map(Number) as [number, number]).find(([x, z]) => ringOfCell({ x, z }) <= 3 && !(x === fx.door.x && z === fx.door.z))!
+    const col = columnCell(3)
     expect(col).toBeDefined()
     const o = buildOffice(2, 3)
     o.slots.push({ id: 'f1', ring: ringOfCell({ x: col[0], z: col[1] }), type: 'desk', pos: { x: col[0], z: col[1] }, rotation: 0, itemId: 'desk-basic', free: true, occupantId: 'e1' })
@@ -330,9 +367,20 @@ describe('stage move carry-over', () => {
     expect(m.storage).toEqual([{ kind: 'panel', n: 1 }])
   })
 
+  it('a desk against the garage wall lands in the next office’s still locked ring: it is re-placed with its sitter', () => {
+    const o = buildOffice(0, 1)
+    o.slots.push({ id: 'f1', ring: ringOfCell({ x: -2, z: 0 }, 0), type: 'desk', pos: { x: -2, z: 0 }, rotation: 3, itemId: 'desk-basic', free: true, occupantId: 'e1' })
+    expect(o.slots.find((x) => x.id === 'f1')!.ring).toBe(1)
+    expect(validateLayout(o).ok).toBe(true)
+    const n = relocateOffice(o, 1)
+    const seat = n.slots.find((x) => x.occupantId === 'e1')!
+    expect(seat.itemId).toBe('desk-basic')
+    expect(ringOfCell(seat.pos, 1)).toBe(1)
+    expect(validateLayout(n).ok).toBe(true)
+  })
+
   it('the game’s stage move points a re-placed desk’s sitter at its new slot', () => {
-    const fx = stageFixtures(3)
-    const [x, z] = [...fx.noPiece].map((k) => k.split(',').map(Number) as [number, number]).find(([cx, cz]) => ringOfCell({ x: cx, z: cz }) <= 3 && !(cx === fx.door.x && cz === fx.door.z))!
+    const [x, z] = columnCell(3)
     let s = rich(2, buildOffice(2, 3))
     s = applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: 'r1-s0' }).state
     s = applyAction(s, { type: 'hire', candidateId: s.candidates[0]!.id }).state
@@ -347,18 +395,18 @@ describe('stage move carry-over', () => {
   })
 })
 
-describe('save v4 → v5', () => {
-  it('SAVE_VERSION is 5', () => {
-    expect(SAVE_VERSION).toBe(5)
+describe('saves', () => {
+  it('SAVE_VERSION is 6', () => {
+    expect(SAVE_VERSION).toBe(6)
   })
 
-  it('the v4 fixture loads with team labels and empty decor, and lays out exactly as before', () => {
+  it('the v4 fixture loads with team labels and empty decor, every piece on its old cell', () => {
     const raw = saveV4 as unknown as { version: number; state: GameState }
     expect(raw.version).toBe(4)
-    const before = layoutOf(raw.state.office)
+    const before = raw.state.office.slots.map((x) => [x.id, x.pos.x, x.pos.z, x.rotation, x.itemId ?? null])
     const s = deserialize(JSON.stringify(raw))!
-    expect(s.meta.saveVersion).toBe(5)
-    expect(layoutOf(s.office)).toEqual(before)
+    expect(s.meta.saveVersion).toBe(6)
+    expect(s.office.slots.map((x) => [x.id, x.pos.x, x.pos.z, x.rotation, x.itemId ?? null])).toEqual(before)
     expect(s.office).toMatchObject({ decor: [], walls: [], storage: [], saved: [] })
     for (const slot of s.office.slots) {
       const e = s.employees.find((x) => x.id === slot.occupantId)
@@ -368,12 +416,55 @@ describe('save v4 → v5', () => {
     expect(validateLayout(s.office).ok).toBe(true)
   })
 
-  it('mock states 0–6 lay out the same after the migration; a dept desk takes its dept', () => {
+  it('v5 → v6: a piece on a cell the one grid now keeps clear (a moved column) is re-placed; its sitter follows', () => {
+    // data/saveV5.json was written by the v5 engine (grid 4fb2172): a Seed-sized Series A office with a seated desk
+    // moved onto (−3,3) and a panel on (−3,−3), both column cells on the v2 grid.
+    const raw = structuredClone(saveV5) as unknown as { version: number; state: GameState }
+    expect(raw.version).toBe(5)
+    expect(validateLayout(raw.state.office).ok).toBe(false)
+    const old = raw.state.office
+    const moved = old.slots.find((x) => x.pos.x === -3 && x.pos.z === 3 && x.itemId)!
+    const sitter = moved.occupantId!
+    const s = deserialize(JSON.stringify(raw))!
+    expect(s.meta.saveVersion).toBe(6)
+    expect(validateLayout(s.office).ok).toBe(true)
+    // Everything else stays on its cell.
+    const keep = (o: OfficeState) => o.slots.filter((x) => x.itemId && x.occupantId !== sitter).map((x) => [x.id, x.pos.x, x.pos.z, x.rotation])
+    expect(keep(s.office)).toEqual(keep(old))
+    const seat = s.office.slots.find((x) => x.occupantId === sitter)!
+    expect([seat.pos.x, seat.pos.z]).not.toEqual([-3, 3])
+    expect(seat.itemId).toBe(moved.itemId)
+    expect(s.employees.find((e) => e.id === sitter)!.deskSlotId).toBe(seat.id)
+    expect(s.office.decor!.map((p) => p.id).sort()).toEqual(old.decor!.filter((p) => !(p.pos.x === -3 && p.pos.z === -3)).map((p) => p.id).sort())
+    expect(s.office.storage).toEqual([{ kind: 'panel', n: 1 }])
+    // A legal v5 office loads untouched.
+    const fine = structuredClone(saveV5) as unknown as { version: number; state: GameState }
+    fine.state.office.slots = fine.state.office.slots.filter((x) => x.id !== moved.id)
+    fine.state.office.decor = fine.state.office.decor!.filter((p) => !(p.pos.x === -3 && p.pos.z === -3))
+    fine.state.employees = fine.state.employees.map((e) => (e.id === sitter ? { ...e, deskSlotId: undefined } : e))
+    expect(validateLayout(fine.state.office).ok).toBe(true)
+    expect(deserialize(JSON.stringify(fine))!.office.slots).toEqual(fine.state.office.slots)
+  })
+
+  it('repairOffice leaves a legal office alone and moves decor off the door zone', () => {
+    const o = full(2)
+    const before = JSON.stringify(o)
+    repairOffice(o)
+    expect(JSON.stringify(o)).toBe(before)
+    const fx = stageFixtures(2)
+    const bad = { ...o, decor: [panel('z', fx.doorZone[3]!.x, fx.doorZone[3]!.z)] }
+    expect(validateLayout(bad).reason).toBe('doorZone')
+    repairOffice(bad)
+    expect(bad.decor).toEqual([])
+    expect(bad.storage).toEqual([{ kind: 'panel', n: 1 }])
+  })
+
+  it('mock states 0–6 keep their cells after the migrations; a dept desk takes its dept', () => {
     for (const st of STAGES) {
       const m = createMockState(st)
-      const before = layoutOf(m.office)
+      const cells = m.office.slots.map((x) => [x.id, x.pos.x, x.pos.z])
       const back = deserialize(JSON.stringify({ version: 4, state: { ...m, office: { stage: m.office.stage, rings: m.office.rings, slots: m.office.slots } } }))!
-      expect(layoutOf(back.office), `mock s${st}`).toEqual(before)
+      expect(back.office.slots.map((x) => [x.id, x.pos.x, x.pos.z]).filter((c) => cells.some((d) => d[0] === c[0])), `mock s${st}`).toEqual(cells.filter((c) => back.office.slots.some((x) => x.id === c[0])))
     }
     const s = rich(2, buildOffice(2, 3))
     s.office.slots.find((x) => x.id === 'r1-s0')!.itemId = 'desk-eng'

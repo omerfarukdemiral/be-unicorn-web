@@ -3,7 +3,7 @@ import type { ActionErrorCode } from '../engine/types'
 
 /** Refusals of a layout change (moveItem to a cell, applyLayout). */
 export const LAYOUT_ERROR_TEXT: Pick<Record<ActionErrorCode, string>, 'blocksDoor' | 'sealsDesk' | 'officeFull'> = {
-  blocksDoor: 'Kapının önü kapanır.',
+  blocksDoor: 'Kapının önü boş kalmalı.',
   sealsDesk: 'Bir masaya yol kalmaz.',
   officeFull: 'Ofis dolu.',
 }
@@ -24,6 +24,7 @@ export const LAYOUT_TEXT: Record<string, string> = {
   'layout.armed': 'Değişiklikler gider. Esc’ye bir daha bas.',
   'layout.sits': '{name} oturuyor',
   'layout.reason.blocksDoor': LAYOUT_ERROR_TEXT.blocksDoor,
+  'layout.reason.doorZone': LAYOUT_ERROR_TEXT.blocksDoor,
   'layout.reason.sealsDesk': LAYOUT_ERROR_TEXT.sealsDesk,
   'layout.reason.typeCap': LAYOUT_ERROR_TEXT.officeFull,
   'layout.reason.decorCap': LAYOUT_ERROR_TEXT.officeFull,

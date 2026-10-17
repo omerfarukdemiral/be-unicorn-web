@@ -4,7 +4,7 @@
 import * as THREE from 'three'
 import { hash01 } from './constants'
 
-/** World units covered by one repeat of a floor texture. */
+/** World units covered by one repeat of a floor texture: two cells (Office.tsx starts it on a cell edge). */
 export const FLOOR_TILE = 3
 /** World units covered by one horizontal repeat of a wall texture (its height is the whole wall). */
 export const WALL_TILE = 2.2
@@ -55,27 +55,43 @@ function wrapped(size: number, x: number, y: number, w: number, h: number, fn: (
 // Floors
 // ---------------------------------------------------------------------------
 
-/** Staggered planks along x: `rows` rows per repeat, random lengths, a soft tone per plank and a hairline joint. */
+/**
+ * Staggered planks along x: `rows` rows per repeat, random lengths, a soft tone per plank and a hairline joint. A
+ * repeat is two cells; planks never cross a cell edge, so every cell reads as one floor tile (the edit grid).
+ */
 function planks(g: Ctx, base: string, rows: number, seed: string, joint: string) {
   const r = rng(seed)
   const h = PX / rows
+  const half = PX / 2
   for (let row = 0; row < rows; row++) {
-    let x = -r() * PX * 0.4
-    while (x < PX) {
-      const len = PX * (0.28 + r() * 0.22)
-      const k = 0.93 + r() * 0.12
-      wrapped(PX, x, row * h, len, h, (px, py) => {
-        g.fillStyle = tone(base, k)
-        g.fillRect(px, py, len, h)
+    for (const x0 of [0, half]) {
+      let x = x0
+      // The first plank of a run is a part, so the rows stay staggered.
+      let len = half * (0.2 + r() * 0.55)
+      while (x < x0 + half - 0.5) {
+        const w = Math.min(len, x0 + half - x)
+        g.fillStyle = tone(base, 0.93 + r() * 0.12)
+        g.fillRect(x, row * h, w, h)
         g.fillStyle = joint
-        g.fillRect(px, py, len, 1.5)
-        g.fillRect(px, py, 1.5, h)
+        g.fillRect(x, row * h, w, 1.5)
+        g.fillRect(x, row * h, 1.5, h)
         // grain
         g.fillStyle = 'rgba(120,80,40,.05)'
-        g.fillRect(px + len * 0.1, py + h * 0.4, len * 0.6, 1)
-      })
-      x += len
+        g.fillRect(x + w * 0.1, row * h + h * 0.4, w * 0.6, 1)
+        x += w
+        len = half * (0.5 + r() * 0.5)
+      }
     }
+  }
+  cellSeams(g, joint)
+}
+
+/** A slightly stronger joint on the cell edges (a repeat is two cells): the floor's own grid is the edit grid. */
+function cellSeams(g: Ctx, color: string) {
+  g.fillStyle = color
+  for (const v of [0, PX / 2]) {
+    g.fillRect(v, 0, 2.5, PX)
+    g.fillRect(0, v, PX, 2.5)
   }
 }
 
@@ -101,6 +117,8 @@ function herringbone(g: Ctx, base: string, seed: string, joint: string) {
       g.stroke()
     }
   }
+  // Laid in one-cell panels.
+  cellSeams(g, joint)
 }
 
 function speckle(g: Ctx, colors: readonly string[], n: number, rMin: number, rMax: number, seed: string) {

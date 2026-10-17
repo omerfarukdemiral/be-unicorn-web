@@ -39,7 +39,7 @@ function autoSlot(office: OfficeState, spec: PlacementSpec): Slot | null {
   const p = autoPlace(office, spec)
   if (!p) return null
   if (p.slotId !== undefined) return findSlot(office, p.slotId) ?? null
-  return { id: 'new', ring: ringOfCell(p.pos), type: spec.slotType, pos: p.pos, rotation: p.rotation, free: true }
+  return { id: 'new', ring: ringOfCell(p.pos, office.stage), type: spec.slotType, pos: p.pos, rotation: p.rotation, free: true }
 }
 
 /** Where "Satın al" puts an item: the targeted slot when it fits, else the free slot nearest the center. */

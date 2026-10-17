@@ -13,7 +13,7 @@ export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
 export const FIXED_STEP_DAYS = 0.25
 /** Bump when GameState shape changes incompatibly; save.ts migrates. */
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 
 /** Company name when none was given (and for pre-v3 saves). */
 export const DEFAULT_COMPANY_NAME = 'İsimsiz Startup'

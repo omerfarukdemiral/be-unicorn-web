@@ -3,6 +3,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { STAIRS_LEN } from '../engine/layout'
 import type { StageIndex } from '../engine/types'
 import { CELL, WALL_HEIGHT, WALL_THICKNESS, hash01 } from './constants'
 import type { Box, OfficeLayout, RingBand } from './layout'
@@ -79,6 +80,8 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   const stage = layout.stage
   const tex = floorTexture(stage)
   const T = FLOOR_TILE
+  // Texture seams on cell edges: the repeat starts half a cell off the founder's cell centre (a joint every cell).
+  const u = (w: number) => (w + CELL / 2) / T
   const y = 0.002
   return (
     <group>
@@ -93,10 +96,10 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
             [b.minX, y, b.minZ],
           ]}
           uvs={[
-            [b.minX / T, -b.maxZ / T],
-            [b.maxX / T, -b.maxZ / T],
-            [b.maxX / T, -b.minZ / T],
-            [b.minX / T, -b.minZ / T],
+            [u(b.minX), u(-b.maxZ)],
+            [u(b.maxX), u(-b.maxZ)],
+            [u(b.maxX), u(-b.minZ)],
+            [u(b.minX), u(-b.minZ)],
           ]}
         />
       )}
@@ -106,7 +109,7 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
       )}
       {stage === 6 && <BrassInlay b={b} />}
       {stage >= 2 && stage <= 5 && (
-        <mesh geometry={GEO.plane} material={decalMat(stage === 2 ? PASTEL.lilac : stage === 3 ? PASTEL.sky : stage === 4 ? PASTEL.peach : PASTEL.mint)} scale={[CELL * 2.2, 1, CELL * 2.2]} position={[0, 0.006, 0]} renderOrder={2} receiveShadow />
+        <mesh geometry={GEO.plane} material={decalMat(stage === 2 ? PASTEL.lilac : stage === 3 ? PASTEL.sky : stage === 4 ? PASTEL.peach : PASTEL.mint)} scale={[CELL * 3, 1, CELL * 3]} position={[0, 0.006, 0]} renderOrder={2} receiveShadow />
       )}
     </group>
   )
@@ -114,7 +117,7 @@ function Floor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
 
 /** Campus: a brass line inset around the walnut floor. */
 function BrassInlay({ b }: { b: Box }) {
-  const i = CELL * 0.4
+  const i = CELL
   const w = b.maxX - b.minX - i * 2
   const d = b.maxZ - b.minZ - i * 2
   const cx = (b.minX + b.maxX) / 2
@@ -255,8 +258,8 @@ function GarageDecor({ layout, pal }: { layout: OfficeLayout; pal: StagePalette 
       {/* roll-up garage door on the left wall */}
       <B s={[0.08, 1.85, doorW + 0.16]} p={[x - 0.01, 0.92, cz]} c={PROP_COLORS.garageFrame} shadow={false} />
       {slats}
-      {/* metal shelf with boxes along the back wall */}
-      <group position={[b.minX + CELL * 0.8, 0, b.minZ + 0.28]}>
+      {/* metal shelf with boxes in the back-left corner cell (a fixture: layout.stageFixtures) */}
+      <group position={[b.minX + CELL * 0.5, 0, b.minZ + 0.25]}>
         <B s={[0.05, 1.3, 0.05]} p={[-0.55, 0.65, -0.12]} c={PROP_COLORS.metal} />
         <B s={[0.05, 1.3, 0.05]} p={[0.55, 0.65, -0.12]} c={PROP_COLORS.metal} />
         <B s={[0.05, 1.3, 0.05]} p={[-0.55, 0.65, 0.12]} c={PROP_COLORS.metal} />
@@ -302,8 +305,8 @@ function Stairs({ layout, pal }: { layout: OfficeLayout; pal: StagePalette }) {
   return (
     <group>
       {steps}
-      <B s={[0.9, 0.08, 2.4]} p={[b.minX + 0.5, 1.64, b.minZ + 1.2 + 2.1]} c={pal.floor} />
-      <B s={[0.04, 0.5, 4.6]} p={[b.minX + 0.92, 1.9, b.minZ + 2.3]} c={pal.wallTrim} />
+      <B s={[0.9, 0.08, STAIRS_LEN - 2.2]} p={[b.minX + 0.5, 1.64, b.minZ + 2.2 + (STAIRS_LEN - 2.2) / 2]} c={pal.floor} />
+      <B s={[0.04, 0.5, STAIRS_LEN]} p={[b.minX + 0.92, 1.9, b.minZ + STAIRS_LEN / 2]} c={pal.wallTrim} />
     </group>
   )
 }

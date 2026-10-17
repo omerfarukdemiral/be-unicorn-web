@@ -61,31 +61,39 @@ function centerOf(g: NavGrid, idx: number): XZ {
   return [g.x0 + ((idx % g.w) + 0.5) * RES, g.z0 + (Math.floor(idx / g.w) + 0.5) * RES]
 }
 
-/** Nearest free cell to `p` (BFS), or -1 when the whole grid is blocked. */
+/**
+ * Nearest free cell to `p` by straight distance (rings of cells outward; one more ring after the first hit, since a
+ * diagonal hit can be farther than a straight one in the next ring), or -1 when the whole grid is blocked. A seat
+ * boxed in by its desk and a neighbour's back snaps to the closer side, not to the first one a scan order meets.
+ */
 function nearestFree(g: NavGrid, p: XZ): number {
   const [i, j] = cellOf(g, p)
   const start = j * g.w + i
   if (!g.blocked[start]) return start
-  const seen = new Uint8Array(g.w * g.h)
-  const queue = [start]
-  seen[start] = 1
-  for (let q = 0; q < queue.length; q++) {
-    const c = queue[q]!
-    if (!g.blocked[c]) return c
-    const ci = c % g.w
-    const cj = Math.floor(c / g.w)
-    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const ni = ci + di
-      const nj = cj + dj
-      if (ni < 0 || nj < 0 || ni >= g.w || nj >= g.h) continue
-      const n = nj * g.w + ni
-      if (!seen[n]) {
-        seen[n] = 1
-        queue.push(n)
+  let best = -1
+  let bestD = Infinity
+  let stopAt = Infinity
+  const maxK = Math.max(g.w, g.h)
+  for (let k = 1; k <= maxK && k <= stopAt; k++) {
+    for (let dj = -k; dj <= k; dj++) {
+      for (let di = -k; di <= k; di++) {
+        if (Math.max(Math.abs(di), Math.abs(dj)) !== k) continue
+        const ni = i + di
+        const nj = j + dj
+        if (ni < 0 || nj < 0 || ni >= g.w || nj >= g.h) continue
+        const n = nj * g.w + ni
+        if (g.blocked[n]) continue
+        const c = centerOf(g, n)
+        const d = Math.hypot(c[0] - p[0], c[1] - p[1])
+        if (d < bestD) {
+          bestD = d
+          best = n
+        }
       }
     }
+    if (best >= 0 && stopAt === Infinity) stopAt = k + 1
   }
-  return -1
+  return best
 }
 
 /** True when the straight segment a→b stays on free cells. */

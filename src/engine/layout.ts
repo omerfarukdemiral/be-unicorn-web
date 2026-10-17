@@ -14,20 +14,16 @@ export type CellKey = string
 export const cellKey = (x: number, z: number): CellKey => `${x},${z}`
 
 // ---------------------------------------------------------------------------
-// Geometry (mirrors render/constants gridToWorld: CELL 1.5, CENTER_GAP 0.9)
+// Geometry (mirrors render/constants gridToWorld: one cell = CELL 1.5, linear, the floor tiles are the cells)
 // ---------------------------------------------------------------------------
 
 const GRID_CELL = 1.5
-const GRID_GAP = 0.9
-/** Cell box half size; the founder cross-aisle (GRID_GAP wide) lies between cell 0 and cells ±1. */
-const CELL_HALF = GRID_CELL / 2
 
-const axisToWorld = (v: number): number => v * GRID_CELL + Math.sign(v) * GRID_GAP
+const axisToWorld = (v: number): number => v * GRID_CELL
 
-/** Inverse of gridToWorld on one axis: the cell whose centre is nearest (the cross-aisle snaps to cell 0). */
+/** Inverse of gridToWorld on one axis: the cell whose box holds the point. */
 export function worldToGrid(w: number): number {
-  const a = Math.abs(w)
-  return a < GRID_CELL + GRID_GAP - CELL_HALF ? 0 : Math.sign(w) * Math.round((a - GRID_GAP) / GRID_CELL)
+  return Math.round(w / GRID_CELL) || 0
 }
 
 /** Front of a piece (its chair / access side) for a rotation: render rotateXZ(0, 1, rot). */
@@ -40,15 +36,27 @@ export function rightDir(rot: number): GridPos {
   return [{ x: 1, z: 0 }, { x: 0, z: 1 }, { x: -1, z: 0 }, { x: 0, z: -1 }][rot & 3]!
 }
 
-/** Half size of the stage's square grid (the outer ring's Chebyshev distance): 1 / 3 / 5 / 7 / 9 / 11 / 11. */
-export function gridHalf(stage: StageIndex): number {
+/** Half size of the stage's ring square (the outer ring's Chebyshev distance): 1 / 3 / 5 / 7 / 9 / 11 / 11. */
+export function ringHalf(stage: StageIndex): number {
   return ringDistance(stageRingCount(stage))
 }
 
-/** Ring (zone) a cell belongs to: the founder cell is 0, a ring owns its slot row and the walkway inside it. */
-export function ringOfCell(c: GridPos): number {
+/**
+ * Half size of the stage's floor in cells: the ring square plus one row along every wall, so the walls stand on cell
+ * edges and a piece can go right against them (5×5 garage … 25×25 Series C). The wall row belongs to the outer ring.
+ */
+export function gridHalf(stage: StageIndex): number {
+  return ringHalf(stage) + 1
+}
+
+/**
+ * Ring (zone) a cell belongs to: the founder cell is 0, a ring owns its slot row and the walkway inside it. With a
+ * stage, the row along the walls counts as the stage's outer ring.
+ */
+export function ringOfCell(c: GridPos, stage?: StageIndex): number {
   const d = Math.max(Math.abs(c.x), Math.abs(c.z))
-  return d === 0 ? 0 : Math.ceil((d + 1) / 2)
+  const r = d === 0 ? 0 : Math.ceil((d + 1) / 2)
+  return stage === undefined ? r : Math.min(r, stageRingCount(stage))
 }
 
 export function inGrid(stage: StageIndex, c: GridPos): boolean {
@@ -56,22 +64,54 @@ export function inGrid(stage: StageIndex, c: GridPos): boolean {
   return Math.abs(c.x) <= h && Math.abs(c.z) <= h
 }
 
-// ---------------------------------------------------------------------------
-// Walk grid. Walking happens on an "expanded" grid: every cell, plus one node row for each side of the founder
-// cross-aisle (e = ±1), which is free floor that runs the whole office. Cell v sits at e = v + sign(v).
-// ---------------------------------------------------------------------------
+/** In the grid and in an open ring: a piece may stand there unless a fixture or another piece is on it. */
+export function cellOpen(office: OfficeState, c: GridPos): boolean {
+  return inGrid(office.stage, c) && isRingUnlocked(office, ringOfCell(c, office.stage))
+}
 
-const ex = (v: number): number => v + Math.sign(v)
+// ---------------------------------------------------------------------------
+// Walk grid: half cells. Every cell is 2×2 walk nodes, so a desk blocks only its back half (the desk top) and its
+// chair half stays floor: desks side by side, back to back or against a wall all leave the chairs reachable.
+// Node (sx, sz) on an axis: sx = 2·(x + H) + k, k = 0 on the cell's −side, 1 on its +side.
+// ---------------------------------------------------------------------------
 
 interface WalkGrid {
-  /** Expanded half size (gridHalf + 1). */
-  h: number
+  /** Cell half size (gridHalf). */
+  H: number
+  /** Nodes per side. */
   n: number
   blocked: Uint8Array
 }
 
-const nodeOf = (g: WalkGrid, x: number, z: number): number => (z + g.h) * g.n + (x + g.h)
-const inWalk = (g: WalkGrid, x: number, z: number): boolean => Math.abs(x) <= g.h && Math.abs(z) <= g.h
+const subOf = (g: WalkGrid, v: number, k: number): number => 2 * (v + g.H) + k
+const nodeAt = (g: WalkGrid, sx: number, sz: number): number => sz * g.n + sx
+const inWalk = (g: WalkGrid, sx: number, sz: number): boolean => sx >= 0 && sz >= 0 && sx < g.n && sz < g.n
+
+/** The four walk nodes of a cell. */
+function cellNodes(g: WalkGrid, c: GridPos): number[] {
+  const out: number[] = []
+  for (const kz of [0, 1]) for (const kx of [0, 1]) {
+    const sx = subOf(g, c.x, kx)
+    const sz = subOf(g, c.z, kz)
+    if (inWalk(g, sx, sz)) out.push(nodeAt(g, sx, sz))
+  }
+  return out
+}
+
+/** The two nodes of a cell on the side `f` points to (f = frontDir: the chair half of a desk). */
+function halfNodes(g: WalkGrid, c: GridPos, f: GridPos): number[] {
+  const out: number[] = []
+  for (const k of [0, 1]) {
+    const kx = f.x !== 0 ? (f.x > 0 ? 1 : 0) : k
+    const kz = f.z !== 0 ? (f.z > 0 ? 1 : 0) : k
+    const sx = subOf(g, c.x, kx)
+    const sz = subOf(g, c.z, kz)
+    if (inWalk(g, sx, sz)) out.push(nodeAt(g, sx, sz))
+  }
+  return out
+}
+
+const back = (f: GridPos): GridPos => ({ x: -f.x, z: -f.z })
 
 // ---------------------------------------------------------------------------
 // Fixtures: cells fixed by the stage's building, never by the player
@@ -80,23 +120,25 @@ const inWalk = (g: WalkGrid, x: number, z: number): boolean => Math.abs(x) <= g.
 export interface Fixtures {
   /** The door's cell (door.inside lands here): the flood fill starts on it. */
   door: GridPos
-  /** No piece and no walking (stairs, the founder desk). */
+  /** The 2×2 cells just inside the door: kept clear, so nothing ever narrows the way in. */
+  doorZone: GridPos[]
+  /** No piece and no walking (the Series B stairs, the garage shelf). */
   blocked: Set<CellKey>
-  /** No piece, but free floor (the door cell, structural columns are a thin post). */
+  /** No piece, but free floor (the door zone, the founder desk's cell, structural columns are a thin post). */
   noPiece: Set<CellKey>
-  /** Column centres in world space, as render/layout.ts draws them (pinned by a test). */
+  /** Column centres in world space (render/layout.ts draws exactly these). */
   columns: [number, number][]
 }
 
 const fixtureCache = new Map<StageIndex, Fixtures>()
 
-/** Cells a world box overlaps (cell boxes are their centre ± half a cell; the cross-aisle belongs to no cell). */
+/** Cells a world box overlaps (a cell's box is its centre ± half a cell). */
 function cellsUnder(minX: number, maxX: number, minZ: number, maxZ: number, h: number): GridPos[] {
   const axis = (lo: number, hi: number): number[] => {
     const out: number[] = []
     for (let v = -h; v <= h; v++) {
       const c = axisToWorld(v)
-      if (c + CELL_HALF > lo + 1e-6 && c - CELL_HALF < hi - 1e-6) out.push(v)
+      if (c + GRID_CELL / 2 > lo + 1e-6 && c - GRID_CELL / 2 < hi - 1e-6) out.push(v)
     }
     return out
   }
@@ -105,43 +147,59 @@ function cellsUnder(minX: number, maxX: number, minZ: number, maxZ: number, h: n
   return xs.flatMap((x) => zs.map((z) => ({ x, z })))
 }
 
+/** Interior floor of a stage in world units: the cell grid edge to edge (the walls stand on its outer cell edges). */
+export function stageBounds(stage: StageIndex): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  const e = (gridHalf(stage) + 0.5) * GRID_CELL
+  return { minX: -e, maxX: e, minZ: -e, maxZ: e }
+}
+
+/** Length of the Series B stairs along the left wall (three cells of the wall row). */
+export const STAIRS_LEN = GRID_CELL * 3
+
 /**
- * The stage's fixed cells, from its canonical bounds only: the door on the back wall's right end, the columns of
- * stages 3–5 (computed against canonical slots, exactly as computeLayout places them), the Series B stairs and the
- * founder desk. Memoised per stage.
+ * The stage's fixed cells, from its bounds only: the door on the back wall above the ring square's last column with
+ * the 2×2 cells inside it kept clear, the columns of stages 3–5 (on walkway cells, never on a ring slot), the Series B
+ * stairs, the garage shelf and the founder desk's cell. Memoised per stage.
  */
 export function stageFixtures(stage: StageIndex): Fixtures {
   const hit = fixtureCache.get(stage)
   if (hit) return hit
+  const rh = ringHalf(stage)
   const h = gridHalf(stage)
-  const edge = axisToWorld(h) + GRID_CELL * 0.55 + GRID_CELL * 0.35
-  const b = { minX: -edge, maxX: edge, minZ: -edge, maxZ: edge }
-  const doorX = Math.max(b.minX + GRID_CELL * 0.8, b.maxX - GRID_CELL * 1.1)
-  const doorInZ = b.minZ + GRID_CELL * 0.6
-  const door = { x: worldToGrid(doorX), z: worldToGrid(doorInZ) }
-  const blocked = new Set<CellKey>([cellKey(0, 0)])
-  const noPiece = new Set<CellKey>([cellKey(door.x, door.z)])
+  const b = stageBounds(stage)
+  const door = { x: rh, z: -h }
+  const doorZone = [door, { x: rh + 1, z: -h }, { x: rh, z: -rh }, { x: rh + 1, z: -rh }]
+  const zone = new Set(doorZone.map((c) => cellKey(c.x, c.z)))
+  const blocked = new Set<CellKey>()
+  const noPiece = new Set<CellKey>([cellKey(0, 0), ...zone])
   const columns: [number, number][] = []
   if (stage >= 3 && stage <= 5) {
-    const slotPts: [number, number][] = [[0, 0]]
-    for (let r = 1; r <= stageRingCount(stage); r++) for (const s of buildRingSlots(r)) slotPts.push([axisToWorld(s.pos.x), axisToWorld(s.pos.z)])
-    const step = GRID_CELL * 3
-    for (let x = b.minX + step; x < b.maxX - GRID_CELL; x += step) {
-      for (let z = b.minZ + step; z < b.maxZ - GRID_CELL; z += step) {
-        const c: [number, number] = [x + GRID_CELL * 0.5, z + GRID_CELL * 0.5]
-        if (Math.hypot(c[0], c[1]) <= GRID_CELL * 1.5) continue
-        if (slotPts.some((p) => Math.max(Math.abs(p[0] - c[0]), Math.abs(p[1] - c[1])) < GRID_CELL * 0.75)) continue
-        if (Math.abs(c[0] - doorX) < GRID_CELL * 0.7 && c[1] < doorInZ + GRID_CELL) continue
-        columns.push(c)
-        for (const cell of cellsUnder(c[0] - 0.11, c[0] + 0.11, c[1] - 0.11, c[1] + 0.11, h)) noPiece.add(cellKey(cell.x, cell.z))
+    const slots = new Set<CellKey>()
+    for (let r = 1; r <= stageRingCount(stage); r++) for (const s of buildRingSlots(r)) slots.add(cellKey(s.pos.x, s.pos.z))
+    // On every third cell (multiples of 3, inside the wall row), skipping the founder's square, ring slots and the door zone.
+    const m = Math.floor((h - 1) / 3) * 3
+    for (let x = -m; x <= m; x += 3) {
+      for (let z = -m; z <= m; z += 3) {
+        if (Math.max(Math.abs(x), Math.abs(z)) <= 1) continue
+        const k = cellKey(x, z)
+        if (slots.has(k) || zone.has(k)) continue
+        columns.push([axisToWorld(x), axisToWorld(z)])
+        noPiece.add(k)
       }
     }
   }
-  // Series B stairs along the back-left corner (render/layout.ts obstacle box).
-  if (stage === 4) for (const cell of cellsUnder(b.minX, b.minX + 0.95, b.minZ, b.minZ + 4.6, h)) blocked.add(cellKey(cell.x, cell.z))
-  const fx: Fixtures = { door, blocked, noPiece, columns }
+  // Series B stairs along the back of the left wall (render/layout.ts obstacle box).
+  if (stage === 4) for (const cell of cellsUnder(b.minX, b.minX + 0.95, b.minZ, b.minZ + STAIRS_LEN, h)) blocked.add(cellKey(cell.x, cell.z))
+  // The garage's metal shelf in the back-left corner.
+  if (stage === 0) blocked.add(cellKey(-h, -h))
+  const fx: Fixtures = { door, doorZone, blocked, noPiece, columns }
   fixtureCache.set(stage, fx)
   return fx
+}
+
+/** A cell of the stage's door zone (the 2×2 inside the door). */
+export function inDoorZone(stage: StageIndex, c: GridPos): boolean {
+  return stageFixtures(stage).doorZone.some((d) => d.x === c.x && d.z === c.z)
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +322,7 @@ export function typeUse(office: OfficeState): Record<SlotType, number> {
 // Validity
 // ---------------------------------------------------------------------------
 
-export type LayoutRefusal = 'outside' | 'locked' | 'fixture' | 'overlap' | 'typeCap' | 'decorCap' | 'blocksDoor' | 'sealsDesk'
+export type LayoutRefusal = 'outside' | 'locked' | 'fixture' | 'doorZone' | 'overlap' | 'typeCap' | 'decorCap' | 'blocksDoor' | 'sealsDesk'
 
 export interface LayoutCheck {
   ok: boolean
@@ -273,31 +331,37 @@ export interface LayoutCheck {
   reason?: LayoutRefusal
 }
 
+/** A desk (any desk item, the founder's too): only its back half is solid, its chair half is floor. */
+const deskLike = (type: SlotType): boolean => type === 'desk'
+
+/** The office's founder desk as a piece of the walk grid (always drawn, item or not). */
+function founderSlot(office: OfficeState): Slot | undefined {
+  return office.slots.find((s) => s.id === FOUNDER_SLOT_ID)
+}
+
+/**
+ * Walk nodes (half cells) of the office: fixtures, non-desk items and blocking decor take their whole cells, a desk
+ * only the back half (the desk top); its chair half stays walkable floor.
+ */
 function walkGrid(office: OfficeState, fx: Fixtures, items: readonly ItemPiece[]): WalkGrid {
-  const h = gridHalf(office.stage) + 1
-  const n = h * 2 + 1
-  const g: WalkGrid = { h, n, blocked: new Uint8Array(n * n) }
-  const block = (c: GridPos) => {
-    const x = ex(c.x)
-    const z = ex(c.z)
-    if (inWalk(g, x, z)) g.blocked[nodeOf(g, x, z)] = 1
+  const H = gridHalf(office.stage)
+  const n = 2 * (2 * H + 1)
+  const g: WalkGrid = { H, n, blocked: new Uint8Array(n * n) }
+  const all = (c: GridPos) => {
+    for (const k of cellNodes(g, c)) g.blocked[k] = 1
   }
   for (const k of fx.blocked) {
     const [x, z] = k.split(',').map(Number) as [number, number]
-    block({ x, z })
+    all({ x, z })
   }
+  const founder = founderSlot(office)
+  if (founder) for (const k of halfNodes(g, founder.pos, back(frontDir(founder.rotation)))) g.blocked[k] = 1
   for (const it of items) {
-    for (const c of it.cells) block(c.pos)
-    // A room straddling the cross-aisle closes the aisle node between its two cells.
-    for (let i = 1; i < it.cells.length; i++) {
-      const a = it.cells[i - 1]!.pos
-      const b = it.cells[i]!.pos
-      const mx = (ex(a.x) + ex(b.x)) / 2
-      const mz = (ex(a.z) + ex(b.z)) / 2
-      if (Number.isInteger(mx) && Number.isInteger(mz) && inWalk(g, mx, mz)) g.blocked[nodeOf(g, mx, mz)] = 1
-    }
+    if (deskLike(it.anchor.type) && it.cells.length === 1) {
+      for (const k of halfNodes(g, it.anchor.pos, back(frontDir(it.rotation)))) g.blocked[k] = 1
+    } else for (const c of it.cells) all(c.pos)
   }
-  for (const p of office.decor ?? []) if (decorShape(p.kind).blocking) for (const c of decorCells(p)) block(c)
+  for (const p of office.decor ?? []) if (decorShape(p.kind).blocking) for (const c of decorCells(p)) all(c)
   return g
 }
 
@@ -309,13 +373,13 @@ function flood(g: WalkGrid, start: number): Uint8Array {
   seen[start] = 1
   for (let i = 0; i < queue.length; i++) {
     const cur = queue[i]!
-    const x = (cur % g.n) - g.h
-    const z = Math.floor(cur / g.n) - g.h
+    const x = cur % g.n
+    const z = Math.floor(cur / g.n)
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const nx = x + dx
       const nz = z + dz
       if (!inWalk(g, nx, nz)) continue
-      const k = nodeOf(g, nx, nz)
+      const k = nodeAt(g, nx, nz)
       if (seen[k] || g.blocked[k]) continue
       seen[k] = 1
       queue.push(k)
@@ -324,20 +388,24 @@ function flood(g: WalkGrid, start: number): Uint8Array {
   return seen
 }
 
-/** Walk node in front of a cell: one step on the expanded grid (a ring-1 desk's front is the cross-aisle). */
-function frontNode(g: WalkGrid, c: GridPos, rot: number): number | null {
+/**
+ * Where a piece is used from: a desk's own chair half; any other item's front edge, the two nodes of the next cell
+ * along its front. Null when that edge is the wall.
+ */
+function accessNodes(g: WalkGrid, c: GridPos, rot: number, desk: boolean): number[] | null {
   const f = frontDir(rot)
-  const x = ex(c.x) + f.x
-  const z = ex(c.z) + f.z
-  return inWalk(g, x, z) ? nodeOf(g, x, z) : null
+  if (desk) return halfNodes(g, c, f)
+  const n = { x: c.x + f.x, z: c.z + f.z }
+  if (Math.abs(n.x) > g.H || Math.abs(n.z) > g.H) return null
+  return halfNodes(g, n, back(f))
 }
 
 /**
- * Is this office layout legal? Run on every hover and every commit (≤ 529 cells, one fill ≈ 0.05 ms):
- * 1. every piece cell is in the grid, in an open ring, off the fixtures and not on another blocking piece;
+ * Is this office layout legal? Run on a hovered cell change and on every commit (≤ 625 cells, one fill ≈ 0.1 ms):
+ * 1. every piece cell is in the grid, in an open ring, off the fixtures and the door zone, not on another blocking piece;
  * 2. the type caps and the decor cap hold;
- * 3. a flood fill from the door reaches the front of every item and of the founder desk (two facing desks may share
- *    one aisle cell). `blocksDoor` when the door has no free floor around it, `sealsDesk` when a front is cut off.
+ * 3. a flood fill over half cells from the door reaches every desk's chair half (desks may stand side by side, back to
+ *    back, in a row or against a wall) and the front edge of every other item. `sealsDesk` when one is cut off.
  */
 export function validateLayout(office: OfficeState): LayoutCheck {
   const stage = office.stage
@@ -347,7 +415,10 @@ export function validateLayout(office: OfficeState): LayoutCheck {
   const fail = (reason: LayoutRefusal, cells: GridPos[]): LayoutCheck => ({ ok: false, reason, bad: cells.map((c) => cellKey(c.x, c.z)) })
   const cellError = (c: GridPos): LayoutRefusal | null => {
     if (!inGrid(stage, c)) return 'outside'
-    if (!isRingUnlocked(office, ringOfCell(c))) return 'locked'
+    if (!isRingUnlocked(office, ringOfCell(c, stage))) return 'locked'
+    if (inDoorZone(stage, c)) return 'doorZone'
+    // The founder's desk is a piece on its cell like any other.
+    if (c.x === 0 && c.z === 0) return 'overlap'
     const k = cellKey(c.x, c.z)
     if (fx.blocked.has(k) || fx.noPiece.has(k)) return 'fixture'
     return null
@@ -389,20 +460,19 @@ export function validateLayout(office: OfficeState): LayoutCheck {
   }
   if (decorCount(office) > decorCap(stage)) return fail('decorCap', [])
   const g = walkGrid(office, fx, items)
-  const reach = flood(g, nodeOf(g, ex(fx.door.x), ex(fx.door.z)))
-  const doorWayIn = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => {
-    const x = ex(fx.door.x) + dx!
-    const z = ex(fx.door.z) + dz!
-    return inWalk(g, x, z) && reach[nodeOf(g, x, z)] === 1
-  })
-  if (!doorWayIn) return fail('blocksDoor', [fx.door])
+  const start = cellNodes(g, fx.door)[0]!
+  const reach = flood(g, start)
+  if (!reach[start]) return fail('blocksDoor', [fx.door])
   const sealed: GridPos[] = []
-  const founder = office.slots.find((s) => s.id === FOUNDER_SLOT_ID)
-  const fronts: { cell: GridPos; rot: number }[] = founder ? [{ cell: founder.pos, rot: founder.rotation }] : []
-  for (const it of items) for (const s of it.cells) fronts.push({ cell: s.pos, rot: it.rotation })
-  for (const f of fronts) {
-    const k = frontNode(g, f.cell, f.rot)
-    if (k === null || !reach[k]) sealed.push(f.cell)
+  const founder = founderSlot(office)
+  const uses: { cell: GridPos; rot: number; desk: boolean }[] = founder ? [{ cell: founder.pos, rot: founder.rotation, desk: true }] : []
+  for (const it of items) {
+    const desk = deskLike(it.anchor.type) && it.cells.length === 1
+    for (const s of it.cells) uses.push({ cell: s.pos, rot: it.rotation, desk })
+  }
+  for (const u of uses) {
+    const ks = accessNodes(g, u.cell, u.rot, u.desk)
+    if (!ks || !ks.some((k) => reach[k] === 1)) sealed.push(u.cell)
   }
   if (sealed.length) return fail('sealsDesk', sealed)
   return { ok: true, bad: [] }
@@ -446,12 +516,12 @@ export function putItem(office: OfficeState, p: Placement, itemId: string, spec:
     }
     return slot
   }
-  const anchor: Slot = { id: nextFreeSlotId(office), ring: ringOfCell(p.pos), type: spec.slotType, pos: { ...p.pos }, rotation: p.rotation, itemId, free: true }
+  const anchor: Slot = { id: nextFreeSlotId(office), ring: ringOfCell(p.pos, office.stage), type: spec.slotType, pos: { ...p.pos }, rotation: p.rotation, itemId, free: true }
   office.slots.push(anchor)
   if (spec.size === 2) {
     const r = rightDir(p.rotation)
     const pos = { x: p.pos.x + r.x, z: p.pos.z + r.z }
-    office.slots.push({ id: nextFreeSlotId(office), ring: ringOfCell(pos), type: spec.slotType, pos, rotation: p.rotation, itemId, spanOf: anchor.id, free: true })
+    office.slots.push({ id: nextFreeSlotId(office), ring: ringOfCell(pos, office.stage), type: spec.slotType, pos, rotation: p.rotation, itemId, spanOf: anchor.id, free: true })
   }
   return anchor
 }
@@ -554,21 +624,21 @@ function canonicalCandidates(office: OfficeState, spec: PlacementSpec, covered: 
 /** BFS distance on the walk grid from a cell (unreached → Infinity). */
 function walkDistances(g: WalkGrid, from: GridPos): Int32Array {
   const d = new Int32Array(g.n * g.n).fill(-1)
-  const sx = ex(Math.round(from.x))
-  const sz = ex(Math.round(from.z))
+  const sx = subOf(g, Math.round(from.x), 0)
+  const sz = subOf(g, Math.round(from.z), 0)
   if (!inWalk(g, sx, sz)) return d
-  const start = nodeOf(g, sx, sz)
+  const start = nodeAt(g, sx, sz)
   d[start] = 0
   const queue = [start]
   for (let i = 0; i < queue.length; i++) {
     const cur = queue[i]!
-    const x = (cur % g.n) - g.h
-    const z = Math.floor(cur / g.n) - g.h
+    const x = cur % g.n
+    const z = Math.floor(cur / g.n)
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const nx = x + dx
       const nz = z + dz
       if (!inWalk(g, nx, nz)) continue
-      const k = nodeOf(g, nx, nz)
+      const k = nodeAt(g, nx, nz)
       // Distances pass through blocked cells too (a desk cluster is not a wall to "near"), only the step counts.
       if (d[k]! >= 0) continue
       d[k] = d[cur]! + 1
@@ -587,7 +657,7 @@ function freeCellCandidates(office: OfficeState, spec: PlacementSpec, covered: S
   const dist = walkDistances(g, centre ?? { x: 0, z: 0 })
   const open = (c: GridPos): boolean => {
     const k = cellKey(c.x, c.z)
-    return inGrid(stage, c) && isRingUnlocked(office, ringOfCell(c)) && !fx.blocked.has(k) && !fx.noPiece.has(k) && !covered.has(k) && !opts.avoid?.has(k)
+    return cellOpen(office, c) && !fx.blocked.has(k) && !fx.noPiece.has(k) && !covered.has(k) && !opts.avoid?.has(k)
   }
   const inTeam: Candidate[] = []
   const rest: Candidate[] = []
@@ -601,7 +671,7 @@ function freeCellCandidates(office: OfficeState, spec: PlacementSpec, covered: S
           const r = rightDir(rotation)
           if (!open({ x: x + r.x, z: z + r.z })) continue
         }
-        const d = dist[nodeOf(g, ex(x), ex(z))]!
+        const d = dist[nodeAt(g, subOf(g, x, 0), subOf(g, z, 0))]!
         const near = team.filter((t) => chebyshev(t, c) === 1).length
         // Covering a canonical (suggested) cell comes last: phones and bots still look for those.
         const key = [canonical.has(cellKey(x, z)) ? 1 : 0, d < 0 ? 1e9 : d, dist2(c, { x: 0, z: 0 }), order++]
@@ -813,7 +883,7 @@ export function carryOffice(old: OfficeState, next: OfficeState): void {
     if (o.team !== undefined) s.team = o.team
     s.rotation = o.rotation
   }
-  for (const o of old.slots) if (o.free) next.slots.push({ ...o, pos: { ...o.pos }, ring: ringOfCell(o.pos) })
+  for (const o of old.slots) if (o.free) next.slots.push({ ...o, pos: { ...o.pos }, ring: ringOfCell(o.pos, next.stage) })
   next.decor = []
   next.storage = (old.storage ?? []).map((x) => ({ ...x }))
   next.saved = (old.saved ?? []).map((x) => ({ ...x }))
@@ -826,38 +896,63 @@ export function carryOffice(old: OfficeState, next: OfficeState): void {
   // Walls stay with the old building: paintings go to storage, a painted wall leaves one free paint job behind.
   for (const w of old.walls ?? []) addStored(next.storage, w.kind)
   storeDecor(next, toStore)
-  repairFixtures(next)
+  repairOffice(next)
   placeStarterDecor(next)
 }
 
-/** Re-places items and separators that sit on a fixture cell (mutates). Separators that find no cell go to storage. */
-function repairFixtures(office: OfficeState): void {
-  const fx = stageFixtures(office.stage)
-  const onFixture = (c: GridPos) => fx.blocked.has(cellKey(c.x, c.z)) || fx.noPiece.has(cellKey(c.x, c.z))
-  const clash = (office.decor ?? []).filter((p) => decorCells(p).some(onFixture)).map((p) => p.id)
-  storeDecor(office, clash)
-  // Lift every clashing piece first: one still on a fixture would make every trial cell of the others invalid.
-  const lifted = itemPieces(office)
-    .filter((it) => it.cells.some((s) => onFixture(s.pos)))
+/** Lifts the items with a cell in `bad` (mutates): their item, seat and label, to be put down again. */
+function liftBad(office: OfficeState, bad: (it: ItemPiece) => boolean): { spec: PlacementSpec; keep: { itemId: string; occupantId?: string; team?: Dept } }[] {
+  const out = itemPieces(office)
+    .filter(bad)
     .map((it) => {
       const spec: PlacementSpec = { slotType: it.anchor.type, size: it.cells.length === 2 ? 2 : 1 }
-      const keep = { itemId: it.anchor.itemId!, occupantId: it.anchor.occupantId, team: it.anchor.team }
-      for (const s of it.cells) {
-        delete s.itemId
-        delete s.spanOf
-        delete s.occupantId
-        delete s.team
-      }
+      const keep = { itemId: it.anchor.itemId!, ...(it.anchor.occupantId !== undefined ? { occupantId: it.anchor.occupantId } : {}), ...(it.anchor.team !== undefined ? { team: it.anchor.team } : {}) }
+      liftItem(office, it.cells)
       return { spec, keep }
     })
-  office.slots = office.slots.filter((s) => !(s.free && s.itemId === undefined))
+  dropEmptyFreeSlots(office)
+  return out
+}
+
+/**
+ * Makes an office legal again after the building changed under it (a stage move, a save from before the door zone;
+ * mutates): decor on a cell it may not use goes to storage, items on one are lifted and re-placed with autoPlace
+ * (seat and team label kept), then anything still sealed in is re-placed the same way. A layout that was legal is
+ * left exactly as it is.
+ */
+export function repairOffice(office: OfficeState): void {
+  if (validateLayout(office).ok) return
+  const fx = stageFixtures(office.stage)
+  const badCell = (c: GridPos) => !cellOpen(office, c) || fx.blocked.has(cellKey(c.x, c.z)) || fx.noPiece.has(cellKey(c.x, c.z))
+  storeDecor(office, (office.decor ?? []).filter((p) => decorCells(p).some(badCell)).map((p) => p.id))
+  // Lift every clashing piece first: one still on a fixture would make every trial cell of the others invalid.
+  const lifted = liftBad(office, (it) => it.cells.some((s) => (s.free ? badCell(s.pos) : !isRingUnlocked(office, s.ring) || badCell(s.pos))))
+  for (let guard = 0; guard < 8; guard++) {
+    const check = validateLayout(office)
+    if (check.ok || check.reason !== 'sealsDesk') break
+    const sealed = new Set(check.bad)
+    // A sealed separator or decor piece never is: only items have a use side. Lift the sealed ones and their sealers.
+    const before = lifted.length
+    lifted.push(...liftBad(office, (it) => it.cells.some((s) => sealed.has(cellKey(s.pos.x, s.pos.z)))))
+    if (lifted.length === before) break
+  }
   for (const { spec, keep } of lifted) {
-    const place = autoPlace(office, spec, { team: keep.team, ignoreCap: true })
+    const place = autoPlace(office, spec, { ...(keep.team !== undefined ? { team: keep.team } : {}), ignoreCap: true })
     if (!place) continue
     storeDecor(office, place.bumped)
     const anchor = putItem(office, place, keep.itemId, spec)
     if (keep.occupantId !== undefined) anchor.occupantId = keep.occupantId
     if (keep.team !== undefined) anchor.team = keep.team
+  }
+  // Still sealed (a decor ring around a desk): the blocking decor goes to storage, nearest the sealed cells first.
+  for (let guard = 0; guard < 40; guard++) {
+    const check = validateLayout(office)
+    if (check.ok) break
+    const decor = (office.decor ?? []).filter((p) => decorShape(p.kind).blocking)
+    if (!decor.length) break
+    const target = check.bad.map((k) => k.split(',').map(Number) as [number, number])
+    const d = (p: DecorPiece) => Math.min(...target.map(([x, z]) => (p.pos.x - x) ** 2 + (p.pos.z - z) ** 2), 1e9)
+    storeDecor(office, [decor.reduce((a, b) => (d(b) < d(a) ? b : a)).id])
   }
 }
 
@@ -874,6 +969,8 @@ export function refusalError(r: LayoutRefusal): ActionErrorCode {
     case 'fixture':
     case 'overlap':
       return 'slotOccupied'
+    case 'doorZone':
+      return 'blocksDoor'
     case 'typeCap':
     case 'decorCap':
       return 'officeFull'
@@ -948,7 +1045,8 @@ export function starterPlan(office: OfficeState): StarterPlan {
   const stage = office.stage
   if (stage !== 1 && stage !== 2) return { floor: [], walls: [] }
   const open = Math.max(1, ...office.rings.filter((r) => r.unlocked).map((r) => r.index))
-  const d = ringDistance(open)
+  // The open floor's corners: the wall row's once the outer ring is open.
+  const d = open >= stageRingCount(stage) ? gridHalf(stage) : ringDistance(open)
   const h = gridHalf(stage)
   // Three plants in the corners of the open floor (the coworking corner plants), clear of the door's corner.
   const floor: StarterPlan['floor'] = [
@@ -986,7 +1084,7 @@ export function placeStarterDecor(office: OfficeState, { force = false }: { forc
     takeStored(storage, f.kind)
     const piece: DecorPiece = { id: nextDecorId(office.decor), kind: f.kind, pos: { ...f.pos }, rotation: f.rotation }
     const covered = coveredCells(office)
-    const free = decorCells(piece).every((c) => !covered.has(cellKey(c.x, c.z)) && isRingUnlocked(office, ringOfCell(c)))
+    const free = decorCells(piece).every((c) => !covered.has(cellKey(c.x, c.z)) && cellOpen(office, c))
     office.decor.push(piece)
     if (free && fits()) continue
     office.decor.pop()

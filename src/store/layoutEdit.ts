@@ -386,7 +386,7 @@ export function draftOffice(office: OfficeState, draft: LayoutSnapshot): OfficeS
     }
     if (!s.free) slots.push({ id: `${s.id}~`, ring: s.ring, type: s.type, pos: s.pos, rotation: s.rotation })
     const pos = own.piece.cells[own.k] ?? own.piece.cells[0]!
-    slots.push({ ...s, ring: ringOfCell(pos), pos: { ...pos }, rotation: own.piece.r })
+    slots.push({ ...s, ring: ringOfCell(pos, office.stage), pos: { ...pos }, rotation: own.piece.r })
   }
   return { ...office, slots }
 }

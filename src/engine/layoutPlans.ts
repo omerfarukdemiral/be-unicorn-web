@@ -5,7 +5,7 @@
 // never moves. Desks are seated team by team, so the templates grow team islands (TEAM_ADJ_BONUS) wherever the
 // office has the people; a saved layout never buys a piece: what the company does not own is reported as missing.
 import { PAINT_KIND } from '../content/decor'
-import { autoPlace, autoPlaceDecor, cellKey, decorBill, decorCap, decorCells, decorCount, dropEmptyFreeSlots, frontDir, gridHalf, inGrid, itemPieces, liftItem, nextDecorId, previewSnapshot, putItem, ringOfCell, rightDir, stageFixtures, storeDecor, validateLayout, wallSegments, type Placement, type Rotation } from './layout'
+import { autoPlace, autoPlaceDecor, cellKey, cellOpen, decorBill, decorCap, decorCells, decorCount, dropEmptyFreeSlots, frontDir, gridHalf, inGrid, itemPieces, liftItem, nextDecorId, previewSnapshot, putItem, rightDir, stageFixtures, storeDecor, validateLayout, wallSegments, type Placement, type Rotation } from './layout'
 import { isRingUnlocked, teamClusters, type PlacementSpec } from './office'
 import { DEPTS, FOUNDER_SLOT_ID, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type SavedLayout, type SlotId, type SlotType, type StageIndex, type WallPiece } from './types'
 
@@ -240,7 +240,7 @@ function frontInside(stage: StageIndex, x: number, z: number, r: Rotation): bool
 function openCell(office: OfficeState, x: number, z: number): boolean {
   const fx = stageFixtures(office.stage)
   const k = cellKey(x, z)
-  return inGrid(office.stage, { x, z }) && isRingUnlocked(office, ringOfCell({ x, z })) && !fx.blocked.has(k) && !fx.noPiece.has(k) && !(x === 0 && z === 0)
+  return cellOpen(office, { x, z }) && !fx.blocked.has(k) && !fx.noPiece.has(k) && !(x === 0 && z === 0)
 }
 
 /** Sides of the office, nearest the founder first: (z side, x side). */
@@ -505,7 +505,7 @@ function less(a: readonly number[], b: readonly number[]): boolean {
 
 /** A decor piece's cells are inside this office's open floor (a saved piece from a bigger office may not be). */
 function placeable(office: OfficeState, p: DecorPiece): boolean {
-  return decorCells(p).every((c) => inGrid(office.stage, c) && isRingUnlocked(office, ringOfCell(c)))
+  return decorCells(p).every((c) => cellOpen(office, c))
 }
 
 /**

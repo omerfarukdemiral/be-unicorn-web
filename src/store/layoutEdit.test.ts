@@ -8,7 +8,7 @@ import { UI_TEXT } from '../content'
 import { effectiveSpeed, pauseReasonsOf, useGameStore } from './gameStore'
 import { draftOffice, draftPieces, draftSpend, isDirty, reduceLayoutEdit, startEdit, UNDO_MAX, type LayoutEdit } from './layoutEdit'
 
-/** Pre-seed office (2 rings open), desks on r1-s0 (0,-1) and r1-s1 (0,1); the door cell is (3,-3). */
+/** Pre-seed office (2 rings open), desks on r1-s0 (0,-1) and r1-s1 (0,1); the door zone is (3..4, −4..−3). */
 function game(): GameState {
   let s = createGame({ seed: 1 })
   s = { ...s, stage: 1, office: buildOffice(1, 2), stats: { ...s.stats, cash: 1e9 } }
@@ -47,28 +47,31 @@ describe('layout edit reducer', () => {
     expect(draftOffice(o, startEdit(o).draft)).toBe(o)
   })
 
-  it('refuses a door block and a sealed desk with red cells and the reason; the draft stays as it was', () => {
+  it('refuses the door zone and a sealed desk with red cells and the reason; the draft stays as it was', () => {
     const o = office()
     const e1 = run(o, startEdit(o), { kind: 'place', id: 'r1-s0', x: 2, z: -3 })
-    const door = reduceLayoutEdit(o, e1, { kind: 'place', id: 'r1-s1', x: 3, z: -2 }, 42)
+    const door = reduceLayoutEdit(o, e1, { kind: 'place', id: 'r1-s1', x: 3, z: -3 }, 42)
     expect(door.draft).toBe(e1.draft)
     expect(door.undo).toBe(e1.undo)
-    expect(door.refused).toMatchObject({ reason: 'blocksDoor', at: 42 })
-    expect(door.refused!.cells).toContain('3,-2')
+    expect(door.refused).toMatchObject({ reason: 'doorZone', at: 42 })
+    expect(door.refused!.cells).toContain('3,-3')
 
-    let s = game()
-    s = applyAction(s, { type: 'placeItem', itemId: 'desk-basic', slotId: 'r2-s0' }).state
-    const sealed = run(s.office, startEdit(s.office), { kind: 'place', id: 'r1-s0', x: -1, z: -2 })
+    // A corner desk (−4,−4) facing +z with a panel on its right: a desk on its front cell walls its chair in.
+    const s = game()
+    const sealedIn = { ...s.office, slots: [...s.office.slots, { id: 'f9', ring: 2, type: 'desk' as const, pos: { x: -4, z: -4 }, rotation: 0 as const, itemId: 'desk-basic', free: true as const }], decor: [{ id: 'p1', kind: 'panel', pos: { x: -3, z: -4 }, rotation: 0 as const }] }
+    const sealed = run(sealedIn, startEdit(sealedIn), { kind: 'place', id: 'r1-s0', x: -4, z: -3, r: 0 })
     expect(sealed.refused?.reason).toBe('sealsDesk')
     expect(sealed.draft.slots).toEqual({})
-    // On another piece, on a fixture (the door cell), outside the open rings.
+    // Desks side by side or back to back are fine.
+    expect(run(o, startEdit(o), { kind: 'place', id: 'r1-s0', x: -1, z: 1, r: 2 }).refused).toBeNull()
+    // On another piece (the founder's desk too), outside the open rings.
     expect(run(o, startEdit(o), { kind: 'place', id: 'r1-s0', x: 0, z: 1 }).refused?.reason).toBe('overlap')
-    expect(run(o, startEdit(o), { kind: 'place', id: 'r1-s0', x: 3, z: -3 }).refused?.reason).toBe('fixture')
+    expect(run(o, startEdit(o), { kind: 'place', id: 'r1-s0', x: 0, z: 0 }).refused?.reason).toBe('overlap')
     expect(run(o, startEdit(o), { kind: 'place', id: 'r1-s0', x: 5, z: 0 }).refused?.reason).toMatch(/locked|outside/)
   })
 
   it('every refusal has a short line in the game voice (no em dash)', () => {
-    for (const r of ['blocksDoor', 'sealsDesk', 'typeCap', 'decorCap', 'overlap', 'fixture', 'locked', 'outside', 'founder', 'invalid']) {
+    for (const r of ['blocksDoor', 'doorZone', 'sealsDesk', 'typeCap', 'decorCap', 'overlap', 'fixture', 'locked', 'outside', 'founder', 'invalid']) {
       const line = UI_TEXT[`layout.reason.${r}`]
       expect(line, r).toBeTruthy()
       expect(line!.split(/\s+/).length, r).toBeLessThanOrEqual(6)
@@ -193,7 +196,7 @@ describe('layout edit in the store', () => {
     expect(store().ui.layoutEdit).toBeNull()
     // A draft that turned illegal under it (forced here): nothing moves, the draft stays.
     store().beginLayoutEdit()
-    const bad = { slots: { 'r1-s0': { x: 2, z: -3, r: 0 as const }, 'r1-s1': { x: 3, z: -2, r: 0 as const } }, decor: [] }
+    const bad = { slots: { 'r1-s0': { x: 2, z: -3, r: 0 as const }, 'r1-s1': { x: 4, z: -3, r: 0 as const } }, decor: [] }
     useGameStore.setState((st) => ({ ui: { ...st.ui, layoutEdit: { ...st.ui.layoutEdit!, draft: bad, undo: [{ slots: {}, decor: [] }] } } }))
     const res = store().commitLayoutEdit()
     expect(res).toMatchObject({ ok: false, error: 'blocksDoor' })

@@ -48,7 +48,7 @@ const sameSeg = (a: WallSeg | null, b: WallSeg | null): boolean => (a === null ?
 function openCells(office: OfficeState): GridPos[] {
   const h = gridHalf(office.stage)
   const out: GridPos[] = []
-  for (let z = -h; z <= h; z++) for (let x = -h; x <= h; x++) if (isRingUnlocked(office, ringOfCell({ x, z }))) out.push({ x, z })
+  for (let z = -h; z <= h; z++) for (let x = -h; x <= h; x++) if (isRingUnlocked(office, ringOfCell({ x, z }, office.stage))) out.push({ x, z })
   return out
 }
 

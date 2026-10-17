@@ -123,13 +123,13 @@ describe('caps and walls', () => {
   })
 
   it('wall segments: one piece each, none on the campus, none on the Series C glass front', () => {
-    expect(wallSegments(0, 'back')).toEqual([-1, 0, 1])
+    expect(wallSegments(0, 'back')).toEqual([-2, -1, 0, 1, 2])
     expect(wallSegments(5, 'back')).toEqual([])
-    expect(wallSegments(5, 'left')).toHaveLength(23)
+    expect(wallSegments(5, 'left')).toHaveLength(25)
     expect(wallSegments(6, 'left')).toEqual([])
     const o = buildOffice(1, 2)
     expect(validateLayout({ ...o, walls: [{ wall: 'back', seg: 0, kind: 'poster' }, { wall: 'back', seg: 0, kind: 'clock' }] }).reason).toBe('overlap')
-    expect(validateLayout({ ...o, walls: [{ wall: 'back', seg: 4, kind: 'poster' }] }).reason).toBe('outside')
+    expect(validateLayout({ ...o, walls: [{ wall: 'back', seg: 5, kind: 'poster' }] }).reason).toBe('outside')
     expect(validateLayout({ ...buildOffice(6, 1), walls: [{ wall: 'left', seg: 0, kind: 'paint', color: '#fff' }] }).ok).toBe(false)
   })
 })

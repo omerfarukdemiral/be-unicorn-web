@@ -5,7 +5,8 @@ import { newLoan } from './effects'
 import { peopleView } from './effort'
 import { FURNITURE } from '../content/furniture'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, DEPTS, FOUNDER_SLOT_ID, SAVE_VERSION, type Dept, type GameState, type OfficeState, type PartialReceipt, type ToolId } from './types'
-import { placeStarterDecor } from './layout'
+import { placeStarterDecor, repairOffice } from './layout'
+import { syncSeats } from './office'
 import { castOf, defaultMarket, ensureRivals, marketTools, newBoard } from './world'
 import { uniquePush } from './util'
 
@@ -108,6 +109,20 @@ const MIGRATIONS: Record<number, Migration> = {
     if (!Array.isArray(office.saved)) office.saved = []
     // Today's fixed coworking / Seed decor becomes starter pieces (free, in the cap, removable to storage).
     if (typeof office.stage === 'number' && Array.isArray(office.rings) && office.decor.length === 0 && office.walls.length === 0) placeStarterDecor(office as OfficeState)
+    return st
+  },
+  // v5 → v6 (grid v2): one grid. Cells are the floor tiles now (no founder cross-aisle), the walls stand one cell row
+  // past the rings and the 2×2 cells inside the door stay clear. Every piece keeps its cell; one that now sits on the
+  // door zone or a moved column is re-placed (decor goes to storage), and seats follow their desks.
+  5: (st) => {
+    const office = st.office as Partial<OfficeState> | undefined
+    if (!office || !Array.isArray(office.slots) || typeof office.stage !== 'number' || !Array.isArray(office.rings)) return st
+    office.decor ??= []
+    office.walls ??= []
+    office.storage ??= []
+    repairOffice(office as OfficeState)
+    const game = st as unknown as GameState
+    if (Array.isArray(game.employees)) syncSeats(game)
     return st
   },
 }

@@ -171,13 +171,13 @@ describe('auto seating groups each team', () => {
 
 describe('stage moves keep every desk', () => {
   it('two desks on the next office’s columns are both re-placed with their sitters (none is lost)', () => {
-    const o = buildOffice(3, 4)
-    // (1,-3) and (4,-3) are free cells at Series A and column cells at Series B.
-    for (const [id, x, z, who] of [['f1', 1, -3, 'e1'], ['f2', 4, -3, 'e2']] as const) {
-      expect(stageFixtures(4).noPiece.has(`${x},${z}`)).toBe(true)
-      o.slots.push({ id, ring: x === 1 ? 2 : 3, type: 'desk', pos: { x, z }, rotation: 0, itemId: 'desk-basic', occupantId: who, team: 'eng', free: true })
+    const o = buildOffice(2, 3)
+    // (−3,−3) and (3,3) are free corner cells at Seed and column cells at Series A.
+    for (const [id, x, z, who] of [['f1', -3, -3, 'e1'], ['f2', 3, 3, 'e2']] as const) {
+      expect(stageFixtures(3).noPiece.has(`${x},${z}`)).toBe(true)
+      o.slots.push({ id, ring: 2, type: 'desk', pos: { x, z }, rotation: 0, itemId: 'desk-basic', occupantId: who, team: 'eng', free: true })
     }
-    const next = relocateOffice(o, 4)
+    const next = relocateOffice(o, 3)
     const seats = next.slots.filter((s) => s.occupantId !== undefined).map((s) => s.occupantId).sort()
     expect(seats).toEqual(['e1', 'e2'])
     expect(next.slots.filter((s) => s.itemId === 'desk-basic')).toHaveLength(2)

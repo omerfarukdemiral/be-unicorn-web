@@ -64,6 +64,16 @@ describe('expandable scene bubble', () => {
     expect(store().state.time.speed).toBe(2)
   })
 
+  it('decision in 2 taps: the first control in the open card is an answer, Detay / × come after it (F5)', () => {
+    openBubble(KEY)
+    const out = decision()
+    const firstButton = out.indexOf('<button')
+    expect(out.slice(firstButton, out.indexOf('</button>', firstButton))).toContain('Hibrit çalışalım')
+    expect(out.indexOf('aria-label="Detay"')).toBeGreaterThan(out.indexOf('Ofiste kalalım'))
+    // Drawn on top all the same.
+    expect(out).toContain('order-first')
+  })
+
   it('on a phone the open bottom sheet closes first', () => {
     store().openPanel({ kind: 'team' })
     openBubble(KEY, true)

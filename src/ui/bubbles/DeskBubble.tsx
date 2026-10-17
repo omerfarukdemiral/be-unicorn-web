@@ -5,7 +5,7 @@
 // with labelled chips. The deeper views stay one tap away: Detay / Masa / Ekip close the bubble, then open the panel.
 import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { MODULE_TEXT, moduleName, PROJECT_NAMES } from '../../content'
+import { MODULE_TEXT, moduleName } from '../../content'
 import * as B from '../../engine/balance'
 import { ledgerCosts } from '../../engine/economy'
 import { autoPaydayChoice } from '../../engine'
@@ -194,7 +194,6 @@ function RoundBubble({ bubbleKey }: { bubbleKey: string }) {
     </Expandable>
   )
 }
-
 
 const pitchMark = (p: PitchOption['pitch'], fit?: boolean): BubbleMark => ({ icon: PITCH_ICON[p], color: fit ? 'var(--color-g-equity)' : 'var(--color-brand)' })
 
@@ -418,18 +417,6 @@ function ModuleBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string 
 // First product (row 9)
 // ---------------------------------------------------------------------------
 
-/** Same naming as the Projeler panel: the next unused name from the run's list. */
-function nextProjectName(): string {
-  const s = useGameStore.getState().state
-  const used = new Set(s.projects.map((p) => p.name))
-  const start = s.counters.projectsStarted ?? s.projects.length
-  for (let i = 0; i < PROJECT_NAMES.length; i++) {
-    const n = PROJECT_NAMES[(start + i) % PROJECT_NAMES.length]
-    if (n && !used.has(n)) return n
-  }
-  return `${PROJECT_NAMES[0] ?? 'Proje'} ${start + 1}`
-}
-
 function ProjectBubble({ bubbleKey }: { bubbleKey: string }) {
   const dispatch = useGameStore((s) => s.dispatch)
   return (
@@ -450,7 +437,7 @@ function ProjectBubble({ bubbleKey }: { bubbleKey: string }) {
             title={t('projects.start')}
             onClick={(e) => {
               e.stopPropagation()
-              dispatch({ type: 'startProject', category: c, name: nextProjectName() })
+              dispatch({ type: 'startProject', category: c })
             }}
             className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-control border border-border bg-surface-2/60 px-1 py-1.5 transition-colors hover:border-border-strong hover:bg-surface-2"
           >

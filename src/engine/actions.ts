@@ -14,6 +14,7 @@ import { SAVED_LAYOUT_MAX, captureLayout, cleanLayoutName } from './layoutPlans'
 import { fillCandidates, hireCandidate, layoff, refreshCost, removeEmployee } from './people'
 import { isModuleId, moduleCost, moduleDef, moduleError, modulePromptFlag, moduleStaleFlag, projectVersion } from './modules'
 import { checkName, nameKey } from './names'
+import { nextProjectName } from './projectNames'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
 import { idleBuilders, upgradeCost } from './loopSelectors'
@@ -510,10 +511,10 @@ const openRing: Handler<'openRing'> = ({ s }, a) => {
 
 const startProject: Handler<'startProject'> = ({ s }, a) => {
   if (!PROJECT_CATEGORIES.includes(a.category)) return 'invalid'
-  const n = (s.counters.projectsStarted ?? 0) + 1
   const p = {
     id: newId(s, 'p'),
-    name: a.name?.trim() || `${a.category}-${n}`,
+    // Unnamed (bots, devPlay): a readable name from the content list, never a "web-1" slug (fix round F8).
+    name: a.name?.trim() || nextProjectName(s),
     category: a.category,
     size: B.PROJECT_SIZE[a.category],
     maturity: 0,

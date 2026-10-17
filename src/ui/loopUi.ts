@@ -187,9 +187,8 @@ export function followStep(step: NextStep): void {
     case 'team':
       return openPanel({ kind: 'team' }, { root: true })
     case 'act': {
-      // "Elle kullanıcı bul" right away when the founder is free; otherwise show the growth numbers.
-      const free = !state.founder.currentAction
-      if (free && dispatch({ type: 'founderAction', kind: 'findUsers' }).ok) return
+      // The founder's focus on finding users (fix round 1: it repeats on its own); already there: the growth numbers.
+      if (state.founder.focus !== 'users' && dispatch({ type: 'setFounderFocus', focus: 'users' }).ok) return
       return openPanel({ kind: 'growth' }, { root: true })
     }
     case 'growth':

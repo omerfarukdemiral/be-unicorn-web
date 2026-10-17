@@ -226,6 +226,10 @@ export const LOOP_TEXT: Record<string, string> = {
   'founder.findUsers.circle': 'Tanıdık çevren bitiyor: {r} kullanıcı',
   'founder.findUsers.big': 'Elle bulmak az getirir: {r} kullanıcı. Pazarlamacı al.',
   'founder.talkToUsers.update': 'Konuşmak sıradaki güncellemeyi yaklaştırır.',
+  // Founder focus (fix round 1): a tap sets what the founder repeats every day.
+  'focus.on': 'Odak bu, kurucu her gün kendisi yapar',
+  'focus.onWeek': 'Odak bu, haftanın artan hamleleri buna gider',
+  'focus.off': 'Dokun, kurucunun odağı bu olsun',
   'founder.salesCall.preview': '{r} MRR · {d} günlük sözleşme · bu ay {n} tam hak',
   'founder.salesCall.saturated': 'Bu ayın pipeline’ı doldu: {r} MRR',
 }

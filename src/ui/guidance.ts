@@ -35,7 +35,7 @@ const DOCK: Partial<Record<NextStepId, DockTab>> = {
   grow: 'growth',
 }
 
-export type GuidanceState = Pick<GameState, 'stage' | 'gameOver' | 'derived' | 'employees' | 'projects' | 'stats' | 'round' | 'candidates'>
+export type GuidanceState = Pick<GameState, 'stage' | 'gameOver' | 'derived' | 'employees' | 'projects' | 'stats' | 'round' | 'candidates'> & { founder?: Pick<GameState['founder'], 'focus'> }
 
 /** Garage steps an idle-builder hint must not cover: the round moment, and the desk / hire steps it would contradict. */
 const NO_IDLE_HINT: ReadonlySet<NextStepId> = new Set<NextStepId>(['round', 'roundWait', 'desk', 'hire'])
@@ -55,7 +55,7 @@ export function guidanceTargets(s: GuidanceState): GuidanceTarget[] {
   const find = findWorth(s)
   switch (step.id) {
     case 'findUsers':
-      if (find) out.push({ kind: 'slot', action: 'findUsers' })
+      if (find && s.founder?.focus !== 'users') out.push({ kind: 'slot', action: 'findUsers' })
       break
     case 'users':
       // The goal, not the road (2026-10-08): a notch on Kullanıcı; finding by hand, ads, a sales call or a launch
@@ -91,7 +91,8 @@ function leverTargets(s: GuidanceState): GuidanceTarget[] {
   const marketerForHire = s.candidates.some((c) => c.dept === 'marketing')
   if ((s.derived.deptCounts?.marketing ?? 0) === 0 && s.stats.users > 0 && marketerForHire) out.push({ kind: 'dock', tab: 'team' })
   // Past FIND_USERS_BIG_AT users a find is a rounding error next to the base, whatever its multiplier says.
-  if (findWorth(s) && s.stats.users <= B.FIND_USERS_BIG_AT) out.push({ kind: 'slot', action: 'findUsers' })
+  // Already the founder's focus: it runs on its own, nothing to prompt.
+  if (findWorth(s) && s.stats.users <= B.FIND_USERS_BIG_AT && s.founder?.focus !== 'users') out.push({ kind: 'slot', action: 'findUsers' })
   return out.slice(0, GUIDANCE_MAX)
 }
 

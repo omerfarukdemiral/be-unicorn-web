@@ -449,7 +449,7 @@ function ProjectDetail({ id }: { id: string }) {
       <SprintRow project={p as Project} />
       {finished && <ModulesSection project={p as Project} />}
       {p.launched && <AdFocusToggle projectId={p.id} />}
-      <Button icon="chat" onClick={() => dispatch({ type: 'founderAction', kind: 'talkToUsers', targetId: p.id })}>
+      <Button icon="chat" onClick={() => dispatch({ type: 'setFounderFocus', focus: 'talk', targetId: p.id })}>
         {t('founder.talkToUsers')}
       </Button>
       <section>

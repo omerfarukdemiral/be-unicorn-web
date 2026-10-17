@@ -6,8 +6,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { FOUNDER_ACTION_DEFS } from '../engine/balance'
-import { founderActionError, refactorDebtCut } from '../engine/founder'
-import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind, type MovesView } from '../engine/types'
+import { focusAction, founderActionError, refactorDebtCut } from '../engine/founder'
+import { FOUNDER_ACTIONS, type ActionErrorCode, type FounderActionKind, type FounderFocus, type MovesView } from '../engine/types'
 import { STAGES, TEASERS } from '../content'
 import { panelSelection, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
@@ -46,6 +46,12 @@ export interface FounderActionView {
   outOfMoves: boolean
   /** The next step points here (the slot breathes, GAMEPLAY V2 §11). */
   guided: boolean
+  /**
+   * A focus slot (fix round 1: "Elle kullanıcı bul", "Kullanıcıyla konuş"): a tap switches the founder's standing focus
+   * instead of doing one unit; `focused` = the founder repeats this one on their own.
+   */
+  focusSlot?: boolean
+  focused?: boolean
   /** Locked: the stage that opens it (the pill). */
   stageName: string
   /** Slot name (≤ 2 words, tooltip only). */
@@ -66,6 +72,7 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
       stage: s.state.stage,
       day: s.state.time.day,
       over: !!s.state.gameOver,
+      focus: s.state.founder.focus ?? 'build',
     })),
   )
   // Same checks the engine runs (energy, missing project…), so buttons never promise an action that fails.
@@ -106,6 +113,13 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
   const cdStart = useRef<Partial<Record<FounderActionKind, { start: number; end: number }>>>({})
 
   const run = (kind: FounderActionKind) => {
+    const focus = FOCUS_OF[kind]
+    if (focus) {
+      // A second tap on the focused slot drops the focus: the founder goes back to coding.
+      if (f.focus === focus) return void dispatch({ type: 'setFounderFocus', focus: 'build' })
+      const targetId = kind === 'talkToUsers' && selection?.kind === 'project' ? selection.id : undefined
+      return void dispatch({ type: 'setFounderFocus', focus, ...(targetId ? { targetId } : {}) })
+    }
     let targetId: string | undefined
     if (kind === 'talkToUsers') {
       targetId = selection?.kind === 'project' ? selection.id : (projects.find((p) => p.maturity < 1) ?? projects[0])?.id
@@ -128,12 +142,19 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
     const running = f.current?.kind === kind && busy
     const runFrac = running && f.current ? (f.day - f.current.startDay) / Math.max(0.01, f.current.endDay - f.current.startDay) : 0
     const err = errors[kind]
-    const disabled = locked || f.over || cdFrac > 0 || (busy && !running) || (!running && err !== null)
-    const outOfMoves = !locked && !f.over && !busy && err === 'noMoves'
+    const focusSlot = FOCUS_OF[kind] !== undefined
+    const focused = focusSlot && focusAction(f.focus) === kind
+    // A focus switch is always open (the engine runs the verb when it can); talks still need a project.
+    const disabled = focusSlot
+      ? locked || f.over || (err === 'notFound' && !focused)
+      : locked || f.over || cdFrac > 0 || (busy && !running) || (!running && err !== null)
+    const outOfMoves = !focusSlot && !locked && !f.over && !busy && err === 'noMoves'
     const stageName = STAGES[unlockStage]?.name ?? ''
     const action = t(`founder.${kind}`)
     const label = locked
       ? t('founder.lockedAt', { action, stage: stageName })
+      : focusSlot && !(err === 'notFound' && !focused)
+        ? `${action}: ${focused ? t(moves ? 'focus.onWeek' : 'focus.on') : t('focus.off')}`
       : cdFrac > 0 && cdEnd !== undefined
         ? t('founder.cooldown', { action, d: Math.max(1, Math.ceil(cdEnd - f.day)) })
         : err === 'noEnergy'
@@ -153,7 +174,9 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
                     : `${action}: ${t(`founder.${kind}.desc`)}`
     const tip = locked
       ? (TEASERS[(unlockStage - 1) as keyof typeof TEASERS] ?? '')
-      : kind === 'findUsers' && find
+      : focused
+        ? t(moves ? 'focus.onWeek' : 'focus.on')
+        : kind === 'findUsers' && find
         ? t('slot.findTip', { r: findRange })
         : kind === 'salesCall' && sales
           ? t('slot.salesTip', { r: range(sales.min, sales.max, money) })
@@ -172,7 +195,8 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
       ...(saturated ? { satLabel: satLabel(factorOf(kind) ?? 1), dead: (factorOf(kind) ?? 1) < SAT_DEAD && !running } : {}),
       moves: moves ? FOUNDER_ACTION_DEFS[kind].moves : 0,
       outOfMoves,
-      guided: guided === kind && !locked,
+      guided: guided === kind && !locked && !focused,
+      ...(focusSlot ? { focusSlot, focused } : {}),
       stageName,
       name: t(`slot.${kind}`),
       label,
@@ -182,6 +206,9 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
   })
   return { energy: f.energy, low: f.energy < LOW_ENERGY, moves, day: f.day, actions }
 }
+
+/** The founder actions a tap turns into the standing focus (fix round 1), and the focus each one sets. */
+const FOCUS_OF: Partial<Record<FounderActionKind, FounderFocus>> = { findUsers: 'users', talkToUsers: 'talk' }
 
 /** Below this return the slot's icon greys out (playtest LD3: a 6% find looked as live as a 50% one). */
 const SAT_DEAD = 0.25
@@ -238,6 +265,7 @@ export function FounderSlot({
         type="button"
         onClick={onClick}
         aria-disabled={a.disabled || undefined}
+        aria-pressed={a.focusSlot ? !!a.focused : undefined}
         aria-label={a.label}
         data-slot={a.kind}
         className={cx(
@@ -252,6 +280,8 @@ export function FounderSlot({
               ? 'ui-key ui-key-sm ui-key-routine'
               : cx('ui-inset transition-colors', idle && 'opacity-80'),
           a.guided && !a.disabled && 'animate-breathe outline-3 outline-[color-mix(in_oklab,var(--color-brand)_28%,transparent)]',
+          // The standing focus: a steady brand ring (no breathing: it is a state, not a prompt).
+          a.focused && 'outline-2 outline-offset-1 outline-brand',
         )}
         style={{ width: size, height: size }}
       >
@@ -282,6 +312,12 @@ export function FounderSlot({
           // The one progress treatment: a 2px line along the bottom edge (running in the hue, cooldown in ink).
           <span aria-hidden="true" className="absolute inset-x-1.5 bottom-[3px] h-[2px] overflow-hidden rounded-full bg-border">
             <span className="block h-full rounded-full" style={{ width: `${Math.round(frac * 100)}%`, background: a.running ? hue : 'var(--color-ink-3)' }} />
+          </span>
+        )}
+        {a.focused && (
+          // Focus mark: a small repeat glyph bottom right ("her gün kendiliğinden").
+          <span aria-hidden="true" data-focus-mark="" className="absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-brand text-on-ink">
+            <Icon name="refresh" size={10} />
           </span>
         )}
         {a.saturated && (

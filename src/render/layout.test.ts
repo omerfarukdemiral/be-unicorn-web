@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeLayout, furnishedBox, idleSpots, lPath, meetingSeats, pathFromDoor, seatPoint, type OfficeLayout, type XZ } from './layout'
+import { computeLayout, furnishedBox, occupiedBox, idleSpots, lPath, meetingSeats, pathFromDoor, seatPoint, type OfficeLayout, type XZ } from './layout'
 import { createMockState } from './mockState'
 import { CELL } from './constants'
 import { gridHalf, validateLayout } from '../engine/layout'
@@ -206,5 +206,28 @@ describe('furnishedBox (phone framing)', () => {
     }
     // Nothing furnished: no opinion.
     expect(furnishedBox(L, s.office.slots.map((x) => ({ ...x, itemId: undefined })))).toBeNull()
+  })
+})
+
+describe('occupiedBox (default framing, fix round §3)', () => {
+  it('frames the desks, not the floor or the door, and grows with the pad', () => {
+    const s = createMockState(4)
+    const L = computeLayout(s.office.slots, s.office.rings, s.office.stage)
+    const full = Math.hypot(L.bounds.maxX - L.bounds.minX, L.bounds.maxZ - L.bounds.minZ) / 2
+    const box = occupiedBox(L, s.office.slots, 1.5)!
+    expect(box.r).toBeLessThan(full)
+    for (const x of s.office.slots) {
+      if (x.type !== 'desk' || !x.itemId) continue
+      const c = L.itemCenter.get(x.id)?.pos ?? L.slotWorld.get(x.id)!
+      expect(c[0]).toBeGreaterThanOrEqual(box.minX)
+      expect(c[0]).toBeLessThanOrEqual(box.maxX)
+      expect(c[1]).toBeGreaterThanOrEqual(box.minZ)
+      expect(c[1]).toBeLessThanOrEqual(box.maxZ)
+    }
+    expect(occupiedBox(L, s.office.slots, 0.5)!.r).toBeLessThan(box.r)
+    // Only the founder desk: a box round it alone, the door left out.
+    const solo = occupiedBox(L, s.office.slots.map((x) => (x.id === 'founder' ? x : { ...x, itemId: undefined })), 1.5)!
+    expect(solo.maxX - solo.minX).toBeLessThanOrEqual(3 + 1e-6)
+    expect(L.door.inside[1] < solo.minZ || L.door.inside[0] > solo.maxX || L.door.inside[0] < solo.minX).toBe(true)
   })
 })

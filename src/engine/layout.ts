@@ -7,6 +7,7 @@ import { buildRingSlots, chebyshev, findPartnerSlot, isRingUnlocked, orphansOf, 
 import { FOUNDER_SLOT_ID, type ActionErrorCode, type DecorKind, type DecorPiece, type Dept, type GridPos, type LayoutSnapshot, type OfficeState, type Slot, type SlotId, type SlotType, type StageIndex, type StoredPiece, type WallPiece } from './types'
 import { clone } from './util'
 import { PAINT_KIND, PAINT_PRICE, decorDef } from '../content/decor'
+import { FURNITURE } from '../content/furniture'
 
 export type Rotation = 0 | 1 | 2 | 3
 export type CellKey = string
@@ -1106,25 +1107,40 @@ export function placeStarterDecor(office: OfficeState, { force = false }: { forc
  * from the placed pieces, from storage or is bought (decorBill: `cost`, charged by applyLayout); a piece left out
  * goes to storage. Validated as a whole (validateLayout).
  */
-export function applySnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; cost: number } | { error: ActionErrorCode } {
+export function applySnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; cost: number; bought: BoughtItem[] } | { error: ActionErrorCode } {
   const p = previewSnapshot(office, snap)
   if ('error' in p) return p
-  return p.check.ok ? { office: p.office, cost: p.cost } : { error: refusalError(p.check.reason!) }
+  return p.check.ok ? { office: p.office, cost: p.cost, bought: p.bought } : { error: refusalError(p.check.reason!) }
+}
+
+/** An item a draft bought: where it landed (its anchor slot id in the built office) and its price. */
+export interface BoughtItem {
+  key: string
+  itemId: string
+  slotId: SlotId
+  price: number
+}
+
+/** Price of the items a draft buys (decor is priced by decorBill). */
+export function buyCost(snap: Pick<LayoutSnapshot, 'buy'>): number {
+  let n = 0
+  for (const b of snap.buy ?? []) n += FURNITURE.find((f) => f.id === b.itemId)?.price ?? 0
+  return n
 }
 
 /**
  * `snap` applied without the verdict, plus its validity check: the edit mode's hover and drop read the refusal and
  * its cells (applySnapshot only keeps the action error). `error` is a malformed snapshot (unknown anchor, bad cell).
  */
-export function previewSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; check: LayoutCheck; cost: number } | { error: ActionErrorCode } {
+export function previewSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; check: LayoutCheck; cost: number; bought: BoughtItem[] } | { error: ActionErrorCode } {
   const built = buildSnapshot(office, snap)
-  return 'error' in built ? built : { office: built.office, check: validateLayout(built.office), cost: built.cost }
+  return 'error' in built ? built : { office: built.office, check: validateLayout(built.office), cost: built.cost, bought: built.bought }
 }
 
-function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; cost: number } | { error: ActionErrorCode } {
+function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: OfficeState; cost: number; bought: BoughtItem[] } | { error: ActionErrorCode } {
   const next = clone(office)
   const pieces = new Map(itemPieces(next).map((p) => [p.anchor.id, p]))
-  const moving: { cp: LayoutSnapshot['slots'][string]; itemId: string; occupantId?: string; team?: Dept; spec: PlacementSpec }[] = []
+  const moving: { cp: LayoutSnapshot['slots'][string]; itemId: string; occupantId?: string; team?: Dept; spec: PlacementSpec; key?: string }[] = []
   for (const [id, cp] of Object.entries(snap.slots)) {
     const it = pieces.get(id)
     if (!it || ![0, 1, 2, 3].includes(cp.r) || !Number.isInteger(cp.x) || !Number.isInteger(cp.z)) return { error: 'invalid' }
@@ -1137,6 +1153,17 @@ function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: Off
     liftItem(next, it.cells)
   }
   dropEmptyFreeSlots(next)
+  // Items bought in the draft go down like moved ones (no seat yet; a dept desk takes its dept as its label).
+  const bought: { key: string; itemId: string; price: number }[] = []
+  for (const n of snap.buy ?? []) {
+    const item = FURNITURE.find((f) => f.id === n.itemId)
+    if (!item || ![0, 1, 2, 3].includes(n.r) || !Number.isInteger(n.x) || !Number.isInteger(n.z)) return { error: 'invalid' }
+    if (item.stageUnlock > office.stage) return { error: 'notUnlocked' }
+    const team = n.team ?? itemDept(item)
+    moving.push({ cp: n, itemId: item.id, ...(team !== undefined ? { team } : {}), spec: { slotType: item.slotType, size: item.size === 2 ? 2 : 1 }, key: n.key })
+    bought.push({ key: n.key, itemId: item.id, price: item.price })
+  }
+  const landed = new Map<string, SlotId>()
   for (const m of moving) {
     const pos = { x: m.cp.x, z: m.cp.z }
     const r = rightDir(m.cp.r)
@@ -1150,13 +1177,20 @@ function buildSnapshot(office: OfficeState, snap: LayoutSnapshot): { office: Off
     if (b && canonical) b.rotation = m.cp.r
     if (m.occupantId !== undefined) anchor.occupantId = m.occupantId
     if (m.team !== undefined) anchor.team = m.team
+    if (m.key !== undefined) landed.set(m.key, anchor.id)
   }
   const bill = decorBill(office, snap)
   if ('error' in bill) return bill
   next.decor = snap.decor.map((p) => ({ id: p.id, kind: p.kind, pos: { x: p.pos.x, z: p.pos.z }, rotation: p.rotation }))
   if (snap.walls) next.walls = snap.walls.map((w) => ({ ...w }))
   next.storage = bill.storage
-  return { office: next, cost: bill.cost }
+  return { office: next, cost: bill.cost, bought: bought.map((b) => ({ ...b, slotId: landed.get(b.key)! })) }
+}
+
+/** The dept a desk item works for (its deptBonus): a bought desk's team label. */
+function itemDept(item: { slotType: SlotType; effects: { deptBonus?: Partial<Record<Dept, number>> } }): Dept | undefined {
+  const bonus = item.slotType === 'desk' ? item.effects.deptBonus : undefined
+  return bonus ? (Object.keys(bonus) as Dept[]).find((d) => (bonus[d] ?? 0) > 0) : undefined
 }
 
 /** What a draft's decor costs: pieces bought per kind, paint jobs bought, the cash, and storage afterwards. */

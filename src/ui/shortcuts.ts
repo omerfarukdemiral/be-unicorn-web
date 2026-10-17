@@ -2,13 +2,13 @@
 // K Kazanımlar, L Liderlik, I İstatistik / Y Kanun Kitabı / H Pazar haritası (again = close), Esc closes (an open scene bubble first), +/- zoom. A center screen (statistics…) does not
 // block the keys: time and the other shortcuts keep working under it (docs/GAMEPLAY_V2.md §14.3).
 // O opens the office edit mode (PC only, layoutEditGate). While it is open the edit keys own the keyboard
-// (layoutEditKey: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, R turn, Del to storage, 1–5 team label, Enter / O Bitti, Esc), every
+// (layoutEditKey: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, R turn, Del takes the piece away, 1–5 team label, Enter / O Bitti, Esc), every
 // other key is swallowed: time is held and no other panel may open over the draft.
 import { useEffect, useRef } from 'react'
 import { DEPTS, type GameSpeed } from '../engine/types'
 import { blockingOverlay, useGameStore } from '../store/gameStore'
 import type { CenterKind, DockTab, ZoomLevel } from '../store/types'
-import { isDirty } from '../store/layoutEdit'
+import { editorHover, isDirty } from '../store/layoutEdit'
 import { isTypingTarget } from './hooks'
 import { tryBeginLayoutEdit } from './layoutEditGate'
 
@@ -51,12 +51,13 @@ const SPEED_KEYS: Record<string, GameSpeed> = { '1': 1, '2': 2, '3': 4 }
 /** Ofisi düzenle (O for Ofis; B is the shop). Again = Bitti. */
 export const LAYOUT_KEY = 'o'
 
-/** Esc in the edit mode: the armed piece, then the selection, then (with changes) one armed press, then Vazgeç. */
+/** Esc in the edit mode: the piece in the hand goes back, then the armed piece, the selection, then (with changes) one armed press, then Vazgeç. */
 export function escapeLayoutEdit(): void {
   const st = useGameStore.getState()
   const e = st.ui.layoutEdit
   if (!e) return
-  if (e.armed) st.layoutEditOp({ kind: 'arm', armed: null })
+  if (e.carry) st.layoutEditOp({ kind: 'drop' })
+  else if (e.armed) st.layoutEditOp({ kind: 'arm', armed: null })
   else if (e.selected) st.layoutEditOp({ kind: 'select', id: null })
   else if (e.decorSel) st.layoutEditOp({ kind: 'selectDecor', id: null })
   else if (e.wallSel) st.layoutEditOp({ kind: 'selectWall', at: null })
@@ -85,7 +86,11 @@ export function layoutEditKey(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' 
   if (key === 'escape') escapeLayoutEdit()
   else if (key === 'enter' || key === LAYOUT_KEY) st.commitLayoutEdit()
   else if (key === 'r') st.layoutEditOp({ kind: 'rotate' })
-  else if (key === 'delete' || key === 'backspace') st.layoutEditOp({ kind: 'remove' })
+  else if (key === 'delete' || key === 'backspace') {
+    // The piece in the hand, else the one under the pointer, else the selected one.
+    const target = st.ui.layoutEdit.carry ?? editorHover.current
+    st.layoutEditOp(target ? { kind: 'remove', target } : { kind: 'remove' })
+  }
   else if (/^[1-5]$/.test(key)) st.layoutEditOp({ kind: 'team', team: DEPTS[Number(key) - 1]! })
   else if (key === '+' || key === '=') st.setZoom(Math.min(2, st.ui.zoom + 1) as ZoomLevel)
   else if (key === '-' || key === '_') st.setZoom(Math.max(0, st.ui.zoom - 1) as ZoomLevel)

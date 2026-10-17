@@ -10,7 +10,7 @@
 import { create } from 'zustand'
 import { DECISIONS } from '../content'
 import { applyAction, createGame, step } from '../engine'
-import { applySnapshot } from '../engine/layout'
+import { applySnapshot, buyCost } from '../engine/layout'
 import { autoArrangeDraft, presetDraft, savedDraft } from '../engine/layoutPlans'
 import * as B from '../engine/balance'
 import { FIXED_STEP_DAYS, FOUNDER_SLOT_ID, INITIAL_WIDGETS, SECONDS_PER_DAY, type Action, type ConceptId, type GameEventKind, type GameSpeed, type GameState, type LayoutSnapshot, type NewGameOptions, type SavedLayout } from '../engine/types'
@@ -702,7 +702,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // Checked before the edit mode closes, so a refusal keeps the draft and says why (the action re-checks anyway).
     const pre = applySnapshot(get().state.office, e.draft)
     // Short of cash for the new pieces: the draft stays and the panel says why (the spend line is already red).
-    const preErr = 'error' in pre ? pre.error : pre.cost > get().state.stats.cash ? ('insufficientCash' as const) : null
+    const preErr = 'error' in pre ? pre.error : pre.cost + buyCost(e.draft) > get().state.stats.cash ? ('insufficientCash' as const) : null
     if (preErr) {
       set((s) => ({
         ui: {

@@ -39,7 +39,7 @@ function SelectedPiece() {
     }),
   )
   const op = useGameStore((s) => s.layoutEditOp)
-  if (!sel) return <div className="font-text text-[13px] text-ink-2">{t('layout.pick')}</div>
+  if (!sel) return null
   const item = FURNITURE.find((f) => f.id === sel.itemId)
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-surface-2 p-3">
@@ -200,6 +200,41 @@ function PieceCard({ def, armed, stored, onArm }: { def: DecorDef; armed: boolea
   )
 }
 
+/** Masalar tab: the desks the stage sells. A card puts a new desk in the hand; it is bought on Bitti. */
+function DeskShop() {
+  const armed = useGameStore((s) => s.ui.layoutEdit?.armed ?? null)
+  const op = useGameStore((s) => s.layoutEditOp)
+  const stage = useGameStore((s) => s.state.stage)
+  const cash = useGameStore((s) => s.state.stats.cash)
+  const desks = FURNITURE.filter((f) => f.slotType === 'desk' && f.stageUnlock <= stage)
+  return (
+    <div className="grid grid-cols-2 gap-1.5" data-desk-shop="">
+      {desks.map((f) => {
+        const on = !!armed?.item && armed.kind === f.id
+        return (
+          <button
+            key={f.id}
+            type="button"
+            data-desk-item={f.id}
+            onClick={() => op({ kind: 'arm', armed: on ? null : { kind: f.id, item: true } })}
+            aria-pressed={on}
+            title={f.name}
+            className={cx('flex min-w-0 items-center gap-2 rounded-xl border-2 p-1.5 text-left transition-colors', on ? 'border-brand bg-surface' : 'border-transparent bg-surface-2/70 hover:bg-surface-2')}
+          >
+            <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-xl border border-black/10 bg-[#ecc996] text-ink/60">
+              <Icon name="desk" size={15} />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[12px] font-bold leading-4 text-ink">{f.name}</span>
+              <span className={cx('tabular truncate text-[11px] font-semibold leading-4', cash >= f.price ? 'text-ink-2' : 'text-negative-ink')}>{money(f.price)}</span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Storage as the draft leaves it: what is stored now plus what the draft took out, less what it put back. */
 function useStock(): Record<string, number> {
   return useGameStore(
@@ -284,7 +319,7 @@ function StorageTray() {
 /** The panel's one line on how: how to put the armed piece down, else how to move pieces. */
 function HowLine() {
   const armed = useGameStore((s) => s.ui.layoutEdit?.armed ?? null)
-  const key = !armed ? 'layout.hint' : armed.kind === PAINT_KIND ? 'layout.armedPaint' : isWallKind(armed.kind) ? 'layout.armedWall' : 'layout.armedFloor'
+  const key = !armed ? 'layout.hint' : armed.kind === PAINT_KIND ? 'layout.armedPaint' : !armed.item && isWallKind(armed.kind) ? 'layout.armedWall' : 'layout.armedFloor'
   return <p className={cx('font-text text-[13px]', armed ? 'font-semibold text-brand-ink' : 'text-ink-2')}>{t(key)}</p>
 }
 
@@ -558,6 +593,7 @@ export function LayoutPanel() {
           </Chip>
         ))}
       </div>
+      {tab === 'desks' && <DeskShop />}
       {tab === 'plans' && <Plans />}
       {tab === 'separator' && <Catalogue group="separator" />}
       {tab === 'floor' && <Catalogue group="floor" />}

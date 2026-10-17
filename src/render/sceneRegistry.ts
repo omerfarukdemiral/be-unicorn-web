@@ -172,13 +172,20 @@ export function useDecorView(): DecorView {
   const sig = useGS(decorSignature)
   const mock = useMockState()
   const draft = useUi((u) => (mock ? null : (u.layoutEdit?.draft ?? null)))
+  // A carried floor or wall piece is in the hand (the editor's ghost), not on the floor.
+  const carried = useUi((u) => {
+    const c = u.layoutEdit?.carry
+    return c?.what === 'decor' ? c.id : c?.what === 'wall' ? `${c.at.wall}:${c.at.seg}` : null
+  })
   return useMemo(() => {
     const o = getGS(mock).office
-    const decor = draft ? draft.decor : (o.decor ?? [])
-    const walls = draft?.walls ?? o.walls ?? []
+    const decor0 = draft ? draft.decor : (o.decor ?? [])
+    const walls0 = draft?.walls ?? o.walls ?? []
+    const decor = carried ? decor0.filter((p) => p.id !== carried) : decor0
+    const walls = carried ? walls0.filter((w) => w.kind === 'paint' || `${w.wall}:${w.seg}` !== carried) : walls0
     return { stage: o.stage, decor, walls, key: draft ? decorKey(o.stage, decor, walls) : sig }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig, mock, draft?.decor, draft?.walls])
+  }, [sig, mock, draft?.decor, draft?.walls, carried])
 }
 
 /** Office snapshot with a stable reference while its signature is unchanged. */
@@ -211,8 +218,10 @@ export function useFurnitureView(): { office: OfficeState; layout: OfficeLayout 
   const layout = useLayout()
   const mock = useMockState()
   const draft = useUi((u) => (mock ? null : (u.layoutEdit?.draft ?? null)))
+  // A carried item is in the hand (LayoutEditor draws it as the ghost), not on the floor.
+  const hide = useUi((u) => (u.layoutEdit?.carry?.what === 'item' ? u.layoutEdit.carry.id : null))
   return useMemo(() => {
-    const view = draft ? draftOffice(office, draft) : office
+    const view = draft ? draftOffice(office, draft, hide) : office
     return view === office ? { office, layout } : { office: view, layout: computeLayout(view.slots, view.rings, view.stage, view.decor) }
-  }, [office, layout, draft])
+  }, [office, layout, draft, hide])
 }

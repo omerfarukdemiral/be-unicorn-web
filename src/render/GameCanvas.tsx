@@ -1,6 +1,7 @@
 // Render lane entry point: full-size <Canvas> with the isometric office.
 // Desktop: click = select/place, wheel = zoom step, right-click = cancel. Keyboard lives in ui/shortcuts.ts.
 // Touch: tap = select, pinch = zoom step. DPR capped at 2; low-power mode follows renderBudget (no shadow pass).
+import { LayoutKeyHint } from './LayoutEditor'
 import { fromBubble } from './bubbleHit'
 import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
@@ -144,6 +145,7 @@ export function GameCanvas({ renderBubble, mockState, className, ambientBubbles 
           <OfficeScene lowPower={lowPower} renderBubble={renderBubble} ambientBubbles={ambientBubbles} />
         </RenderStateProvider>
       </Canvas>
+      {!mockState && <LayoutKeyHint />}
     </div>
   )
 }

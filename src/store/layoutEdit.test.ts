@@ -282,3 +282,55 @@ describe('layout edit: decor pieces (grid step 4)', () => {
     expect(useGameStore.getState().ui.layoutEdit).toBeNull()
   })
 })
+
+describe('carry and drop (grid v2)', () => {
+  it('a picked piece turns in the hand, goes down with a click, and Esc (drop) puts it back untouched', () => {
+    const o = office()
+    let e = run(o, startEdit(o), { kind: 'pick', carry: { what: 'item', id: 'r1-s0', r: 0 } })
+    expect(e.carry).toEqual({ what: 'item', id: 'r1-s0', r: 0 })
+    expect(e.selected).toBe('r1-s0')
+    e = run(o, e, { kind: 'rotate' }, { kind: 'rotate' })
+    expect(e.carry).toMatchObject({ r: 2 })
+    expect(e.draft.slots).toEqual({})
+    expect(draftOffice(o, e.draft, 'r1-s0').slots.some((s) => s.id === 'r1-s0')).toBe(false)
+    const dropped = run(o, e, { kind: 'drop' })
+    expect(dropped.carry).toBeNull()
+    expect(dropped.draft).toBe(e.draft)
+    const placed = run(o, e, { kind: 'place', id: 'r1-s0', x: -2, z: 2, r: 2 })
+    expect(placed.carry).toBeNull()
+    expect(placed.draft.slots['r1-s0']).toMatchObject({ x: -2, z: 2, r: 2 })
+    // A refused click keeps it in the hand.
+    const refused = run(o, e, { kind: 'place', id: 'r1-s0', x: 3, z: -3, r: 2 })
+    expect(refused.carry).toEqual(e.carry)
+    expect(refused.refused?.reason).toBe('doorZone')
+  })
+
+  it('a desk card buys in the draft: placed, turned, a second one, Delete drops it; owned items are not deleted', () => {
+    const o = office()
+    let e = run(o, startEdit(o), { kind: 'arm', armed: { kind: 'desk-basic', item: true } }, { kind: 'rotate' })
+    expect(e.armedRot).toBe(1)
+    e = run(o, e, { kind: 'addItem', x: -2, z: 2 }, { kind: 'addItem', x: -1, z: 2 })
+    expect(e.draft.buy).toEqual([
+      { key: 'n1', itemId: 'desk-basic', x: -2, z: 2, r: 1 },
+      { key: 'n2', itemId: 'desk-basic', x: -1, z: 2, r: 1 },
+    ])
+    expect(draftSpend(o, e.draft)).toBe(600)
+    expect(draftPieces(o, e.draft).filter((p) => p.isNew).map((p) => p.id)).toEqual(['+n1', '+n2'])
+    expect(draftOffice(o, e.draft).slots.find((s) => s.id === '+n2')).toMatchObject({ itemId: 'desk-basic', pos: { x: -1, z: 2 } })
+    // A new desk can be picked up and moved like any other.
+    const moved = run(o, e, { kind: 'pick', carry: { what: 'item', id: '+n2', r: 1 } }, { kind: 'place', id: '+n2', x: -1, z: 3, r: 1 })
+    expect(moved.draft.buy![1]).toMatchObject({ x: -1, z: 3 })
+    const del = run(o, e, { kind: 'remove', target: { what: 'item', id: '+n2', r: 1 } })
+    expect(del.draft.buy!.map((n) => n.key)).toEqual(['n1'])
+    const owned = reduceLayoutEdit(o, e, { kind: 'remove', target: { what: 'item', id: 'r1-s0', r: 0 } }, 7)
+    expect(owned.refused).toMatchObject({ reason: 'sell', at: 7 })
+    expect(owned.draft).toBe(e.draft)
+    // Not enough cash for one more: refused when it is put down.
+    expect(reduceLayoutEdit(o, e, { kind: 'addItem', x: -3, z: 2 }, 1, 650).refused?.reason).toBe('cash')
+    // The desk cap counts the new ones (8 at Pre-seed with two rings).
+    let full = e
+    for (const [x, z] of [[-3, 2], [-4, 2], [-4, 1], [-4, 0], [-4, -1]] as const) full = run(o, full, { kind: 'addItem', x, z })
+    expect(full.draft.buy).toHaveLength(8 - 2)
+    expect(run(o, full, { kind: 'addItem', x: -4, z: -2 }).refused?.reason).toBe('typeCap')
+  })
+})

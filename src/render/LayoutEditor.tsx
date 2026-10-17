@@ -1,139 +1,80 @@
-// Office edit mode in the scene (grid design §4, PC only): the cell grid, one tinted fill for the team labels (an
-// island of 3+, grid §5, tinted stronger), the selection and the ghost (green / red footprint, its front edge), the
-// refused cells with their short reason, and the pointer: press a piece and drag it (over 10 px), or select it and
-// click a free cell. Picking is plane math (a y = 0 ray hit → worldToGrid), never a raycast on the baked meshes. One
-// draw call (grid lines are thin quads in the same vertex-coloured mesh) plus DOM for the reason; nothing here bakes,
-// and the drop only changes the draft (furniture moves by transform, see useFurnitureView).
+// Office edit mode in the scene (grid v2, PC only): carry and drop, the way a building game does it. No grid lines and
+// no tinted squares: the floor's own tiles are the cells. A piece is picked up with a click (or pressed and dragged),
+// follows the pointer as its real model tinted soft green where it fits and red where it does not, R or a right click
+// turns it, a click puts it down (Shift keeps a new one of the same piece in the hand), Delete takes it away, Esc
+// puts it back. A catalogue card arms a new piece the same way. Picking is plane math (a y = 0 ray hit → worldToGrid),
+// never a raycast on the baked meshes. The short reason shows next to the piece only when a click is refused.
 import { Html } from '@react-three/drei'
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { decorCells, frontDir, gridHalf, inGrid, isWallKind, ringOfCell, stageFixtures, wallSegments, worldToGrid, type CellKey, type Rotation } from '../engine/layout'
-import { isRingUnlocked } from '../engine/office'
-import { FOUNDER_SLOT_ID, type Dept, type GridPos, type OfficeState } from '../engine/types'
+import { decorCells, inGrid, isWallKind, rightDir, wallSegments, worldToGrid, type CellKey, type Rotation } from '../engine/layout'
+import { FOUNDER_SLOT_ID, type GridPos } from '../engine/types'
 import { UI_TEXT } from '../content'
-import { checkFloor, checkPlace, checkWall, decorAt, draftIslands, draftPieces, pieceAt, wallAt, type DecorCheck, type DraftPiece, type LayoutEdit, type WallSeg } from '../store/layoutEdit'
-import { CELL, WALL_HEIGHT, gridToWorld } from './constants'
+import { checkFloor, checkNewItem, checkPlace, checkWall, decorAt, draftPieces, editorHover, pieceAt, wallAt, type Carry, type DecorCheck, type LayoutEdit, type WallSeg } from '../store/layoutEdit'
+import { CELL, WALL_HEIGHT, gridToWorld, yawOf } from './constants'
 import { FloorModel, WallModel, floorPose, wallPose } from './Decor'
+import { FurnitureModel } from './Furniture'
+import { resolveFurniture } from './furnitureCatalog'
 import { useHtmlPortal } from './htmlPortal'
-import { DEPT_COLORS, HIGHLIGHT } from './palette'
+import { HIGHLIGHT } from './palette'
 import { useLayout, useOffice } from './sceneRegistry'
 import { storeApi, useGS, useUi } from './source'
 
 /** Screen px a press must travel before it becomes a drag (the slot tap tolerance). */
 const DRAG_PX = 10
-/**
- * Lift over the floor. The floor and its decals are pulled toward the camera with polygonOffset (about one pixel of
- * depth slope: several cm at the far zoom), so a plain lift is not enough: the overlay pulls harder (OVERLAY_MAT).
- */
+/** Lift of the footprint glow over the floor (it also pulls toward the camera with polygonOffset). */
 const Y_FILL = 0.03
-/** A tinted cell is a bit smaller than the cell, so neighbours read as separate cells. */
-const FILL = CELL * 0.9
-const LINE = CELL * 0.96
-/** Grid line width (world units). */
-const LINE_W = 0.035
-const LINE_RGBA: RGBA = [1, 1, 1, 0.5]
-
-type RGBA = [number, number, number, number]
-
-const rgba = (hex: string, a: number): RGBA => {
-  const c = new THREE.Color(hex)
-  return [c.r, c.g, c.b, a]
-}
 
 const sameCell = (a: GridPos | null, b: GridPos | null): boolean => (a === null ? b === null : b !== null && a.x === b.x && a.z === b.z)
 const sameSeg = (a: WallSeg | null, b: WallSeg | null): boolean => (a === null ? b === null : b !== null && a.wall === b.wall && a.seg === b.seg)
-
-/** Every editable cell: in the stage's grid and in an open ring (locked rings stay dark, the shell shows them). */
-function openCells(office: OfficeState): GridPos[] {
-  const h = gridHalf(office.stage)
-  const out: GridPos[] = []
-  for (let z = -h; z <= h; z++) for (let x = -h; x <= h; x++) if (isRingUnlocked(office, ringOfCell({ x, z }, office.stage))) out.push({ x, z })
-  return out
-}
-
-/** The cell outlines as thin quads (one per cell side): drawn in the fill mesh, so the grid costs no draw call. */
-function gridQuads(cells: readonly GridPos[]): Box[] {
-  const out: Box[] = []
-  const s = LINE / 2
-  const w = LINE_W / 2
-  for (const c of cells) {
-    const [x, z] = gridToWorld(c)
-    out.push([x - s, x + s, z - s - w, z - s + w], [x - s, x + s, z + s - w, z + s + w], [x - s - w, x - s + w, z - s, z + s], [x + s - w, x + s + w, z - s, z + s])
-  }
-  return out
-}
-
-/** World rect [minX, maxX, minZ, maxZ]. */
-type Box = [number, number, number, number]
-
-interface Quad {
-  c: GridPos
-  color: RGBA
-  /** Front edge strip (the chair / access side) for this rotation; absent = the whole cell. */
-  front?: number
-}
-
-function fillGeometry(lines: readonly Box[], quads: readonly Quad[]): THREE.BufferGeometry {
-  const pos: number[] = []
-  const col: number[] = []
-  const idx: number[] = []
-  for (const [x0, x1, z0, z1] of lines) {
-    const n = pos.length / 3
-    pos.push(x0, Y_FILL, z0, x1, Y_FILL, z0, x1, Y_FILL, z1, x0, Y_FILL, z1)
-    for (let k = 0; k < 4; k++) col.push(...LINE_RGBA)
-    idx.push(n, n + 2, n + 1, n, n + 3, n + 2)
-  }
-  for (const q of quads) {
-    const [cx, cz] = gridToWorld(q.c)
-    let hx = FILL / 2
-    let hz = FILL / 2
-    let ox = 0
-    let oz = 0
-    if (q.front !== undefined) {
-      const f = frontDir(q.front)
-      const t = FILL * 0.14
-      if (f.x !== 0) hx = t / 2
-      else hz = t / 2
-      ox = f.x * (FILL / 2 - t / 2)
-      oz = f.z * (FILL / 2 - t / 2)
-    }
-    const n = pos.length / 3
-    const y = q.front !== undefined ? Y_FILL + 0.002 : Y_FILL
-    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
-      pos.push(cx + ox + sx * hx, y, cz + oz + sz * hz)
-      col.push(...q.color)
-    }
-    idx.push(n, n + 2, n + 1, n, n + 3, n + 2)
-  }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4))
-  g.setIndex(idx)
-  return g
-}
 
 const keyToCell = (k: CellKey): GridPos => {
   const [x, z] = k.split(',').map(Number) as [number, number]
   return { x, z }
 }
 
-interface Drag {
-  /** What is dragged: a functional piece, a floor decor piece, a wall piece. */
-  what: 'item' | 'decor' | 'wall'
-  id: string
-  from?: WallSeg
-  /** Anchor minus the grabbed cell: a room grabbed by its second cell keeps that offset. */
-  dx: number
-  dz: number
-  x0: number
-  y0: number
-  active: boolean
+/** What is in the hand: a placed piece picked up (`carry`) or a new one from a card (`armed`). */
+type Hand =
+  | { what: 'item'; id: string | null; itemId: string; type: Parameters<typeof resolveFurniture>[1]; size: 1 | 2; r: Rotation }
+  | { what: 'floor'; id: string | null; kind: string; r: Rotation }
+  | { what: 'wall'; from: WallSeg | null; kind: string; color?: string }
+
+function handOf(edit: LayoutEdit, pieces: ReturnType<typeof draftPieces>): Hand | null {
+  const c = edit.carry
+  if (c?.what === 'item') {
+    const p = pieces.find((x) => x.id === c.id)
+    return p ? { what: 'item', id: p.id, itemId: p.itemId, type: p.type, size: p.size, r: c.r } : null
+  }
+  if (c?.what === 'decor') {
+    const p = edit.draft.decor.find((x) => x.id === c.id)
+    return p ? { what: 'floor', id: p.id, kind: p.kind, r: c.r } : null
+  }
+  if (c?.what === 'wall') {
+    const w = wallAt(edit.draft, c.at)
+    return w ? { what: 'wall', from: c.at, kind: w.kind } : null
+  }
+  const a = edit.armed
+  if (!a) return null
+  const r = (edit.armedRot ?? 0) as Rotation
+  if (a.item) {
+    const f = resolveFurniture(a.kind)
+    return { what: 'item', id: null, itemId: a.kind, type: f.slotType, size: f.item?.size === 2 ? 2 : 1, r }
+  }
+  if (isWallKind(a.kind)) return { what: 'wall', from: null, kind: a.kind, ...(a.color ? { color: a.color } : {}) }
+  return { what: 'floor', id: null, kind: a.kind, r }
 }
 
 export function LayoutEditor() {
   const edit = useUi((u) => u.layoutEdit)
   return edit ? <Editor edit={edit} /> : null
+}
+
+interface Press {
+  x0: number
+  y0: number
+  /** The press picked this piece up: a release far enough away puts it down there (drag and drop). */
+  picked: boolean
 }
 
 function Editor({ edit }: { edit: LayoutEdit }) {
@@ -144,25 +85,13 @@ function Editor({ edit }: { edit: LayoutEdit }) {
   const portal = useHtmlPortal()
   const cash = useGS((s) => s.stats.cash)
   const pieces = useMemo(() => draftPieces(office, edit.draft), [office, edit.draft])
-  // Desks in a team island (grid §5) read stronger than a lone labelled desk. Seats do not change while editing.
-  const deptOf = useGS((s) => s.employees.map((e) => `${e.id}:${e.dept}`).join('|'))
-  const island = useMemo(() => {
-    const m = new Map(deptOf.split('|').map((x) => x.split(':') as [string, Dept]))
-    return new Set(draftIslands(office, edit.draft, (id) => m.get(id)).filter((c) => c.active).flatMap((c) => c.slotIds))
-  }, [office, edit.draft, deptOf])
   const piecesRef = useRef(pieces)
   piecesRef.current = pieces
-  const cells = useMemo(() => openCells(office), [office])
-  const lines = useMemo(() => gridQuads(cells), [cells])
   const [hover, setHover] = useState<GridPos | null>(null)
   const [hoverWall, setHoverWall] = useState<WallSeg | null>(null)
-  const [dragId, setDragId] = useState<{ what: Drag['what']; id: string } | null>(null)
-  const drag = useRef<Drag | null>(null)
-  const grab = useRef({ dx: 0, dz: 0 })
 
-  // Pointer → cell by plane math: the camera ray meets the floor (y = 0), worldToGrid names the cell. The cross-aisle
-  // and the margins outside a cell box are no cell (null). The back and left walls are planes too: a ray that meets a
-  // wall before the floor points at that wall's segment.
+  // Pointer → cell by plane math: the camera ray meets the floor (y = 0), worldToGrid names the cell. The back and
+  // left walls are planes too: a ray that meets a wall before the floor points at that wall's segment.
   useEffect(() => {
     const el = gl.domElement
     const ray = new THREE.Raycaster()
@@ -171,7 +100,7 @@ function Editor({ edit }: { edit: LayoutEdit }) {
     const backWall = new THREE.Plane(new THREE.Vector3(0, 0, 1), -bounds.minZ)
     const leftWall = new THREE.Plane(new THREE.Vector3(1, 0, 0), -bounds.minX)
     const hit = new THREE.Vector3()
-    const aim = (ev: PointerEvent) => {
+    const aim = (ev: PointerEvent | MouseEvent) => {
       const r = el.getBoundingClientRect()
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1)
       ray.setFromCamera(ndc, get().camera)
@@ -180,8 +109,6 @@ function Editor({ edit }: { edit: LayoutEdit }) {
       if (!ray.ray.intersectPlane(floor, hit)) return { c: null, d: Infinity }
       const d = ray.ray.origin.distanceTo(hit)
       const c = { x: worldToGrid(hit.x), z: worldToGrid(hit.z) }
-      const [wx, wz] = gridToWorld(c)
-      if (Math.abs(hit.x - wx) > CELL / 2 || Math.abs(hit.z - wz) > CELL / 2) return { c: null, d }
       return { c: inGrid(office.stage, c) ? c : null, d }
     }
     const wallAtRay = (): { w: WallSeg | null; d: number } => {
@@ -198,15 +125,24 @@ function Editor({ edit }: { edit: LayoutEdit }) {
       }
       return best
     }
-    /** The floor cell or the wall segment under the pointer (the nearer one along the ray). */
-    const pick = (ev: PointerEvent): { c: GridPos | null; w: WallSeg | null } => {
+    const pick = (ev: PointerEvent | MouseEvent): { c: GridPos | null; w: WallSeg | null } => {
       aim(ev)
       const f = floorAt()
       const w = wallAtRay()
       return w.w && w.d < f.d ? { c: null, w: w.w } : { c: f.c, w: null }
     }
+    /** The piece under the pointer (nothing in the hand): an item, a floor piece, a wall piece. */
+    const pieceUnder = (c: GridPos | null, w: WallSeg | null, e: LayoutEdit): Carry | null => {
+      if (w) return wallAt(e.draft, w) ? { what: 'wall', at: w } : null
+      if (!c) return null
+      const id = pieceAt(piecesRef.current, c)
+      if (id && id !== FOUNDER_SLOT_ID) return { what: 'item', id, r: 0 }
+      const did = decorAt(e.draft, c)
+      return did ? { what: 'decor', id: did, r: 0 } : null
+    }
     let lastC: GridPos | null = null
     let lastW: WallSeg | null = null
+    let press: Press | null = null
     const setTarget = (c: GridPos | null, w: WallSeg | null) => {
       if (!sameCell(c, lastC)) {
         lastC = c
@@ -217,89 +153,96 @@ function Editor({ edit }: { edit: LayoutEdit }) {
         setHoverWall(w)
       }
     }
+    /** Puts what is in the hand down at the pointer; true when it landed. Shift keeps a new one of it in the hand. */
+    const putDown = (c: GridPos | null, w: WallSeg | null, shift: boolean): boolean => {
+      const api = storeApi()
+      const e = api.ui.layoutEdit
+      if (!e) return false
+      const before = e.undo.length
+      const carry = e.carry
+      const landed = () => (storeApi().ui.layoutEdit?.undo.length ?? before) > before
+      if (carry?.what === 'item' && c) {
+        const p = piecesRef.current.find((x) => x.id === carry.id)
+        api.layoutEditOp({ kind: 'place', id: carry.id, x: c.x, z: c.z, r: carry.r })
+        if (landed() && shift && p) api.layoutEditOp({ kind: 'arm', armed: { kind: p.itemId, item: true } })
+        if (landed() && shift) storeApi().layoutEditOp({ kind: 'armRot', r: carry.r })
+        return landed()
+      }
+      if (carry?.what === 'decor' && c) {
+        const p = e.draft.decor.find((x) => x.id === carry.id)
+        api.layoutEditOp({ kind: 'moveDecor', id: carry.id, x: c.x, z: c.z, r: carry.r })
+        if (landed() && shift && p) {
+          api.layoutEditOp({ kind: 'arm', armed: { kind: p.kind } })
+          storeApi().layoutEditOp({ kind: 'armRot', r: carry.r })
+        }
+        return landed()
+      }
+      if (carry?.what === 'wall' && w) {
+        api.layoutEditOp({ kind: 'moveWall', from: carry.at, to: w })
+        return landed()
+      }
+      const a = e.armed
+      if (!a) return false
+      if (a.item && c) api.layoutEditOp({ kind: 'addItem', x: c.x, z: c.z })
+      else if (isWallKind(a.kind) && w) api.layoutEditOp({ kind: 'hang', at: w })
+      else if (!a.item && !isWallKind(a.kind) && c) api.layoutEditOp({ kind: 'addDecor', x: c.x, z: c.z })
+      else return false
+      const ok = landed()
+      // One piece per click; Shift keeps the next one in the hand (paint stays on the brush).
+      if (ok && !shift && a.kind !== 'paint') storeApi().layoutEditOp({ kind: 'arm', armed: null })
+      return ok
+    }
     const onDown = (ev: PointerEvent) => {
       if (ev.button !== 0) return
       const { c, w } = pick(ev)
-      const api = storeApi()
-      const e = api.ui.layoutEdit
+      const e = storeApi().ui.layoutEdit
       if (!e) return
-      // An armed piece goes down where the pointer is (and stays armed for the next one).
-      if (e.armed) {
-        if (isWallKind(e.armed.kind)) {
-          if (w) api.layoutEditOp({ kind: 'hang', at: w })
-        } else if (c) api.layoutEditOp({ kind: 'addDecor', x: c.x, z: c.z })
+      if (e.carry || e.armed) {
+        putDown(c, w, ev.shiftKey)
+        press = null
         return
       }
-      if (w) {
-        if (!wallAt(e.draft, w)) return
-        drag.current = { what: 'wall', id: `${w.wall}:${w.seg}`, from: w, dx: 0, dz: 0, x0: ev.clientX, y0: ev.clientY, active: false }
-        api.layoutEditOp({ kind: 'selectWall', at: w })
-        el.setPointerCapture?.(ev.pointerId)
+      const under = pieceUnder(c, w, e)
+      if (c && !under && pieceAt(piecesRef.current, c) === FOUNDER_SLOT_ID) {
+        storeApi().layoutEditOp({ kind: 'select', id: FOUNDER_SLOT_ID })
         return
       }
-      if (!c) return
-      const id = pieceAt(piecesRef.current, c)
-      if (id === FOUNDER_SLOT_ID) {
-        api.layoutEditOp({ kind: 'select', id })
+      if (!under) {
+        if (e.selected || e.decorSel || e.wallSel) storeApi().layoutEditOp({ kind: 'drop' })
         return
       }
-      if (id) {
-        const p = piecesRef.current.find((x) => x.id === id)!
-        drag.current = { what: 'item', id, dx: p.x - c.x, dz: p.z - c.z, x0: ev.clientX, y0: ev.clientY, active: false }
-        api.layoutEditOp({ kind: 'select', id })
-        el.setPointerCapture?.(ev.pointerId)
-        return
-      }
-      const did = decorAt(e.draft, c)
-      if (did) {
-        const p = e.draft.decor.find((x) => x.id === did)!
-        drag.current = { what: 'decor', id: did, dx: p.pos.x - c.x, dz: p.pos.z - c.z, x0: ev.clientX, y0: ev.clientY, active: false }
-        api.layoutEditOp({ kind: 'selectDecor', id: did })
-        el.setPointerCapture?.(ev.pointerId)
-      }
+      storeApi().layoutEditOp({ kind: 'pick', carry: under })
+      press = { x0: ev.clientX, y0: ev.clientY, picked: true }
+      el.setPointerCapture?.(ev.pointerId)
     }
     const onMove = (ev: PointerEvent) => {
       const { c, w } = pick(ev)
       setTarget(c, w)
-      const d = drag.current
-      if (d && !d.active && Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0) > DRAG_PX) {
-        d.active = true
-        grab.current = { dx: d.dx, dz: d.dz }
-        setDragId({ what: d.what, id: d.id })
-      }
       const e = storeApi().ui.layoutEdit
-      const onPiece = !!c && ((pieceAt(piecesRef.current, c) !== null && pieceAt(piecesRef.current, c) !== FOUNDER_SLOT_ID) || (!!e && decorAt(e.draft, c) !== null))
-      el.style.cursor = drag.current?.active ? 'grabbing' : e?.armed ? 'copy' : onPiece || (w && e && wallAt(e.draft, w)) ? 'grab' : ''
+      const under = e && !e.carry && !e.armed ? pieceUnder(c, w, e) : null
+      editorHover.current = under
+      el.style.cursor = e?.carry ? 'grabbing' : e?.armed ? 'copy' : under ? 'grab' : ''
     }
     const onUp = (ev: PointerEvent) => {
       if (ev.button !== 0) return
-      const api = storeApi()
-      const d = drag.current
-      drag.current = null
       el.releasePointerCapture?.(ev.pointerId)
-      const { c, w } = pick(ev)
-      if (d?.active) {
-        setDragId(null)
-        if (d.what === 'wall') {
-          if (w && d.from) api.layoutEditOp({ kind: 'moveWall', from: d.from, to: w })
-        } else if (c) api.layoutEditOp(d.what === 'item' ? { kind: 'place', id: d.id, x: c.x + d.dx, z: c.z + d.dz } : { kind: 'moveDecor', id: d.id, x: c.x + d.dx, z: c.z + d.dz })
-        return
+      const p = press
+      press = null
+      // Pressed on a piece and dragged off: it goes down where the button came up. A plain click keeps it in the hand.
+      if (p?.picked && Math.hypot(ev.clientX - p.x0, ev.clientY - p.y0) > DRAG_PX) {
+        const { c, w } = pick(ev)
+        putDown(c, w, ev.shiftKey)
       }
-      if (d) return
-      const e = api.ui.layoutEdit
-      if (!e || e.armed) return
-      // A click on a bare spot: move the selected piece there, or drop the selection.
-      if (w && e.wallSel && !wallAt(e.draft, w)) api.layoutEditOp({ kind: 'moveWall', from: e.wallSel, to: w })
-      else if (c && e.selected && pieceAt(piecesRef.current, c) === null) api.layoutEditOp({ kind: 'place', id: e.selected, x: c.x, z: c.z })
-      else if (c && e.decorSel && pieceAt(piecesRef.current, c) === null) api.layoutEditOp({ kind: 'moveDecor', id: e.decorSel, x: c.x, z: c.z })
-      else api.layoutEditOp({ kind: 'select', id: null })
     }
-    const onLeave = () => setTarget(null, null)
-    const onContext = () => {
-      drag.current = null
-      setDragId(null)
+    const onLeave = () => {
+      setTarget(null, null)
+      editorHover.current = null
+    }
+    const onContext = (ev: MouseEvent) => {
+      ev.preventDefault()
       const e = storeApi().ui.layoutEdit
-      storeApi().layoutEditOp(e?.armed ? { kind: 'arm', armed: null } : { kind: 'select', id: null })
+      // Right click turns what is in the hand (a building game's habit); with nothing in it, it does nothing.
+      if (e?.carry || e?.armed) storeApi().layoutEditOp({ kind: 'rotate' })
     }
     el.addEventListener('pointerdown', onDown)
     el.addEventListener('pointermove', onMove)
@@ -313,129 +256,68 @@ function Editor({ edit }: { edit: LayoutEdit }) {
       el.removeEventListener('pointerleave', onLeave)
       el.removeEventListener('contextmenu', onContext)
       el.style.cursor = ''
+      editorHover.current = null
     }
   }, [gl, get, office.stage, bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ])
 
-  // Ghost: the dragged piece under the pointer, or the selected piece over a free hovered cell (click to move there).
-  const selected = edit.selected ? pieces.find((p) => p.id === edit.selected) : undefined
-  let ghost: { piece: DraftPiece; x: number; z: number } | null = null
-  if (hover && dragId?.what === 'item') {
-    const p = pieces.find((x) => x.id === dragId.id)
-    if (p) ghost = { piece: p, x: hover.x + grab.current.dx, z: hover.z + grab.current.dz }
-  } else if (hover && !dragId && selected && pieceAt(pieces, hover) === null) ghost = { piece: selected, x: hover.x, z: hover.z }
-  const gx = ghost?.x
-  const gz = ghost?.z
-  const gid = ghost?.piece.id
-  const gr = ghost?.piece.r
-  const check = useMemo(
-    () => (gid !== undefined && gx !== undefined && gz !== undefined && gr !== undefined ? checkPlace(office, edit.draft, gid, gx, gz, gr) : null),
-    [office, edit.draft, gid, gx, gz, gr],
-  )
-
-  // Decor ghost: the armed piece, a dragged floor piece, or the selected floor piece over a free cell.
-  const decorSel = edit.decorSel ? edit.draft.decor.find((p) => p.id === edit.decorSel) : undefined
-  let fGhost: { id: string | null; kind: string; x: number; z: number; r: Rotation } | null = null
-  if (hover && edit.armed && !isWallKind(edit.armed.kind)) fGhost = { id: null, kind: edit.armed.kind, x: hover.x, z: hover.z, r: edit.armedRot ?? 0 }
-  else if (hover && dragId?.what === 'decor') {
-    const p = edit.draft.decor.find((x) => x.id === dragId.id)
-    if (p) fGhost = { id: p.id, kind: p.kind, x: hover.x + grab.current.dx, z: hover.z + grab.current.dz, r: p.rotation }
-  } else if (hover && !dragId && decorSel && pieceAt(pieces, hover) === null && decorAt(edit.draft, hover) === null) fGhost = { id: decorSel.id, kind: decorSel.kind, x: hover.x, z: hover.z, r: decorSel.rotation }
-  const fKey = fGhost ? `${fGhost.id}|${fGhost.kind}|${fGhost.x}|${fGhost.z}|${fGhost.r}` : ''
-  const fCheck = useMemo<DecorCheck | null>(
-    () => (fGhost ? checkFloor(office, edit, fGhost.id, fGhost.kind, fGhost.x, fGhost.z, fGhost.r, cash) : null),
+  const hand = handOf(edit, pieces)
+  const handKey = hand ? JSON.stringify(hand) : ''
+  // Fit of the piece in the hand at the hovered cell / wall segment (on a cell change, never per pixel).
+  const check = useMemo<{ ok: boolean; cells: GridPos[] } | null>(() => {
+    if (!hand) return null
+    if (hand.what === 'wall') {
+      if (!hoverWall) return null
+      if (hand.from) {
+        const taken = wallAt(edit.draft, hoverWall) && !sameSeg(hand.from, hoverWall)
+        return { ok: !taken, cells: [] }
+      }
+      const c: DecorCheck = checkWall(office, edit, hoverWall, { kind: hand.kind, ...(hand.color ? { color: hand.color } : {}) }, cash)
+      return { ok: c.ok, cells: [] }
+    }
+    if (!hover) return null
+    if (hand.what === 'item') {
+      const c = hand.id ? checkPlace(office, edit.draft, hand.id, hover.x, hover.z, hand.r) : checkNewItem(office, edit, hand.itemId, hover.x, hover.z, hand.r, cash)
+      return { ok: c.ok, cells: c.cells }
+    }
+    const c = checkFloor(office, edit, hand.id, hand.kind, hover.x, hover.z, hand.r, cash)
+    return { ok: c.ok, cells: c.cells }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [office, edit.draft, fKey, cash],
-  )
-  // Wall ghost: the armed wall piece (or paint) or a dragged wall piece over a wall segment.
-  const draggedWall = dragId?.what === 'wall' && edit.wallSel ? wallAt(edit.draft, edit.wallSel) : undefined
-  const wArmed = edit.armed && isWallKind(edit.armed.kind) ? edit.armed : draggedWall ? { kind: draggedWall.kind } : null
-  const wKey = hoverWall && wArmed ? `${hoverWall.wall}|${hoverWall.seg}|${wArmed.kind}|${wArmed.color ?? ''}|${draggedWall ? 'd' : ''}` : ''
-  const wCheck = useMemo<DecorCheck | null>(() => {
-    if (!hoverWall || !wArmed) return null
-    if (draggedWall) return wallAt(edit.draft, hoverWall) && !(edit.wallSel && hoverWall.wall === edit.wallSel.wall && hoverWall.seg === edit.wallSel.seg) ? { ok: false, cells: [], bad: [], reason: 'overlap' } : { ok: true, draft: edit.draft, cells: [] }
-    return checkWall(office, edit, hoverWall, wArmed, cash)
+  }, [office, edit.draft, handKey, hover?.x, hover?.z, hoverWall?.wall, hoverWall?.seg, cash])
+
+  // The piece under the pointer with nothing in the hand: a soft light under it says "this one can be picked up".
+  const hoverPiece = !hand && hover ? pieceAt(pieces, hover) : null
+  const hoverDecor = !hand && hover && !hoverPiece ? decorAt(edit.draft, hover) : null
+  const lit: GridPos[] = hoverPiece && hoverPiece !== FOUNDER_SLOT_ID ? (pieces.find((p) => p.id === hoverPiece)?.cells ?? []) : hoverDecor ? decorCells(edit.draft.decor.find((p) => p.id === hoverDecor)!) : []
+
+  // Refused click: the red cells and the reason next to them, until the refusal fades (LayoutPanel clears it).
+  const refused = edit.refused
+  const refusedCells = refused ? refused.cells.map(keyToCell) : []
+  const glow = useMemo(() => {
+    const quads: { c: GridPos; color: string; a: number }[] = []
+    for (const c of lit) quads.push({ c, color: HIGHLIGHT.hover, a: 0.22 })
+    if (hand && check) for (const c of check.cells) quads.push({ c, color: check.ok ? HIGHLIGHT.valid : HIGHLIGHT.invalid, a: 0.28 })
+    for (const c of refusedCells) quads.push({ c, color: HIGHLIGHT.invalid, a: 0.4 })
+    return quads
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [office, edit.draft, wKey, cash])
-  const hoverId = hover && !dragId ? pieceAt(pieces, hover) : null
+  }, [lit.map((c) => `${c.x},${c.z}`).join(';'), handKey, check, refused])
 
-  const fill = useMemo(() => {
-    const quads: Quad[] = []
-    const fx = stageFixtures(office.stage)
-    for (const k of [...fx.noPiece, ...fx.blocked]) {
-      const c = keyToCell(k)
-      if (c.x === 0 && c.z === 0) continue
-      quads.push({ c, color: rgba('#7a7468', 0.22) })
-    }
-    for (const p of pieces) {
-      const tint = p.team ? rgba(DEPT_COLORS[p.team], island.has(p.id) ? 0.7 : 0.42) : rgba('#ffffff', 0.12)
-      for (const c of p.cells) quads.push({ c, color: tint })
-    }
-    for (const p of edit.draft.decor) for (const c of decorCells(p)) quads.push({ c, color: rgba('#ffffff', p.id === edit.decorSel ? 0 : 0.1) })
-    const lit = (p: DraftPiece | undefined, hex: string, a: number) => {
-      if (!p) return
-      for (const c of p.cells) quads.push({ c, color: rgba(hex, a) })
-      quads.push({ c: p.cells[0]!, color: rgba(hex, Math.min(1, a + 0.4)), front: p.r })
-    }
-    if (hoverId && hoverId !== edit.selected && hoverId !== FOUNDER_SLOT_ID) lit(pieces.find((p) => p.id === hoverId), HIGHLIGHT.hover, 0.28)
-    lit(selected, HIGHLIGHT.selected, 0.5)
-    if (decorSel) for (const c of decorCells(decorSel)) quads.push({ c, color: rgba(HIGHLIGHT.selected, 0.5) })
-    if (ghost && check) {
-      const hex = check.ok ? HIGHLIGHT.valid : HIGHLIGHT.invalid
-      for (const c of check.cells) quads.push({ c, color: rgba(hex, 0.55) })
-      quads.push({ c: check.cells[0]!, color: rgba(hex, 0.95), front: ghost.piece.r })
-      if (!check.ok) for (const k of check.bad) quads.push({ c: keyToCell(k), color: rgba(HIGHLIGHT.invalid, 0.45) })
-    }
-    if (fCheck) {
-      const hex = fCheck.ok ? HIGHLIGHT.valid : HIGHLIGHT.invalid
-      for (const c of fCheck.cells) quads.push({ c, color: rgba(hex, 0.55) })
-      if (!fCheck.ok) for (const k of fCheck.bad) quads.push({ c: keyToCell(k), color: rgba(HIGHLIGHT.invalid, 0.45) })
-    }
-    if (edit.refused) for (const k of edit.refused.cells) quads.push({ c: keyToCell(k), color: rgba(HIGHLIGHT.invalid, 0.6) })
-    return fillGeometry(lines, quads)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [office.stage, lines, pieces, island, hoverId, selected, edit.selected, edit.refused, check, ghost?.piece.r, edit.draft.decor, decorSel, fCheck])
-
-  useEffect(() => () => fill.dispose(), [fill])
-  // Pulls toward the camera harder than the floor's own offset (factor / units −1), still behind any furniture.
-  const fillMat = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), [])
-  useEffect(() => () => fillMat.dispose(), [fillMat])
-
-  // The short reason next to the red cells: the ghost's while it is over a refused spot, else the last refused drop.
-  const wallSpot = hoverWall ? wallPose(bounds, hoverWall.wall, hoverWall.seg).pos : null
   let reason: { key: string; at: [number, number, number] } | null = null
-  const cellSpot = (c: GridPos, y = 0.4): [number, number, number] => {
-    const [x, z] = gridToWorld(c)
-    return [x, y, z]
+  if (refused) {
+    const at = refusedCells[0]
+    const [x, z] = at ? gridToWorld(at) : hover ? gridToWorld(hover) : [0, 0]
+    reason = { key: refused.reason, at: [x, 0.5, z] }
   }
-  if (ghost && check && !check.ok) reason = { key: check.reason, at: cellSpot(check.cells[0]!) }
-  else if (fGhost && fCheck && !fCheck.ok) reason = { key: fCheck.reason, at: cellSpot({ x: fGhost.x, z: fGhost.z }) }
-  else if (wCheck && !wCheck.ok && wallSpot) reason = { key: wCheck.reason, at: [wallSpot[0], wallSpot[1] + 0.3, wallSpot[2]] }
-  else if (edit.refused) reason = { key: edit.refused.reason, at: edit.refused.cells[0] ? cellSpot(keyToCell(edit.refused.cells[0])) : (wallSpot ?? [0, 0.4, 0]) }
-
-  // Model previews (unbaked, 1–4 draws): the floor ghost on its cell, the wall ghost on its segment.
-  const fPose = fGhost ? floorPose({ kind: fGhost.kind, pos: { x: fGhost.x, z: fGhost.z }, rotation: fGhost.r }) : null
-  const wPose = hoverWall && wArmed && wArmed.kind !== 'paint' && wCheck?.ok ? wallPose(bounds, hoverWall.wall, hoverWall.seg) : null
 
   return (
     <group name="layoutEditor">
-      <mesh geometry={fill} material={fillMat} renderOrder={4} />
-      {fGhost && fPose && (fCheck?.ok ?? false) && (
-        <group position={[fPose.pos[0], 0, fPose.pos[1]]} rotation={[0, fPose.yaw, 0]}>
-          <FloorModel kind={fGhost.kind} />
-        </group>
-      )}
-      {wPose && wArmed && (
-        <group position={wPose.pos} rotation={[0, wPose.yaw, 0]}>
-          <WallModel kind={wArmed.kind} />
-        </group>
-      )}
-      {edit.wallSel && !dragId && <WallMark at={edit.wallSel} bounds={bounds} />}
+      <Glow quads={glow} />
+      {hand && check && <HandGhost hand={hand} hover={hover} hoverWall={hoverWall} ok={check.ok} bounds={bounds} />}
       {reason && (
         <Html portal={portal} position={reason.at} center zIndexRange={[14, 12]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
           <div
             data-layout-reason=""
             className="whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-bold text-white shadow-[0_2px_8px_rgb(0_0_0/0.25)]"
-            style={{ background: HIGHLIGHT.invalid, transform: 'translateY(-26px)' }}
+            style={{ background: HIGHLIGHT.invalid, transform: 'translateY(-34px)' }}
           >
             {UI_TEXT[`layout.reason.${reason.key}`]}
           </div>
@@ -445,26 +327,125 @@ function Editor({ edit }: { edit: LayoutEdit }) {
   )
 }
 
-/** The selected wall piece: a thin outline frame on the wall around its segment. */
-function WallMark({ at, bounds }: { at: WallSeg; bounds: { minX: number; minZ: number } }) {
-  const { pos, yaw } = wallPose(bounds as Parameters<typeof wallPose>[0], at.wall, at.seg)
-  const m = useMemo(() => new THREE.MeshBasicMaterial({ color: HIGHLIGHT.selected, transparent: true, opacity: 0.85, depthWrite: false }), [])
+/** Soft cell lights under the hand and the hovered piece: one small mesh, rebuilt on a cell change only. */
+function Glow({ quads }: { quads: { c: GridPos; color: string; a: number }[] }) {
+  const geo = useMemo(() => {
+    const pos: number[] = []
+    const col: number[] = []
+    const idx: number[] = []
+    const h = CELL * 0.46
+    for (const q of quads) {
+      const [cx, cz] = gridToWorld(q.c)
+      const c = new THREE.Color(q.color)
+      const n = pos.length / 3
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+        pos.push(cx + sx * h, Y_FILL, cz + sz * h)
+        col.push(c.r, c.g, c.b, q.a)
+      }
+      idx.push(n, n + 2, n + 1, n, n + 3, n + 2)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4))
+    g.setIndex(idx)
+    return g
+  }, [quads])
+  useEffect(() => () => geo.dispose(), [geo])
+  const m = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), [])
   useEffect(() => () => m.dispose(), [m])
-  const w = CELL * 0.92
-  const h = 0.8
-  const t = 0.04
+  if (!quads.length) return null
+  return <mesh geometry={geo} material={m} renderOrder={4} />
+}
+
+const ghostMats = new Map<string, THREE.Material>()
+/** The ghost's look: the model's own colours washed toward green / red, a little see-through. */
+function ghostMat(ok: boolean, vertexColors: boolean): THREE.Material {
+  const key = `${ok}|${vertexColors}`
+  let m = ghostMats.get(key)
+  if (!m) {
+    const tint = new THREE.Color(ok ? HIGHLIGHT.valid : HIGHLIGHT.invalid)
+    m = new THREE.MeshStandardMaterial({
+      color: vertexColors ? new THREE.Color(1, 1, 1).lerp(tint, 0.45) : tint,
+      vertexColors,
+      emissive: tint,
+      emissiveIntensity: 0.28,
+      transparent: true,
+      opacity: 0.82,
+      roughness: 0.7,
+      depthWrite: true,
+    })
+    ghostMats.set(key, m)
+  }
+  return m
+}
+
+/** Every mesh under `ref` drawn with the ghost material (the model bakes itself after mount, so this runs per frame). */
+function useGhostLook(ref: React.RefObject<THREE.Group | null>, ok: boolean) {
+  useFrame(() => {
+    const g = ref.current
+    if (!g) return
+    g.traverse((o) => {
+      const mesh = o as THREE.Mesh
+      if (!mesh.isMesh) return
+      const want = ghostMat(ok, !!mesh.geometry.getAttribute('color'))
+      if (mesh.material !== want) {
+        mesh.material = want
+        mesh.castShadow = false
+      }
+    })
+  })
+}
+
+/** The real model of what is in the hand, on the hovered cell (or wall segment), turned as it will go down. */
+function HandGhost({ hand, hover, hoverWall, ok, bounds }: { hand: Hand; hover: GridPos | null; hoverWall: WallSeg | null; ok: boolean; bounds: ReturnType<typeof useLayout>['bounds'] }) {
+  const ref = useRef<THREE.Group>(null)
+  useGhostLook(ref, ok)
+  if (hand.what === 'wall') {
+    if (!hoverWall || hand.kind === 'paint') return null
+    const { pos, yaw } = wallPose(bounds, hoverWall.wall, hoverWall.seg)
+    return (
+      <group ref={ref} position={pos} rotation={[0, yaw, 0]}>
+        <WallModel kind={hand.kind} />
+      </group>
+    )
+  }
+  if (!hover) return null
+  if (hand.what === 'floor') {
+    const { pos, yaw } = floorPose({ kind: hand.kind, pos: hover, rotation: hand.r })
+    return (
+      <group ref={ref} position={[pos[0], 0.02, pos[1]]} rotation={[0, yaw, 0]}>
+        <FloorModel kind={hand.kind} />
+      </group>
+    )
+  }
+  const [x, z] = gridToWorld(hover)
+  const span = hand.size === 2
+  const d = rightDir(hand.r)
+  const pos: [number, number] = span ? [x + (d.x * CELL) / 2, z + (d.z * CELL) / 2] : [x, z]
+  const yaw = span ? -Math.atan2(d.z, d.x) : yawOf(hand.r)
   return (
-    <group position={pos} rotation={[0, yaw, 0]}>
-      {[
-        [0, h / 2, w, t],
-        [0, -h / 2, w, t],
-        [-w / 2, 0, t, h],
-        [w / 2, 0, t, h],
-      ].map(([x, y, sx, sy], i) => (
-        <mesh key={i} geometry={BOX} material={m} position={[x!, y!, 0.06]} scale={[sx!, sy!, 0.01]} renderOrder={5} />
-      ))}
+    <group ref={ref} position={[pos[0], 0.02, pos[1]]} rotation={[0, yaw, 0]}>
+      <FurnitureModel key={hand.itemId} resolved={resolveFurniture(hand.itemId, hand.type)} span={span} />
     </group>
   )
 }
 
-const BOX = new THREE.BoxGeometry(1, 1, 1)
+/** Left edge of the hint's band: clear of the money island in the bottom-left corner (about 290 px wide on a PC). */
+const HINT_LEFT = 300
+
+/**
+ * The one hint box at the bottom of the scene while the edit mode is open: the keys of the carry, nothing else. DOM,
+ * mounted by GameCanvas next to the canvas (not inside the three tree).
+ */
+export function LayoutKeyHint() {
+  const open = useUi((u) => u.layoutEdit !== null)
+  const inset = useUi((u) => u.sceneInset)
+  if (!open) return null
+  return (
+    <div className="pointer-events-none absolute z-[13] flex justify-center" style={{ left: HINT_LEFT, right: inset?.right ?? 0, bottom: (inset?.bottom ?? 0) + 8 }}>
+      <div data-layout-keys="" className="rounded-full bg-ink/80 px-3.5 py-1.5 font-text text-[12px] font-semibold text-white shadow-[0_2px_10px_rgb(0_0_0/0.18)]">
+        {UI_TEXT['layout.keys']}
+      </div>
+    </div>
+  )
+}

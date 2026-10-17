@@ -13,6 +13,7 @@ import { FOUNDER_SLOT_ID, SAVE_VERSION, type DecorPiece, type GameState, type Of
 import golden from './data/officeGolden.json'
 import saveV4 from './data/saveV4.json'
 import saveV5 from './data/saveV5.json'
+import { FURNITURE } from '../../content/furniture'
 import { autoFill, goldenNow, moveChain } from './officeGolden'
 
 const STAGES = [0, 1, 2, 3, 4, 5, 6] as StageIndex[]
@@ -319,6 +320,25 @@ describe('moves and layouts (actions)', () => {
     const bad = applyAction(s, { type: 'applyLayout', draft: { slots: { 'r1-s0': { x: -2, z: 2, r: 0 }, 'r1-s1': { x: 4, z: -3, r: 0 } }, decor: [] } })
     expect(bad).toMatchObject({ ok: false, error: 'blocksDoor' })
     expect(bad.state).toBe(s)
+  })
+
+  it('applyLayout buys the items a draft put down: their price, a dept desk’s label, the activity line; atomic', () => {
+    const s = rich(1, buildOffice(1, 2))
+    const cash = s.stats.cash
+    const r = applyAction(s, { type: 'applyLayout', draft: { slots: {}, decor: [], buy: [{ key: 'n1', itemId: 'desk-basic', x: -2, z: 2, r: 1 }, { key: 'n2', itemId: 'desk-design', x: -1, z: 2, r: 1 }] } })
+    expect(r.error).toBeUndefined()
+    const placed = r.state.office.slots.filter((x) => x.itemId)
+    expect(placed.map((x) => [x.itemId, x.pos.x, x.pos.z, x.rotation])).toEqual([['desk-basic', -2, 2, 1], ['desk-design', -1, 2, 1]])
+    expect(placed[1]!.team).toBe('product')
+    const price = (id: string) => FURNITURE.find((f) => f.id === id)!.price
+    expect(r.state.stats.cash).toBe(cash - price('desk-basic') - price('desk-design'))
+    // Short of cash for the lot: nothing changes.
+    const poor = { ...s, stats: { ...s.stats, cash: price('desk-basic') } }
+    expect(applyAction(poor, { type: 'applyLayout', draft: { slots: {}, decor: [], buy: [{ key: 'n1', itemId: 'desk-basic', x: -2, z: 2, r: 1 }, { key: 'n2', itemId: 'desk-design', x: -1, z: 2, r: 1 }] } })).toMatchObject({ ok: false, error: 'insufficientCash' })
+    // In the door zone, or a stage the item is not sold at yet: refused.
+    expect(applyAction(s, { type: 'applyLayout', draft: { slots: {}, decor: [], buy: [{ key: 'n1', itemId: 'desk-basic', x: 3, z: -3, r: 0 }] } }).error).toBe('blocksDoor')
+    const late = FURNITURE.find((f) => f.slotType === 'desk' && f.stageUnlock > 1)!
+    expect(applyAction(s, { type: 'applyLayout', draft: { slots: {}, decor: [], buy: [{ key: 'n1', itemId: late.id, x: -2, z: 2, r: 0 }] } }).error).toBe('notUnlocked')
   })
 
   it('placeItem on a canonical slot covered by a piece is refused', () => {

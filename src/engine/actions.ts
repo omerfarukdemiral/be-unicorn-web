@@ -450,13 +450,17 @@ const upgradeItem: Handler<'upgradeItem'> = ({ s, content }, a) => {
 }
 
 /** Commits an edited layout (grid §4): one validated, atomic step; seats follow their desks. */
-const applyLayout: Handler<'applyLayout'> = ({ s }, a) => {
+const applyLayout: Handler<'applyLayout'> = ({ s, content }, a) => {
   const res = applySnapshot(s.office, a.draft)
   if ('error' in res) return res.error
-  // New decor is paid on Bitti, all at once (moving is free); short of cash, nothing changes.
-  if (res.cost > s.stats.cash) return 'insufficientCash'
+  // New decor and items bought in the draft are paid on Bitti, all at once (moving is free); short of cash, nothing changes.
+  const items = res.bought.map((b) => ({ b, item: furnitureById(content, b.itemId) }))
+  if (items.some((x) => !x.item)) return 'notFound'
+  if (res.cost + items.reduce((n, x) => n + x.item!.price, 0) > s.stats.cash) return 'insufficientCash'
   s.stats.cash -= res.cost
   s.office = res.office
+  // Each bought item as if bought in the shop: its price, its team label, reputation, tools, the activity line.
+  for (const { b, item } of items) boughtOn(s, item!, findSlot(s.office, b.slotId)!)
   syncSeats(s)
   return null
 }

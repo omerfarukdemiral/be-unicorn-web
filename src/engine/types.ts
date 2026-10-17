@@ -348,11 +348,20 @@ export interface CellPlacement {
   team?: Dept
 }
 
+/** A functional item bought inside the edit mode (grid v2 carry): put down in the draft, paid on Bitti. */
+export interface NewItem extends CellPlacement {
+  /** Draft-local key ("n1", "n2", …). */
+  key: string
+  itemId: FurnitureId
+}
+
 /** A whole office arrangement: the edit-mode draft, a saved layout. Anchor slots not listed stay where they are. */
 export interface LayoutSnapshot {
   slots: Record<SlotId, CellPlacement>
   decor: DecorPiece[]
   walls?: WallPiece[]
+  /** Items bought in the draft (absent: none). */
+  buy?: NewItem[]
 }
 
 /**

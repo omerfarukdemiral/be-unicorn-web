@@ -45,8 +45,9 @@ export function BottomBar({ layout, sheetOpen = false, narrow = false }: { layou
     return (
       <nav aria-label={t('bottom.label')} className="pointer-events-none flex flex-col items-center gap-2">
         {!sheetOpen && (
-          <div data-scene-island="" className="ui-card pointer-events-auto flex h-14 max-w-full items-center px-2">
-            <FounderBar variant="mobile" className="h-11" />
+          // Full width: the slot row measures its room there (FounderBar), so all slots fit at 390 (fix round F6).
+          <div data-scene-island="" className="ui-card pointer-events-auto flex h-14 w-full items-center px-1.5">
+            <FounderBar variant="mobile" className="h-11 w-full" />
           </div>
         )}
         <div data-scene-island="" className="ui-card pointer-events-auto relative flex h-14 items-center gap-1 px-1">

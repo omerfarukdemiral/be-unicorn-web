@@ -4,27 +4,23 @@ import { describe, expect, it } from 'vitest'
 import { FounderSlot, SLOT } from '../FounderActions'
 import { t } from '../i18n'
 import { ViewControls } from './ViewControls'
-import { dockFits, keepsMenuOpen, NARROW_PHONE_W, slotSizeFor, SLOT_NARROW } from './dockFit'
+import { dockFits, keepsMenuOpen, slotSizeForRoom, SLOT_NARROW } from './dockFit'
 import bottomBar from './BottomBar.tsx?raw'
 
 describe('founder dock on narrow phones', () => {
-  it('shrinks the slot to 40px at <= 375 wide, 44px above', () => {
-    expect(slotSizeFor(360)).toBe(SLOT_NARROW)
-    expect(slotSizeFor(NARROW_PHONE_W)).toBe(40)
-    expect(slotSizeFor(390)).toBe(SLOT)
+  it('picks 44px while the row has room, else the 40px key', () => {
+    // 390 wide, Pre-seed on: the measured row is ~310px (island 374 - padding - energy/moves column). Seven slots fit.
+    expect(slotSizeForRoom(7, 310)).toBe(SLOT_NARROW)
+    expect(dockFits(7, slotSizeForRoom(7, 310), 310)).toBe(true)
+    // Garage: five slots keep the 44px key.
+    expect(slotSizeForRoom(5, 304)).toBe(SLOT)
   })
 
-  it('at 360 wide every slot fits or the row reports scrollable (fade shown)', () => {
-    // Pill 360 - 16 (island padding) - energy/moves/divider (~120) leaves ~224 for the row.
-    const room = 224
-    for (let n = 1; n <= 10; n++) {
-      const fits = dockFits(n, slotSizeFor(360), room)
-      // Not fitting == scrollable; the 40px slot fits at least one more than the 44px one.
-      expect(fits || n * 40 + (n - 1) * 4 > room).toBe(true)
-      if (dockFits(n, 44, room)) expect(fits).toBe(true)
-    }
-    expect(dockFits(5, 40, room)).toBe(true)
-    expect(dockFits(7, 40, room)).toBe(false)
+  it('a row too narrow even for 40px keys reports scrollable (fade shown)', () => {
+    // 360 wide: ~280px of row.
+    const room = 280
+    expect(dockFits(7, slotSizeForRoom(7, room), room)).toBe(false)
+    expect(dockFits(6, slotSizeForRoom(6, room), room)).toBe(true)
   })
 
   it('a 40px slot keeps a 44px hit area', () => {

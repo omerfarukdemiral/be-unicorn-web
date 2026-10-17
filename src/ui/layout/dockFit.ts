@@ -1,15 +1,14 @@
-// Founder dock sizing on narrow phones (M3): at <= 375px wide the 44px slots no longer fit the pill from stage 2 on.
-// The slot shrinks to 40px with 4px gaps; the 44px hit area stays (a pseudo-element, the ::before in FounderSlot). Whatever
-// still does not fit scrolls sideways (the row shows a fade, FounderBar).
+// Founder dock sizing on phones (M3, fix round F6): the slot is 44px while the row has room, else 40px (the 44px hit area
+// stays: a pseudo-element, the ::before in FounderSlot). The row's room is measured (FounderBar), so at 390 wide all
+// seven slots fit from Pre-seed on; whatever still does not fit (375px and narrower, from Pre-seed) scrolls sideways behind a fade.
 import { SLOT } from '../FounderActions'
 
-export const NARROW_PHONE_W = 375
 export const SLOT_NARROW = 40
 const GAP = 4
 
-/** Slot side in px for a viewport width. */
-export function slotSizeFor(vw: number): number {
-  return vw <= NARROW_PHONE_W ? SLOT_NARROW : SLOT
+/** Slot side for `count` slots in `room` px (the measured row): 44 when it fits, else the 40px key. */
+export function slotSizeForRoom(count: number, room: number): number {
+  return dockFits(count, SLOT, room) ? SLOT : SLOT_NARROW
 }
 
 /**

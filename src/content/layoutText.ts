@@ -46,7 +46,7 @@ export const LAYOUT_TEXT: Record<string, string> = {
   'layout.full': 'Ofis dolu',
   'layout.spend': 'Bitti deyince {v} ödersin.',
   'layout.spendShort': 'Kasa yetmiyor: {v} lazım.',
-  'layout.armedFloor': 'Koymak için bir kareye tıkla. Esc bırakır.',
+  'layout.armedFloor': 'Koymak için zemine tıkla. Esc bırakır.',
   'layout.armedWall': 'Duvarda bir yere tıkla. Esc bırakır.',
   'layout.armedPaint': 'Boyamak için bir duvara tıkla.',
   'layout.toStorage': 'Depoya kaldır',

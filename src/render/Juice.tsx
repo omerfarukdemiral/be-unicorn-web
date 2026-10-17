@@ -1,6 +1,6 @@
 // Scene juice for the core loop beats (docs/CORE_LOOP.md §7), kept apart from Office/Npc/Character:
-// - release moment: a banner over the founder desk (version name; a module or a version also names itself and its wave,
-//   with the wave as a "+N" float), a light pulse,
+// - release moment: a short toast at the top edge of the scene, under the top HUD (version name; a module or a version
+//   also names itself and its wave, with the wave as a "+N" float over the desk), a light pulse,
 //   confetti (from v1 on; MVP already celebrates via projectLaunched) and a wave of simple user figures walking in;
 // - payday: a short warm-red light pulse over the office, and the amount paid rising over the desk;
 // - a manual user hunt (founder action): a few figures walk in through the door and "+N" rises over the desk
@@ -8,7 +8,7 @@
 // Watches state.events with its own cursor; a new game / loaded save skips the history.
 // Runs on scene time (sceneRegistry.sceneTime): while a bubble holds the world nothing here moves or expires.
 import { Html } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { GameState, ReleaseEntry } from '../engine/types'
@@ -25,11 +25,15 @@ import { celebrate, sceneTime, useLayout, useSceneTimers } from './sceneRegistry
 import { useGS, useSceneCovered, useUi } from './source'
 import { useYieldToBubbles } from './yieldToBubbles'
 import { DOOR_FADE } from './walker'
+import { measureIslands } from './frameFit'
 
 const MAX_FIGURES = 8
 const WALK_SPEED = 2.4 // world units / s
 const FIGURE_LINGER = 1.4 // s at the spot before fading
-const BANNER_MS = 3600
+/** The release toast's life (ms of scene time): a short toast, gone before the next beat. */
+const BANNER_MS = 2800
+/** Gap (px) between the toast and the top HUD islands above it. */
+const TOAST_GAP = 8
 /** The wave (banner + figures) unmounts after this long. */
 const WAVE_MS = 9000
 const PULSE_MS = 1400
@@ -151,7 +155,7 @@ export function JuiceLayer() {
     <>
       <pointLight ref={light} position={[desk[0], 3.2, desk[1]]} distance={CELL * 7} decay={1.6} intensity={0} />
       <Confetti trigger={confetti} origin={desk} />
-      {wave && <ReleaseBanner key={wave.id} wave={wave} at={desk} hidden={covered} />}
+      {wave && <ReleaseBanner key={wave.id} wave={wave} hidden={covered} />}
       {wave && <UserWave key={`w${wave.id}`} count={Math.min(MAX_FIGURES, Math.max(2, Math.round(Math.sqrt(wave.release.users))))} target={desk} />}
       {hunt && !wave && <UserWave key={`h${hunt.id}`} count={hunt.count} target={desk} />}
       {floats.length > 0 && <Floats items={floats} at={desk} hidden={covered} />}
@@ -218,13 +222,35 @@ function money(n: number): string {
   return a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(a / 1e3).toFixed(1)}K` : `$${Math.round(a)}`
 }
 
-function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boolean }) {
+/**
+ * Screen point (px, canvas space) of the release toast: centred on the free scene (left of the side panel), just under
+ * the lowest top HUD island. On a phone the banner over the desk sat in the middle of the scene, over the team (fix
+ * round §4); a toast at the top edge never covers it.
+ */
+function useToastAnchor(): readonly [number, number] {
+  const gl = useThree((s) => s.gl)
+  const size = useThree((s) => s.size)
+  const inset = useUi((u) => u.sceneInset.right)
+  return useMemo(() => {
+    const freeRight = Math.max(size.width - inset, size.width * 0.3)
+    let top = 0
+    for (const r of measureIslands(gl.domElement)) if (r.top < size.height * 0.3 && r.bottom < size.height * 0.4 && r.left < freeRight) top = Math.max(top, r.bottom)
+    return [freeRight / 2, top + TOAST_GAP] as const
+  }, [gl, size, inset])
+}
+
+function ReleaseBanner({ wave, hidden }: { wave: Wave; hidden: boolean }) {
   const [on, setOn] = useState(true)
   const play = usePlayState()
   const portal = useHtmlPortal()
   const box = useRef<HTMLDivElement>(null)
+  // A decision bubble under the toast still wins: the toast steps aside (or fades) for it.
   useYieldToBubbles(box)
   const later = useSceneTimers()
+  const anchor = useToastAnchor()
+  const at = useRef(anchor)
+  at.current = anchor
+  const place = useMemo(() => () => [at.current[0], at.current[1]], [])
   useEffect(() => later(BANNER_MS, () => setOn(false)), [later])
   const r = wave.release
   const category = useGS((s) => s.projects.find((p) => p.id === r.projectId)?.category)
@@ -243,17 +269,17 @@ function ReleaseBanner({ wave, at, hidden }: { wave: Wave; at: XZ; hidden: boole
         : text('release.banner', { level })
   const sub = (r.module || isVersion) && r.users >= 1 ? text('release.moduleUsersSub', { u: Math.round(r.users) }) : ''
   return (
-    <Html portal={portal} position={[at[0], 3.0, at[1]]} center zIndexRange={[15, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
-      {/* The yield (translate + fade) sits on this wrapper: pop-in's `both` fill owns the inner box's opacity, so a fade
-          written there never showed and the banner stayed under the pill when it had no free height (QA). */}
+    <Html portal={portal} calculatePosition={place} zIndexRange={[15, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none', transform: 'translateX(-50%)' }}>
+      {/* A toast: anchored on the screen (top edge of the scene), not on the desk. Centred by the Html style, the yield
+          (translate + fade) on the wrapper below. */}
       <div ref={box} data-juice-banner="" style={{ visibility: hidden ? 'hidden' : undefined }}>
         <div
-          className="animate-pop-in whitespace-nowrap rounded-[10px] px-3 py-1.5 text-center shadow-pop"
+          className="animate-pop-in flex items-baseline gap-2 whitespace-nowrap rounded-full px-3 py-1 shadow-pop"
           style={{ background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', animationPlayState: play }}
         >
           {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
-          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>{line}</div>
-          {sub && <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>{sub}</div>}
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>{line}</span>
+          {sub && <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>{sub}</span>}
         </div>
       </div>
     </Html>

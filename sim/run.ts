@@ -244,10 +244,14 @@ line()
 
 line('## Tur penceresi ve aksiyonlar (docs/CORE_LOOP.md §10 Faz 2)')
 line()
-line('| Arketip | En sık aksiyon (koşu başına medyan) | Elle kullanıcı bul (medyan) | Turda en uzun boşluk (medyan / en kötü) | Tur tutarı / eski tablo (medyan) |')
+line('| Arketip | En sık aksiyon (koşu başına medyan) | Kullanıcı bul + konuş tıklaması (medyan / en çok) | Turda en uzun boşluk (medyan / en kötü) | Tur tutarı / eski tablo (medyan) |')
 line('|---|---|---|---|---|')
 let findUsersTop = false
 let worstGapSec = 0
+/** Fix round 1: clicks on the two light verbs per run (a one-off find / talk, or a focus switch); target ≤ FOCUS_CLICKS_MAX. */
+const FOCUS_CLICKS_MAX = 30
+const focusClicks = (r: BotRun) => (r.actionCounts['founderAction:findUsers'] ?? 0) + (r.actionCounts['founderAction:talkToUsers'] ?? 0) + (r.actionCounts['setFounderFocus'] ?? 0)
+let worstClicks = 0
 for (const [kind, runs] of byArch) {
   const keys = new Set(runs.flatMap((r) => Object.keys(r.actionCounts)))
   const med = (k: string) => median(runs.map((r) => r.actionCounts[k] ?? 0)) ?? 0
@@ -257,10 +261,13 @@ for (const [kind, runs] of byArch) {
   const gaps = runs.map((r) => r.roundGapMaxDays * SECONDS_PER_DAY)
   worstGapSec = Math.max(worstGapSec, ...gaps)
   const ratios = runs.flatMap((r) => r.rounds.map((x) => (x.table > 0 ? x.amount / x.table : 1)))
-  line(`| ${kind} | ${top ? `${top[0]} ${top[1]}` : '—'} | ${med('founderAction:findUsers')} | ${(median(gaps) ?? 0).toFixed(0)} sn / ${Math.max(...gaps).toFixed(0)} sn | ${(median(ratios) ?? 0).toFixed(2)}× |`)
+  const clicks = runs.map(focusClicks)
+  worstClicks = Math.max(worstClicks, ...clicks)
+  line(`| ${kind} | ${top ? `${top[0]} ${top[1]}` : '—'} | ${median(clicks)} / ${Math.max(...clicks)} | ${(median(gaps) ?? 0).toFixed(0)} sn / ${Math.max(...gaps).toFixed(0)} sn | ${(median(ratios) ?? 0).toFixed(2)}× |`)
 }
 line()
 line(`- findUsers hiçbir arketipte en sık aksiyon değil: **${findUsersTop ? 'HAYIR' : 'EVET'}**`)
+line(`- Kullanıcı bul + konuş tıklaması koşu başına ≤ ${FOCUS_CLICKS_MAX} (en kötü koşu): **${worstClicks <= FOCUS_CLICKS_MAX ? 'EVET' : 'HAYIR'}** (${worstClicks})`)
 line(`- Tur penceresinde en uzun boşluk ≤ 20 sn: **${worstGapSec <= 20 ? 'EVET' : `HAYIR (${worstGapSec.toFixed(0)} sn)`}**`)
 line()
 

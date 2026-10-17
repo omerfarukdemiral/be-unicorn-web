@@ -5,7 +5,7 @@ import { clamp } from './economy'
 import { founderProject } from './effort'
 import { addProjectUsers, moduleMult, updateSize } from './modules'
 import type { Rng } from './rng'
-import { DAYS_PER_WEEK, type ActionErrorCode, type EnterpriseCustomer, type FindUsersPreview, type FounderActionKind, type FounderMoves, type GameState, type MovesView, type RenewalView, type RenewOffer, type SalesCallPreview } from './types'
+import { DAYS_PER_WEEK, type ActionErrorCode, type EnterpriseCustomer, type FindUsersPreview, type FounderActionKind, type FounderMoves, type FounderState, type GameState, type MovesView, type RenewalView, type RenewOffer, type SalesCallPreview } from './types'
 import { incCounter, newId, pushActivity, pushEvent } from './util'
 
 /** Flag: "Elle kullanıcı bul" uses this month (reset on month end). */
@@ -372,6 +372,38 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
   }
   pushActivity(s, 'founderActionDone', params)
   pushEvent(s, { kind: 'founderActionDone', refId: run.kind, ...(typeof params.value === 'number' ? { value: params.value } : {}) })
+}
+
+/** The founder action a focus repeats (none for 'build' or a missing focus). */
+export function focusAction(focus: FounderState['focus']): FounderActionKind | undefined {
+  return focus === 'users' ? 'findUsers' : focus === 'talk' ? 'talkToUsers' : undefined
+}
+
+/**
+ * Why the focus is not running right now, or null when runFocus would start it: 'build' when there is nothing to
+ * repeat; 'circle' (garage, the month's finds are spent), 'energy' (garage, it would go under the floor), 'week' (on
+ * the budget, the week's moves are still the player's, or only the kept one is left), else the founderActionError code.
+ */
+export function focusWait(s: GameState): ActionErrorCode | 'build' | 'circle' | 'energy' | 'week' | null {
+  const kind = focusAction(s.founder.focus)
+  if (!kind) return 'build'
+  const err = founderActionError(s, kind)
+  if (err) return err
+  if (!onMoveBudget(s)) {
+    if (kind === 'findUsers' && findUsersPreview(s).factor < B.FOCUS_FIND_MIN_FACTOR) return 'circle'
+    if (s.founder.energy - B.FOUNDER_ACTION_DEFS[kind].energy < B.FOCUS_ENERGY_FLOOR) return 'energy'
+    return null
+  }
+  const left = movesLeft(s) - (s.round?.active && s.round.pitchDue !== undefined ? B.MOVE_COST.roundPitch : 0)
+  const resetDay = (Math.floor(s.time.day / DAYS_PER_WEEK) + 1) * DAYS_PER_WEEK
+  if (left - B.FOCUS_KEEP_MOVES < B.FOUNDER_ACTION_DEFS[kind].moves || resetDay - s.time.day > left + B.FOCUS_KEEP_MOVES) return 'week'
+  return null
+}
+
+/** Every tick: an idle founder starts the focused verb when focusWait allows it (no click, the same verb and price). */
+export function runFocus(s: GameState): void {
+  if (s.founder.currentAction || focusWait(s) !== null) return
+  startFounderAction(s, focusAction(s.founder.focus)!, s.founder.focus === 'talk' ? s.founder.focusTarget : undefined)
 }
 
 /**

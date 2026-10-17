@@ -20,6 +20,7 @@ import { idleBuilders, upgradeCost } from './loopSelectors'
 import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
+  FOUNDER_FOCI,
   FOUNDER_SLOT_ID,
   PACES,
   POLICY_IDS,
@@ -600,6 +601,15 @@ const founderAction: Handler<'founderAction'> = ({ s }, a) => {
   return startFounderAction(s, a.kind, a.targetId)
 }
 
+const setFounderFocus: Handler<'setFounderFocus'> = ({ s }, a) => {
+  if (!FOUNDER_FOCI.includes(a.focus)) return 'invalid'
+  if (a.targetId !== undefined && !s.projects.some((p) => p.id === a.targetId)) return 'notFound'
+  s.founder.focus = a.focus
+  if (a.focus === 'talk' && a.targetId !== undefined) s.founder.focusTarget = a.targetId
+  else delete s.founder.focusTarget
+  return null
+}
+
 const setSpeed: Handler<'setSpeed'> = ({ s }, a) => {
   if (![0, 1, 2, 4].includes(a.speed)) return 'invalid'
   s.time.speed = a.speed
@@ -789,6 +799,7 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   refreshModule,
   cancelModule,
   founderAction,
+  setFounderFocus,
   setSpeed,
   setAdBudget,
   setAdFocus,

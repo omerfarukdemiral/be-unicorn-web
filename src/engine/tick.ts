@@ -8,7 +8,7 @@ import { applyDefaultDecision, applyDueEffects, fireCalendar, maybeShowDecision 
 import { maturityRates, recomputeDerived, type Outputs } from './derive'
 import { accrueMonth, amortizeTechDebt, checkGoals, checkPaydayDesk, checkReleases, freezeModuleMeasures, ledgerOf, payday } from './loop'
 import { dailyEndgame } from './endgame'
-import { completeFounderAction, dailyContracts, dailyFounder, regenEnergy } from './founder'
+import { completeFounderAction, dailyContracts, dailyFounder, regenEnergy, runFocus } from './founder'
 import { flowProjectUsers, syncProjectUsers, updateSize } from './modules'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
@@ -79,6 +79,7 @@ function advance(s: GameState, content: EngineContent, rng: Rng, dt: number): vo
     daily(s, content, rng, d)
     if (s.gameOver) return
   }
+  runFocus(s)
 }
 
 /**

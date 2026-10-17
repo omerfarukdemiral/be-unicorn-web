@@ -27,6 +27,7 @@ import {
   type Dept,
   type EngineContent,
   type FounderActionKind,
+  type FounderFocus,
   type GameEvent,
   type GameEventKind,
   type GameState,
@@ -786,31 +787,23 @@ function founder(c: Ctx, cfg: BotConfig, careless = false): void {
     c.mem.salesDay = c.s.time.day
     return
   }
-  if (c.s.projects.some((p) => p.maturity < 1) && go('talkToUsers')) return
-  // A sensible player stops once the circle is used up ("tanıdık çevren tükeniyor").
-  if (c.s.stage <= 1 && (c.s.derived.findUsers?.factor ?? 1) >= 0.5 && go('findUsers')) return
-  if (!careless) spareMoves(c, go)
+  if (!careless) focus(c)
+  // Careless sets the focus once, the way a casual player would, and never looks at it again.
+  else if (c.s.founder.focus === undefined) c.act({ type: 'setFounderFocus', focus: 'users' })
 }
 
 /**
- * GAMEPLAY V2 §7.1 "use it or lose it": moves that would expire unspent at the week's refill go to the light verbs
- * (talks feed the next update, a find brings a few users), the least used one first so no single verb crowds the run
- * (topActionShare). One move is kept back: a founder does not burn the whole week on filler. Pep talks and coffees stay
- * on their own triggers above: spent as filler they stack morale and reputation and the good bots outrun the rival.
+ * Founder focus (fix round 1): the engine repeats the focused light verb (garage: whenever free; on the budget: the
+ * week's leftover moves), so the bot only switches it: talks while a product is unfinished (the old routine's first
+ * call), then in the garage / Pre-seed users while the month's circle still returns half; later talks (they feed the
+ * next update).
+ * A new game has no focus (the founder codes).
  */
-const SPARE_VERBS: readonly FounderActionKind[] = ['talkToUsers', 'findUsers']
-const SPARE_KEEP_MOVES = 1
-function spareMoves(c: Ctx, go: (kind: FounderActionKind) => boolean): void {
-  const m = c.s.derived.moves
-  if (!m || m.left <= SPARE_KEEP_MOVES || m.resetDay - c.s.time.day > m.left + 1) return
-  const order = [...SPARE_VERBS].sort((a, b) => (c.mem[`spare:${a}`] ?? 0) - (c.mem[`spare:${b}`] ?? 0))
-  for (const kind of order) {
-    if (kind === 'talkToUsers' && !c.s.projects.length) continue
-    if (go(kind)) {
-      c.mem[`spare:${kind}`] = (c.mem[`spare:${kind}`] ?? 0) + 1
-      return
-    }
-  }
+function focus(c: Ctx): void {
+  const findOk = (c.s.derived.findUsers?.factor ?? 1) >= balance.FOCUS_FIND_MIN_FACTOR
+  const unfinished = c.s.projects.some((p) => p.maturity < 1)
+  const want: FounderFocus = c.s.stage <= 1 && !unfinished && findOk ? 'users' : 'talk'
+  if ((c.s.founder.focus ?? 'build') !== want) c.act({ type: 'setFounderFocus', focus: want })
 }
 
 /**

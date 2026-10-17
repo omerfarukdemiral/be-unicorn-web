@@ -647,6 +647,19 @@ export const FOUNDER_ACTION_DEFS: Readonly<Record<FounderActionKind, FounderActi
   rest: { stage: 0, durationDays: 2, energy: 0, cooldownDays: 0, moves: 0 },
   refactorSprint: { stage: TECH_DEBT_MIN_STAGE, durationDays: 1, energy: 15, cooldownDays: REFACTOR_COOLDOWN_DAYS, moves: MOVE_COST.refactorSprint },
 }
+/**
+ * Founder focus (fix round 1, 250–320 clicks a run on the two light verbs): the founder repeats the focused verb on
+ * their own. Garage: whenever it is free (cooldown, energy) and leaves at least FOCUS_ENERGY_FLOOR energy; a 'users'
+ * focus pauses while the month's circle returns less than FOCUS_FIND_MIN_FACTOR (the founder codes instead). On the
+ * move budget the focus takes the week's leftover moves only: it starts when the days to the refill are no more than
+ * the moves left + FOCUS_KEEP_MOVES (they would expire), so the week's own verbs keep first call, and it leaves
+ * FOCUS_KEEP_MOVES in hand for a surprise (a leaver's talk, a renewal); a due round meeting keeps one back too.
+ * [DENGE] Keeping one is the old bots' filler rule ("a founder does not burn the whole week on filler"): spending every
+ * move took vcRocket's Unicorn under 55 min (sim, 12 seeds: 54.4).
+ */
+export const FOCUS_ENERGY_FLOOR = 25
+export const FOCUS_KEEP_MOVES = 1
+export const FOCUS_FIND_MIN_FACTOR = 0.5
 export const FIND_USERS_MIN = 3
 export const FIND_USERS_MAX = 6
 /**

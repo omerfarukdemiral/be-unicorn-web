@@ -572,7 +572,17 @@ export interface FounderState {
   lowEnergyDays: number
   /** Weekly move budget (GAMEPLAY V2 §7.1), from Pre-seed on; older saves default lazily (founder.movesOf). */
   moves?: FounderMoves
+  /**
+   * The founder's standing focus (fix round 1): 'users' repeats "Elle kullanıcı bul", 'talk' "Kullanıcıyla konuş" on
+   * its own (founder.runFocus), 'build' leaves the founder coding. Missing (a new game, older saves) = 'build'.
+   */
+  focus?: FounderFocus
+  /** 'talk' focus: the project to talk about (missing = the least mature one). */
+  focusTarget?: string
 }
+
+export const FOUNDER_FOCI = ['users', 'talk', 'build'] as const
+export type FounderFocus = (typeof FOUNDER_FOCI)[number]
 
 /** Moves left this week and the day the week began (refilled on every day % 7 === 0). */
 export interface FounderMoves {
@@ -1768,6 +1778,8 @@ export type Action =
   | { type: 'cancelModule'; projectId: ProjectId }
   // Founder
   | { type: 'founderAction'; kind: FounderActionKind; targetId?: string }
+  /** The standing focus the founder repeats every day until changed (targetId: the project a 'talk' focus is about). */
+  | { type: 'setFounderFocus'; focus: FounderFocus; targetId?: string }
   // Controls & growth
   | { type: 'setSpeed'; speed: GameSpeed }
   | { type: 'setAdBudget'; amount: number }

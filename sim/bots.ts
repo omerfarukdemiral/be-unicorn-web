@@ -393,7 +393,7 @@ export type DecisionPolicy = 'best' | 'worst' | 'first'
 
 /** World beats the player sees (not their own clicks): the dead-time metric during rounds counts gaps between these. */
 const BEAT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([
-  'roundStarted', 'roundWeek', 'roundClosed', 'payday', 'release', 'decisionShown', 'conceptQueued', 'milestone',
+  'roundStarted', 'roundWeek', 'roundClosed', 'roundFailed', 'payday', 'release', 'decisionShown', 'conceptQueued', 'milestone',
   'goalDone', 'delayedEffect', 'projectLaunched', 'resigned', 'bankruptWarning', 'roundWindow', 'payrollMissed',
 ])
 /** Beats of the dead-time metric: world beats + the founder's own move landing, a hire walking in, a visitor. */
@@ -1656,7 +1656,8 @@ export function playBot(
         lastBeat = e.day
       }
       if (e.kind === 'roundStarted') inRound = true
-      if (e.kind === 'roundClosed') inRound = false
+      // A failed round ends the window too (fix round 9: its gaps until the next round counted as round gaps, 40 s).
+      if (e.kind === 'roundClosed' || e.kind === 'roundFailed') inRound = false
     }
     seenId = s.events[s.events.length - 1]?.id ?? seenId
     if (s.time.day <= DAYS_5_MIN) c5 = s.concepts.learned.length

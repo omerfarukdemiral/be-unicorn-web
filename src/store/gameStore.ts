@@ -82,8 +82,8 @@ export const EFFORT_CRISIS_KINDS: ReadonlySet<GameEventKind> = new Set<GameEvent
 /** Game days at 1× after an important moment before 4× comes back (~6 s at 1×, SECONDS_PER_DAY = 2). */
 export const SLOWDOWN_WINDOW_DAYS = 3
 
-/** NEW-5: real time an important moment holds 1× before the player's speed comes back. */
-export const SLOWDOWN_MS = 3000
+/** NEW-5: wall time an important moment holds 1× before the player's speed comes back (≤ 3 s with the timer slack). */
+export const SLOWDOWN_MS = 2800
 
 /** True while the store itself sends setSpeed (the slowdown and its restore): such a call keeps the pending restore. */
 let autoSpeed = false
@@ -822,17 +822,26 @@ function afterStep(prev: GameState, next: GameState): void {
   if (ui.slowOnMoments && next.time.speed === 4 && hasImportantMoment(prev, next)) {
     autoSetSpeed(1)
     useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownAt: performance.now(), slowdownResumeDay: resumeDay } }))
+    // NEW-5: a wall-clock timer ends the hold on time even when frames are slow (a busy scene ticks a few times a second).
+    if (typeof window !== 'undefined') window.setTimeout(endSlowdownIfDue, SLOWDOWN_MS + 20)
     return
   }
-  if (ui.slowdownResumeDay === null) return
-  // NEW-5: the moment holds 1× for SLOWDOWN_MS of real time (a pause or an open card stops ticks meanwhile), then the
-  // player's speed comes back. A payday miss, the runway warning or a round close no longer keep 1× until a tap; only
-  // an urgent decision card still waiting holds it (its default lands in days).
-  if (isUrgentCard(next.decisions.active?.cardId)) return
+  endSlowdownIfDue()
+}
+
+/**
+ * NEW-5: the moment holds 1× for SLOWDOWN_MS of wall time (performance.now; a pause stops it meanwhile), then the
+ * player's speed comes back. A payday miss, the runway warning or a round close never keep 1× until a tap; only an
+ * urgent decision card still waiting holds it (its default lands in days), and an effort hold owns the speed.
+ */
+function endSlowdownIfDue(): void {
+  const { ui, state } = useGameStore.getState()
+  if (ui.slowdownResumeDay === null || ui.effortHold || state.gameOver) return
+  if (isUrgentCard(state.decisions.active?.cardId)) return
   if (ui.pauseReasons.length > 0) return
   if (ui.slowdownAt !== null && performance.now() - ui.slowdownAt < SLOWDOWN_MS) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
-  if (useGameStore.getState().state.time.speed === 1) autoSetSpeed(ui.chosenSpeed > 1 ? ui.chosenSpeed : 4)
+  if (state.time.speed === 1) autoSetSpeed(ui.chosenSpeed > 1 ? ui.chosenSpeed : 4)
 }
 
 /**

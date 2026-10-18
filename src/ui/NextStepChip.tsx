@@ -12,6 +12,7 @@ import { t } from './i18n'
 import { cx } from './primitives'
 import { followStep, stepShort, stepText } from './loopUi'
 import { useIsMobile } from './hooks'
+import { nextStepShown } from './layout/stripRules'
 
 export interface NextStepView {
   step: NextStep | undefined
@@ -52,6 +53,15 @@ export function useNextStep(): NextStepView {
     }),
   )
 }
+
+/** The goal chip has something to show (the same rule the strip and the stage cards use). */
+export function useGoalChipShown(): boolean {
+  const step = useNextStep()
+  return nextStepShown({ hasStep: !!step.step, startCall: step.startCall, stepId: step.step?.id, canStartRound: step.canStartRound, over: step.over, sheetOpen: false })
+}
+
+/** Round 9: the phone sheet starts this much lower while the chip shows, so the chip stays on screen above it. */
+export const PHONE_CHIP_ROW = 44 + 8
 
 /** N-C: the chip rests this long after a tap. */
 export const TAP_REST_MS = 1000

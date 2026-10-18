@@ -112,6 +112,12 @@ function MobileBar() {
         <div data-scene-island="" className="ui-card pointer-events-auto flex min-w-0 items-center px-1" style={{ height: MOBILE_TOP_H }}>
           <GaugeRow className="flex-1 [&>*]:shrink-0" />
         </div>
+        {/* Round 9: with the phone sheet up the goal chip stays, in a row above the sheet (RightPanel leaves it room). */}
+        {sheetOpen && (
+          <div className="absolute left-0 top-[calc(100%+8px)] flex max-w-full">
+            <GoalChip phone />
+          </div>
+        )}
         {!sheetOpen && (
           <div className="absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col items-start gap-2">
             <div data-scene-obstacle="" data-scene-island="" className="ui-card pointer-events-auto flex max-w-full flex-col px-2.5 pb-1.5">

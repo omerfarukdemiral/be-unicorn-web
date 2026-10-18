@@ -35,6 +35,7 @@ import { SettingsPanel } from './panels/SettingsPanel'
 import { RoadmapPanel } from './panels/RoadmapPanel'
 import { LeaderboardPanel } from './panels/LeaderboardPanel'
 import { LayoutPanel } from './panels/LayoutPanel'
+import { PHONE_CHIP_ROW, useGoalChipShown } from './NextStepChip'
 
 function panelMeta(p: Panel): { icon: IconName; title: string } {
   switch (p.kind) {
@@ -160,6 +161,8 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
   const mobile = useIsMobile()
   const mode = useLayoutMode()
   const width = usePanelWidth(mode)
+  // Round 9: the phone goal chip keeps its row above the sheet.
+  const chipRow = useGoalChipShown()
   if (!panel) return null
 
   const meta = panelMeta(panel)
@@ -212,7 +215,7 @@ export function RightPanel({ renderPreview }: { renderPreview?: RenderPreview })
         data-scene-sheet=""
         aria-label={meta.title || t('panel.label')}
         className="ui-card pointer-events-auto absolute z-20 flex animate-slide-up flex-col overflow-hidden shadow-[var(--shadow-panel)]"
-        style={{ left: EDGE, right: EDGE, top: EDGE + MOBILE_TOP_H + GAP, bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${MOBILE_BOTTOM_TABS_H + GAP}px)` }}
+        style={{ left: EDGE, right: EDGE, top: EDGE + MOBILE_TOP_H + GAP + (chipRow ? PHONE_CHIP_ROW : 0), bottom: `calc(max(${EDGE}px, env(safe-area-inset-bottom, 0px)) + ${MOBILE_BOTTOM_TABS_H + GAP}px)` }}
       >
         {stripe}
         <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-border-strong" />

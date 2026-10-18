@@ -4,6 +4,7 @@ import { NEXT_MOVES, type Action, type NextMove, type NextStep } from '../engine
 import { useGameStore } from '../store/gameStore'
 import { chipTarget, markChipTarget } from './chipTarget'
 import { CONFIRM_MOVES, confirmPlace, followStep } from './loopUi'
+import { onDeclined, pendingConfirm } from './chipConfirm'
 
 const step = (move: NextMove): NextStep => ({ id: 'grow', index: 6, total: 6, move })
 
@@ -51,5 +52,27 @@ describe('chip move split', () => {
     expect(place.place).toEqual({ panel: { kind: 'team' } })
     tap('hireEng')
     expect(chipTarget()).toBe(place.key)
+  })
+
+  it('round 8: closing the place without confirming is heard as declined; confirming is not', () => {
+    const heard: NextMove[] = []
+    const off = onDeclined((m) => heard.push(m))
+    try {
+      useGameStore.getState().newGame({ seed: 4, founderXp: 0, runIndex: 0 })
+      tap('newProduct')
+      expect(pendingConfirm()?.move).toBe('newProduct')
+      useGameStore.getState().closePanel()
+      expect(heard).toEqual(['newProduct'])
+      // Confirmed in the place: the watch ends, closing says nothing.
+      tap('newProduct')
+      const pick = confirmPlace(useGameStore.getState().state, 'newProduct').key?.split(':')[1]
+      if (pick) {
+        expect(useGameStore.getState().dispatch({ type: 'startProject', category: pick as never }).ok).toBe(true)
+        useGameStore.getState().closePanel()
+        expect(heard).toEqual(['newProduct'])
+      }
+    } finally {
+      off()
+    }
   })
 })

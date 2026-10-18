@@ -27,6 +27,7 @@ import {
   codexCount,
   effectiveSpeed,
   resumeSpeed,
+  endOfRunUi,
   hasImportantMoment,
   hasInterrupt,
   IMPORTANT_EVENT_KINDS,
@@ -582,6 +583,15 @@ describe('focus (CORE_LOOP phase 0)', () => {
     const day = store().state.time.day
     for (let i = 0; i < 400 && store().state.time.day < day + SLOWDOWN_WINDOW_DAYS * 3; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.speed).toBe(2)
+  })
+
+  it('NEW-4: the end of a run closes the panel and the open bubble', () => {
+    store().openPanel({ kind: 'team' })
+    store().setBubbleOpen('desk:hire')
+    const ui = endOfRunUi(store().ui, store().state)
+    expect(ui.panel).toBeNull()
+    expect(ui.bubbleOpen).toBeNull()
+    expect(ui.pauseReasons).not.toContain('bubble')
   })
 
   it('N6: a pause that closes during the slowdown hands the player 4× back; a pause key resumes 4× too', () => {

@@ -11,7 +11,7 @@ import * as B from '../engine/balance'
 import type { DecisionCardId, GameState, NpcRole } from '../engine/types'
 import { BubbleAnchor, BubbleLayoutRegistry, useBubbleLayoutDriver } from './BubbleAnchor'
 import type { BubbleRenderer, DeskTopic, StaffNeed, VisitorTopic, WorldBubble } from './bubbles'
-import { staffAttention } from '../engine/loopSelectors'
+import { hireIsRed, staffAttention } from '../engine/loopSelectors'
 import { moduleAsk } from '../engine/modules'
 import { firstFreeDesk } from '../engine/office'
 import { UI_TONES } from './palette'
@@ -79,7 +79,8 @@ export function deskTopics(s: GameState, bubbleOpen: string | null): { topic: De
   const renewal = s.derived.renewals?.[0]
   if (renewal) out.push({ topic: 'renewal', refId: renewal.id })
   // Hiring asks while someone waits and a desk stands free (nextStep never names 'hire' any more; a free desk does).
-  if (s.candidates.length > 0 && firstFreeDesk(s.office) !== undefined) out.push({ topic: 'hire' })
+  // NEW-4: not when every offer is in the red (it stays reachable from the Ekip tab), never after the run ended.
+  if (!s.gameOver && s.candidates.length > 0 && firstFreeDesk(s.office) !== undefined && s.candidates.some((c) => !hireIsRed(s, c.salary))) out.push({ topic: 'hire' })
   // A finished product with room for a module (or a stale one): the desk asks about ONE project at a time, oldest first.
   const ask = moduleAsk(s)
   if (ask) out.push({ topic: 'module', refId: ask.projectId })

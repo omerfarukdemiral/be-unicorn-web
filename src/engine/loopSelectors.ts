@@ -344,6 +344,20 @@ export function upgradeCost(cur: { price: number }, next: { price: number }): nu
  * What a commit button would do to the money (§4.4): `cashDelta` is paid now (a purchase: negative), `burnDelta` is
  * added to the monthly burn (a hire: its salary). Death day at payday granularity.
  */
+/**
+ * NEW-4: a hire offer in the red (HireRunway): the first payday would bounce, or the runway left falls under
+ * HIRE_RUNWAY_MIN months. `deskCost` = the desk the hire would buy too.
+ */
+export function hireIsRed(s: GameState, salary: number, deskCost = 0): boolean {
+  const p = previewSpend(s, { cashDelta: -deskCost, burnDelta: salary })
+  return p.paydayShort || (p.runwayAfter !== null && p.runwayAfter < B.HIRE_RUNWAY_MIN)
+}
+
+/** NEW-4: the first payday after this hire would bounce ("Maaşa yetmez"): the hire key is disabled. */
+export function hireBouncesPayday(s: GameState, salary: number, deskCost = 0): boolean {
+  return previewSpend(s, { cashDelta: -deskCost, burnDelta: salary }).paydayShort
+}
+
 export function previewSpend(s: GameState, delta: { cashDelta?: number; burnDelta?: number } = {}): SpendPreview {
   const c = cashCore(s, delta.cashDelta ?? 0, delta.burnDelta ?? 0)
   const deathDay = deathDayOf(c)

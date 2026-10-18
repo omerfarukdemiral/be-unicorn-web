@@ -344,6 +344,8 @@ function HireRow({ c, armed, onHire }: { c: Candidate; armed: boolean; onHire: (
       primary={armed}
       title={t('team.hire')}
       icon={skill ? { icon: CATEGORY_ICON[skill.category], color: CATEGORY_COLOR[skill.category] } : undefined}
+      // NEW-4: "Maaşa yetmez" (the first payday would bounce) cannot be hired.
+      disabled={preview.paydayShort}
       effects={
         <span className="flex flex-wrap items-center gap-1">
           <ChipRow

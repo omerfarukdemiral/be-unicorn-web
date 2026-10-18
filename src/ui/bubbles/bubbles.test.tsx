@@ -145,6 +145,16 @@ describe('routed bubbles', () => {
     expect(out.match(/Kasa/g)?.length).toBeGreaterThanOrEqual(Math.min(3, store().state.candidates.length))
   })
 
+  it('NEW-4: a "Maaşa yetmez" offer cannot be hired from the desk', () => {
+    const st = store().state
+    if (!st.candidates[0]) return
+    useGameStore.setState({ state: { ...st, stats: { ...st.stats, cash: 0 } } })
+    openBubble('desk:hire')
+    const out = html(createElement(DeskBubble, { bubbleKey: 'desk:hire', topic: 'hire' }))
+    expect(out).toContain('Maaşa yetmez')
+    expect(out).toMatch(/<button[^>]*disabled=""/)
+  })
+
   it('desk project: one tile per category', () => {
     openBubble('desk:project')
     const out = html(createElement(DeskBubble, { bubbleKey: 'desk:project', topic: 'project' }))

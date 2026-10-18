@@ -118,6 +118,18 @@ describe('routeBubbles: who asks', () => {
     expect(open(s)).toEqual([])
   })
 
+  it('NEW-4: hiring does not ask when every offer is in the red, nor after the run ended', () => {
+    const s = game()
+    for (const x of s.office.slots) if (x.type === 'desk' && x.id !== 'founder' && x.ring === 1 && x.occupantId === undefined) x.itemId = 'desk-basic'
+    s.candidates = [{ id: 'c1', salary: 2_000 } as GameState['candidates'][number]]
+    expect(keys(open(s))).toEqual(['desk:hire'])
+    s.stats.cash = 500
+    expect(open(s)).toEqual([])
+    s.stats.cash = 1_000_000
+    s.gameOver = { kind: 'bankrupt' } as GameState['gameOver']
+    expect(open(s)).toEqual([])
+  })
+
   it('round window and first project are desk topics', () => {
     const s = game()
     s.derived.canStartRound = true

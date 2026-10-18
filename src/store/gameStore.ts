@@ -454,12 +454,20 @@ function lastEventId(s: GameState): number {
 let pendingDays = 0
 
 /** Records XP once the run ends so a reload still carries it into the next run. */
+/** NEW-4: the UI once the run is over: every panel, bubble, placement and edit closed (the end overlay stays). */
+export function endOfRunUi(ui: UiState, state: GameState): UiState {
+  return withPause({ ...ui, panel: null, panelBack: null, bubbleOpen: null, decisionExpanded: false, placing: null, layoutEdit: null }, state)
+}
+
 function onGameOver(s: GameState): void {
   if (!s.gameOver) return
   writeProfile({ founderXp: s.meta.founderXp + s.gameOver.xpEarned, runIndex: s.meta.runIndex + 1 })
   clearSave()
   // A reload after the end shows the start card, not an auto-resume (there is nothing left to resume).
   clearRunOnScreen('gameOver')
+  // NEW-4: the run is over: no panel, bubble, placement or edit stays up behind (or answers under) the end screen.
+  // The end overlay itself comes from ModalHost.
+  useGameStore.setState((st) => ({ ui: endOfRunUi(st.ui, st.state) }))
 }
 
 function freshState(opts?: Partial<NewGameOptions>): GameState {

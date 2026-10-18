@@ -226,8 +226,9 @@ export function CandidateCard({
         <Button
           tone="commit"
           size="sm"
-          disabled={deskCost === null}
-          title={deskCost === null ? t('team.noSlot') : undefined}
+          // NEW-4: "Maaşa yetmez" (the first payday would bounce) cannot be hired.
+          disabled={deskCost === null || preview.paydayShort}
+          title={deskCost === null ? t('team.noSlot') : preview.paydayShort ? t('team.runwayShort') : undefined}
           cost={deskCost ? t('team.deskCost', { v: money(deskCost) }) : undefined}
           onClick={onHire}
         >

@@ -132,6 +132,8 @@ export interface UiState {
   slowdownAt: number | null
   /** Game day the automatic slowdown hands 4× back (null = no restore pending; the player's own setSpeed clears it). */
   slowdownResumeDay: number | null
+  /** The player's last own running speed (never an automatic 1×): what a pause, a slowdown or a hold hands back (N6). */
+  chosenSpeed: GameSpeed
   /**
    * An effort crisis (burnout, a resignation notice) dropped the speed to 1×: the speed to bring back (`prevSpeed`),
    * the people in crisis and the last game day to hold. Ends when none of them is still burnt out / leaving, or on

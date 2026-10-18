@@ -190,6 +190,7 @@ export function ChoiceRow({
   title,
   icon,
   danger,
+  focused,
 }: {
   label: ReactNode
   chips?: readonly Chip[]
@@ -202,6 +203,8 @@ export function ChoiceRow({
   icon?: BubbleMark
   /** An armed destructive tap ("Projeden çıkar? Onayla"): red outline. */
   danger?: boolean
+  /** The founder's standing focus (N3): marked like the bar slot, a brand ring, the repeat mark and "Odak". */
+  focused?: boolean
 }) {
   const mobile = useIsMobile()
   const hasFx = !!effects || (chips?.length ?? 0) > 0
@@ -211,6 +214,7 @@ export function ChoiceRow({
       type="button"
       disabled={disabled}
       title={title}
+      aria-pressed={focused === undefined ? undefined : focused}
       onClick={(e) => {
         e.stopPropagation()
         onClick()
@@ -220,6 +224,8 @@ export function ChoiceRow({
         mobile && 'min-h-11',
         danger
           ? 'border-negative bg-surface text-negative-ink ring-1 ring-negative'
+          : focused
+          ? 'border-brand bg-surface text-ink ring-2 ring-brand'
           : filled
           ? 'border-ink bg-ink text-on-ink enabled:hover:opacity-90'
           : primary
@@ -230,6 +236,12 @@ export function ChoiceRow({
       <span className="flex w-full min-w-0 items-center gap-1.5">
         {icon && <Icon name={icon.icon} size={15} tone={icon.color} className="shrink-0" />}
         <span className="font-text line-clamp-2 min-w-0 text-[13px] font-semibold leading-snug">{label}</span>
+        {focused && (
+          <span data-focus-mark="" className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-brand py-0.5 pl-1 pr-1.5 text-[11px] font-bold leading-none text-on-ink">
+            <Icon name="refresh" size={10} />
+            {t('focus.tag')}
+          </span>
+        )}
       </span>
       {effects ?? (chips && chips.length > 0 && <ChipRow chips={chips} />)}
     </button>

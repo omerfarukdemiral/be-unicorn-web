@@ -63,7 +63,15 @@ export interface FounderActionView {
   run: () => void
 }
 
-export function useFounderActions(): { energy: number; low: boolean; moves: MovesView | undefined; day: number; actions: FounderActionView[] } {
+export function useFounderActions(): {
+  energy: number
+  low: boolean
+  moves: MovesView | undefined
+  day: number
+  actions: FounderActionView[]
+  focus: FounderFocus
+  setFocus: (focus: FounderFocus) => void
+} {
   const f = useGameStore(
     useShallow((s) => ({
       energy: s.state.founder.energy,
@@ -115,8 +123,9 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
   const run = (kind: FounderActionKind) => {
     const focus = FOCUS_OF[kind]
     if (focus) {
-      // A second tap on the focused slot drops the focus: the founder goes back to coding.
-      if (f.focus === focus) return void dispatch({ type: 'setFounderFocus', focus: 'build' })
+      // A second tap on the focused slot keeps it (the slot pulses, FounderSlot): dropping it silently left the founder
+      // on 'build', which has no slot. The way back to coding is "Kod yaz" in the desk bubble (fix round 2, N3).
+      if (!focusTap(f.focus, focus)) return
       const targetId = kind === 'talkToUsers' && selection?.kind === 'project' ? selection.id : undefined
       return void dispatch({ type: 'setFounderFocus', focus, ...(targetId ? { targetId } : {}) })
     }
@@ -204,7 +213,15 @@ export function useFounderActions(): { energy: number; low: boolean; moves: Move
       run: () => run(kind),
     }
   })
-  return { energy: f.energy, low: f.energy < LOW_ENERGY, moves, day: f.day, actions }
+  const setFocus = (focus: FounderFocus) => {
+    if (focus !== f.focus) dispatch({ type: 'setFounderFocus', focus })
+  }
+  return { energy: f.energy, low: f.energy < LOW_ENERGY, moves, day: f.day, actions, focus: f.focus, setFocus }
+}
+
+/** The focus a tap on a focus slot sets, or null: the slot already in focus keeps it (N3). */
+export function focusTap(current: FounderFocus, tapped: FounderFocus): FounderFocus | null {
+  return current === tapped ? null : tapped
 }
 
 /** The founder actions a tap turns into the standing focus (fix round 1), and the focus each one sets. */
@@ -247,12 +264,15 @@ export function FounderSlot({
   const idle = a.disabled && !a.running
   const frac = a.running ? a.runFrac : a.cdFrac > 0 && !a.locked ? 1 - a.cdFrac : null
   const [peek, setPeek] = useState(false)
+  // A tap on the slot already in focus: a small pulse says "already on it" (the key remounts its icon to replay it).
+  const [pulse, setPulse] = useState(0)
   useEffect(() => {
     if (!peek) return
     const id = window.setTimeout(() => setPeek(false), PEEK_MS)
     return () => window.clearTimeout(id)
   }, [peek])
   const onClick = () => {
+    if (a.focused) setPulse((n) => n + 1)
     // Locked: show what opens it, never a panel. Out of moves: the engine answers ("Haftaya", strip 2.6 s).
     if (a.locked) return onPeek ? onPeek(a) : setPeek(true)
     if (a.outOfMoves) return a.run()
@@ -285,12 +305,14 @@ export function FounderSlot({
         )}
         style={{ width: size, height: size }}
       >
-        <Icon
-          name={FOUNDER_ICON[a.kind]}
-          size={a.locked ? 18 : 22}
-          className={cx('shrink-0', a.locked ? '-mt-2.5 text-ink-3 opacity-40' : (idle || a.dead) && 'text-ink-3')}
-          style={idle || a.dead ? undefined : { color: iconTone(hue) }}
-        />
+        <span key={pulse} data-pulse={pulse || undefined} className={cx('grid place-items-center', pulse > 0 && 'animate-pop-once')}>
+          <Icon
+            name={FOUNDER_ICON[a.kind]}
+            size={a.locked ? 18 : 22}
+            className={cx('shrink-0', a.locked ? '-mt-2.5 text-ink-3 opacity-40' : (idle || a.dead) && 'text-ink-3')}
+            style={idle || a.dead ? undefined : { color: iconTone(hue) }}
+          />
+        </span>
         {a.locked && (
           <>
             <span aria-hidden="true" className="absolute right-0.5 top-0.5 text-ink-2">

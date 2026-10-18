@@ -26,6 +26,7 @@ import {
   codexAfter,
   codexCount,
   effectiveSpeed,
+  resumeSpeed,
   hasImportantMoment,
   hasInterrupt,
   IMPORTANT_EVENT_KINDS,
@@ -581,6 +582,21 @@ describe('focus (CORE_LOOP phase 0)', () => {
     const day = store().state.time.day
     for (let i = 0; i < 400 && store().state.time.day < day + SLOWDOWN_WINDOW_DAYS * 3; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.speed).toBe(2)
+  })
+
+  it('N6: a pause that closes during the slowdown hands the player 4× back; a pause key resumes 4× too', () => {
+    slowByRelease()
+    expect(store().state.time.speed).toBe(1)
+    expect(resumeSpeed(store())).toBe(4)
+    store().setBubbleOpen('desk:actions')
+    expect(store().ui.pauseReasons).toContain('bubble')
+    store().setBubbleOpen(null)
+    expect(store().state.time.speed).toBe(4)
+    expect(store().ui.slowdownResumeDay).toBeNull()
+    // The player pauses inside a slowdown: resuming means 4×, not the automatic 1×.
+    slowByRelease()
+    store().dispatch({ type: 'setSpeed', speed: 0 })
+    expect(resumeSpeed(store())).toBe(4)
   })
 
   it('the slowdown can be turned off', () => {

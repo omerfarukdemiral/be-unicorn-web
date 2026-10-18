@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { GameSpeed } from '../engine/types'
 import { STAGES } from '../content'
-import { blockingOverlay, effectiveSpeed, useGameStore } from '../store/gameStore'
+import { blockingOverlay, effectiveSpeed, resumeSpeed, useGameStore } from '../store/gameStore'
 import type { PauseReason, UiState } from '../store/types'
 import { Icon } from './icons'
 import { t } from './i18n'
@@ -41,6 +41,8 @@ export interface TimeStatus {
   effective: GameSpeed
   /** The player's chosen speed (what time returns to once focus pauses clear). */
   chosen: GameSpeed
+  /** The speed that comes back after a pause (N6): the player's own, also during a moment's automatic 1×. */
+  resume: GameSpeed
   /** Why time is still (null = flowing). A focus pause wins over the player's own pause in the label. */
   hold: TimeHold
   runStarted: boolean
@@ -54,7 +56,7 @@ export function useTimeStatus(): TimeStatus {
       const chosen = st.state.time.speed
       const reason = st.ui.pauseReasons[0]
       const hold: TimeHold = effective > 0 ? null : reason ? reason : !st.ui.runStarted ? 'start' : 'manual'
-      return { effective, chosen, hold, runStarted: st.ui.runStarted, gameOver: !!st.state.gameOver }
+      return { effective, chosen, resume: resumeSpeed(st), hold, runStarted: st.ui.runStarted, gameOver: !!st.state.gameOver }
     }),
   )
 }

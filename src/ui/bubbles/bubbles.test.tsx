@@ -140,6 +140,9 @@ describe('routed bubbles', () => {
     const out = html(createElement(DeskBubble, { bubbleKey: 'desk:hire', topic: 'hire' }))
     expect(out).toContain(c.name)
     expect(out).toContain('Maaş')
+    // N1: the same runway phrase as the Ekip panel ("Kasa N ay taşır").
+    expect(out).toContain("taşır")
+    expect(out.match(/Kasa/g)?.length).toBeGreaterThanOrEqual(Math.min(3, store().state.candidates.length))
   })
 
   it('desk project: one tile per category', () => {

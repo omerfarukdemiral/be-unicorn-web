@@ -3,7 +3,7 @@
 // Merged into UI_TEXT by the content barrel (index.ts); keys never collide with strings.ts / timeText.ts.
 export const LOOP_TEXT: Record<string, string> = {
   'time.resumeTo': '{v}× dönecek',
-  // Short focus-pause reasons for the HUD pill ("Karar · 1× dönecek").
+  // Short focus-pause reasons for the HUD pill ("Karar · 4× dönecek": the player's own speed, N6).
   'time.reasonShort.decision': 'Karar',
   'time.reasonShort.concept': 'Defter',
   'time.reasonShort.modal': 'Ekran',
@@ -229,6 +229,11 @@ export const LOOP_TEXT: Record<string, string> = {
   'focus.on': 'Odak bu, kurucu her gün kendisi yapar',
   'focus.onWeek': 'Odak bu, haftanın artan hamleleri buna gider',
   'focus.off': 'Dokun, kurucunun odağı bu olsun',
+  // Founder desk bubble (fix round 2, N3): the three foci as rows; "Kod yaz" is the way back to building.
+  'focus.tag': 'Odak',
+  'focus.row.users': 'Kullanıcı bul',
+  'focus.row.talk': 'Kullanıcıyla konuş',
+  'focus.row.build': 'Kod yaz',
   'founder.salesCall.preview': '{r} MRR · {d} günlük sözleşme · bu ay {n} tam hak',
   'founder.salesCall.saturated': 'Bu ayın pipeline’ı doldu: {r} MRR',
 }

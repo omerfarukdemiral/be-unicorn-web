@@ -3,7 +3,7 @@
 // differ by icon (▶ / ▶▶ / ▶▶▶) and fill density, never by hue (docs/GAMEPLAY_V2.md §13). ONE soft inset pill holds
 // the four segments: no box per segment, only the active one is filled (its colour tint, ink text); the chosen speed
 // during a focus pause keeps a small green underline. No frames, no dashed outlines anywhere.
-import { useRef, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import type { GameSpeed } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
@@ -40,8 +40,8 @@ function useStatusLabel(time: TimeStatus): { text: string; title: string; tone: 
     if (isFocusHold(time.hold) && time.chosen > 0) {
       const reason = t(`time.reasonShort.${time.hold}`)
       return {
-        text: t('top.speedFocus', { reason, v: time.chosen }),
-        title: t('top.speedFocusTitle', { reason: holdLabel(time.hold), v: time.chosen }),
+        text: t('top.speedFocus', { reason, v: time.resume }),
+        title: t('top.speedFocusTitle', { reason: holdLabel(time.hold), v: time.resume }),
         tone: 'ink-2',
       }
     }
@@ -64,14 +64,13 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
   const { effective, chosen } = time
   const held = effective === 0 && chosen > 0
   const playerPaused = chosen === 0
-  // Player-paused: the pause segment turns into play and resumes the last running speed.
-  const lastSpeed = useRef<GameSpeed>(1)
-  if (chosen > 0) lastSpeed.current = chosen
+  // Player-paused: the pause segment turns into play and resumes the player's own speed (N6, store resumeSpeed).
   const label = useStatusLabel(time)
 
   if (compact) {
     const idx = SPEEDS.indexOf(chosen)
-    const nextSpeed = SPEEDS[(idx + 1) % SPEEDS.length] ?? 1
+    // From a pause the pill resumes the player's speed (N6: it used to cycle back up from 1×).
+    const nextSpeed = chosen === 0 ? time.resume : (SPEEDS[(idx + 1) % SPEEDS.length] ?? 1)
     const still = effective === 0
     const now = still ? t('time.paused') : `${effective}×`
     const next = nextSpeed === 0 ? t('speed.pause') : `${nextSpeed}×`
@@ -111,7 +110,7 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
         className="ui-inset flex h-11 shrink-0 items-center gap-0.5 rounded-full p-1"
         role="group"
         aria-label={t('speed.label')}
-        title={held ? t('time.resumesAt', { v: chosen }) : undefined}
+        title={held ? t('time.resumesAt', { v: time.resume }) : undefined}
       >
         {SPEEDS.map((v) => {
           const active = effective === v
@@ -120,7 +119,7 @@ export function SpeedControl({ compact, showLabel = true }: { compact?: boolean;
               key={v}
               type="button"
               disabled={time.gameOver}
-              onClick={() => setSpeed(v === 0 && playerPaused ? lastSpeed.current : v)}
+              onClick={() => setSpeed(v === 0 && playerPaused ? time.resume : v)}
               aria-pressed={chosen === v}
               aria-label={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pause')) : t('speed.hint', { v })}
               title={v === 0 ? (playerPaused ? t('speed.play') : t('speed.pauseHint')) : t('speed.hint', { v })}

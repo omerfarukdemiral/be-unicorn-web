@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import type { EffectBundle, GameEvent, GameState, NextMove, NextStep, ValuationBreakdown } from '../engine/types'
 import { moveAction } from '../engine/loopSelectors'
 import { moduleOffers } from '../engine/modules'
+import { growthAsk, investorGrowth } from '../engine/round'
 import * as B from '../engine/balance'
 import { valuation } from '../engine/economy'
 import { cacFactors, type CacFactor } from '../engine/ads'
@@ -179,6 +180,9 @@ export function moveShort(move: NextMove, s: GameState): { label: string; value?
   switch (move) {
     case 'ads':
       return { label, value: t('move.short.perMonth', { v: money(a?.type === 'setAdBudget' ? a.amount : 0) }) }
+    case 'growthAsk':
+      // The round's ask on line 2: the investor's growth now over what they want ("%4/%8").
+      return { label, value: t('step.short.of', { v: pct(investorGrowth(s)), t: pct(growthAsk(s)) }) }
     case 'module': {
       if (a?.type !== 'buildModule') return { label }
       const p = s.projects.find((x) => x.id === a.projectId)
@@ -239,10 +243,30 @@ export function stepGo(step: NextStep): StepGo {
 }
 
 /** Chip click: opens the panel of the step (the targeted shop highlights the empty desk slot in the scene). */
+/**
+ * The bubble that holds the round meeting now: the investor's visitor bubble when they came in, else the desk's pitch
+ * bubble (same keys as render/WorldBubbles). null when no pitch is due.
+ */
+export function meetingBubbleKey(s: Pick<GameState, 'round' | 'visitors'>): string | null {
+  if (!s.round?.active || s.round.pitchDue == null) return null
+  const v = s.visitors.find((x) => x.purpose === 'round')
+  return v ? `visitor:pitch:${v.id}` : 'desk:pitch'
+}
+
 export function followStep(step: NextStep): void {
   const { openPanel, dispatch, state } = useGameStore.getState()
   if (step.move) {
     // The chip names one move: the tap does it; if the engine refuses, the place where it lives opens.
+    // The round meeting is a choice to read: the tap opens the meeting itself (its bubble), not a panel.
+    if (step.move === 'pitch') {
+      const key = meetingBubbleKey(state)
+      if (key) {
+        const st = useGameStore.getState()
+        if (st.ui.panel) st.closePanel()
+        return st.setBubbleOpen(key)
+      }
+      return openPanel({ kind: 'growth', section: 'round' }, { root: true })
+    }
     const a = moveAction(state, step.move)
     if (a && dispatch(a).ok) return
     return openPanel(step.move === 'module' ? { kind: 'projects' } : { kind: 'growth' }, { root: true })

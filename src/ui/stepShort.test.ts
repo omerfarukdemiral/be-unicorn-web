@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import { UI_TEXT } from '../content'
 import { NEXT_MOVES, NEXT_STEP_IDS, type NextStep } from '../engine/types'
-import { stepShort } from './loopUi'
+import { meetingBubbleKey, moveShort, stepShort } from './loopUi'
+import { createGame } from '../engine'
 
 const s = { stats: { users: 1240 }, finance: { mrr: 1200, valuation: 280_000 } } as never
 
@@ -30,5 +31,17 @@ describe('stepShort', () => {
     expect(stepShort(step('revenue', 5000), s).value).toContain('/$5')
     expect(stepShort(step('launch', undefined, 0.18), s).value).toContain('18')
     expect(stepShort(step('idea'), s)).toEqual({ label: 'Ürün fikri seç' })
+  })
+
+  it('growthAsk shows the investor growth over the ask on line 2', () => {
+    const g = createGame({ seed: 2 })
+    expect(moveShort('growthAsk', g).value).toMatch(/^%.*\/%/)
+  })
+
+  it('the pitch move opens the meeting: the investor visitor bubble, else the desk pitch bubble', () => {
+    expect(meetingBubbleKey({ round: undefined, visitors: [] } as never)).toBeNull()
+    const round = { active: true, pitchDue: 3 }
+    expect(meetingBubbleKey({ round, visitors: [] } as never)).toBe('desk:pitch')
+    expect(meetingBubbleKey({ round, visitors: [{ id: 'v9', purpose: 'round' }] } as never)).toBe('visitor:pitch:v9')
   })
 })

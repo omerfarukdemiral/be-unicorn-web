@@ -25,8 +25,15 @@ import { getGS, storeApi, useGS, useMockState, useSceneCovered, useUi } from './
 /** Card speakers who stand in the scene as themselves; every other card is the founder's own call (desk). */
 export const NPC_SPEAKS: ReadonlySet<NpcRole> = new Set<NpcRole>(['investor', 'customer', 'journalist'])
 
-/** At most this many bubbles ask for the player at once, so the office never turns into a notification wall. */
-export const MAX_ACTIONABLE = 3
+/**
+ * At most this many bubbles ask for the player at once, so the office never turns into a notification wall (fix round
+ * 5: 4+ bubbles and notes at once on PC read as a busy screen). The rest queue and ask as one closes.
+ */
+export const MAX_ACTIONABLE = 2
+/** Bubbles of any kind in the scene at once: a reflection or an ambient line only fills a slot the asks leave free. */
+export const MAX_WORLD = 2
+/** Ambient office lines at once (they are live notes too: one at a time). */
+export const MAX_AMBIENT = 1
 
 /** The central desk: the founder's own calls and projects. */
 export const DESK = 'desk'
@@ -133,7 +140,7 @@ export function routeCandidates(s: GameState, opts: { bubbleOpen: string | null 
 /** An answer older than this (game days) gets no reflection; covers 4 s real time at the fastest speed. */
 export const REFLECTION_FRESH_DAYS = 10
 
-/** Counts against MAX_ACTIONABLE (reflections and ambient lines do not). */
+/** Counts against MAX_ACTIONABLE (reflections and ambient lines only take a free MAX_WORLD slot). */
 export const isActionable = (l: Pick<RoutedLine, 'kind'>): boolean => l.kind === 'decision' || l.kind === 'visitor' || l.kind === 'desk' || l.kind === 'staff' || l.kind === 'person'
 
 /** Burnout and a resignation notice cost the player a person: their bubbles are pinned (E1 round 3). */
@@ -153,7 +160,7 @@ export const MAX_IDLE = 1
 export const MAX_TIRED_BORED = B.STAFF_TIRED_BORED_MAX
 
 /**
- * ≤ MAX_ACTIONABLE actionable bubbles, one per anchor, ≤ MAX_IDLE idle builders, ≤ MAX_TIRED_BORED tired / bored, the
+ * ≤ MAX_ACTIONABLE actionable bubbles (≤ MAX_WORLD of every kind), one per anchor, ≤ MAX_IDLE idle builders, ≤ MAX_TIRED_BORED tired / bored, the
  * open one first, then by priority. Pinned staff bubbles (burnout, notice) are never dropped and take slots only from
  * the others (at least one other still fits). Others pass through.
  */
@@ -184,7 +191,17 @@ export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | nu
     anchors.add(l.speakerId)
     out.push(l)
   }
-  for (const l of lines) if (!isActionable(l)) out.push(l)
+  // Reflection ("Seçtin: …") first, then one ambient line, only into slots the asks left free.
+  const rest = lines.filter((l) => !isActionable(l)).sort((a, b) => Number(b.kind === 'reflection') - Number(a.kind === 'reflection'))
+  let ambient = 0
+  for (const l of rest) {
+    if (l.key !== bubbleOpen && out.length >= MAX_WORLD) continue
+    if (l.kind === 'ambient') {
+      if (ambient >= MAX_AMBIENT) continue
+      ambient++
+    }
+    out.push(l)
+  }
   return out
 }
 

@@ -25,6 +25,7 @@ import { celebrate, sceneTime, useLayout, useSceneTimers } from './sceneRegistry
 import { useGS, useSceneCovered, useUi } from './source'
 import { useYieldToBubbles } from './yieldToBubbles'
 import { DOOR_FADE } from './walker'
+import { usePaydayCardOn } from '../ui/toastSlot'
 
 const MAX_FIGURES = 8
 const WALK_SPEED = 2.4 // world units / s
@@ -157,12 +158,14 @@ export function JuiceLayer() {
 
   // A card or the start call owns the screen: the banner and "+N" wait out of sight (they keep their clock).
   const covered = useSceneCovered()
+  // One live note at a time (fix round 5): the release toast waits while the payday card shows.
+  const paydayOn = usePaydayCardOn()
 
   return (
     <>
       <pointLight ref={light} position={[desk[0], 3.2, desk[1]]} distance={CELL * 7} decay={1.6} intensity={0} />
       <Confetti trigger={confetti} origin={desk} />
-      {wave && <ReleaseBanner key={wave.id} wave={wave} hidden={covered} />}
+      {wave && <ReleaseBanner key={wave.id} wave={wave} hidden={covered || paydayOn} />}
       {wave && <UserWave key={`w${wave.id}`} count={Math.min(MAX_FIGURES, Math.max(2, Math.round(Math.sqrt(wave.release.users))))} target={desk} />}
       {hunt && !wave && <UserWave key={`h${hunt.id}`} count={hunt.count} target={desk} />}
       {floats.length > 0 && <Floats items={floats} at={desk} hidden={covered} />}

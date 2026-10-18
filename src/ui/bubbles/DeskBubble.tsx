@@ -5,13 +5,14 @@
 // with labelled chips. The deeper views stay one tap away: Detay / Masa / Ekip close the bubble, then open the panel.
 import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { MODULE_TEXT, moduleName } from '../../content'
+import { CONTENT, MODULE_TEXT, moduleName } from '../../content'
 import * as B from '../../engine/balance'
 import { ledgerCosts } from '../../engine/economy'
 import { autoPaydayChoice } from '../../engine'
 import { actionEnergy } from '../../engine/founder'
+import { hireDeskCost } from '../../engine/office'
 import { moduleAsk, moduleOffers, projectVersion, slotsOpened } from '../../engine/modules'
-import { FOUNDER_ACTIONS, PROJECT_CATEGORIES, ROUND_SIZES, type ActionErrorCode, type PaydayChoice, type PitchOption } from '../../engine/types'
+import { FOUNDER_ACTIONS, PROJECT_CATEGORIES, type Candidate, ROUND_SIZES, type ActionErrorCode, type PaydayChoice, type PitchOption } from '../../engine/types'
 import { useGameStore } from '../../store/gameStore'
 import { renewalRows, type RenewalRow } from '../center/centerData'
 import { ChipRow, type Chip } from '../EffectChips'
@@ -25,6 +26,8 @@ import { requestOverlay } from '../modalQueue'
 import { PAYDAY_LINES, paydayView, type PaydayDesk } from '../overlays/paydayView'
 import { buildChips, MODULE_ICON, ModuleCostPreview, useBuildCost } from '../panels/ModulesSection'
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../panels/ProjectsPanel'
+import { HireRunway } from '../panels/TeamPanel'
+import { useSpendPreview } from '../widgets'
 import { cx, IconBadge } from '../primitives'
 import { candidateFit, fitChips } from '../effort'
 import { BlockedLine, ChoiceRow, closeBubble, Expandable, launch, type BubbleMark } from './Expandable'
@@ -294,8 +297,6 @@ function RenewalBubble({ bubbleKey, refId }: { bubbleKey: string; refId?: string
 
 function HireBubble({ bubbleKey }: { bubbleKey: string }) {
   const candidates = useGameStore(useShallow((s) => s.state.candidates))
-  // E3: an engineer / product hire's one category (the icon), and a tick + speed when the company builds it.
-  const state = useGameStore((s) => s.state)
   const dispatch = useGameStore((s) => s.dispatch)
   const [err, setErr] = useState<string | null>(null)
   // A hire is a monthly salary: the first tap asks "İşe al?", the second commits.
@@ -311,33 +312,51 @@ function HireBubble({ bubbleKey }: { bubbleKey: string }) {
       line={t('bubble.hire', { n: candidates.length })}
       detail={() => useGameStore.getState().openPanel({ kind: 'team' })}
     >
-      {candidates.slice(0, MAX_CANDIDATES).map((c) => {
-        const skill = candidateFit(state, c)
-        return (
-          <ChoiceRow
-            key={c.id}
-            label={armed === c.id ? t('bubble.hireConfirm', { name: c.name, pay: money(c.salary) }) : `${c.name} · ${t(`dept.${c.dept}`)}`}
-            primary={armed === c.id}
-            title={t('team.hire')}
-            icon={skill ? { icon: CATEGORY_ICON[skill.category], color: CATEGORY_COLOR[skill.category] } : undefined}
-            chips={[
-              { icon: 'cash', label: t('fx.tag.salary'), text: `−${money(c.salary)}`, tail: t('bubble.month'), good: false, title: t('hud.cash') },
-              ...(skill?.fit ? fitChips(CATEGORY_ICON[skill.category]) : []),
-            ]}
-            onClick={() =>
-              tap(c.id, () => {
-                const res = dispatch({ type: 'hire', candidateId: c.id })
-                setErr(res.ok || !res.error ? null : t(`error.${res.error}`))
-              })
-            }
-          />
-        )
-      })}
+      {candidates.slice(0, MAX_CANDIDATES).map((c) => (
+        <HireRow
+          key={c.id}
+          c={c}
+          armed={armed === c.id}
+          onHire={() =>
+            tap(c.id, () => {
+              const res = dispatch({ type: 'hire', candidateId: c.id })
+              setErr(res.ok || !res.error ? null : t(`error.${res.error}`))
+            })
+          }
+        />
+      ))}
       {candidates.length > MAX_CANDIDATES && (
         <ChoiceRow label={t('bubble.moreCandidates', { n: candidates.length - MAX_CANDIDATES })} onClick={() => launch(() => useGameStore.getState().openPanel({ kind: 'team' }))} />
       )}
       {err && <span className="font-text text-[12px] font-semibold text-negative-ink">{err}</span>}
     </Expandable>
+  )
+}
+
+/** One candidate: salary, fit, and the runway the hire leaves (HireRunway, the Ekip panel's phrase, N1). */
+function HireRow({ c, armed, onHire }: { c: Candidate; armed: boolean; onHire: () => void }) {
+  const skill = useGameStore(useShallow((s) => candidateFit(s.state, c)))
+  const deskCost = useGameStore((s) => hireDeskCost(s.state, CONTENT))
+  const preview = useSpendPreview(-(deskCost ?? 0), c.salary)
+  return (
+    <ChoiceRow
+      label={armed ? t('bubble.hireConfirm', { name: c.name, pay: money(c.salary) }) : `${c.name} · ${t(`dept.${c.dept}`)}`}
+      primary={armed}
+      title={t('team.hire')}
+      icon={skill ? { icon: CATEGORY_ICON[skill.category], color: CATEGORY_COLOR[skill.category] } : undefined}
+      effects={
+        <span className="flex flex-wrap items-center gap-1">
+          <ChipRow
+            chips={[
+              { icon: 'cash', label: t('fx.tag.salary'), text: `−${money(c.salary)}`, tail: t('bubble.month'), good: false, title: t('hud.cash') },
+              ...(skill?.fit ? fitChips(CATEGORY_ICON[skill.category]) : []),
+            ]}
+          />
+          <HireRunway preview={preview} />
+        </span>
+      }
+      onClick={onHire}
+    />
   )
 }
 

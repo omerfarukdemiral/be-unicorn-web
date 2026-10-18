@@ -67,6 +67,9 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.pitch': 'Yatırımcı bekliyor: toplantıya cevap ver',
   'move.focusTalk': 'Tanıdık çevre tükendi: odağı kullanıcıyla konuşmaya çevir',
   'move.growthAsk': 'Tur daha hızlı büyüme ister: büyümeyi artır',
+  'move.startRound': 'Tur zamanı: turu başlat',
+  'move.progress': 'Sıradaki tura doğru: değerlemeyi büyüt',
+  'move.cutBurn': 'Kasa bitiyor: aylık gideri kıs',
   // Phone strip short words for the moves (the number on line 2).
   'move.short.salesCall': 'Müşteri ara',
   'move.short.adsCut': 'Reklamı durdur',
@@ -85,6 +88,9 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.short.pitch': 'Yatırımcı',
   'move.short.focusTalk': 'Konuşmaya geç',
   'move.short.growthAsk': 'Büyümeyi artır',
+  'move.short.startRound': 'Turu başlat',
+  'move.short.progress': 'Sıradaki tur',
+  'move.short.cutBurn': 'Gideri kıs',
 
   // Horizon strip
   'horizon.span': '6 hafta',

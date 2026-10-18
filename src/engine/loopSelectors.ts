@@ -2,10 +2,10 @@
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
 import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
-import { effortOn, ledMember, onLeave } from './effort'
+import { effortOn, hasOpenWork, ledMember, onLeave, projectLoad } from './effort'
 import { projectVersion, updateSize, versionUpdates } from './modules'
 import { diligenceNow, growthAsk, investorGrowth as investorGrowthOf, offerFactor, priceRatio } from './round'
-import { founderActionError, salesCallPreview } from './founder'
+import { founderActionError, movesError, salesCallPreview } from './founder'
 import { moduleOffers } from './modules'
 import { nextLockedRing, ringOpenCost, ringRent } from './office'
 import { modifierMult } from './util'
@@ -23,6 +23,7 @@ import {
   type Candidate,
   type Dept,
   type NextMove,
+  type PolicyId,
   type ProjectModuleId,
   type NextStep,
   type NextStepId,
@@ -86,13 +87,32 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
   switch (move) {
     case 'keepStaff': {
       // The leaver nearest the door: a raise when the runway carries it, else the talk.
+      // By cause (round 6: raises answered boredom, salaries 36K → 214K for the same 11 people): bored → work on the
+      // busiest project with open work (else the talk); burnt out → the talk; morale → a raise the cash carries.
       const e = leaverOf(s)
       if (!e) return null
+      if (e.leaveCause === 'bored') {
+        const p = busiestOpen(s, e.projectId)
+        return p ? { type: 'assign', employeeId: e.id, projectId: p.id } : { type: 'respondResignation', employeeId: e.id, response: 'talk' }
+      }
       const raise = e.salary * (B.RAISE_FACTOR - 1)
-      return { type: 'respondResignation', employeeId: e.id, response: hireIsRed(s, raise) ? 'talk' : 'raise' }
+      const canRaise = e.leaveCause !== 'burnout' && !hireIsRed(s, raise) && cashSafe(s, 0, raise)
+      return { type: 'respondResignation', employeeId: e.id, response: canRaise ? 'raise' : 'talk' }
     }
     case 'morale':
       return { type: 'founderAction', kind: 'motivateTeam' }
+    case 'startRound':
+      return { type: 'startRound' }
+    case 'cutBurn': {
+      // The survival laws first (they cut the month without a severance), then the newest non-engineer leaves.
+      const law = survivalLaw(s)
+      if (law) return { type: 'adoptPolicy', policyId: law }
+      const e = [...s.employees].filter((x) => x.dept !== 'eng' && x.status !== 'leaving').sort((a, b) => b.hiredDay - a.hiredDay)[0]
+      return e ? { type: 'fire', employeeId: e.id } : null
+    }
+    case 'progress':
+      // The road to the next stage, no verb of its own: the tap opens the round section (UI).
+      return null
     case 'pitch':
       // The meeting is a choice the player reads: the tap opens it (UI), no engine verb.
       return null
@@ -133,6 +153,19 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
   }
 }
 
+/** The survival laws in the order that cuts the most for the least (the bots' order); the first one signable now. */
+const SURVIVAL_LAWS: readonly PolicyId[] = ['lean-office', 'founder-no-pay', 'salary-freeze', 'deferred-pay']
+function survivalLaw(s: GameState): PolicyId | undefined {
+  const v = s.derived.policies
+  if (!v || s.time.day < v.nextSignDay || movesError(s, B.MOVE_COST.adoptPolicy)) return undefined
+  return SURVIVAL_LAWS.find((id) => v.available.includes(id))
+}
+
+/** The project with open work and the heaviest load, other than `skip` (where a bored person helps most). */
+export function busiestOpen(s: GameState, skip?: string) {
+  return s.projects.filter((p) => p.id !== skip && hasOpenWork(p)).sort((a, b) => projectLoad(s, b) - projectLoad(s, a))[0]
+}
+
 /** Someone walking out (the soonest leave day first). */
 function leaverOf(s: GameState) {
   return s.employees.filter((e) => e.status === 'leaving').sort((a, b) => (a.leaveDay ?? 0) - (b.leaveDay ?? 0))[0]
@@ -142,9 +175,14 @@ function leaverOf(s: GameState) {
 function growthMove(s: GameState): Action | null {
   if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return hireAction(s, 'marketing')
   const amount = biggerAdBudget(s)
-  if (amount <= s.finance.adBudget) return null
+  if (amount <= s.finance.adBudget || !adsPay(s) || !cashSafe(s, 0, amount - s.finance.adBudget)) return null
   const after = previewSpend(s, { burnDelta: amount - s.finance.adBudget }).runwayAfter
   return after === null || after >= B.HIRE_RUNWAY_MIN ? { type: 'setAdBudget', amount } : null
+}
+
+/** More ads still pay: a customer brings back at least NEXT_MOVE_LTV_CAC × what it costs (no ad ramp into a stall). */
+function adsPay(s: GameState): boolean {
+  return (s.derived.ltvCac ?? Infinity) >= NEXT_MOVE_LTV_CAC
 }
 
 /** Days since the last hire (Infinity with nobody on staff): growth hires wait NEXT_MOVE_HIRE_GAP_DAYS between them. */
@@ -160,7 +198,7 @@ function biggerAdBudget(s: GameState): number {
 /** The office has no desk slot left but a locked ring the runway carries (its price and rent). */
 function ringFits(s: GameState, months: number): boolean {
   const ring = nextLockedRing(s.office)
-  if (ring === null) return false
+  if (ring === null || !cashSafe(s, ringOpenCost(ring), ringRent(s.stage, ring))) return false
   const r = previewSpend(s, { cashDelta: -ringOpenCost(ring), burnDelta: ringRent(s.stage, ring) }).runwayAfter
   return r === null || r >= months
 }
@@ -182,8 +220,23 @@ export function deptHireRunway(s: GameState, dept: Dept): number | null | undefi
   return previewSpend(s, { cashDelta: -desk, burnDelta: policyCost(s, 'salary', c.salary) }).runwayAfter
 }
 
-/** The hire leaves at least `months` of runway (profitable after it counts). */
+/**
+ * Round 6 guard for every move that spends (a profitable company at −$4.3K was told to hire, then missed payroll): no
+ * payday waiting on the desk, the next payday still paid after the spend, and the free cash after it covers one
+ * month of costs (burn + the new monthly cost) even when the company is profitable on paper.
+ */
+export function cashSafe(s: GameState, cashCost: number, monthlyCost: number): boolean {
+  if (s.finance.pendingPayday || s.finance.payrollMissed) return false
+  const p = previewSpend(s, { cashDelta: -cashCost, burnDelta: monthlyCost })
+  if (p.paydayShort) return false
+  return freeCash(s) - heldWages(s) - cashCost >= Math.max(0, s.finance.burn) + monthlyCost
+}
+
+/** The hire leaves at least `months` of runway (profitable after it counts) and passes the cash guard. */
 function hireFits(s: GameState, dept: Dept, months: number): boolean {
+  const c = cheapestOf(s, dept)
+  const desk = s.derived.hireDeskCost
+  if (!c || desk === null || desk === undefined || !cashSafe(s, desk, policyCost(s, 'salary', c.salary))) return false
   const r = deptHireRunway(s, dept)
   return r === null || (r !== undefined && r >= months)
 }
@@ -199,7 +252,7 @@ function growthDept(s: GameState): Dept | undefined {
   const gap = (d: Dept) => ((GROWTH_MIX[d] ?? 0) / total) * team - (s.derived.deptCounts?.[d] ?? 0)
   return (Object.keys(GROWTH_MIX) as Dept[])
     .sort((a, b) => gap(b) - gap(a))
-    .find((d) => hireFits(s, d, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
+    .find((d) => hireFits(s, d, s.stage >= 3 ? NEXT_MOVE_LATE_HIRE_RUNWAY : B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
 }
 
 /** A first ad budget: half the MRR, at least the garage's paid floor, at most this stage's (no 2× MRR spend at Seed). */
@@ -215,7 +268,7 @@ function moduleToBuild(s: GameState): { projectId: string; moduleId: ProjectModu
   for (const p of s.projects) {
     if (p.maturity < 1 || p.build) continue
     const offer = moduleOffers(s, p)
-      .filter((o) => !o.refresh && o.error === null && o.cost <= freeCash(s))
+      .filter((o) => !o.refresh && o.error === null && cashSafe(s, o.cost, 0))
       .sort((a, b) => a.cost - b.cost)[0]
     if (offer) return { projectId: p.id, moduleId: offer.id }
   }
@@ -233,14 +286,19 @@ export function nextMove(s: GameState): NextMove | undefined {
   // People first (playtest round 5: three resignations sank Pre-seed): a leaver, then a team below the morale bar.
   if (leaverOf(s)) return 'keepStaff'
   if (s.employees.length > 0 && s.stats.morale < NEXT_MOVE_MORALE && founderActionError(s, 'motivateTeam') === null) return 'morale'
-  // A meeting waiting on the player: the chip says so (the tap opens it).
-  if (s.round?.active) return s.round.pitchDue !== undefined ? 'pitch' : undefined
+  // The round window open and nothing started: the round brings the cash (round 6: the tester idled 400 days with
+  // only the HUD's "Tur başlat" as a cue).
+  if (s.derived.canStartRound && !s.round?.active) return 'startRound'
+  // A meeting waiting on the player: the chip says so (the tap opens it); a running round otherwise shows its road.
+  if (s.round?.active) return s.round.pitchDue !== undefined ? 'pitch' : s.stage >= 1 ? 'progress' : undefined
   const rw = s.finance.runway
   const sales = founderActionError(s, 'salesCall') === null && salesCallPreview(s).factor >= NEXT_MOVE_SALES_FACTOR
   if (rw !== null && rw < B.HIRE_RUNWAY_MIN) {
     if (sales) return 'salesCall'
     if (s.finance.adBudget > 0) return 'adsCut'
     if (s.finance.priceMultiplier < NEXT_MOVE_PRICE_CAP - 1e-9) return 'price'
+    // Nothing left to sell or stop: cut the month (round 6: a stalled Series A ran 8 → 0 months with the chip calm).
+    if (s.employees.length > 1 && (survivalLaw(s) || rw < NEXT_MOVE_CUT_RUNWAY)) return 'cutBurn'
   }
   // Servers full (users churn away on an overloaded product): an engineer, if the runway carries one.
   const eng = s.derived.deptCounts?.eng ?? 0
@@ -252,7 +310,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (flat) {
     if ((s.founder.focus ?? 'build') === 'build' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
     if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
-    if (s.finance.adBudget <= 0) {
+    if (s.finance.adBudget <= 0 && cashSafe(s, 0, firstAdBudget(s))) {
       // Only an ad budget the runway carries (no ads on / ads cut loop).
       const after = previewSpend(s, { burnDelta: firstAdBudget(s) }).runwayAfter
       if (after === null || after >= B.HIRE_RUNWAY_MIN) return 'ads'
@@ -264,20 +322,23 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.stage >= 1 && investorGrowthOf(s) < growthAsk(s) && growthMove(s)) return 'growthAsk'
   if (s.stage >= 1) {
     // One growth hire at a time: the last one settles NEXT_MOVE_HIRE_GAP_DAYS before the next is named.
-    if (daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s)) return 'hireGrowth'
+    // Never into an idle or bored team (they leave), and from Series A only with a year of runway after the hire.
+    const underused = s.stage >= 3 && (idleBuilders(s).length > 0 || s.employees.some((e) => (e.boredDays ?? 0) > 0))
+    if (!underused && daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s)) return 'hireGrowth'
     const roomy = (m: number) => rw === null || rw >= m
     // Office full: the next section, when the runway carries its price and rent.
     if (s.derived.hireDeskCost === null && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
     // Cash idle and ads small: the next ad step (the runway must still carry it).
-    if (roomy(NEXT_MOVE_ADS_UP_RUNWAY) && s.finance.adBudget < s.finance.mrr * NEXT_MOVE_AD_MRR * 0.75) {
+    if (roomy(NEXT_MOVE_ADS_UP_RUNWAY) && adsPay(s) && s.finance.adBudget < s.finance.mrr * NEXT_MOVE_AD_MRR * 0.75 && cashSafe(s, 0, biggerAdBudget(s) - s.finance.adBudget)) {
       const after = previewSpend(s, { burnDelta: biggerAdBudget(s) - s.finance.adBudget }).runwayAfter
       if (after === null || after >= B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) return 'adsUp'
     }
   }
-  return undefined
+  // Nothing concrete: the chip still shows the road to the next stage (after the garage; the garage has its chain).
+  return s.stage >= 1 ? 'progress' : undefined
 }
-/** Moves are named up to Seed (a guided player must reach Series A; the chip closes from A on). */
-const NEXT_MOVE_MAX_STAGE = 2
+/** Moves are named through Series C (round 6: the chip always shows something until Unicorn). */
+const NEXT_MOVE_MAX_STAGE = 5
 /** A sales call is named while the month's deals still pay at least half. */
 const NEXT_MOVE_SALES_FACTOR = 0.5
 /** The price move stops here (the chip never walks the price to the top). */
@@ -292,6 +353,12 @@ const NEXT_MOVE_ADS_UP_RUNWAY = 12
 const NEXT_MOVE_MORALE = B.DILIGENCE_MORALE
 /** The users focus at this find return reads as spent (the slot greys out under a quarter). */
 const NEXT_MOVE_FIND_DEAD = 0.25
+/** LTV:CAC the ad moves ask for before raising the budget. */
+const NEXT_MOVE_LTV_CAC = 2
+/** From Series A a growth hire needs this much runway after it (a 20-person team that stalls burns fast). */
+const NEXT_MOVE_LATE_HIRE_RUNWAY = 12
+/** Under this runway the chip cuts the month even when no survival law is open (a hire leaves). */
+const NEXT_MOVE_CUT_RUNWAY = 2
 /** Days between two growth hires the chip names (N-C: three taps were three hires). */
 const NEXT_MOVE_HIRE_GAP_DAYS = 30
 /** Users within this of last month's count read as flat. */
@@ -312,7 +379,7 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
  */
 export function nextStep(s: GameState): NextStep {
   const st = chainStep(s)
-  const move = st.id === 'idea' || st.id === 'hire' || st.id === 'round' || st.id === 'roundWait' ? undefined : nextMove(s)
+  const move = st.id === 'idea' || st.id === 'hire' ? undefined : nextMove(s)
   return move ? { ...st, move } : st
 }
 

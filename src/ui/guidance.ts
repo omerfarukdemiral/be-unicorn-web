@@ -6,7 +6,7 @@
 // Pure (state in, targets out): the Dock, the founder slots and the top gauges each read their own part.
 import * as B from '../engine/balance'
 import type { ActionErrorCode, FounderActionKind, GameState, NextStepId, Slot, SlotId } from '../engine/types'
-import { idleBuilders } from '../engine/loopSelectors'
+import { hireAffordable, idleBuilders } from '../engine/loopSelectors'
 import { firstFreeDesk, isFreeDesk } from '../engine/office'
 import type { DockTab } from '../store/types'
 
@@ -89,7 +89,8 @@ function leverTargets(s: GuidanceState): GuidanceTarget[] {
   const out: GuidanceTarget[] = []
   if (s.projects.length === 0 || idleBuilders(s).length > 0) out.push({ kind: 'dock', tab: 'projects' })
   const marketerForHire = s.candidates.some((c) => c.dept === 'marketing')
-  if ((s.derived.deptCounts?.marketing ?? 0) === 0 && s.stats.users > 0 && marketerForHire) out.push({ kind: 'dock', tab: 'team' })
+  // N1: never push a hire the runway cannot carry (HIRE_RUNWAY_MIN months after it).
+  if ((s.derived.deptCounts?.marketing ?? 0) === 0 && s.stats.users > 0 && marketerForHire && hireAffordable(s)) out.push({ kind: 'dock', tab: 'team' })
   // Past FIND_USERS_BIG_AT users a find is a rounding error next to the base, whatever its multiplier says.
   // Already the founder's focus: it runs on its own, nothing to prompt.
   if (findWorth(s) && s.stats.users <= B.FIND_USERS_BIG_AT && s.founder?.focus !== 'users') out.push({ kind: 'slot', action: 'findUsers' })

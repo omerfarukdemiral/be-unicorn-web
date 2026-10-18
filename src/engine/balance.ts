@@ -895,6 +895,12 @@ export const OUTCOMES_MAX = 20
 export const HORIZON_DAYS = 42
 /** Next step chain targets: users before "revenue" becomes the step, and first manual users before the desk. */
 export const NEXT_STEP_USERS = 50
+/**
+ * Fix round N1 (playtest: a player who took every garage hire missed payday by day ~100–186): the guidance asks for
+ * a hire only while the cheapest one (salary + its desk) still leaves this many months of runway; the hire offer shows
+ * the runway after it, red below this.
+ */
+export const HIRE_RUNWAY_MIN = 3
 export const NEXT_STEP_FIRST_USERS = 3
 /** Each ☆ stage goal reached takes this much off the equity sold in the next round (1 point). */
 export const GOAL_STAR_EQUITY_DISCOUNT = 0.01

@@ -349,6 +349,11 @@ const BASE_TEXT: Record<string, string> = {
   'team.hire': 'İşe al',
   'team.hireConfirm': 'Onayla',
   'team.deskCost': '+ masa {v}',
+  // N1: the runway after the hire, on the offer itself.
+  'team.runwayAfter': 'Kasa {v} ay taşır',
+  'team.runwayUnder1': 'Kasa bir ay taşımaz',
+  'team.runwayShort': 'Maaşa yetmez',
+  'team.runwayOk': 'Kasa rahat taşır',
   'team.idle': 'Boşta',
   'team.fire': 'İşten çıkar',
   'team.expires': '{n} gün içinde gider',

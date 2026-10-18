@@ -73,7 +73,9 @@ describe('panel sources', () => {
   })
 
   it('commit buttons carry a CostPreview (hire, buy, ad step, down round, renewal, sign, open segment, buy a rival)', () => {
-    for (const name of ['TeamPanel', 'ShopPanel', 'GrowthPanel', 'RoundSection', 'RenewalSection', 'LawbookScreen', 'MarketScreen']) expect(src(name), name).toMatch(/<CostPreview\b/)
+    for (const name of ['ShopPanel', 'GrowthPanel', 'RoundSection', 'RenewalSection', 'LawbookScreen', 'MarketScreen']) expect(src(name), name).toMatch(/<CostPreview\b/)
+    // N1: the hire offer says the runway it leaves in words ("Kasa 2 ay taşır").
+    expect(src('TeamPanel')).toMatch(/<HireRunway\b/)
     expect(src('RoundSection')).toMatch(/down: true/)
     // Two commits per renewal (the hold also shows its failure), two kinds of commit on the map: each its own preview.
     expect(src('RenewalSection').match(/<CostPreview\b/g)).toHaveLength(3)

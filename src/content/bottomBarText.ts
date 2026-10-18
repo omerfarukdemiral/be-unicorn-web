@@ -29,6 +29,7 @@ export const BOTTOM_BAR_TEXT: Record<string, string> = {
   'float.users': '+{v} kullanıcı',
   'float.mrr': '+{v}/ay',
   'float.debt': '−{v} borç',
+  'float.morale': '+{v} moral',
 
   // Notification strip
   'strip.label': 'Bildirimler',

@@ -119,7 +119,7 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
             {text}
           </span>
           {/* Desktop: the road to the next round keeps its number in view ("$1.2M/$3M"), the sentence truncates first. */}
-          {step.move === 'progress' && v.shortValue && <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{v.shortValue}</span>}
+          {step.move === 'progress' && !step.metric && v.shortValue && <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{v.shortValue}</span>}
         </>
       )}
       {progress !== undefined && (

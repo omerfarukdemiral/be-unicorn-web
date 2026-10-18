@@ -117,7 +117,7 @@ export function releaseName(level: number, update?: number, module?: string, ver
 
 /** Chip text for a step (money / % filled from the engine's progress + target); a concrete move speaks instead. */
 export function stepText(step: NextStep, s: GameState): string {
-  if (step.move) return moveText(step.move, s)
+  if (step.move) return moveText(step.move, s, step.metric)
   switch (step.id) {
     case 'launch':
       return t('step.launch', { v: pct(step.progress ?? 0) })
@@ -140,7 +140,7 @@ export function stepText(step: NextStep, s: GameState): string {
  * (a newer step) falls back to its full sentence as the label.
  */
 export function stepShort(step: NextStep, s: GameState): { label: string; value?: string } {
-  if (step.move) return moveShort(step.move, s)
+  if (step.move) return moveShort(step.move, s, step.metric)
   const key = `step.short.${step.id}`
   const label = UI_TEXT[key] !== undefined ? t(key) : stepText(step, s)
   const of = (v: string, tg: string) => t('step.short.of', { v, t: tg })
@@ -160,7 +160,7 @@ export function stepShort(step: NextStep, s: GameState): { label: string; value?
 }
 
 /** The move's sentence, with the number the tap spends (engine moveAction picks it). */
-export function moveText(move: NextMove, s: GameState): string {
+export function moveText(move: NextMove, s: GameState, metric?: NextStep['metric']): string {
   const a = moveAction(s, move)
   switch (move) {
     case 'ads':
@@ -172,7 +172,12 @@ export function moveText(move: NextMove, s: GameState): string {
       return t('move.module', { m: moduleName(a.moduleId, p?.category), v: money(offer?.cost ?? 0) })
     }
     case 'progress':
-      // The number goes beside it (NextStepChip: a suffix that never truncates).
+      // Round 10: the weakest number on the way to the next round, in its own unit ("Seed için aylık büyüme %4/%6").
+      if (metric) {
+        const f = metricValues(metric)
+        return t(`move.progress.${metric.id}`, { s: STAGES[metric.stage]?.name ?? '', v: f.v, t: f.t })
+      }
+      // No metric (older engine state): the number goes beside it (NextStepChip: a suffix that never truncates).
       return t('move.progress')
     default:
       return t(`move.${move}`)
@@ -180,20 +185,45 @@ export function moveText(move: NextMove, s: GameState): string {
 }
 
 /** "$X / $Y": the valuation against the next stage's target valuation (the road to the next round). */
+type ProgressMetric = NonNullable<NextStep['metric']>
+
+/** A progress metric's value and target in its unit: money, %, months, morale points, × burn multiple. */
+export function metricValues(m: ProgressMetric): { v: string; t: string } {
+  const f = (x: number): string => {
+    switch (m.id) {
+      case 'valuation':
+        return money(x)
+      case 'growth':
+        return pct(x, 1)
+      case 'runway':
+        return fixed(x, 1)
+      case 'morale':
+        return String(Math.round(x))
+      case 'burn':
+        return `${fixed(x, 1)}×`
+    }
+  }
+  return { v: f(m.value), t: f(m.target) }
+}
+
 function progressOf(s: GameState): string {
   const target = STAGES[s.stage + 1]?.targetValuation ?? 0
   return t('step.short.of', { v: money(s.finance.valuation), t: money(target) })
 }
 
 /** Phone strip: the move's short word, and the money the tap spends on line 2 (N9 + fix round 3 moves). */
-export function moveShort(move: NextMove, s: GameState): { label: string; value?: string } {
+export function moveShort(move: NextMove, s: GameState, metric?: NextStep['metric']): { label: string; value?: string } {
   const label = t(`move.short.${move}`)
   const a = moveAction(s, move)
   switch (move) {
     case 'ads':
       return { label, value: t('move.short.perMonth', { v: money(a?.type === 'setAdBudget' ? a.amount : 0) }) }
-    case 'progress':
-      return { label, value: progressOf(s) }
+    case 'progress': {
+      if (!metric) return { label, value: progressOf(s) }
+      // Phone: the metric's name over "{v}/{t}" (runway in months).
+      const f = metricValues(metric)
+      return { label: t(`move.short.metric.${metric.id}`), value: t(metric.id === 'runway' ? 'move.short.ofMonths' : 'step.short.of', { v: f.v, t: f.t }) }
+    }
     case 'growthAsk':
       // The round's ask on line 2: the investor's growth now over what they want ("%4/%8").
       return { label, value: t('step.short.of', { v: pct(investorGrowth(s)), t: pct(growthAsk(s)) }) }

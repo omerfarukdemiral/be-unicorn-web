@@ -67,7 +67,8 @@ describe('floating number queue', () => {
     expect(floatText('findUsers', 3)).toBe('+3 kullanıcı')
     expect(floatText('salesCall', 1200)).toBe('+$1.2K/ay')
     expect(floatText('rest', undefined)).toBeNull()
-    expect(floatText('motivateTeam', 5)).toBeNull()
+    // Round 10: motivating says the morale it gave.
+    expect(floatText('motivateTeam', 10)).toBe('+10 moral')
   })
 })
 

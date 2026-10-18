@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { UI_TEXT } from '../content'
 import { NEXT_MOVES, NEXT_STEP_IDS, type NextStep } from '../engine/types'
-import { followStep, meetingBubbleKey, moveShort, stepShort } from './loopUi'
+import { followStep, meetingBubbleKey, moveShort, moveText, stepShort } from './loopUi'
 import { useGameStore } from '../store/gameStore'
 import { createGame } from '../engine'
 
@@ -53,5 +53,16 @@ describe('stepShort', () => {
     useGameStore.getState().newGame({ seed: 2, founderXp: 0, runIndex: 0 })
     followStep({ id: 'grow', index: 6, total: 6, move: 'progress' })
     expect(useGameStore.getState().ui.panel).toMatchObject({ kind: 'growth', section: 'round' })
+  })
+
+  it('round 10: progress names its weakest metric in its unit; phone: the metric name over v/t', () => {
+    const g = createGame({ seed: 2 })
+    const m = (id: 'valuation' | 'growth' | 'runway' | 'morale' | 'burn', value: number, target: number) => ({ id, value, target, stage: 2 })
+    expect(moveText('progress', g, m('growth', 0.04, 0.06))).toBe('Seed için aylık büyüme %4/%6')
+    expect(moveText('progress', g, m('runway', 4.2, 6))).toBe('Seed için runway 4.2/6 ay')
+    expect(moveText('progress', g, m('valuation', 1_200_000, 3_000_000))).toMatch(/\$1\.2M\/\$3M/)
+    expect(moveShort('progress', g, m('burn', 2.4, 2))).toEqual({ label: 'Burn çarpanı', value: '2.4×/2×' })
+    expect(moveShort('progress', g, m('runway', 4.2, 6))).toEqual({ label: 'Runway', value: '4.2/6 ay' })
+    expect(moveShort('progress', g, m('morale', 48, 50))).toEqual({ label: 'Moral', value: '48/50' })
   })
 })

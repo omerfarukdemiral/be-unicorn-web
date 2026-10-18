@@ -109,6 +109,13 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.short.growthAsk': 'Büyümeyi artır',
   'move.short.startRound': 'Turu başlat',
   'move.short.progress': 'Sıradaki tur',
+  // Round 10: the progress chip's short word is the weakest metric's name; its number on line 2.
+  'move.short.metric.valuation': 'Değerleme',
+  'move.short.metric.growth': 'Büyüme',
+  'move.short.metric.runway': 'Runway',
+  'move.short.metric.morale': 'Moral',
+  'move.short.metric.burn': 'Burn çarpanı',
+  'move.short.ofMonths': '{v}/{t} ay',
   'move.short.cutBurn': 'Gideri kıs',
   'move.short.openSegment': 'Yeni pazar',
   'move.short.newProduct': 'Yeni ürün',

@@ -31,6 +31,9 @@ export function floatText(kind: FounderActionKind, value: number | undefined): s
       return t('float.mrr', { v: money(value) })
     case 'refactorSprint':
       return t('float.debt', { v: num(value) })
+    case 'motivateTeam':
+      // Round 10: the engine's done event carries the morale it gave.
+      return t('float.morale', { v: num(value) })
     default:
       return null
   }

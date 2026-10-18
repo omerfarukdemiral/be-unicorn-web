@@ -82,6 +82,9 @@ export const EFFORT_CRISIS_KINDS: ReadonlySet<GameEventKind> = new Set<GameEvent
 /** Game days at 1× after an important moment before 4× comes back (~6 s at 1×, SECONDS_PER_DAY = 2). */
 export const SLOWDOWN_WINDOW_DAYS = 3
 
+/** NEW-5: real time an important moment holds 1× before the player's speed comes back. */
+export const SLOWDOWN_MS = 3000
+
 /** True while the store itself sends setSpeed (the slowdown and its restore): such a call keeps the pending restore. */
 let autoSpeed = false
 
@@ -795,8 +798,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
  *   stands silently (tap → card) and, once the visitor's stay is over, it moves to the shelf (minimizeConcept);
  * - an interrupting event (a card, the round window, a missed payroll…) closes an open center screen;
  * - at 4× an important event (never a normal card; an urgent one, see isUrgentCard, does) slows the run to 1× (a real setSpeed: the player sees and may undo it) for
- *   SLOWDOWN_WINDOW_DAYS game days once the moment is dealt with (no payday or urgent card waiting, no focus pause), then 4×
- *   comes back the same way; a new moment in the window pushes the restore later, a player setSpeed cancels it;
+ *   SLOWDOWN_MS of real time (NEW-5; a focus pause stops ticks meanwhile, an urgent card still waiting holds it), then the
+ *   player's speed comes back the same way; closing a pause ends it at once (N6), a player setSpeed cancels it;
  * - a card shown goes into the Keşif record (storage errors are swallowed by save.ts: play never breaks on them).
  * Engine changes go through dispatch, so the replay log reproduces them.
  */
@@ -822,16 +825,14 @@ function afterStep(prev: GameState, next: GameState): void {
     return
   }
   if (ui.slowdownResumeDay === null) return
-  // The window counts from when the moment is dealt with: a payday or an urgent card still waiting (or a new moment)
-  // moves it on. A collapsed normal card does not: it lets time run, and an open one stops ticks through pauseReasons.
-  const waiting = !!next.finance.pendingPayday || isUrgentCard(next.decisions.active?.cardId) || hasImportantMoment(prev, next)
-  if (waiting) {
-    if (resumeDay > ui.slowdownResumeDay) useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: resumeDay } }))
-    return
-  }
-  if (ui.pauseReasons.length > 0 || next.time.day < ui.slowdownResumeDay) return
+  // NEW-5: the moment holds 1× for SLOWDOWN_MS of real time (a pause or an open card stops ticks meanwhile), then the
+  // player's speed comes back. A payday miss, the runway warning or a round close no longer keep 1× until a tap; only
+  // an urgent decision card still waiting holds it (its default lands in days).
+  if (isUrgentCard(next.decisions.active?.cardId)) return
+  if (ui.pauseReasons.length > 0) return
+  if (ui.slowdownAt !== null && performance.now() - ui.slowdownAt < SLOWDOWN_MS) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
-  if (useGameStore.getState().state.time.speed === 1) autoSetSpeed(4)
+  if (useGameStore.getState().state.time.speed === 1) autoSetSpeed(ui.chosenSpeed > 1 ? ui.chosenSpeed : 4)
 }
 
 /**

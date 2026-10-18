@@ -37,6 +37,7 @@ import {
   pauseReasonsOf,
   PAYDAY_SLOW_RUNWAY_MONTHS,
   SLOWDOWN_WINDOW_DAYS,
+  SLOWDOWN_MS,
   useGameStore,
   waitingConcepts,
 } from './gameStore'
@@ -361,6 +362,12 @@ describe('time: paused start and focus pauses', () => {
 
 describe('focus (CORE_LOOP phase 0)', () => {
   beforeEach(() => store().newGame({ seed: 7, founderXp: 0, runIndex: 0 }))
+  // NEW-5: a moment's 1× lasts SLOWDOWN_MS of real time: a fake clock that moves 100 ms per read.
+  let clock = 0
+  beforeEach(() => {
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100))
+  })
+  afterEach(() => vi.restoreAllMocks())
 
   function withDecision(): string {
     const st = store().state
@@ -557,11 +564,11 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(sets.at(-1)?.action).toEqual({ type: 'setSpeed', speed: 1 })
     expect(store().ui.slowdownResumeDay).not.toBeNull()
 
-    // SLOWDOWN_WINDOW_DAYS later 4× is back, through the replay too.
-    const slowDay = store().state.time.day
+    // SLOWDOWN_MS of real time later (NEW-5) 4× is back, through the replay too.
+    const slowAt = performance.now()
     for (let i = 0; i < 200 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.speed).toBe(4)
-    expect(store().state.time.day).toBeGreaterThanOrEqual(slowDay + SLOWDOWN_WINDOW_DAYS - 1)
+    expect(performance.now() - slowAt).toBeGreaterThanOrEqual(SLOWDOWN_MS)
     expect(store().ui.slowdownResumeDay).toBeNull()
     expect(store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed').at(-1)?.action).toEqual({ type: 'setSpeed', speed: 4 })
 
@@ -665,7 +672,8 @@ describe('focus (CORE_LOOP phase 0)', () => {
     // Still unanswered, still collapsed: 4× came back on schedule.
     expect(store().state.decisions.active?.cardId).toBe(card.cardId)
     expect(store().state.time.speed).toBe(4)
-    expect(store().state.time.day).toBeLessThan(slowDay + SLOWDOWN_WINDOW_DAYS + 1)
+    // NEW-5: on schedule = SLOWDOWN_MS of real time, a handful of game days at 1×.
+    expect(store().state.time.day).toBeLessThan(slowDay + SLOWDOWN_WINDOW_DAYS * 4)
   })
 
   it('F1 review: an urgent card (landlord notice, 7 g default) slows 4× and holds 1× until it is answered', () => {

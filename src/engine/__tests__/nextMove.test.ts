@@ -61,10 +61,28 @@ describe('nextMove', () => {
     const a = stepAction(rich, { ...nextStep(rich), move: 'hireEng' })
     expect(rich.candidates.find((c) => c.id === (a as { candidateId: string }).candidateId)?.dept).toBe('eng')
     const calm: GameState = { ...rich, derived: { ...rich.derived, overload: 0, deptCounts: { ...rich.derived.deptCounts, eng: 1, marketing: 1 } } }
-    expect(['hireGrowth', 'module', 'openRing', 'adsUp']).toContain(nextMove(calm))
+    expect(['hireGrowth', 'module', 'openRing', 'adsUp', 'growthAsk', 'focusTalk']).toContain(nextMove(calm))
     // Thin runway: no hire is ever named.
     const thin: GameState = { ...rich, stats: { ...rich.stats, cash: 0 }, finance: { ...rich.finance, runway: B.HIRE_RUNWAY_MIN + 0.5 }, derived: { ...rich.derived, overload: 0.5 } }
     expect(['hireEng', 'hireGrowth', 'hireMarketing']).not.toContain(nextMove(thin))
+  })
+
+  it('people first: a leaver, then low morale; a waiting meeting; a spent circle switches to talks; one growth hire a month', () => {
+    const l = live()
+    const pre: GameState = { ...l, stage: 1, stats: { ...l.stats, cash: 300_000 }, finance: { ...l.finance, runway: 30 } }
+    const e = pre.employees[0]!
+    const leaving: GameState = { ...pre, employees: [{ ...e, status: 'leaving', leaveDay: pre.time.day + 3 }] }
+    expect(nextMove(leaving)).toBe('keepStaff')
+    expect(stepAction(leaving, { ...nextStep(leaving), move: 'keepStaff' })).toMatchObject({ type: 'respondResignation', employeeId: e.id, response: 'raise' })
+    expect(nextMove({ ...pre, stats: { ...pre.stats, morale: 20 } })).toBe('morale')
+    const round = { active: true, pitchDue: 1, meeting: 'intro' } as unknown as GameState['round']
+    expect(nextMove({ ...pre, round })).toBe('pitch')
+    expect(stepAction({ ...pre, round }, { ...nextStep({ ...pre, round }), move: 'pitch' })).toBeNull()
+    const spent: GameState = { ...pre, founder: { ...pre.founder, focus: 'users' }, derived: { ...pre.derived, findUsers: { ...pre.derived.findUsers!, factor: 0.1 } } }
+    expect(nextMove(spent)).toBe('focusTalk')
+    // A hire this week: no growth hire named.
+    const fresh: GameState = { ...pre, employees: pre.employees.map((x) => ({ ...x, hiredDay: pre.time.day - 5 })) }
+    expect(nextMove(fresh)).not.toBe('hireGrowth')
   })
 
   it('stops at Series A', () => {

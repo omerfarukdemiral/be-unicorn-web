@@ -3,6 +3,7 @@
 // notch). Garage only: from Pre-seed on the chip closes. Engine picks the link (state.derived.nextStep).
 // It is the notification strip's resting item (P3, docs/LAYOUT.md §3): borderless inside the strip. The start of time
 // is asked by the StartCall card, so the strip hides this item while that card is up (stripRules.nextStepShown).
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { NextStep } from '../engine/types'
 import { blockingOverlay, useGameStore } from '../store/gameStore'
@@ -52,10 +53,21 @@ export function useNextStep(): NextStepView {
   )
 }
 
+/** N-C: the chip rests this long after a tap. */
+export const TAP_REST_MS = 1000
+
 /** The strip's resting row (`variant` kept as "strip": the strip is its only home now). */
 export function NextStepChip({ compact, className }: { compact?: boolean; className?: string; variant?: 'strip' }) {
   const v = useNextStep()
   const dispatch = useGameStore((s) => s.dispatch)
+  // N-C: no tap through a modal / the stage-up curtain, and a short rest after a tap (a double tap did the move twice).
+  const covered = useGameStore((s) => s.ui.overlay !== null)
+  const [resting, setResting] = useState(false)
+  useEffect(() => {
+    if (!resting) return
+    const id = window.setTimeout(() => setResting(false), TAP_REST_MS)
+    return () => window.clearTimeout(id)
+  }, [resting])
   // Touch screens have no Space key: the hint lives only on keyboards.
   const touch = useIsMobile()
   const step = v.step
@@ -64,12 +76,23 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
   // Phones (N9): a short word over its number; the number never truncates.
   const short = compact && !v.needsStart ? { label: v.shortLabel, value: v.shortValue } : null
   // A tap still helps (opens the place or starts time), but nothing on the row asks for it.
-  const onClick = () => (v.needsStart ? dispatch({ type: 'setSpeed', speed: 1 }) : followStep(step))
+  const onClick = () => {
+    if (covered || resting) return
+    setResting(true)
+    if (v.needsStart) dispatch({ type: 'setSpeed', speed: 1 })
+    else followStep(step)
+  }
   const progress = step.progress
 
   // Borderless row for the strip: [flag] 6/8 · why. The strip draws the surface.
   return (
-    <button type="button" onClick={onClick} title={`${t('step.label')} · ${text}`} className={cx('group flex h-full w-full min-w-0 items-center gap-2 text-left', className)}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={covered || resting}
+      title={`${t('step.label')} · ${text}`}
+      className={cx('group flex h-full w-full min-w-0 items-center gap-2 text-left disabled:cursor-default', className)}
+    >
       <span className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-brand-soft text-brand-ink" aria-hidden="true">
         <Icon name="flag" size={14} />
       </span>

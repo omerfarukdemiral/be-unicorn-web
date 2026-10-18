@@ -18,7 +18,7 @@ import { t } from '../i18n'
 import { fixed } from '../format'
 import { cx } from '../primitives'
 import { founderActionStage, soft } from '../theme'
-import { useExclusiveExpander } from '../hooks'
+import { useExclusiveExpander, useLayoutMode } from '../hooks'
 import { activityText, ActivityHistory } from '../ActivityLine'
 import { errorText, usePlacing } from '../Feedback'
 import { HorizonDue, HorizonList, HorizonLoan, HorizonMini, PaydayCountdown } from '../Horizon'
@@ -303,6 +303,8 @@ export function NotificationStrip({
   const bankrupt = useGameStore(useShallow((s) => (s.state.finance.payrollMissed && !s.state.gameOver ? { days: Math.max(0, BANKRUPT_DAYS - s.state.finance.negativeCashDays) } : null)))
   const placing = usePlacing()
   const step = useNextStep()
+  // N-A: on a portrait phone the chip has its own card under the stage card (TopBar); the strip keeps the notes.
+  const portrait = useLayoutMode() === 'portrait'
   const speed = useGameStore((s) => s.state.time.speed)
   const openPanel = useGameStore((s) => s.openPanel)
   const hasHorizon = useGameStore((s) => !!s.state.derived.horizon?.length)
@@ -321,7 +323,7 @@ export function NotificationStrip({
     canStartRound: step.canStartRound,
     over: step.over,
     sheetOpen,
-  }) && !island
+  }) && !island && !portrait
   const front = queue[0]
   const slot = pickSlot({ bankrupt: !!bankrupt, placing: !!placing, nextStep: showStep, front })
   // A center screen leaves the strip readable (time flows under it); only a blocking modal covers it.

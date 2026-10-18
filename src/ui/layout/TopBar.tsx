@@ -38,10 +38,19 @@ function Island({ className, children }: { className?: string; children: ReactNo
  * The garage's next step (T05, was the strip's resting row): a small card hanging under the stage island, like a
  * sim's objective tag. Absolutely placed, so the scene inset stays the islands' height. Same rules as the strip had.
  */
-function GoalChip() {
+function GoalChip({ phone = false }: { phone?: boolean }) {
   const step = useNextStep()
   const shown = nextStepShown({ hasStep: !!step.step, startCall: step.startCall, stepId: step.step?.id, canStartRound: step.canStartRound, over: step.over, sheetOpen: false })
   if (!shown) return null
+  if (phone) {
+    // N-A: the phone chip has its own card under the stage card, like the desktop one: a note in the strip never
+    // replaces it. Short word over its number (N9), 44px tall for the thumb.
+    return (
+      <div data-scene-obstacle="" data-goal-chip="" className="ui-card pointer-events-auto relative flex h-11 w-max max-w-[min(280px,calc(100vw-24px))] items-center overflow-hidden px-2">
+        <NextStepChip compact />
+      </div>
+    )
+  }
   return (
     // Absolute, so the header's rect leaves it out: an obstacle of its own for the bubble layout.
     <div data-scene-obstacle="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex h-10 w-max max-w-[360px] items-center overflow-hidden px-2">
@@ -104,9 +113,12 @@ function MobileBar() {
           <GaugeRow className="flex-1 [&>*]:shrink-0" />
         </div>
         {!sheetOpen && (
-          <div data-scene-obstacle="" data-scene-island="" className="ui-card pointer-events-auto absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col px-2.5 pb-1.5">
-            <StageSection variant="mobile" />
-            <StageProgressLine className="-mt-1" />
+          <div className="absolute left-0 top-[calc(100%+8px)] flex max-w-full flex-col items-start gap-2">
+            <div data-scene-obstacle="" data-scene-island="" className="ui-card pointer-events-auto flex max-w-full flex-col px-2.5 pb-1.5">
+              <StageSection variant="mobile" />
+              <StageProgressLine className="-mt-1" />
+            </div>
+            <GoalChip phone />
           </div>
         )}
       </div>

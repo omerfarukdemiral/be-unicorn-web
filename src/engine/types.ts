@@ -1090,6 +1090,11 @@ export interface DerivedMetrics {
   round?: RoundView
   /** "Elle kullanıcı bul" return preview (monthly saturation). */
   findUsers?: FindUsersPreview
+  /**
+   * Runway in months after hiring the cheapest candidate today (salary + the auto desk when none is free); null =
+   * still profitable after it, undefined = no candidate. The guidance stops asking for hires under HIRE_RUNWAY_MIN.
+   */
+  hireRunway?: number | null
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
   nextStep?: NextStep
   /** The player's play style today (engine/style.ts); null = none clear yet. */

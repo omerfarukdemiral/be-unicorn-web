@@ -38,6 +38,19 @@ function step(id: NextStepId, extra: Omit<NextStep, 'id' | 'index' | 'total'> = 
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
 
+/** The cheapest hire still leaves HIRE_RUNWAY_MIN months of runway (derived.hireRunway; unknown = yes). */
+export function hireAffordable(s: Pick<GameState, 'derived'>): boolean {
+  const r = s.derived.hireRunway
+  return r === undefined || r === null || r >= B.HIRE_RUNWAY_MIN
+}
+
+/** Runway after hiring the cheapest candidate (salary + the auto desk when none stands free); see derived.hireRunway. */
+export function cheapestHireRunway(s: GameState, deskCost: number | null): number | null | undefined {
+  if (!s.candidates.length || deskCost === null) return undefined
+  const salary = Math.min(...s.candidates.map((c) => c.salary))
+  return previewSpend(s, { cashDelta: -deskCost, burnDelta: policyCost(s, 'salary', salary) }).runwayAfter
+}
+
 /** Day of a project's last update or 1.0 release (−∞ = none on record). */
 export function lastUpdateDay(s: GameState, projectId: string): number {
   const list = s.releases ?? []
@@ -54,7 +67,7 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
 export function nextStep(s: GameState): NextStep {
   if (s.projects.length === 0) return step('idea')
   if (!s.projects.some((p) => p.launched)) {
-    if (s.stage === 0 && s.employees.length === 0 && s.candidates.length > 0) return step('hire')
+    if (s.stage === 0 && s.employees.length === 0 && s.candidates.length > 0 && hireAffordable(s)) return step('hire')
     const best = s.projects.reduce((m, p) => Math.max(m, p.maturity), 0)
     return step('launch', { progress: clamp01(best / B.MVP_MATURITY), target: B.MVP_MATURITY })
   }

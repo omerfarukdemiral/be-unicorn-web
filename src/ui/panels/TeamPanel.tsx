@@ -1,10 +1,10 @@
 // Ekip: candidate pool (hire by dept) + team list (status, morale, resignation responses). HUD grammar (GAMEPLAY V2
-// §10.5): 36px person cards with a 4px gap (no hairline list), salary as the number, every hire carries its CostPreview.
+// §10.5): 36px person cards with a 4px gap (no hairline list), salary as the number, every hire carries the runway it leaves (HireRunway).
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { idleBuilders } from '../../engine/loopSelectors'
 import { hireDeskCost } from '../../engine/office'
-import { DEPTS, type Candidate, type Dept, type Employee } from '../../engine/types'
+import { DEPTS, type Candidate, type Dept, type Employee, type SpendPreview } from '../../engine/types'
 import { CONTENT, DEPT_TEXT } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import * as B from '../../engine/balance'
@@ -14,7 +14,7 @@ import { money } from '../format'
 import { candidateFit, fatigueGood, fitChips, personLabel } from '../effort'
 import { ChipRow } from '../EffectChips'
 import { CATEGORY_ICON } from './ProjectsPanel'
-import { Bar, Button, Chip, CostPreview, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
+import { Bar, Button, Chip, cx, Dot, Empty, Pill, QualityStars } from '../primitives'
 import { useSpendPreview } from '../widgets'
 import { useTwoStep } from '../hooks'
 import { DEPT_COLOR, moraleTone, soft } from '../theme'
@@ -135,6 +135,34 @@ function HireView() {
   )
 }
 
+/**
+ * N1: what the hire leaves, in one short phrase on the offer ("Kasa 2 ay taşır"); red under HIRE_RUNWAY_MIN months or
+ * when the next payday would bounce. Numbers from the engine's previewSpend, nothing computed here.
+ */
+export function HireRunway({ preview }: { preview: SpendPreview }) {
+  const after = preview.runwayAfter
+  const danger = preview.paydayShort || (after !== null && after < B.HIRE_RUNWAY_MIN)
+  const text = preview.paydayShort
+    ? t('team.runwayShort')
+    : after === null
+      ? t('team.runwayOk')
+      : after < 1
+        ? t('team.runwayUnder1')
+        : t('team.runwayAfter', { v: Math.floor(after) })
+  return (
+    <span
+      data-danger={danger ? '' : undefined}
+      className={cx(
+        'tabular inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-px text-[11px] font-bold',
+        danger ? 'bg-[color-mix(in_oklab,var(--color-negative)_10%,transparent)] text-negative-ink' : 'text-ink-2',
+      )}
+    >
+      <Icon name="hourglass" size={12} />
+      {text}
+    </span>
+  )
+}
+
 /** Before candidateQuality: a rough low / mid / high (bolt pips), never the exact number. */
 function RoughQuality({ quality }: { quality: number }) {
   const span = B.CANDIDATE_QUALITY_MAX - B.CANDIDATE_QUALITY_MIN
@@ -194,7 +222,7 @@ export function CandidateCard({
         {skill?.fit && <ChipRow chips={fitChips(CATEGORY_ICON[skill.category])} className="mt-0.5" />}
       </div>
       <span className="flex shrink-0 items-center gap-1.5">
-        <CostPreview preview={preview} />
+        <HireRunway preview={preview} />
         <Button
           tone="commit"
           size="sm"

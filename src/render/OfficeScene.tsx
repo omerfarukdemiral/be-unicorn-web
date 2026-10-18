@@ -14,7 +14,7 @@ import { HeadPlates } from './HeadPlates'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
-import { furnishedBox, type FrameBox, type OfficeLayout } from './layout'
+import { occupiedBox, type FrameBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
 import { DecorLayer } from './Decor'
 import { stagePalette } from './palette'
@@ -68,21 +68,34 @@ function frameBox(layout: OfficeLayout, zoomLevel: ZoomLevel): FrameBox {
   return { ...box, cx: (box.minX + box.maxX) / 2, cz: (box.minZ + box.maxZ) / 2, r: Math.hypot(box.maxX - box.minX, box.maxZ - box.minZ) / 2 }
 }
 
-/** The furnished box is used only when it is clearly smaller than the default frame. */
-const FURNISHED_MIN_GAIN = 0.85
-/** Portrait framing of the unlocked ring (and a camera biased into the gap between the HUD islands) starts at this stage. */
+/** The team's box is used only when it is clearly smaller than the default frame. */
+const OCCUPIED_MIN_GAIN = 0.85
+/** Portrait from this stage on frames the team's box whatever its size (and biases the camera into the HUD gap). */
 const RING_FRAME_STAGE = 3
+/**
+ * Margin round the team's desks (world units). Landscape keeps a desk and a half of floor round the edge desks; a
+ * portrait phone a bit less, so its figures read larger (fix round §4).
+ */
+const OCCUPIED_PAD = CELL * 1.5
+const OCCUPIED_PAD_PORTRAIT = CELL * 0.8
 /** Outline height: the walls (and the heads at the back desks) belong to the frame. */
 const OUTLINE_H = WALL_HEIGHT
 /** Portrait: the diamond's bare side tips may run this share of its width off each edge (figures read larger). */
 const PORTRAIT_SLACK = 0.04
+/**
+ * Portrait framing the team: its box's side corners are bare floor past the outer desks (a team is a blob, not a
+ * square), so more of them may run off the screen. At 0.04 a Series B team on a 390 px phone drew 19 px per unit.
+ */
+const TEAM_PORTRAIT_SLACK = 0.1
 /** The diamond's bare tips may slip this share under a HUD island (frameFit.islandSlack). */
 const ISLAND_SLACK = 0.1
 /**
  * The default frame never zooms past this many px per world unit per px of the screen's short side: a small open
- * ring (Pre-seed's unlocked corner) would otherwise fill a desktop like the close zoom, walls cut off.
+ * ring (Pre-seed's unlocked corner) would otherwise fill a desktop like the close zoom, walls cut off. A portrait
+ * phone's short side is a third of a desktop's: its cap is looser, or a team of three stays a few px tall.
  */
 const MAX_ZOOM_PER_PX = 1 / 12
+const MAX_ZOOM_PER_PX_PORTRAIT = 1 / 8.5
 /** Islands are re-read this often (ms) in case one changed size without a resize (a wider gauge, a new tab). */
 const ISLAND_POLL_MS = 600
 
@@ -100,7 +113,8 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const cam = useRef<THREE.OrthographicCamera>(null)
   const layout = useLayout()
   const office = useOffice()
-  const furnished = useMemo(() => furnishedBox(layout, office.slots), [layout, office])
+  const occupied = useMemo(() => occupiedBox(layout, office.slots, OCCUPIED_PAD), [layout, office])
+  const occupiedPortrait = useMemo(() => occupiedBox(layout, office.slots, OCCUPIED_PAD_PORTRAIT), [layout, office])
   const selection = useUi((u) => panelSelection(u.panel))
   // Only the side panel still takes a band off the scene; the top and bottom HUD are corner islands (T07).
   const panelRight = useUi((u) => u.sceneInset.right)
@@ -129,10 +143,12 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     const freeRight = Math.max(size.width - band.current, size.width * 0.3)
     const portrait = size.height > freeRight * 1.2
     let frame = frameBox(layout, zoomLevel)
-    // Portrait from Series A the open ring is the frame whatever its size (the office is tiny, a third of the free
-    // area bare ground); before that only when it is clearly smaller than the default frame.
+    // Default zoom frames the team (its desks plus a margin), not the floor: from Series A the whole floor made a
+    // dozen people a small cluster in an empty slab (fix round §3). Portrait from Series A always does (the office is
+    // tiny on a phone); otherwise only when the team's box is clearly smaller than the default frame.
     const ringStage = layout.stage >= RING_FRAME_STAGE
-    if (portrait && zoomLevel === 1 && furnished && (ringStage || furnished.r < frame.r * FURNISHED_MIN_GAIN)) frame = furnished
+    const team = portrait ? occupiedPortrait : occupied
+    if (zoomLevel === 1 && team && ((portrait && ringStage) || team.r < frame.r * OCCUPIED_MIN_GAIN)) frame = team
 
     // The fit only changes with the screen, the panel, the islands or the frame: cached on those.
     const biasDown = portrait && zoomLevel === 1 && ringStage
@@ -142,7 +158,7 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
       // Islands under the side panel are hidden by it: only the ones in the free part count.
       const free = { left: 0, top: 0, right: freeRight, bottom: size.height }
       const focusY = biasDown ? gapCenterY(islands.current.filter((r) => r.left < freeRight), size.height) ?? undefined : undefined
-      fit = fitOutline({ focusY, outline: outlineOf(frame, OUTLINE_H), free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: portrait ? PORTRAIT_SLACK : 0, islandSlack: ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * MAX_ZOOM_PER_PX })
+      fit = fitOutline({ focusY, outline: outlineOf(frame, OUTLINE_H), free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: portrait ? (frame === team ? TEAM_PORTRAIT_SLACK : PORTRAIT_SLACK) : 0, islandSlack: ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * (portrait ? MAX_ZOOM_PER_PX_PORTRAIT : MAX_ZOOM_PER_PX) })
       fitCache.current = { key, fit }
     }
     const want = clamp(fit.zoom * ZOOM_FACTORS[zoomLevel], 12, 400)

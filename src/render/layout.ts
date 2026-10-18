@@ -414,3 +414,32 @@ export function furnishedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'i
   maxZ = Math.min(b.maxZ, maxZ + FURNISHED_PAD)
   return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
 }
+
+/**
+ * Default framing (fix round 2026-10-18 §3/§4): the team's part of the office, not the whole floor. The box holds every
+ * placed desk (the founder's included) plus `pad`, clamped to the office; the door, a corner shelf or a far whiteboard
+ * do not stretch it. From Series A a team of a dozen sat as a small cluster in a mostly empty floor. Null when no desk
+ * stands.
+ */
+export function occupiedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'id' | 'itemId' | 'type'>[], pad: number): FrameBox | null {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const s of slots) {
+    if (s.id !== FOUNDER_SLOT_ID && (!s.itemId || s.type !== 'desk')) continue
+    const c = layout.itemCenter.get(s.id)?.pos ?? layout.slotWorld.get(s.id)
+    if (!c) continue
+    minX = Math.min(minX, c[0])
+    maxX = Math.max(maxX, c[0])
+    minZ = Math.min(minZ, c[1])
+    maxZ = Math.max(maxZ, c[1])
+  }
+  if (minX === Infinity) return null
+  const b = layout.bounds
+  minX = Math.max(b.minX, minX - pad)
+  maxX = Math.min(b.maxX, maxX + pad)
+  minZ = Math.max(b.minZ, minZ - pad)
+  maxZ = Math.min(b.maxZ, maxZ + pad)
+  return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
+}

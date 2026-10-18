@@ -172,8 +172,8 @@ describe('auto seating groups each team', () => {
 describe('stage moves keep every desk', () => {
   it('two desks on the next office’s columns are both re-placed with their sitters (none is lost)', () => {
     const o = buildOffice(2, 3)
-    // (−3,−3) and (3,3) are free corner cells at Seed and column cells at Series A.
-    for (const [id, x, z, who] of [['f1', -3, -3, 'e1'], ['f2', 3, 3, 'e2']] as const) {
+    // (−6,−3) and (6,3) are free wall-row cells at Seed and column cells at Series A.
+    for (const [id, x, z, who] of [['f1', -6, -3, 'e1'], ['f2', 6, 3, 'e2']] as const) {
       expect(stageFixtures(3).noPiece.has(`${x},${z}`)).toBe(true)
       o.slots.push({ id, ring: 2, type: 'desk', pos: { x, z }, rotation: 0, itemId: 'desk-basic', occupantId: who, team: 'eng', free: true })
     }

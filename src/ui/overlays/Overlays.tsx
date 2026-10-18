@@ -157,7 +157,8 @@ export function PostMortemOverlay() {
   if (s.go.kind === 'acquired') return <AcquiredOverlay day={s.day} xp={s.go.xpEarned} />
   const cause = s.go.reasons[0]
   // N-E: a run that ends with nobody left ends because the cash could not hire again: say that, with the cash.
-  const teamCash = s.go.kind === 'teamLost' && cause?.code === 'teamLost'
+  // Round 6: with the cash under zero at the end, the cash is the cause whatever scored first (an overload line misled).
+  const teamCash = s.go.kind === 'teamLost' && (cause?.code === 'teamLost' || s.cash < 0)
   const causeLine = cause ? (teamCash ? t('pm.teamLostCash') : t(`postMortem.${cause.code}`)) : ''
   const causeValue = cause ? (teamCash ? t('pm.cashLeft', { v: money(s.cash) }) : cause.value !== undefined ? PM_FORMAT[cause.code](cause.value) : undefined) : undefined
   const cid = teamCash ? (s.go.reasons.find((r) => r.code !== 'teamLost')?.conceptId ?? cause?.conceptId) : cause?.conceptId

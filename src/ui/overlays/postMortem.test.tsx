@@ -30,6 +30,15 @@ describe('post-mortem cause', () => {
     expect(html).not.toContain(t('unit.people', { v: 1 }))
   })
 
+  it('team lost with the cash under zero: the cash line even when another reason scored first', () => {
+    const s = createGame({ seed: 1 })
+    s.stats.cash = -5000
+    s.gameOver = { kind: 'teamLost', day: 300, reasons: [{ code: 'overload', value: 10.6 }, { code: 'teamLost', value: 3 }], xpEarned: 1 }
+    const html = render(s)
+    expect(html).toContain(t('pm.teamLostCash'))
+    expect(html).not.toContain(t('postMortem.overload'))
+  })
+
   it('bankrupt: the first reason as before', () => {
     const s = createGame({ seed: 1 })
     s.gameOver = { kind: 'bankrupt', day: 200, reasons: [{ code: 'burnTooHigh', value: 3000 }], xpEarned: 1 }

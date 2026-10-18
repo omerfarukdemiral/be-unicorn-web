@@ -55,7 +55,7 @@ export function useChipMark<T extends HTMLElement>(key: string): { ref: RefObjec
     const ids = SCROLL_TRIES.map((ms) =>
       window.setTimeout(() => {
         const el = ref.current
-        if (el && !inView(el)) el.scrollIntoView?.({ block: 'center', behavior: ms === SCROLL_TRIES[0] ? 'auto' : 'smooth' })
+        if (el && !inView(el)) el.scrollIntoView?.({ block: 'center', behavior: 'auto' })
       }, ms),
     )
     return () => ids.forEach((id) => window.clearTimeout(id))

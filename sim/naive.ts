@@ -15,6 +15,7 @@ function arg(name: string, fallback: number): number {
   return i >= 0 ? Number(process.argv[i + 1]) : fallback
 }
 const SEEDS = arg('seeds', 12)
+const FROM = arg('from', 1)
 const DAYS = arg('days', 1200)
 const TRACE = arg('trace', 0)
 /** NEW-2: the founder who never hires. */
@@ -75,7 +76,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed' && s.stage === 0) garageMissed++
     seen = s.events[s.events.length - 1]?.id ?? seen
     if (trace && Math.floor(s.time.day) % 15 === 0 && s.time.day % 1 < 0.5) {
-      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.length} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
+      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
     }
   }
   return { seed, stageDays, garageMissed, minCash, over: s.gameOver ? `${s.gameOver.kind}@${s.gameOver.day}` : null, hires, moves }
@@ -83,7 +84,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
 
 if (process.argv[1]?.endsWith('naive.ts')) {
   const runs: NaiveRun[] = []
-  for (let seed = 1; seed <= SEEDS; seed++) {
+  for (let seed = FROM; seed <= SEEDS; seed++) {
     const r = playNaive(seed, DAYS, SOLO, TRACE === seed)
     runs.push(r)
     console.log(`seed ${seed}: pre g${r.stageDays[1] ?? '—'} seed g${r.stageDays[2] ?? '—'} A g${r.stageDays[3] ?? '—'} · hires ${r.hires} · garage missed paydays ${r.garageMissed} · min cash ${Math.round(r.minCash)} · ${r.over ?? 'alive'} · moves ${JSON.stringify(r.moves)}`)

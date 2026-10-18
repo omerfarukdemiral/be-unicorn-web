@@ -57,6 +57,11 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.focusUsers': 'Kullanıcı artmıyor: odağı kullanıcı bulmaya çevir',
   'move.ads': 'Kullanıcı artmıyor: küçük bir reklam aç · {v}/ay',
   'move.module': 'Ürün boşta: {m} modülünü kur · {v}',
+  'move.hireEng': 'Sunucular doluyor: bir geliştirici al',
+  'move.hireMarketing': 'Kullanıcı getiren yok: bir pazarlamacı al',
+  'move.hireGrowth': 'Kasa yetiyor: ekibi bir kişi büyüt',
+  'move.openRing': 'Ofis doldu: yeni bölümü aç',
+  'move.adsUp': 'Kasa boşta duruyor: reklamı bir kademe artır',
   // Phone strip short words for the moves (the number on line 2).
   'move.short.salesCall': 'Müşteri ara',
   'move.short.adsCut': 'Reklamı durdur',
@@ -65,6 +70,11 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.short.ads': 'Reklam aç',
   'move.short.module': 'Modül kur',
   'move.short.perMonth': '{v}/ay',
+  'move.short.hireEng': 'Geliştirici al',
+  'move.short.hireMarketing': 'Pazarlamacı al',
+  'move.short.hireGrowth': 'Ekibi büyüt',
+  'move.short.openRing': 'Yeni bölüm',
+  'move.short.adsUp': 'Reklam artır',
 
   // Horizon strip
   'horizon.span': '6 hafta',

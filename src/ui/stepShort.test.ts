@@ -1,7 +1,7 @@
 // N9: the phone goal chip is a short word over its number; the number always shows, the word fits one ~85px line.
 import { describe, expect, it } from 'vitest'
 import { UI_TEXT } from '../content'
-import { NEXT_STEP_IDS, type NextStep } from '../engine/types'
+import { NEXT_MOVES, NEXT_STEP_IDS, type NextStep } from '../engine/types'
 import { stepShort } from './loopUi'
 
 const s = { stats: { users: 1240 }, finance: { mrr: 1200, valuation: 280_000 } } as never
@@ -12,6 +12,14 @@ describe('stepShort', () => {
       const text = UI_TEXT[`step.short.${id}`]
       expect(text, id).toBeDefined()
       expect(Array.from(text!).length, id).toBeLessThanOrEqual(14)
+    }
+  })
+
+  it('every chip move has a short word of at most 14 letters too', () => {
+    for (const m of NEXT_MOVES) {
+      const text = UI_TEXT[`move.short.${m}`]
+      expect(text, m).toBeDefined()
+      expect(Array.from(text!).length, m).toBeLessThanOrEqual(14)
     }
   })
 

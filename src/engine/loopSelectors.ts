@@ -7,6 +7,7 @@ import { projectVersion, updateSize, versionUpdates } from './modules'
 import { diligenceNow, offerFactor, priceRatio } from './round'
 import { founderActionError, salesCallPreview } from './founder'
 import { moduleOffers } from './modules'
+import { nextLockedRing, ringOpenCost, ringRent } from './office'
 import { modifierMult } from './util'
 import { rivalOut } from './world'
 import {
@@ -19,6 +20,8 @@ import {
   type HorizonItem,
   type NextCrisis,
   type Action,
+  type Candidate,
+  type Dept,
   type NextMove,
   type ProjectModuleId,
   type NextStep,
@@ -97,7 +100,71 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
       const pick = moduleToBuild(s)
       return pick ? { type: 'buildModule', projectId: pick.projectId, moduleId: pick.moduleId } : null
     }
+    case 'hireEng':
+      return hireAction(s, 'eng')
+    case 'hireMarketing':
+      return hireAction(s, 'marketing')
+    case 'hireGrowth': {
+      const d = growthDept(s)
+      return d ? hireAction(s, d) : null
+    }
+    case 'openRing': {
+      const ring = nextLockedRing(s.office)
+      return ring === null ? null : { type: 'openRing', ring }
+    }
+    case 'adsUp':
+      return { type: 'setAdBudget', amount: biggerAdBudget(s) }
   }
+}
+
+/** The next ad step for a company with money to spare: double, at most NEXT_MOVE_AD_MRR of the MRR. */
+function biggerAdBudget(s: GameState): number {
+  return Math.round(Math.max(firstAdBudget(s), Math.min(s.finance.mrr * NEXT_MOVE_AD_MRR, s.finance.adBudget * 2)))
+}
+
+/** The office has no desk slot left but a locked ring the runway carries (its price and rent). */
+function ringFits(s: GameState, months: number): boolean {
+  const ring = nextLockedRing(s.office)
+  if (ring === null) return false
+  const r = previewSpend(s, { cashDelta: -ringOpenCost(ring), burnDelta: ringRent(s.stage, ring) }).runwayAfter
+  return r === null || r >= months
+}
+
+function hireAction(s: GameState, dept: Dept): Action | null {
+  const c = cheapestOf(s, dept)
+  return c ? { type: 'hire', candidateId: c.id, autoDesk: true } : null
+}
+
+function cheapestOf(s: GameState, dept: Dept): Candidate | undefined {
+  return s.candidates.filter((c) => c.dept === dept).sort((a, b) => a.salary - b.salary)[0]
+}
+
+/** Runway after hiring the cheapest `dept` candidate (desk included); undefined = no such hire possible now. */
+export function deptHireRunway(s: GameState, dept: Dept): number | null | undefined {
+  const c = cheapestOf(s, dept)
+  const desk = s.derived.hireDeskCost
+  if (!c || desk === null || desk === undefined) return undefined
+  return previewSpend(s, { cashDelta: -desk, burnDelta: policyCost(s, 'salary', c.salary) }).runwayAfter
+}
+
+/** The hire leaves at least `months` of runway (profitable after it counts). */
+function hireFits(s: GameState, dept: Dept, months: number): boolean {
+  const r = deptHireRunway(s, dept)
+  return r === null || (r !== undefined && r >= months)
+}
+
+/**
+ * The team mix a guided company grows toward (builders, users, deals, retention): the dept furthest under its share
+ * that has a candidate and fits the runway with headroom.
+ */
+const GROWTH_MIX: Readonly<Partial<Record<Dept, number>>> = { eng: 3, marketing: 3, sales: 2, product: 1, ops: 1 }
+function growthDept(s: GameState): Dept | undefined {
+  const total = Object.values(GROWTH_MIX).reduce((a, b) => a + (b ?? 0), 0)
+  const team = s.employees.length + 1
+  const gap = (d: Dept) => ((GROWTH_MIX[d] ?? 0) / total) * team - (s.derived.deptCounts?.[d] ?? 0)
+  return (Object.keys(GROWTH_MIX) as Dept[])
+    .sort((a, b) => gap(b) - gap(a))
+    .find((d) => hireFits(s, d, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
 }
 
 /** A first ad budget: half the MRR, at least the garage's paid floor, at most this stage's (no 2× MRR spend at Seed). */
@@ -135,10 +202,14 @@ export function nextMove(s: GameState): NextMove | undefined {
     if (s.finance.adBudget > 0) return 'adsCut'
     if (s.finance.priceMultiplier < NEXT_MOVE_PRICE_CAP - 1e-9) return 'price'
   }
+  // Servers full (users churn away on an overloaded product): an engineer, if the runway carries one.
+  const eng = s.derived.deptCounts?.eng ?? 0
+  if ((s.derived.overload > NEXT_MOVE_OVERLOAD || (eng === 0 && s.stage >= 1)) && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
   const last = s.finance.usersHistory[s.finance.usersHistory.length - 1]
   const flat = last !== undefined && s.stats.users <= last * (1 + NEXT_MOVE_FLAT_GROWTH)
   if (flat) {
     if (s.founder.focus !== 'users' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
+    if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
     if (s.finance.adBudget <= 0) {
       // Only an ad budget the runway carries (no ads on / ads cut loop).
       const after = previewSpend(s, { burnDelta: firstAdBudget(s) }).runwayAfter
@@ -146,6 +217,18 @@ export function nextMove(s: GameState): NextMove | undefined {
     }
   }
   if (moduleToBuild(s)) return 'module'
+  // Money in the bank beyond the bar: grow the team toward the mix (Pre-seed / Seed: the next round wants growth).
+  if (s.stage >= 1) {
+    if (growthDept(s)) return 'hireGrowth'
+    const roomy = (m: number) => rw === null || rw >= m
+    // Office full: the next section, when the runway carries its price and rent.
+    if (s.derived.hireDeskCost === null && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
+    // Cash idle and ads small: the next ad step (the runway must still carry it).
+    if (roomy(NEXT_MOVE_ADS_UP_RUNWAY) && s.finance.adBudget < s.finance.mrr * NEXT_MOVE_AD_MRR * 0.75) {
+      const after = previewSpend(s, { burnDelta: biggerAdBudget(s) - s.finance.adBudget }).runwayAfter
+      if (after === null || after >= B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) return 'adsUp'
+    }
+  }
   return undefined
 }
 /** Moves are named up to Seed (a guided player must reach Series A; the chip closes from A on). */
@@ -154,6 +237,12 @@ const NEXT_MOVE_MAX_STAGE = 2
 const NEXT_MOVE_SALES_FACTOR = 0.5
 /** The price move stops here (the chip never walks the price to the top). */
 const NEXT_MOVE_PRICE_CAP = 1.3
+/** Overload (users over server capacity, derived.overload) from which the chip asks for an engineer. */
+const NEXT_MOVE_OVERLOAD = 0.1
+/** A growth hire keeps this many months over HIRE_RUNWAY_MIN. */
+const NEXT_MOVE_GROWTH_HEADROOM = 2
+/** Runway from which idle cash goes into the next ad step. */
+const NEXT_MOVE_ADS_UP_RUNWAY = 12
 /** Users within this of last month's count read as flat. */
 const NEXT_MOVE_FLAT_GROWTH = 0.02
 

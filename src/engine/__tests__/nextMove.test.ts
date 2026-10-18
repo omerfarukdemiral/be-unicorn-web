@@ -53,6 +53,20 @@ describe('nextMove', () => {
     expect((a as { amount: number }).amount).toBeGreaterThanOrEqual(B.CAC_SPEND_FLOOR[0]!)
   })
 
+  it('Pre-seed / Seed: overloaded servers ask for an engineer the runway carries; money idle grows the team', () => {
+    const l = live()
+    const engCand = { ...l.candidates[0]!, id: 'cand-eng-test', dept: 'eng' as const }
+    const rich: GameState = { ...l, stage: 1, candidates: [...l.candidates, engCand], stats: { ...l.stats, cash: 300_000 }, finance: { ...l.finance, runway: 30 } }
+    expect(nextMove({ ...rich, derived: { ...rich.derived, overload: 0.5 } })).toBe('hireEng')
+    const a = stepAction(rich, { ...nextStep(rich), move: 'hireEng' })
+    expect(rich.candidates.find((c) => c.id === (a as { candidateId: string }).candidateId)?.dept).toBe('eng')
+    const calm: GameState = { ...rich, derived: { ...rich.derived, overload: 0, deptCounts: { ...rich.derived.deptCounts, eng: 1, marketing: 1 } } }
+    expect(['hireGrowth', 'module', 'openRing', 'adsUp']).toContain(nextMove(calm))
+    // Thin runway: no hire is ever named.
+    const thin: GameState = { ...rich, stats: { ...rich.stats, cash: 0 }, finance: { ...rich.finance, runway: B.HIRE_RUNWAY_MIN + 0.5 }, derived: { ...rich.derived, overload: 0.5 } }
+    expect(['hireEng', 'hireGrowth', 'hireMarketing']).not.toContain(nextMove(thin))
+  })
+
   it('stops at Series A', () => {
     const l = live()
     expect(nextMove({ ...l, stage: 3, finance: { ...l.finance, runway: 1 } })).toBeUndefined()

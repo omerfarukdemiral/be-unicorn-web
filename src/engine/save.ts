@@ -9,6 +9,7 @@ import { placeStarterDecor, repairOffice } from './layout'
 import { syncSeats } from './office'
 import { castOf, defaultMarket, ensureRivals, marketTools, newBoard } from './world'
 import { uniquePush } from './util'
+import { renameSlugProjects } from './projectNames'
 
 export interface SaveFile {
   version: number
@@ -173,6 +174,8 @@ export function migrate(file: { version: number; state: unknown }): GameState | 
   if (!out.meta || !out.time || !out.stats) return null
   // Renamed stage goals keep the ☆ already earned (any version: the rename landed inside v4).
   if (Array.isArray(out.goalsDone)) out.goalsDone = [...new Set(out.goalsDone.map((id) => RENAMED_GOALS[id] ?? id))]
+  // Unnamed projects were "marketplace-1" slugs until fix round F8: any save gets the readable names (feed and releases too).
+  if (Array.isArray(out.projects) && out.rng) renameSlugProjects(out)
   // Garage levers (2026-10-08) open for any save, whatever its version.
   if (Array.isArray(out.unlockedTools)) for (const tool of INITIAL_TOOLS) uniquePush(out.unlockedTools, tool)
   // E1: derived.people is not saved; rebuilt here (pure, no content) so the loaded state reads as it was.

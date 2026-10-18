@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_CATEGORIES, type Project, type ProjectCategory } from '../../engine/types'
 import * as B from '../../engine/balance'
 import { effortOn, founderProject, isBuilder } from '../../engine/effort'
-import { PROJECT_CATEGORY_TEXT, PROJECT_NAMES } from '../../content'
+import { PROJECT_CATEGORY_TEXT } from '../../content'
 import { useGameStore } from '../../store/gameStore'
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
@@ -20,18 +20,6 @@ import { displayMaturity, projectVersion } from '../../engine/modules'
 import { AdFocusMark } from './AdFocus'
 import { LeadLine, SprintRow, TeamOf } from '../effort'
 import { Face } from '../bubbles/face'
-
-/** Turkish project name from content, unique within the run. */
-function nextProjectName(): string {
-  const s = useGameStore.getState().state
-  const used = new Set(s.projects.map((p) => p.name))
-  const start = s.counters.projectsStarted ?? s.projects.length
-  for (let i = 0; i < PROJECT_NAMES.length; i++) {
-    const n = PROJECT_NAMES[(start + i) % PROJECT_NAMES.length]
-    if (n && !used.has(n)) return n
-  }
-  return `${PROJECT_NAMES[0] ?? 'Proje'} ${start + 1}`
-}
 
 export const MVP_MATURITY = 0.2
 
@@ -118,7 +106,7 @@ export function ProjectsPanel() {
             <div key={c} className="relative">
               <button
                 type="button"
-                onClick={() => dispatch({ type: 'startProject', category: c, name: nextProjectName() })}
+                onClick={() => dispatch({ type: 'startProject', category: c })}
                 title={t('projects.start')}
                 className="flex min-h-[76px] w-full flex-col items-center justify-center gap-1 rounded-control border border-border px-1 py-2 transition-colors hover:border-border-strong hover:bg-surface-2"
               >

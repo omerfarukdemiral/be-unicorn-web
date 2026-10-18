@@ -149,8 +149,11 @@ export function Expandable({
         style={{ ...tintEdge(mark.color), maxHeight: `calc(var(--scene-free-h, 9999px) - ${CARD_SLACK}px)`, ...(limits.landscape ? { width: limits.maxW } : null) }}
         className={cx(BUBBLE_SHELL, 'flex flex-col overflow-hidden', !limits.landscape && (mobile ? 'w-[calc(100vw-24px)]' : 'w-[min(340px,calc(100vw-32px))]'))}
       >
+        {/* The answers come first in the DOM (the header is drawn on top with order-first): the first control after the
+            pill tap is an answer, not Detay / ×, for Tab and for scripted players (fix round F5: bubble → answer, 2 taps). */}
+        <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5 *:shrink-0" style={{ maxHeight: limits.maxH }}>{children}</div>
         {/* The header on the kind's ground, the answers on the neutral surface (chips keep their green / red). */}
-        <div className={cx('mb-2 flex min-w-0 shrink-0 items-center gap-1.5 py-1 pr-1', face ? 'pl-1.5' : 'pl-2.5')} style={{ background: ground.background }}>
+        <div className={cx('order-first mb-2 flex min-w-0 shrink-0 items-center gap-1.5 py-1 pr-1', face ? 'pl-1.5' : 'pl-2.5')} style={{ background: ground.background }}>
           {face && <Face id={face} size={32} color={mark.color} badge={mark.icon} />}
           {/* Open, the pill's line stays as the header topic ("Sen · Tur penceresi açık"): the rows below need that context. */}
           <SpeakerLine icon={face ? undefined : mark.icon} color={mark.color} speaker={speaker} topic={lineInBody && speaker ? undefined : line} className="min-w-0 flex-1" />
@@ -158,7 +161,6 @@ export function Expandable({
           {detail && <IconButton icon="info" label={t('bubble.detail')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={() => launch(detail)} />}
           <IconButton icon="close" label={t('bubble.close')} size={mobile ? 44 : 30} className="pointer-coarse:size-11!" onClick={closeBubble} />
         </div>
-        <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5 *:shrink-0" style={{ maxHeight: limits.maxH }}>{children}</div>
       </div>
       <BubbleTail style={tintEdge(mark.color)} />
     </div>

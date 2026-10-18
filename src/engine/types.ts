@@ -1095,6 +1095,8 @@ export interface DerivedMetrics {
    * still profitable after it, undefined = no candidate. The guidance stops asking for hires under HIRE_RUNWAY_MIN.
    */
   hireRunway?: number | null
+  /** What a hire's auto desk costs today (0 = a desk stands free, null = no desk slot left). */
+  hireDeskCost?: number | null
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
   nextStep?: NextStep
   /** The player's play style today (engine/style.ts); null = none clear yet. */
@@ -1375,7 +1377,7 @@ export interface NextStep {
 }
 
 /** Concrete garage / Pre-seed moves the chip can name: cash first, then growth, then the product. */
-export const NEXT_MOVES = ['salesCall', 'adsCut', 'price', 'focusUsers', 'ads', 'module'] as const
+export const NEXT_MOVES = ['salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp'] as const
 export type NextMove = (typeof NEXT_MOVES)[number]
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */

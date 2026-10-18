@@ -44,6 +44,11 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.focusUsers': 'Kullanıcı artmıyor: odağı kullanıcı bulmaya çevir',
   'move.ads': 'Kullanıcı artmıyor: küçük bir reklam aç · {v}/ay',
   'move.module': 'Ürün boşta: {m} modülünü kur · {v}',
+  'move.hireEng': 'Sunucular doluyor: bir geliştirici al',
+  'move.hireMarketing': 'Kullanıcı getiren yok: bir pazarlamacı al',
+  'move.hireGrowth': 'Kasa yetiyor: ekibi bir kişi büyüt',
+  'move.openRing': 'Ofis doldu: yeni bölümü aç',
+  'move.adsUp': 'Kasa boşta duruyor: reklamı bir kademe artır',
 
   // Horizon strip
   'horizon.span': '6 hafta',

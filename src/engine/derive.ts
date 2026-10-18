@@ -338,7 +338,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.market = marketView(s)
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
-  s.derived.hireRunway = cheapestHireRunway(s, hireDeskCost(s, content))
+  s.derived.hireDeskCost = hireDeskCost(s, content)
+  s.derived.hireRunway = cheapestHireRunway(s, s.derived.hireDeskCost)
   s.derived.nextStep = nextStep(s)
   s.derived.playStyle = playStyle(s)
   // GAMEPLAY V2 §8.3–8.4: the board's quarter and the contracts up for renewal (the horizon lists both).

@@ -15,6 +15,13 @@ describe('guided naive player', () => {
     })
   }
 
+  it('seed 11: the chip carries the guided player to Series A, cash never below zero', { timeout: 180_000 }, () => {
+    const r = playNaive(11, 900, false)
+    expect(r.stageDays[3]).not.toBeNull()
+    expect(r.minCash).toBeGreaterThan(0)
+    expect(r.over).toBeNull()
+  })
+
   it('solo (never hires): the chip keeps naming moves and the garage still reaches Pre-seed', { timeout: 120_000 }, () => {
     const r = playNaive(2, 700, true)
     expect(r.hires).toBe(0)

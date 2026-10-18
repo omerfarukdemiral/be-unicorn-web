@@ -64,7 +64,7 @@ describe('nextMove', () => {
     const a = stepAction(rich, { ...nextStep(rich), move: 'hireEng' })
     expect(rich.candidates.find((c) => c.id === (a as { candidateId: string }).candidateId)?.dept).toBe('eng')
     const calm: GameState = { ...rich, derived: { ...rich.derived, overload: 0, deptCounts: { ...rich.derived.deptCounts, eng: 1, marketing: 1 } } }
-    expect(['hireGrowth', 'module', 'openRing', 'adsUp', 'growthAsk', 'focusTalk', 'progress']).toContain(nextMove(calm))
+    expect(['hireGrowth', 'module', 'openRing', 'adsUp', 'growthAsk', 'focusTalk', 'progress', 'salesGrow', 'moraleLost', 'cutBurn']).toContain(nextMove(calm))
     // Thin runway: no hire is ever named.
     const thin: GameState = { ...rich, stats: { ...rich.stats, cash: 0 }, finance: { ...rich.finance, runway: B.HIRE_RUNWAY_MIN + 0.5 }, derived: { ...rich.derived, overload: 0.5 } }
     expect(['hireEng', 'hireGrowth', 'hireMarketing']).not.toContain(nextMove(thin))
@@ -218,6 +218,23 @@ describe('nextMove', () => {
       expect(['hireEng', 'hireMarketing', 'hireGrowth', 'serverRoom', 'openRing']).not.toContain(nextMove(full))
       for (const m of ['hireEng', 'hireMarketing', 'hireGrowth', 'serverRoom'] as const) expect(stepAction(full, { ...nextStep(full), move: m }), m).toBeNull()
     }
+  })
+
+  it('round 12: an empty team after the garage hires the first builder; progress hands a curable weak number to its cure', () => {
+    const l = live()
+    const eng = { ...l.candidates[0]!, id: 'cand-eng-0', dept: 'eng' as const, salary: 500 }
+    const empty: GameState = { ...l, stage: 2, employees: [], candidates: [...l.candidates, eng], stats: { ...l.stats, cash: 200_000 }, finance: { ...l.finance, runway: 20 } }
+    expect(nextMove(empty)).toBe('hireEng')
+    // A falling morale with a team to shrink is never a bare gauge.
+    const sinking: GameState = {
+      ...l,
+      stage: 2,
+      employees: [...l.employees, { ...l.employees[0]!, id: 'e-x', dept: 'marketing' }],
+      stats: { ...l.stats, cash: 200_000, morale: 52 },
+      finance: { ...l.finance, runway: 20 },
+    }
+    const m = nextMove(sinking)
+    expect(m).toBeDefined()
   })
 
   it('stops at Unicorn', () => {

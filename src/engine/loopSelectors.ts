@@ -565,6 +565,8 @@ export function nextMove(s: GameState): NextMove | undefined {
       if (!lifts && s.employees.length > 1 && moveAction(s, 'cutBurn') && !snoozed(s, 'cutBurn')) return 'moraleLost'
     }
   }
+  // Round 12: nobody left after the garage: the cheapest builder the cash carries (2 months of runway after it).
+  if (s.stage >= 1 && s.employees.length === 0 && !snoozed(s, 'hireEng') && hireFits(s, 'eng', NEXT_MOVE_FIRST_ENG_RUNWAY)) return 'hireEng'
   // The round window open and nothing started: the round brings the cash (round 6: the tester idled 400 days with
   // only the HUD's "Tur başlat" as a cue).
   if (s.derived.canStartRound && !s.round?.active) return 'startRound'
@@ -630,7 +632,20 @@ export function nextMove(s: GameState): NextMove | undefined {
     }
   }
   // Nothing concrete: the chip still shows the road to the next stage (after the garage; the garage has its chain).
-  return s.stage >= 1 ? 'progress' : undefined
+  return s.stage >= 1 ? progressOrCure(s) : undefined
+}
+
+/**
+ * Round 12 (test9 phone: "Seed için moral 48 → 23 → 3/50" and "aylık büyüme %-12.7/%6" with no move while it sank):
+ * progress never names a weak number that has a cure on hand: low morale with a team to shrink → moraleLost, short
+ * runway → cutBurn, weak growth → a sales call; only then the gauge.
+ */
+function progressOrCure(s: GameState): NextMove {
+  const m = weakestMetric(s)
+  if (m?.id === 'morale' && s.employees.length > 1 && !snoozed(s, 'cutBurn') && moveAction(s, 'cutBurn')) return 'moraleLost'
+  if (m?.id === 'runway' && s.employees.length > 1 && !snoozed(s, 'cutBurn') && moveAction(s, 'cutBurn')) return 'cutBurn'
+  if ((m?.id === 'growth' || m?.id === 'valuation') && founderActionError(s, 'salesCall') === null && salesCallPreview(s).factor >= NEXT_MOVE_SALES_FACTOR) return 'salesGrow'
+  return 'progress'
 }
 /** Moves are named through Series C (round 6: the chip always shows something until Unicorn). */
 const NEXT_MOVE_MAX_STAGE = 5

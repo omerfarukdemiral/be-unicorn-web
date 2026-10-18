@@ -21,7 +21,13 @@ export const CRISES: readonly CrisisDef[] = [
     cardId: 'crisis-lease-hike',
     // Rent × 1.8 for 90 days + a deposit of 3 months' rent. There is no rent modifier yet (rent is priced in derive):
     // the 90-day difference is paid up front with the deposit.
-    effects: (s, sev) => ({ cash: -Math.round(rentOf(s) * (3 + 0.8 * 3 * sev)) }),
+    // Round 12 (test9: the hike took a thin Pre-seed under $0 before the card, both options read "Kasa −$2.4K olur"):
+    // when the cash cannot cover it, the deposit and the difference are spread over the 90 days as rent instead.
+    effects: (s, sev) => {
+      const cost = Math.round(rentOf(s) * (3 + 0.8 * 3 * sev))
+      if (s.stats.cash >= cost || rentOf(s) <= 0) return { cash: -cost }
+      return { modifiers: [{ kind: 'rent', value: 1 + cost / (3 * rentOf(s)), days: 90 }] }
+    },
     // A remote team has no landlord: the card's 'go remote' option or the signed policy settles it for good.
     settled: (s) => s.flags[REMOTE_FIRST_FLAG] === true || (s.policies?.adopted ?? []).includes('remote-first'),
   },

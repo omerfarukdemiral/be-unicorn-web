@@ -4,7 +4,7 @@ import * as B from './balance'
 import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
 import { effortOn, ledMember, onLeave } from './effort'
 import { projectVersion, updateSize, versionUpdates } from './modules'
-import { diligenceNow, offerFactor, priceRatio } from './round'
+import { diligenceNow, growthAsk, investorGrowth as investorGrowthOf, offerFactor, priceRatio } from './round'
 import { founderActionError, salesCallPreview } from './founder'
 import { moduleOffers } from './modules'
 import { nextLockedRing, ringOpenCost, ringRent } from './office'
@@ -84,6 +84,22 @@ export function stepAction(s: GameState, st: NextStep): Action | null {
 /** The engine verb of a chip move (null when it is no longer possible). */
 export function moveAction(s: GameState, move: NextMove): Action | null {
   switch (move) {
+    case 'keepStaff': {
+      // The leaver nearest the door: a raise when the runway carries it, else the talk.
+      const e = leaverOf(s)
+      if (!e) return null
+      const raise = e.salary * (B.RAISE_FACTOR - 1)
+      return { type: 'respondResignation', employeeId: e.id, response: hireIsRed(s, raise) ? 'talk' : 'raise' }
+    }
+    case 'morale':
+      return { type: 'founderAction', kind: 'motivateTeam' }
+    case 'pitch':
+      // The meeting is a choice the player reads: the tap opens it (UI), no engine verb.
+      return null
+    case 'focusTalk':
+      return { type: 'setFounderFocus', focus: 'talk' }
+    case 'growthAsk':
+      return growthMove(s)
     case 'salesCall':
       return { type: 'founderAction', kind: 'salesCall' }
     case 'adsCut':
@@ -115,6 +131,25 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
     case 'adsUp':
       return { type: 'setAdBudget', amount: biggerAdBudget(s) }
   }
+}
+
+/** Someone walking out (the soonest leave day first). */
+function leaverOf(s: GameState) {
+  return s.employees.filter((e) => e.status === 'leaving').sort((a, b) => (a.leaveDay ?? 0) - (b.leaveDay ?? 0))[0]
+}
+
+/** What raises the MoM the next round asks for: a marketer if there is none, else the next ad step the runway carries. */
+function growthMove(s: GameState): Action | null {
+  if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return hireAction(s, 'marketing')
+  const amount = biggerAdBudget(s)
+  if (amount <= s.finance.adBudget) return null
+  const after = previewSpend(s, { burnDelta: amount - s.finance.adBudget }).runwayAfter
+  return after === null || after >= B.HIRE_RUNWAY_MIN ? { type: 'setAdBudget', amount } : null
+}
+
+/** Days since the last hire (Infinity with nobody on staff): growth hires wait NEXT_MOVE_HIRE_GAP_DAYS between them. */
+function daysSinceHire(s: GameState): number {
+  return s.employees.reduce((m, e) => Math.min(m, s.time.day - e.hiredDay), Infinity)
 }
 
 /** The next ad step for a company with money to spare: double, at most NEXT_MOVE_AD_MRR of the MRR. */
@@ -194,7 +229,12 @@ function moduleToBuild(s: GameState): { projectId: string; moduleId: ProjectModu
  * idle: its cheapest module). undefined = the goal itself is the move.
  */
 export function nextMove(s: GameState): NextMove | undefined {
-  if (s.stage > NEXT_MOVE_MAX_STAGE || s.round?.active || !s.projects.some((p) => p.launched)) return undefined
+  if (s.stage > NEXT_MOVE_MAX_STAGE || !s.projects.some((p) => p.launched)) return undefined
+  // People first (playtest round 5: three resignations sank Pre-seed): a leaver, then a team below the morale bar.
+  if (leaverOf(s)) return 'keepStaff'
+  if (s.employees.length > 0 && s.stats.morale < NEXT_MOVE_MORALE && founderActionError(s, 'motivateTeam') === null) return 'morale'
+  // A meeting waiting on the player: the chip says so (the tap opens it).
+  if (s.round?.active) return s.round.pitchDue !== undefined ? 'pitch' : undefined
   const rw = s.finance.runway
   const sales = founderActionError(s, 'salesCall') === null && salesCallPreview(s).factor >= NEXT_MOVE_SALES_FACTOR
   if (rw !== null && rw < B.HIRE_RUNWAY_MIN) {
@@ -207,8 +247,10 @@ export function nextMove(s: GameState): NextMove | undefined {
   if ((s.derived.overload > NEXT_MOVE_OVERLOAD || (eng === 0 && s.stage >= 1)) && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
   const last = s.finance.usersHistory[s.finance.usersHistory.length - 1]
   const flat = last !== undefined && s.stats.users <= last * (1 + NEXT_MOVE_FLAT_GROWTH)
+  // The users focus on a spent circle (the "6%" badge): talks feed the product instead.
+  if (s.founder.focus === 'users' && (s.derived.findUsers?.factor ?? 1) < NEXT_MOVE_FIND_DEAD) return 'focusTalk'
   if (flat) {
-    if (s.founder.focus !== 'users' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
+    if ((s.founder.focus ?? 'build') === 'build' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
     if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
     if (s.finance.adBudget <= 0) {
       // Only an ad budget the runway carries (no ads on / ads cut loop).
@@ -218,8 +260,11 @@ export function nextMove(s: GameState): NextMove | undefined {
   }
   if (moduleToBuild(s)) return 'module'
   // Money in the bank beyond the bar: grow the team toward the mix (Pre-seed / Seed: the next round wants growth).
+  // Pre-seed / Seed: the next round asks for MoM growth; under the ask the chip names it and the move that raises it.
+  if (s.stage >= 1 && investorGrowthOf(s) < growthAsk(s) && growthMove(s)) return 'growthAsk'
   if (s.stage >= 1) {
-    if (growthDept(s)) return 'hireGrowth'
+    // One growth hire at a time: the last one settles NEXT_MOVE_HIRE_GAP_DAYS before the next is named.
+    if (daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s)) return 'hireGrowth'
     const roomy = (m: number) => rw === null || rw >= m
     // Office full: the next section, when the runway carries its price and rent.
     if (s.derived.hireDeskCost === null && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
@@ -243,6 +288,12 @@ const NEXT_MOVE_OVERLOAD = 0.1
 const NEXT_MOVE_GROWTH_HEADROOM = 2
 /** Runway from which idle cash goes into the next ad step. */
 const NEXT_MOVE_ADS_UP_RUNWAY = 12
+/** Morale under this (the diligence bar) names a pep talk. */
+const NEXT_MOVE_MORALE = B.DILIGENCE_MORALE
+/** The users focus at this find return reads as spent (the slot greys out under a quarter). */
+const NEXT_MOVE_FIND_DEAD = 0.25
+/** Days between two growth hires the chip names (N-C: three taps were three hires). */
+const NEXT_MOVE_HIRE_GAP_DAYS = 30
 /** Users within this of last month's count read as flat. */
 const NEXT_MOVE_FLAT_GROWTH = 0.02
 

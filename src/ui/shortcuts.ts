@@ -4,9 +4,9 @@
 // O opens the office edit mode (PC only, layoutEditGate). While it is open the edit keys own the keyboard
 // (layoutEditKey: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, R turn, Del takes the piece away, 1–5 team label, Enter / O Bitti, Esc), every
 // other key is swallowed: time is held and no other panel may open over the draft.
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { DEPTS, type GameSpeed } from '../engine/types'
-import { blockingOverlay, useGameStore } from '../store/gameStore'
+import { blockingOverlay, resumeSpeed, useGameStore } from '../store/gameStore'
 import type { CenterKind, DockTab, ZoomLevel } from '../store/types'
 import { editorHover, isDirty } from '../store/layoutEdit'
 import { isTypingTarget } from './hooks'
@@ -99,7 +99,6 @@ export function layoutEditKey(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' 
 }
 
 export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
-  const lastSpeed = useRef<GameSpeed>(1)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || isTypingTarget(e)) return
@@ -122,16 +121,13 @@ export function useKeyboardShortcuts(tabKeys: Record<string, DockTab>) {
       if (e.code === 'Space') {
         e.preventDefault()
         const speed = st.state.time.speed
-        if (speed === 0) st.dispatch({ type: 'setSpeed', speed: lastSpeed.current || 1 })
-        else {
-          lastSpeed.current = speed
-          st.dispatch({ type: 'setSpeed', speed: 0 })
-        }
+        // Resume to the player's own speed (N6): a pause during a moment's 1× still hands 4× back.
+        if (speed === 0) st.dispatch({ type: 'setSpeed', speed: resumeSpeed(st) })
+        else st.dispatch({ type: 'setSpeed', speed: 0 })
         return
       }
       const sp = SPEED_KEYS[key]
       if (sp !== undefined) {
-        lastSpeed.current = sp
         st.dispatch({ type: 'setSpeed', speed: sp })
         return
       }

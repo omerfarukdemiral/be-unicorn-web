@@ -256,6 +256,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   slowOnMoments: true,
   slowdownAt: null,
   slowdownResumeDay: null,
+  chosenSpeed: 1,
   effortHold: null,
   pinnedMetrics: saved.pinnedMetrics ?? [],
   seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
@@ -360,6 +361,17 @@ function withPause(ui: UiState, state: GameState): UiState {
 export function effectiveSpeed(st: { state: GameState; ui: UiState }): GameSpeed {
   if (st.state.gameOver || st.ui.pauseReasons.length > 0) return 0
   return st.state.time.speed
+}
+
+/**
+ * The speed time comes back to (N6): the running speed the player picked, also while an automatic 1× (a moment
+ * slowdown, an effort hold) or a pause holds it. "Karar · 4×", Space, the pause key and the phone pill all use it.
+ */
+export function resumeSpeed(st: { state: GameState; ui: UiState }): GameSpeed {
+  const sp = st.state.time.speed
+  if (sp > 0 && st.ui.slowdownResumeDay === null && st.ui.effortHold === null) return sp
+  if (st.ui.effortHold && sp > 0) return st.ui.effortHold.prevSpeed
+  return st.ui.chosenSpeed
 }
 
 /** New game / continue: the world waits for the player's first "Başlat". */
@@ -479,6 +491,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // The payday desk closes once its month is answered (`payday` pause ends with it).
     set((s) => ({ state: res.state, ui: withAutoPins(withPause(withDesk(starts ? { ...s.ui, runStarted: true } : s.ui, res.state), res.state), state, res.state) }))
     retargetEmptiedDetail(action, res.state)
+    // The player's own running speed is the one every pause hands back (N6).
+    if (action.type === 'setSpeed' && !autoSpeed && action.speed > 0 && get().ui.chosenSpeed !== action.speed) set((s) => ({ ui: { ...s.ui, chosenSpeed: action.speed } }))
     // The player's own speed choice always wins over a pending 4× restore.
     if (action.type === 'setSpeed' && !autoSpeed && (get().ui.slowdownResumeDay !== null || get().ui.effortHold !== null)) set((s) => ({ ui: { ...s.ui, slowdownResumeDay: null, effortHold: null } }))
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
@@ -811,3 +825,16 @@ function afterStep(prev: GameState, next: GameState): void {
   useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
   if (useGameStore.getState().state.time.speed === 1) autoSetSpeed(4)
 }
+
+/**
+ * N6: a decision / panel / bubble pause that closes during a moment slowdown hands the player's speed back right
+ * away (the player has dealt with the moment). A payday or urgent card still waiting keeps the 1× (afterStep).
+ */
+useGameStore.subscribe((st, prev) => {
+  if (prev.ui.pauseReasons.length === 0 || st.ui.pauseReasons.length > 0) return
+  const { ui, state } = st
+  if (ui.slowdownResumeDay === null || ui.effortHold || state.time.speed !== 1 || state.gameOver) return
+  if (state.finance.pendingPayday || isUrgentCard(state.decisions.active?.cardId)) return
+  useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
+  if (ui.chosenSpeed > 1) autoSetSpeed(ui.chosenSpeed)
+})

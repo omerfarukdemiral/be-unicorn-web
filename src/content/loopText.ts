@@ -3,7 +3,7 @@
 // Merged into UI_TEXT by the content barrel (index.ts); keys never collide with strings.ts / timeText.ts.
 export const LOOP_TEXT: Record<string, string> = {
   'time.resumeTo': '{v}× dönecek',
-  // Short focus-pause reasons for the HUD pill ("Karar · 1× dönecek").
+  // Short focus-pause reasons for the HUD pill ("Karar · 4× dönecek": the player's own speed, N6).
   'time.reasonShort.decision': 'Karar',
   'time.reasonShort.concept': 'Defter',
   'time.reasonShort.modal': 'Ekran',

@@ -875,6 +875,18 @@ function endSlowdownIfDue(): void {
  * N6: a decision / panel / bubble pause that closes during a moment slowdown hands the player's speed back right
  * away (the player has dealt with the moment). A payday or urgent card still waiting keeps the 1× (afterStep).
  */
+/**
+ * Round 11 watchdog (1× holds still reached 4.7–6.4 s on some paths): while a hold is on, a wall-clock check every
+ * 250 ms ends it once due, whatever ticks or pauses did meanwhile. Browser only.
+ */
+if (typeof window !== 'undefined') {
+  window.setInterval(() => {
+    const { ui } = useGameStore.getState()
+    if (ui.effortHold) endEffortHoldIfDue()
+    else if (ui.slowdownResumeDay !== null) endSlowdownIfDue()
+  }, 250)
+}
+
 useGameStore.subscribe((st, prev) => {
   if (prev.ui.pauseReasons.length === 0 || st.ui.pauseReasons.length > 0) return
   const { ui, state } = st

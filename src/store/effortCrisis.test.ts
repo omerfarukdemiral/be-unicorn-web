@@ -1,6 +1,7 @@
 // Effort crises slow time (E1 round 3): burnout and every resignation notice drop 2× / 4× to 1× and hold it until the
-// person is answered, gone, or EFFORT_HOLD_DAYS pass; the player's own speed comes back, and a manual setSpeed wins.
-import { beforeEach, describe, expect, it } from 'vitest'
+// person is answered, gone, or SLOWDOWN_MS of wall time pass (round 6: never waiting on a tap); the player's own speed
+// comes back, and a manual setSpeed wins.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as B from '../engine/balance'
 import { SECONDS_PER_DAY, type Employee, type GameState } from '../engine/types'
 import { useGameStore } from './gameStore'
@@ -23,9 +24,13 @@ const run = (until: () => boolean, max = 600) => {
 const eng = () => store().state.employees.find((x) => x.id === 'e9')
 
 describe('effort crisis hold', () => {
+  // A fake wall clock: 100 ms per read (the hold is wall time, round 6).
+  let clock = 0
   beforeEach(() => {
     store().setSlowOnMoments(true)
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100))
   })
+  afterEach(() => vi.restoreAllMocks())
 
   it('burnout at 4× drops to 1× and the answered person gives the 4× back', () => {
     burntRun(4)
@@ -82,15 +87,15 @@ describe('effort crisis hold', () => {
     expect(store().state.time.speed).toBe(1)
   })
 
-  it('a payday waiting when the person is answered keeps the 1× until it is dealt with', () => {
+  it('round 6: a payday waiting when the person is answered does not keep the 1× (no tap needed)', () => {
     burntRun(4)
     run(() => store().ui.effortHold !== null)
     useGameStore.setState((x) => ({
       state: { ...x.state, finance: { ...x.state.finance, pendingPayday: { day: x.state.time.day, ledger: { salaries: 0, rent: 0, infra: 0, ads: 0 }, deferredBefore: 0 } as never }, employees: x.state.employees.map((e) => ({ ...e, fatigue: 10, loadAvg: 1, status: 'working' as const, burnoutDays: 0 })) },
     }))
-    for (let i = 0; i < 12; i++) store().tick(SECONDS_PER_DAY / 8)
-    expect(store().state.time.speed).toBe(1)
-    expect(store().ui.effortHold).not.toBeNull()
+    run(() => store().ui.effortHold === null, 40)
+    expect(store().ui.effortHold).toBeNull()
+    expect(store().state.time.speed).toBe(4)
   })
 
   it('a collapsed, unanswered card does not outlive the hold window (F1); an expanded one stops ticks', () => {
@@ -109,7 +114,8 @@ describe('effort crisis hold', () => {
     expect(store().state.decisions.active?.cardId).toBe('remote-vs-office')
     expect(store().ui.effortHold).toBeNull()
     expect(store().state.time.speed).toBe(4)
-    expect(store().state.time.day).toBeLessThan(untilDay + 1)
+    // Wall time ends it (round 6): a few game days at 1×, never the old day window plus.
+    expect(store().state.time.day).toBeLessThan(untilDay + B.EFFORT_HOLD_DAYS)
   })
 
   it('1× needs no hold, and "Önemli anda yavaşla" off leaves the speed alone', () => {

@@ -151,42 +151,48 @@ const inCrisis = (s: GameState, id: string): boolean => {
 
 /**
  * Effort crisis hold: a burnout or notice at 2× / 4× drops the speed to 1× (a real setSpeed, like the moment slowdown)
- * and keeps it there until the people in crisis are answered or gone, or EFFORT_HOLD_DAYS pass; then the player's
- * speed comes back. Honours "Önemli anda yavaşla".
+ * for SLOWDOWN_MS of wall time (round 6: one hold per chain, never waiting on a tap; the person's bubble keeps asking),
+ * then the player's speed comes back. A new crisis during the hold joins it without extending it. Honours
+ * "Önemli anda yavaşla".
  */
 function effortCrisisStep(prev: GameState, next: GameState): void {
   const ui = useGameStore.getState().ui
   const crisis = newCrises(prev, next)
   // At 1× inside a moment slowdown the player's speed is the one waiting to come back.
   const waiting = next.time.speed === 1 && ui.slowdownResumeDay !== null
-  if (crisis.length > 0 && ui.slowOnMoments && (next.time.speed > 1 || waiting)) {
-    const hold = ui.effortHold
+  const hold = ui.effortHold
+  if (crisis.length > 0 && !hold && ui.slowOnMoments && (next.time.speed > 1 || waiting) && (waiting || performance.now() - lastHoldEnd >= SLOWDOWN_COOLDOWN_MS)) {
     autoSetSpeed(1)
     useGameStore.setState((s) => ({
       ui: {
         ...s.ui,
-        slowdownAt: performance.now(),
+        // A moment hold already running keeps its start: the chain stays one hold.
+        slowdownAt: waiting && s.ui.slowdownAt !== null ? s.ui.slowdownAt : performance.now(),
         // The 4× restore of an important moment would undo the hold: the hold hands the speed back itself.
         slowdownResumeDay: null,
-        effortHold: { employeeIds: [...new Set([...(hold?.employeeIds ?? []), ...crisis])], untilDay: next.time.day + B.EFFORT_HOLD_DAYS, prevSpeed: hold?.prevSpeed ?? (waiting ? 4 : next.time.speed) },
+        effortHold: { employeeIds: crisis, untilDay: next.time.day + B.EFFORT_HOLD_DAYS, prevSpeed: waiting ? (s.ui.chosenSpeed > 1 ? s.ui.chosenSpeed : 4) : next.time.speed },
       },
     }))
+    if (typeof window !== 'undefined') window.setTimeout(endEffortHoldIfDue, SLOWDOWN_MS + 20)
     return
   }
-  const hold = ui.effortHold
   if (!hold) return
   if (crisis.length > 0) {
-    // Already at 1× (held): a new crisis person joins the hold and the window starts over.
-    useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: { ...hold, employeeIds: [...new Set([...hold.employeeIds, ...crisis])], untilDay: next.time.day + B.EFFORT_HOLD_DAYS } } }))
-    return
+    useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: { ...hold, employeeIds: [...new Set([...hold.employeeIds, ...crisis])] } } }))
   }
-  const open = hold.employeeIds.some((id) => inCrisis(next, id))
-  if (open && next.time.day < hold.untilDay) return
-  // A payday, an urgent card or a focus pause that came in during the hold keeps the 1×: the speed comes back only once
-  // it is dealt with. A collapsed normal card does not hold it (an open one pauses through pauseReasons).
-  if (next.finance.pendingPayday || isUrgentCard(next.decisions.active?.cardId) || ui.pauseReasons.length > 0) return
+  endEffortHoldIfDue()
+}
+
+function endEffortHoldIfDue(): void {
+  const { ui, state } = useGameStore.getState()
+  const hold = ui.effortHold
+  if (!hold || state.gameOver || ui.pauseReasons.length > 0) return
+  // Ends when the people in crisis are answered or gone, or after SLOWDOWN_MS of wall time, whichever comes first.
+  const open = hold.employeeIds.some((id) => inCrisis(state, id))
+  if (open && ui.slowdownAt !== null && performance.now() - ui.slowdownAt < SLOWDOWN_MS) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, effortHold: null } }))
-  if (next.time.speed === 1) autoSetSpeed(hold.prevSpeed)
+  lastHoldEnd = performance.now()
+  if (state.time.speed === 1) autoSetSpeed(hold.prevSpeed)
 }
 
 /** True when `next` brought an event that closes an open center screen (INTERRUPT_EVENT_KINDS). */

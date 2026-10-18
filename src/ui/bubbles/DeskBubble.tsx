@@ -455,8 +455,10 @@ function ProjectBubble({ bubbleKey }: { bubbleKey: string }) {
 // ---------------------------------------------------------------------------
 
 function ActionsBubble({ bubbleKey }: { bubbleKey: string }) {
-  const { actions } = useFounderActions()
+  const { actions, focus, setFocus } = useFounderActions()
   const energy = useGameStore(useShallow((s) => FOUNDER_ACTIONS.map((k) => actionEnergy(s.state, B.FOUNDER_ACTION_DEFS[k].energy))))
+  const find = actions.find((a) => a.kind === 'findUsers')
+  const talk = actions.find((a) => a.kind === 'talkToUsers')
   const movesOut = useGameStore((s) => (s.state.derived.moves?.left ?? 1) <= 0)
   const resetIn = useMovesResetIn()
   return (
@@ -469,8 +471,27 @@ function ActionsBubble({ bubbleKey }: { bubbleKey: string }) {
       line={t('founder.actions')}
       detail={() => useGameStore.getState().openPanel({ kind: 'detail', selection: { kind: 'founder' } })}
     >
+      {/* The founder's standing focus (fix round 2, N3): three rows, the active one marked like the bar slot. Picking the
+          focused one again keeps it; "Kod yaz" is the way back to building. */}
+      {(
+        [
+          { focus: 'users', a: find, icon: FOUNDER_ICON.findUsers, color: FOUNDER_COLOR.findUsers },
+          { focus: 'talk', a: talk, icon: FOUNDER_ICON.talkToUsers, color: FOUNDER_COLOR.talkToUsers },
+          { focus: 'build', a: undefined, icon: 'desk', color: 'var(--color-brand)' },
+        ] as const
+      ).map((row) => (
+        <ChoiceRow
+          key={row.focus}
+          icon={{ icon: row.icon, color: row.color }}
+          label={t(`focus.row.${row.focus}`)}
+          title={row.a?.label}
+          focused={focus === row.focus}
+          disabled={row.a ? row.a.locked || (row.a.disabled && focus !== row.focus) : false}
+          onClick={() => setFocus(row.focus)}
+        />
+      ))}
       {actions
-        .filter((a) => !a.locked)
+        .filter((a) => !a.locked && !a.focusSlot)
         .map((a) => {
           const e = energy[FOUNDER_ACTIONS.indexOf(a.kind)] ?? 0
           const chips: Chip[] = [

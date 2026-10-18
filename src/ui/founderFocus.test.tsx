@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { applyAction, createGame, type GameState } from '../engine'
 import { useGameStore } from '../store/gameStore'
 import { FounderBar } from './layout/FounderBar'
+import { focusTap } from './FounderActions'
+import { DeskBubble } from './bubbles/DeskBubble'
+import { openBubble } from './bubbles/Expandable'
 import { t } from './i18n'
 
 function garage(focus?: 'users' | 'talk' | 'build'): GameState {
@@ -14,16 +17,21 @@ function garage(focus?: 'users' | 'talk' | 'build'): GameState {
 }
 
 /** Server render of the CURRENT store: zustand's server snapshot reads the initial state, so it is swapped in. */
-function render(state: GameState): string {
+function render(state: GameState, el: Parameters<typeof renderToStaticMarkup>[0] = createElement(FounderBar, { variant: 'bar' })): string {
   useGameStore.setState({ state })
   const initial = useGameStore.getInitialState()
-  const keep = initial.state
-  Object.assign(initial, { state })
+  const keep = { state: initial.state, ui: initial.ui }
+  Object.assign(initial, { state, ui: useGameStore.getState().ui })
   try {
-    return renderToStaticMarkup(createElement(FounderBar, { variant: 'bar' }))
+    return renderToStaticMarkup(el)
   } finally {
-    Object.assign(initial, { state: keep })
+    Object.assign(initial, keep)
   }
+}
+
+const desk = (state: GameState): string => {
+  openBubble('desk:actions')
+  return render(state, createElement(DeskBubble, { bubbleKey: 'desk:actions', topic: 'actions' }))
 }
 
 const slot = (html: string, kind: string): string => html.match(new RegExp(`<button[^>]*data-slot="${kind}"[^>]*>`))?.[0] ?? ''
@@ -42,5 +50,24 @@ describe('founder focus switch', () => {
     expect(slot(html, 'findUsers')).toContain(t('focus.on'))
     expect(slot(html, 'talkToUsers')).toContain('aria-pressed="false"')
     expect(html.match(/data-focus-mark/g)).toHaveLength(1)
+  })
+
+  it('N3: a tap on the slot already in focus keeps it; another slot switches', () => {
+    expect(focusTap('users', 'users')).toBeNull()
+    expect(focusTap('users', 'talk')).toBe('talk')
+    expect(focusTap('build', 'users')).toBe('users')
+  })
+
+  it('N3: the desk bubble shows the three foci, the active one marked; Kod yaz is there to go back', () => {
+    const html = desk(garage('users'))
+    for (const k of ['users', 'talk', 'build'] as const) expect(html).toContain(t(`focus.row.${k}`))
+    const row = (label: string) => html.match(new RegExp(`<button[^>]*aria-pressed="(true|false)"[^>]*>(?:(?!</button>).)*${label}`))?.[1]
+    expect(row(t('focus.row.users'))).toBe('true')
+    expect(row(t('focus.row.build'))).toBe('false')
+    expect(html).toContain(t('focus.tag'))
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+    // Back on build: the Kod yaz row is the marked one.
+    const built = desk(garage('build'))
+    expect(built.match(new RegExp(`<button[^>]*aria-pressed="true"[^>]*>(?:(?!</button>).)*${t('focus.row.build')}`))).not.toBeNull()
   })
 })

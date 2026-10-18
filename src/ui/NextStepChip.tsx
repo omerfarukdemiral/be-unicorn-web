@@ -104,9 +104,13 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
           {short.value && <span className="tabular whitespace-nowrap text-[12px] font-semibold text-ink-2">{short.value}</span>}
         </span>
       ) : (
-        <span key={step.id} className={cx('min-w-0 flex-1 animate-fade-in text-[13px] font-semibold text-ink', compact ? 'line-clamp-2 leading-tight' : 'truncate')}>
-          {text}
-        </span>
+        <>
+          <span key={step.id} className={cx('min-w-0 flex-1 animate-fade-in text-[13px] font-semibold text-ink', compact ? 'line-clamp-2 leading-tight' : 'truncate')}>
+            {text}
+          </span>
+          {/* Desktop: the road to the next round keeps its number in view ("$1.2M/$3M"), the sentence truncates first. */}
+          {step.move === 'progress' && v.shortValue && <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{v.shortValue}</span>}
+        </>
       )}
       {progress !== undefined && (
         <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[2px] bg-brand/12">

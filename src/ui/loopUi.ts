@@ -168,9 +168,18 @@ export function moveText(move: NextMove, s: GameState): string {
       const offer = p ? moduleOffers(s, p).find((o) => o.id === a.moduleId) : undefined
       return t('move.module', { m: moduleName(a.moduleId, p?.category), v: money(offer?.cost ?? 0) })
     }
+    case 'progress':
+      // The number goes beside it (NextStepChip: a suffix that never truncates).
+      return t('move.progress')
     default:
       return t(`move.${move}`)
   }
+}
+
+/** "$X / $Y": the valuation against the next stage's target valuation (the road to the next round). */
+function progressOf(s: GameState): string {
+  const target = STAGES[s.stage + 1]?.targetValuation ?? 0
+  return t('step.short.of', { v: money(s.finance.valuation), t: money(target) })
 }
 
 /** Phone strip: the move's short word, and the money the tap spends on line 2 (N9 + fix round 3 moves). */
@@ -180,6 +189,8 @@ export function moveShort(move: NextMove, s: GameState): { label: string; value?
   switch (move) {
     case 'ads':
       return { label, value: t('move.short.perMonth', { v: money(a?.type === 'setAdBudget' ? a.amount : 0) }) }
+    case 'progress':
+      return { label, value: progressOf(s) }
     case 'growthAsk':
       // The round's ask on line 2: the investor's growth now over what they want ("%4/%8").
       return { label, value: t('step.short.of', { v: pct(investorGrowth(s)), t: pct(growthAsk(s)) }) }
@@ -269,7 +280,10 @@ export function followStep(step: NextStep): void {
     }
     const a = moveAction(state, step.move)
     if (a && dispatch(a).ok) return
-    return openPanel(step.move === 'module' ? { kind: 'projects' } : { kind: 'growth' }, { root: true })
+    // No verb (progress) or refused: the place where it lives. The round moves open the Growth panel's round section.
+    if (step.move === 'module') return openPanel({ kind: 'projects' }, { root: true })
+    const round = step.move === 'progress' || step.move === 'startRound' || step.move === 'growthAsk'
+    return openPanel(round ? { kind: 'growth', section: 'round' } : { kind: 'growth' }, { root: true })
   }
   switch (stepGo(step)) {
     case 'projects':

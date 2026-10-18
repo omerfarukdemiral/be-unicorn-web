@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import { UI_TEXT } from '../content'
 import { NEXT_MOVES, NEXT_STEP_IDS, type NextStep } from '../engine/types'
-import { meetingBubbleKey, moveShort, stepShort } from './loopUi'
+import { followStep, meetingBubbleKey, moveShort, stepShort } from './loopUi'
+import { useGameStore } from '../store/gameStore'
 import { createGame } from '../engine'
 
 const s = { stats: { users: 1240 }, finance: { mrr: 1200, valuation: 280_000 } } as never
@@ -43,5 +44,14 @@ describe('stepShort', () => {
     const round = { active: true, pitchDue: 3 }
     expect(meetingBubbleKey({ round, visitors: [] } as never)).toBe('desk:pitch')
     expect(meetingBubbleKey({ round, visitors: [{ id: 'v9', purpose: 'round' }] } as never)).toBe('visitor:pitch:v9')
+  })
+
+  it('progress: the valuation over the next target on line 2; the tap opens the Growth round section', () => {
+    const g = createGame({ seed: 2 })
+    g.stage = 1
+    expect(moveShort('progress', g).value).toMatch(/^\$.*\/\$/)
+    useGameStore.getState().newGame({ seed: 2, founderXp: 0, runIndex: 0 })
+    followStep({ id: 'grow', index: 6, total: 6, move: 'progress' })
+    expect(useGameStore.getState().ui.panel).toMatchObject({ kind: 'growth', section: 'round' })
   })
 })

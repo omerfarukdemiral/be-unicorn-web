@@ -85,6 +85,12 @@ export const SLOWDOWN_WINDOW_DAYS = 3
 /** NEW-5: wall time an important moment holds 1× before the player's speed comes back (≤ 3 s with the timer slack). */
 export const SLOWDOWN_MS = 2800
 
+/** Round 6: after a hold ends, moments within this wall time do not start another (one hold per chain). */
+export const SLOWDOWN_COOLDOWN_MS = 5000
+
+/** performance.now() when the last moment hold ended (module state: UI timing, never saved). */
+let lastHoldEnd = Number.NEGATIVE_INFINITY
+
 /** True while the store itself sends setSpeed (the slowdown and its restore): such a call keeps the pending restore. */
 let autoSpeed = false
 
@@ -536,6 +542,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
 
   newGame(opts) {
     pendingDays = 0
+    lastHoldEnd = Number.NEGATIVE_INFINITY
     const state = pausedStart(freshState(opts))
     writeProfile({ founderXp: state.meta.founderXp, runIndex: state.meta.runIndex })
     resetReplay(state, false)
@@ -554,6 +561,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
   },
 
   load() {
+    lastHoldEnd = Number.NEGATIVE_INFINITY
     const saved = readSave()
     if (!saved || saved.gameOver) return false
     const state = pausedStart(saved)
@@ -819,7 +827,9 @@ function afterStep(prev: GameState, next: GameState): void {
   // An effort hold owns the speed until it ends.
   if (ui.effortHold) return
   const resumeDay = next.time.day + SLOWDOWN_WINDOW_DAYS
-  if (ui.slowOnMoments && next.time.speed === 4 && hasImportantMoment(prev, next)) {
+  // Round 6: one hold per chain of moments; a moment right after a hold ended (stage-up, a hire and a module in the
+  // same breath) does not start another.
+  if (ui.slowOnMoments && next.time.speed === 4 && performance.now() - lastHoldEnd >= SLOWDOWN_COOLDOWN_MS && hasImportantMoment(prev, next)) {
     autoSetSpeed(1)
     useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownAt: performance.now(), slowdownResumeDay: resumeDay } }))
     // NEW-5: a wall-clock timer ends the hold on time even when frames are slow (a busy scene ticks a few times a second).
@@ -837,10 +847,11 @@ function afterStep(prev: GameState, next: GameState): void {
 function endSlowdownIfDue(): void {
   const { ui, state } = useGameStore.getState()
   if (ui.slowdownResumeDay === null || ui.effortHold || state.gameOver) return
-  if (isUrgentCard(state.decisions.active?.cardId)) return
+  // Round 6: never waits on a tap, an urgent card still waiting included (its bubble asks on its own).
   if (ui.pauseReasons.length > 0) return
   if (ui.slowdownAt !== null && performance.now() - ui.slowdownAt < SLOWDOWN_MS) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
+  lastHoldEnd = performance.now()
   if (state.time.speed === 1) autoSetSpeed(ui.chosenSpeed > 1 ? ui.chosenSpeed : 4)
 }
 
@@ -852,7 +863,7 @@ useGameStore.subscribe((st, prev) => {
   if (prev.ui.pauseReasons.length === 0 || st.ui.pauseReasons.length > 0) return
   const { ui, state } = st
   if (ui.slowdownResumeDay === null || ui.effortHold || state.time.speed !== 1 || state.gameOver) return
-  if (state.finance.pendingPayday || isUrgentCard(state.decisions.active?.cardId)) return
   useGameStore.setState((s) => ({ ui: { ...s.ui, slowdownResumeDay: null } }))
+  lastHoldEnd = performance.now()
   if (ui.chosenSpeed > 1) autoSetSpeed(ui.chosenSpeed)
 })

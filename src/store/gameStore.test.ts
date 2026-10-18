@@ -616,6 +616,18 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(resumeSpeed(store())).toBe(4)
   })
 
+  it('round 6: one hold per chain: a moment right after a hold ended does not start another', () => {
+    slowByRelease()
+    expect(store().state.time.speed).toBe(1)
+    for (let i = 0; i < 200 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.time.speed).toBe(4)
+    // A second release in the same breath (the fake clock moves 100 ms a read: well inside the cooldown).
+    useGameStore.setState((st) => ({ state: { ...st.state, projects: st.state.projects.map((p) => ({ ...p, maturity: Math.max(p.maturity, 0.45), releaseLevel: Math.min(p.releaseLevel ?? 0, 1) })) } }))
+    for (let i = 0; i < 4; i++) store().tick(SECONDS_PER_DAY / 8)
+    expect(store().state.events.filter((e) => e.kind === 'release').length).toBeGreaterThanOrEqual(2)
+    expect(store().state.time.speed).toBe(4)
+  })
+
   it('the slowdown can be turned off', () => {
     store().setSlowOnMoments(false)
     slowByRelease()
@@ -676,23 +688,18 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().state.time.day).toBeLessThan(slowDay + SLOWDOWN_WINDOW_DAYS * 4)
   })
 
-  it('F1 review: an urgent card (landlord notice, 7 g default) slows 4× and holds 1× until it is answered', () => {
+  it('F1 review + round 6: an urgent card slows 4× but the hold never waits on a tap', () => {
     expect(isUrgentCard('landlord-notice')).toBe(true)
     expect(isUrgentCard('remote-vs-office')).toBe(false)
     store().dispatch({ type: 'setSpeed', speed: 4 })
     useGameStore.setState((st) => ({ state: { ...st.state, decisions: { ...st.state.decisions, active: undefined, queue: ['landlord-notice'] } } }))
     for (let i = 0; i < 400 && store().state.decisions.active?.cardId !== 'landlord-notice'; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.decisions.active?.cardId).toBe('landlord-notice')
-    // Arrived collapsed: 1×, so its 7-day default takes ~14 s, not ~3.5 s.
+    // Arrived collapsed: 1× for the moment.
     expect(store().state.time.speed).toBe(1)
-    const shown = store().state.time.day
-    for (let i = 0; i < 8 * (SLOWDOWN_WINDOW_DAYS + 1); i++) store().tick(SECONDS_PER_DAY / 8)
-    // Still unanswered: still 1×, the restore waits on it.
-    expect(store().state.decisions.active?.cardId).toBe('landlord-notice')
-    expect(store().state.time.day).toBeGreaterThan(shown + SLOWDOWN_WINDOW_DAYS)
-    expect(store().state.time.speed).toBe(1)
-    expect(store().dispatch({ type: 'answerDecision', cardId: 'landlord-notice', optionIndex: 0 }).ok).toBe(true)
     for (let i = 0; i < 400 && store().state.time.speed === 1; i++) store().tick(SECONDS_PER_DAY / 8)
+    // Nobody answered it, and the player's 4× came back on its own (no tap).
+    expect(store().exportReplay().actions.some((a) => a.action.type === 'answerDecision')).toBe(false)
     expect(store().state.time.speed).toBe(4)
   })
 })

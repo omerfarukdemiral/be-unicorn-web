@@ -161,6 +161,16 @@ export function stripClockRuns(p: { slot: StripSlot; hasFront: boolean; hover: b
  * Hover state after a render: a strip that stops rendering (empty slot, hidden under the phone sheet) gets no
  * mouseleave, so its hover is cleared here instead of freezing every later item.
  */
+/**
+ * Round 6 (phone strip froze ~760 days): a hover holds the clock only while the mouse moves over the strip. A pointer
+ * resting still (an emulated or parked cursor the layout slid under, a stylus) let go after this much idle time.
+ */
+export const STRIP_HOLD_IDLE_MS = 4000
+
+export function hoverHolds(lastMoveAt: number, now: number): boolean {
+  return now - lastMoveAt < STRIP_HOLD_IDLE_MS
+}
+
 export function nextHover(hover: boolean, slot: StripSlot, sheetOpen: boolean): boolean {
   return hover && stripVisible(slot, sheetOpen)
 }

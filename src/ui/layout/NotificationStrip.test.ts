@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { stripShellShown } from './NotificationStrip'
+import stripSource from './NotificationStrip.tsx?raw'
 
 const base = { visible: true, content: false, horizon: false, more: false, overlay: false }
 
@@ -18,5 +19,13 @@ describe('stripShellShown', () => {
   it('a blocking modal (stage-up, move scene) hides everything', () => {
     expect(stripShellShown({ ...base, content: true, overlay: true })).toBe(false)
     expect(stripShellShown({ ...base, more: true, overlay: true })).toBe(false)
+  })
+})
+
+describe('round 6: the strip clock hold', () => {
+  it('follows mouse movement, not pointerenter (a cursor the layout slid under froze a note for ~760 days)', () => {
+    expect(stripSource).not.toContain('onPointerEnter')
+    expect(stripSource).toContain('onPointerMove')
+    expect(stripSource).toContain('hoverHolds(')
   })
 })

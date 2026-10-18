@@ -9,6 +9,8 @@ import {
   DEDUPE_DAYS,
   enqueue,
   nextHover,
+  hoverHolds,
+  STRIP_HOLD_IDLE_MS,
   nextStepShown,
   P2_PER_DAY,
   pickSlot,
@@ -264,5 +266,14 @@ describe('daily budget (docs/GAMEPLAY_V2.md §12 D9)', () => {
     const { b } = run([{ kind: 'activity', dedupeKey: 'x' }, { kind: 'activity' }, { kind: 'activity' }], 400)
     const fresh = dailyBudget(0, b)
     expect(fresh).toEqual({ day: 0, p2: 0, office: 0, digest: 0, seen: {} })
+  })
+})
+
+describe('round 6: a parked pointer never freezes the strip', () => {
+  it('the hover holds while the mouse moves, and lets go after STRIP_HOLD_IDLE_MS of stillness', () => {
+    expect(hoverHolds(1000, 1000 + STRIP_HOLD_IDLE_MS - 1)).toBe(true)
+    expect(hoverHolds(1000, 1000 + STRIP_HOLD_IDLE_MS)).toBe(false)
+    // The pointer that never moved (enter only, lastMove 0) lets go at once on a long-running page.
+    expect(hoverHolds(0, 760_000)).toBe(false)
   })
 })

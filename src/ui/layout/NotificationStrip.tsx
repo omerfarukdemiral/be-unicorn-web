@@ -31,6 +31,7 @@ import {
   enqueue,
   nextHover,
   nextStepShown,
+  hoverHolds,
   pickSlot,
   readDigest,
   resetSharedBudget,
@@ -421,7 +422,7 @@ export function NotificationStrip({
   // One live note at a time (fix round 5): the pill steps back while the payday card speaks.
   const shown = stripShellShown({ visible: stripVisible(slot, sheetOpen), content: content !== null, horizon, more, overlay }) && !(paydayQuiet && !more && !danger)
   return (
-    <StripShell shown={shown} className={cx(island ? 'w-auto min-w-[320px]' : 'w-full', className)} onHold={setHold}>
+    <StripShell shown={shown} held={hold} className={cx(island ? 'w-auto min-w-[320px]' : 'w-full', className)} onHold={setHold}>
       {more && (
         <div className="ui-card ui-scroll absolute bottom-[calc(100%+8px)] right-0 z-10 max-h-[280px] w-[min(360px,100%)] animate-slide-up overflow-y-auto p-1">
           <p className="ui-label px-2 pb-1 pt-1.5">{t('strip.upcoming')}</p>
@@ -494,9 +495,18 @@ export function NotificationStrip({
  * The strip's outer box: mounts with a fade-in, and on `shown` → false keeps its last frame for STRIP_EXIT_MS while it
  * fades out (inert), then unmounts. The frozen frame is the last one that had something to say.
  */
-function StripShell({ shown, className, onHold, children }: { shown: boolean; className?: string; onHold: (hold: boolean) => void; children: ReactNode }) {
+function StripShell({ shown, held, className, onHold, children }: { shown: boolean; held: boolean; className?: string; onHold: (hold: boolean) => void; children: ReactNode }) {
   const present = useLinger(shown, STRIP_EXIT_MS)
   const last = useRef<ReactNode>(null)
+  // Round 6: the hold follows mouse movement; a parked pointer lets the clock run again (hoverHolds).
+  const lastMove = useRef(0)
+  useEffect(() => {
+    if (!held) return
+    const id = window.setInterval(() => {
+      if (!hoverHolds(lastMove.current, performance.now())) onHold(false)
+    }, 500)
+    return () => window.clearInterval(id)
+  }, [held, onHold])
   if (shown) last.current = children
   if (!present) return null
   return (
@@ -506,8 +516,13 @@ function StripShell({ shown, className, onHold, children }: { shown: boolean; cl
       style={{ opacity: shown ? 1 : 0, transition: `opacity ${STRIP_EXIT_MS}ms ease-out` }}
       aria-hidden={shown ? undefined : true}
       inert={!shown}
-      // Mouse only: a tap fires enter without a reliable leave, so touch never holds the clock.
-      onPointerEnter={(e) => shown && e.pointerType === 'mouse' && onHold(true)}
+      // Mouse only, and only while it moves: a tap fires enter without a reliable leave, and a cursor the layout slid
+      // under fires enter without ever moving (the phone strip froze for ~760 days, round 6).
+      onPointerMove={(e) => {
+        if (!shown || e.pointerType !== 'mouse') return
+        lastMove.current = performance.now()
+        if (!held) onHold(true)
+      }}
       onPointerLeave={() => onHold(false)}
     >
       {shown ? children : last.current}

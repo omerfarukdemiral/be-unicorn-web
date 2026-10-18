@@ -89,7 +89,6 @@ export const LOOP_TEXT: Record<string, string> = {
   'release.minor': 'v{v}.{m}',
   'release.title': 'Yayında! {project} {level}',
   'release.wave': '+{u} kullanıcı · MRR +{m}',
-  'release.banner': 'Yayında! {level}',
 
   // Valuation breakdown (değerleme dökümü)
   'val.pre': 'Değerleme = {l} yayında × $150K ({lv}) + {u} kullanıcı × $400 ({uv}) + {r} sürüm × $15K ({rv})',

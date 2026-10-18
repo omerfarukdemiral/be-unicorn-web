@@ -24,12 +24,41 @@ function subscribe(f: () => void): () => void {
   return () => subs.delete(f)
 }
 
+const SCROLL_TRIES = [30, 250, 600, 1000]
+
+/** Fully inside its scroll box and the window (a phone sheet's box ends above the tab island). */
+export function inView(el: Element): boolean {
+  const r = el.getBoundingClientRect()
+  if (r.height <= 0) return false
+  let top = 0
+  let bottom = window.innerHeight
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY
+    if (oy === 'auto' || oy === 'scroll') {
+      const b = p.getBoundingClientRect()
+      top = Math.max(top, b.top)
+      bottom = Math.min(bottom, b.bottom)
+      break
+    }
+  }
+  return r.top >= top && r.bottom <= bottom
+}
+
 /** The row marked by the chip: a ref that scrolls it into view once, and the ring class while it is marked. */
 export function useChipMark<T extends HTMLElement>(key: string): { ref: RefObject<T | null>; marked: boolean; markClass: string } {
   const marked = useSyncExternalStore(subscribe, () => chipTarget() === key, () => false)
   const ref = useRef<T>(null)
   useEffect(() => {
-    if (marked) ref.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    if (!marked) return
+    // Round 8: the panel is still sliding / fading in when the row mounts, so one early scroll can land short (the new
+    // product tile stayed below the fold). Retry for ~1 s until the row sits inside the viewport.
+    const ids = SCROLL_TRIES.map((ms) =>
+      window.setTimeout(() => {
+        const el = ref.current
+        if (el && !inView(el)) el.scrollIntoView?.({ block: 'center', behavior: ms === SCROLL_TRIES[0] ? 'auto' : 'smooth' })
+      }, ms),
+    )
+    return () => ids.forEach((id) => window.clearTimeout(id))
   }, [marked])
   return { ref, marked, markClass: marked ? 'ring-2 ring-brand ring-offset-1 animate-attention' : '' }
 }

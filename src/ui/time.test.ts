@@ -1,6 +1,8 @@
 // Speed colour constants (docs/GAMEPLAY_V2.md §13): paused red, running green at every speed.
 import { describe, expect, it } from 'vitest'
 import { pauseVeilShown, SPEED_COLOR, SPEED_FILL } from './time'
+import timeSource from './time.tsx?raw'
+import chipSource from './NextStepChip.tsx?raw'
 
 describe('speed colours', () => {
   it('pause differs from running; 1×, 2× and 4× share one colour', () => {
@@ -33,5 +35,13 @@ describe('pause veil', () => {
     expect(pauseVeilShown(0, false, { overlay: { kind: 'lawbook' } })).toBe(false)
     expect(pauseVeilShown(0, false, { overlay: { kind: 'market' } })).toBe(false)
     expect(pauseVeilShown(0, false, { overlay: { kind: 'moveScene' } })).toBe(false)
+  })
+})
+
+describe('round 8: the start call resumes the player speed', () => {
+  it('Başlat and the paused chip never hard-code 1×', () => {
+    expect(timeSource).not.toContain("speed: 1 })")
+    expect(chipSource).not.toContain("speed: 1 })")
+    expect(timeSource).toContain('resumeSpeed(useGameStore.getState())')
   })
 })

@@ -243,7 +243,8 @@ export function StartCall() {
         <span className="flex animate-breathe rounded-control">
           <button
             type="button"
-            onClick={() => dispatch({ type: 'setSpeed', speed: 1 })}
+            // Round 8: after a stage-up's new office the call resumes the player's own speed (4× stayed 1× for ~23 s).
+            onClick={() => dispatch({ type: 'setSpeed', speed: resumeSpeed(useGameStore.getState()) })}
             aria-keyshortcuts="Space"
             className="ui-key ui-key-commit pointer-events-auto inline-flex min-h-14 items-center justify-center gap-2 px-8 text-lg font-extrabold"
           >

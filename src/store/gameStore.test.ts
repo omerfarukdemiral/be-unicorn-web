@@ -628,6 +628,15 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().state.time.speed).toBe(4)
   })
 
+  it('round 8: the new office after a stage-up opens paused, and Başlat resumes the player 4×, not 1×', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    store().openOverlay({ kind: 'moveScene' })
+    store().closeOverlay()
+    expect(store().state.time.speed).toBe(0)
+    expect(store().ui.runStarted).toBe(false)
+    expect(resumeSpeed(store())).toBe(4)
+  })
+
   it('the slowdown can be turned off', () => {
     store().setSlowOnMoments(false)
     slowByRelease()

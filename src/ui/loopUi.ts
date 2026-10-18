@@ -13,6 +13,7 @@ import { withCase } from '../content/format'
 import { useGameStore } from '../store/gameStore'
 import type { Panel } from '../store/types'
 import { markChipTarget } from './chipTarget'
+import { watchConfirm, wireConfirmWatch } from './chipConfirm'
 import { t } from './i18n'
 import { fixed, money, num, pct, signedMoney } from './format'
 
@@ -306,6 +307,9 @@ function openConfirmPlace(s: GameState, move: NextMove): void {
     if (st.ui.overlay?.kind !== place.center) st.toggleCenter(place.center)
   } else st.openPanel(place.panel, { root: true })
   markChipTarget(key)
+  // Round 8: the place closing without this action = declined (chipConfirm.onDeclined; the engine snooze hooks there).
+  wireConfirmWatch()
+  watchConfirm(move, moveAction(s, move)?.type ?? null, 'center' in place ? 'overlay' : 'panel')
 }
 
 /**

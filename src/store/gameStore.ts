@@ -389,6 +389,14 @@ export function resumeSpeed(st: { state: GameState; ui: UiState }): GameSpeed {
   return st.ui.chosenSpeed
 }
 
+const actionListeners = new Set<(a: Action) => void>()
+
+/** Hears every applied action (round 8: the chip's confirm watch, ui/chipConfirm.ts). */
+export function onAction(f: (a: Action) => void): () => void {
+  actionListeners.add(f)
+  return () => actionListeners.delete(f)
+}
+
 /** New game / continue: the world waits for the player's first "Başlat". */
 function pausedStart(s: GameState): GameState {
   return s.time.speed === 0 ? s : { ...s, time: { ...s.time, speed: 0 } }
@@ -509,6 +517,8 @@ export const useGameStore = create<GameStore>()((set, get) => ({
       return res
     }
     if (replay.actions.length < REPLAY_MAX) replay.actions.push({ atDay: state.time.day, action })
+    // Before the UI follows the new state (a fire empties its detail panel): the chip's confirm watch hears it first.
+    for (const f of actionListeners) f(action)
     const starts = action.type === 'setSpeed' && action.speed > 0 && !get().ui.runStarted
     // A round choice made (size picked, pitch sent) ends the `offer` pause: pause reasons follow the new state.
     // The payday desk closes once its month is answered (`payday` pause ends with it).

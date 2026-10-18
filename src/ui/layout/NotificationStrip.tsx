@@ -41,6 +41,7 @@ import {
   type TransientKind,
 } from './stripRules'
 import { STRIP_H, STRIP_H_MOBILE } from './tokens'
+import { usePaydayCardOn } from '../toastSlot'
 
 type Item =
   | { key: number; kind: Moment['kind']; moment: Moment }
@@ -304,6 +305,7 @@ export function NotificationStrip({
   const placing = usePlacing()
   const step = useNextStep()
   const speed = useGameStore((s) => s.state.time.speed)
+  const paydayQuiet = usePaydayCardOn()
   const openPanel = useGameStore((s) => s.openPanel)
   const hasHorizon = useGameStore((s) => !!s.state.derived.horizon?.length)
   const [hold, setHold] = useState(false)
@@ -414,7 +416,8 @@ export function NotificationStrip({
   }
 
   // Nothing to read (no message, no horizon, no history) → no shell: never an empty white pill or a bare ⌃ row.
-  const shown = stripShellShown({ visible: stripVisible(slot, sheetOpen), content: content !== null, horizon, more, overlay })
+  // One live note at a time (fix round 5): the pill steps back while the payday card speaks.
+  const shown = stripShellShown({ visible: stripVisible(slot, sheetOpen), content: content !== null, horizon, more, overlay }) && !(paydayQuiet && !more && !danger)
   return (
     <StripShell shown={shown} className={cx(island ? 'w-auto min-w-[320px]' : 'w-full', className)} onHold={setHold}>
       {more && (

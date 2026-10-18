@@ -11,6 +11,7 @@ import { t } from '../i18n'
 import { heldText, useMomentSource } from '../Moments'
 import { soft, WIDGET_COLOR } from '../theme'
 import { ledgerMoney } from '../widgets'
+import { setPaydayCardOn } from '../toastSlot'
 
 const CARD_MS = 2800
 
@@ -21,6 +22,11 @@ export function PaydayCard() {
     const m = [...ms].reverse().find((x) => x.kind === 'receipt')
     if (m?.kind === 'receipt') setReceipt({ key: m.key, r: m.receipt })
   })
+  // One live note at a time: the message pill and the release toast wait while the card shows.
+  useEffect(() => {
+    setPaydayCardOn(!!receipt)
+    return () => setPaydayCardOn(false)
+  }, [receipt])
   useEffect(() => {
     if (!receipt) return
     const id = window.setTimeout(() => setReceipt(null), CARD_MS)

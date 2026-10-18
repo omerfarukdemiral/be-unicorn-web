@@ -125,7 +125,7 @@ export const PROJECT_SIZE: Readonly<Record<ProjectCategory, number>> = { mobile:
  * (game), B2B price with little buzz (api). Means ≈ 0.99 / 1.04 and the rich end capped at 1.2: the first cut
  * (api 1.25, ai 1.45) moved the fastest Unicorn from day 1855 to 1378 in sim/minStageDays.ts.
  */
-export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.94, mobile: 1, api: 1.1, ai: 1.2, game: 0.92, marketplace: 1 }
+export const CATEGORY_ARPU: Readonly<Record<ProjectCategory, number>> = { web: 0.94, mobile: 1, api: 1.1, ai: 1.15, game: 0.92, marketplace: 1 }
 export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1.1, api: 0.75, ai: 0.9, game: 1.35, marketplace: 1.15 }
 /**
  * [DENGE B1] The Series C plateau sits right on the Unicorn gate: ~$16.2M MRR (1B / 12 / MULTIPLE_MAX_BY_STAGE[5])
@@ -139,6 +139,8 @@ export const CATEGORY_ORGANIC: Readonly<Record<ProjectCategory, number>> = { web
  * [B2 review] B2's 10-slot cap and trimmed sellers took back part of the cure (24 seeds, Unicorn median: web vcRocket
  * 75.4 → 87.5 dk, web platform 89.6 → 94.2 dk and 22/24, game vcRocket 76.0 → 82.0 dk): web ARPU .92 → .94 and CAC
  * .85 → .8, game ARPU .88 → .92 (order game < web < mobile and one coin pip each kept).
+ * [fix round 10] ai ARPU 1.2 → 1.15 (still three coin pips): the fastest category by 7 min (59.7 against 66–76) carried
+ * vcRocket under the 55 min floor once marketers earned more (ORGANIC_PER_MARKETING).
  */
 export const CATEGORY_WAVE: Readonly<Record<ProjectCategory, number>> = { web: 1, mobile: 1, api: 1, ai: 1, game: 2, marketplace: 1 }
 export const CATEGORY_CAC: Readonly<Record<ProjectCategory, number>> = { web: 0.8, mobile: 1, api: 1, ai: 1, game: 1, marketplace: 1 }
@@ -149,8 +151,11 @@ export const CATEGORY_CAC: Readonly<Record<ProjectCategory, number>> = { web: 0.
 export const CAPACITY_MIN = 50
 /** [DENGE ≠ PLAN 1500] Faz 3: 20K (was 4K): with 36 desks the late game hit a server wall that stalled user-heavy archetypes at random. */
 export const CAPACITY_PER_ENG = 20000
-/** [DENGE ≠ PLAN 25] */
-export const ORGANIC_PER_MARKETING = 42
+/**
+ * [DENGE ≠ PLAN 25] [fix round 10: 42 → 46] Word of mouth per marketer: a team grown on burn pays off a little more, so
+ * the burner gets ahead of the frugal by ≥ 15% (sim, 24 seeds: 14% → 16%; frugal waits for 9 months of runway to hire).
+ */
+export const ORGANIC_PER_MARKETING = 46
 /** [DENGE ≠ PLAN 8 × 1.3^aşama] */
 export const CAC_BASE = 45
 export const CAC_STAGE_GROWTH = 1.7

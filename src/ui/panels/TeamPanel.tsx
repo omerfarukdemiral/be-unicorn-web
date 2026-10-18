@@ -226,7 +226,7 @@ export function CandidateCard({
   // E3: the one category an engineer / product hire is fluent in; a match with a project they would build is faster.
   const skill = useGameStore(useShallow((s) => candidateFit(s.state, c)))
   return (
-    <li ref={mark.ref} className={cx('flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-1.5 py-1', mark.markClass)}>
+    <li ref={mark.ref} data-chip-mark={mark.marked ? '' : undefined} className={cx('flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-1.5 py-1', mark.markClass)}>
       <Avatar name={c.name} dept={c.dept} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">

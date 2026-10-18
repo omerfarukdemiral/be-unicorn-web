@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react'
 import type { EffectBundle, GameEvent, GameState, NextMove, NextStep, ValuationBreakdown } from '../engine/types'
 import { moveAction } from '../engine/loopSelectors'
+import { applyAction } from '../engine'
+import { nextLockedRing } from '../engine/office'
 import { moduleOffers } from '../engine/modules'
 import { growthAsk, investorGrowth } from '../engine/round'
 import * as B from '../engine/balance'
@@ -299,6 +301,12 @@ export type ConfirmPlace = { place: { panel: Panel } | { center: 'lawbook' | 'ma
 /** Where a confirm move is decided, and the item to mark there (the engine's pick, never acted on here). */
 export function confirmPlace(s: GameState, move: NextMove): ConfirmPlace {
   const a = moveAction(s, move)
+  // Round 11: a hire or a server room that has no room yet points at the ring to open (one tap there), not at a
+  // greyed key ("Boş slot yok") the player cannot press.
+  if ((a?.type === 'hire' || a?.type === 'placeItem') && !applyAction(s, a).ok) {
+    const ring = nextLockedRing(s.office)
+    if (ring !== null) return { place: { panel: { kind: 'shop' } }, key: `ring:${ring}` }
+  }
   switch (a?.type) {
     case 'hire':
       return { place: { panel: { kind: 'team' } }, key: `candidate:${a.candidateId}` }
@@ -340,7 +348,8 @@ function openConfirmPlace(s: GameState, move: NextMove): void {
   markChipTarget(key)
   // Round 8: the place closing without this action = declined (chipConfirm.onDeclined → the engine snoozeMove).
   wireConfirmWatch()
-  watchConfirm(move, moveAction(s, move)?.type ?? null, 'center' in place ? 'overlay' : 'panel')
+  // A move routed to the ring (no room yet) is confirmed by opening that ring.
+  watchConfirm(move, key?.startsWith('ring:') ? 'openRing' : (moveAction(s, move)?.type ?? null), 'center' in place ? 'overlay' : 'panel')
 }
 
 /**

@@ -210,7 +210,7 @@ function ShopItem({
   const tip = [item.name, item.description, ...tags, locked ? stageName(lockStage) : ''].filter(Boolean).join('\n')
   const mark = useChipMark<HTMLLIElement>(`item:${item.id}`)
   return (
-    <li ref={mark.ref} title={tip} className={cx('relative flex min-w-0 flex-col overflow-hidden rounded-control bg-surface-2/60', mark.markClass)}>
+    <li ref={mark.ref} data-chip-mark={mark.marked ? '' : undefined} title={tip} className={cx('relative flex min-w-0 flex-col overflow-hidden rounded-control bg-surface-2/60', mark.markClass)}>
       {bought && (
         // Over the picture, clear of the Buy key; click-through so a repeat buy still lands.
         <div
@@ -284,9 +284,9 @@ function RingCta({
   onOpen: () => void
 }) {
   const preview = useSpendPreview(-openCost, rent)
-  const mark = useChipMark<HTMLDivElement>(`ring:${index}`)
+  // The chip marks the ring in RingSection (always there); one mark, so the two never fight over the scroll.
   return (
-    <div ref={mark.ref} aria-hidden={hidden || undefined} className={cx('mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3', hidden && 'invisible', mark.markClass)}>
+    <div aria-hidden={hidden || undefined} className={cx('mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3', hidden && 'invisible')}>
       <Icon name="building" size={16} className="shrink-0 text-brand-ink" />
       <span className="min-w-0 flex-1 text-xs font-semibold text-ink">{t('shop.noRoomOpenRing', { n: index, cost: money(openCost) })}</span>
       <span className="flex shrink-0 items-center gap-1.5">
@@ -354,7 +354,7 @@ function RingOffer({ index, openCost, rent, cash, onOpen }: { index: number; ope
   const preview = useSpendPreview(-openCost, rent)
   const mark = useChipMark<HTMLDivElement>(`ring:${index}`)
   return (
-    <div ref={mark.ref} className={cx('flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-surface-2/60 p-2', mark.markClass)}>
+    <div ref={mark.ref} data-chip-mark={mark.marked ? '' : undefined} className={cx('flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-surface-2/60 p-2', mark.markClass)}>
       <IconBadge icon="building" size={36} color="var(--color-brand)" />
       <div className="min-w-0 flex-1">
         <div className="ui-label">{t('shop.ringTitle', { n: index })}</div>

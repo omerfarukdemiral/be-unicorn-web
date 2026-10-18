@@ -1377,7 +1377,7 @@ export interface NextStep {
 }
 
 /** Concrete garage / Pre-seed moves the chip can name: cash first, then growth, then the product. */
-export const NEXT_MOVES = ['keepStaff', 'morale', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk'] as const
+export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'progress'] as const
 export type NextMove = (typeof NEXT_MOVES)[number]
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */

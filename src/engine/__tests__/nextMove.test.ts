@@ -55,13 +55,13 @@ describe('nextMove', () => {
 
   it('Pre-seed / Seed: overloaded servers ask for an engineer the runway carries; money idle grows the team', () => {
     const l = live()
-    const engCand = { ...l.candidates[0]!, id: 'cand-eng-test', dept: 'eng' as const }
+    const engCand = { ...l.candidates[0]!, id: 'cand-eng-test', dept: 'eng' as const, salary: 500 }
     const rich: GameState = { ...l, stage: 1, candidates: [...l.candidates, engCand], stats: { ...l.stats, cash: 300_000 }, finance: { ...l.finance, runway: 30 } }
     expect(nextMove({ ...rich, derived: { ...rich.derived, overload: 0.5 } })).toBe('hireEng')
     const a = stepAction(rich, { ...nextStep(rich), move: 'hireEng' })
     expect(rich.candidates.find((c) => c.id === (a as { candidateId: string }).candidateId)?.dept).toBe('eng')
     const calm: GameState = { ...rich, derived: { ...rich.derived, overload: 0, deptCounts: { ...rich.derived.deptCounts, eng: 1, marketing: 1 } } }
-    expect(['hireGrowth', 'module', 'openRing', 'adsUp', 'growthAsk', 'focusTalk']).toContain(nextMove(calm))
+    expect(['hireGrowth', 'module', 'openRing', 'adsUp', 'growthAsk', 'focusTalk', 'progress']).toContain(nextMove(calm))
     // Thin runway: no hire is ever named.
     const thin: GameState = { ...rich, stats: { ...rich.stats, cash: 0 }, finance: { ...rich.finance, runway: B.HIRE_RUNWAY_MIN + 0.5 }, derived: { ...rich.derived, overload: 0.5 } }
     expect(['hireEng', 'hireGrowth', 'hireMarketing']).not.toContain(nextMove(thin))
@@ -85,8 +85,30 @@ describe('nextMove', () => {
     expect(nextMove(fresh)).not.toBe('hireGrowth')
   })
 
-  it('stops at Series A', () => {
+  it('round 6: no spending move with negative cash or a payday waiting; an open window starts the round; never empty after the garage', () => {
     const l = live()
-    expect(nextMove({ ...l, stage: 3, finance: { ...l.finance, runway: 1 } })).toBeUndefined()
+    const rich: GameState = { ...l, stage: 2, stats: { ...l.stats, cash: 300_000 }, finance: { ...l.finance, runway: null, net: 50_000 } }
+    const broke: GameState = { ...rich, stats: { ...rich.stats, cash: -4_000 }, derived: { ...rich.derived, overload: 0.5 } }
+    expect(['hireEng', 'hireGrowth', 'hireMarketing', 'openRing', 'ads', 'adsUp', 'module']).not.toContain(nextMove(broke))
+    const desk: GameState = { ...rich, finance: { ...rich.finance, pendingPayday: {} as never }, derived: { ...rich.derived, overload: 0.5 } }
+    expect(['hireEng', 'hireGrowth', 'hireMarketing', 'openRing', 'ads', 'adsUp', 'module']).not.toContain(nextMove(desk))
+    const window: GameState = { ...rich, derived: { ...rich.derived, canStartRound: true } }
+    expect(nextMove(window)).toBe('startRound')
+    expect(stepAction(window, { ...nextStep(window), move: 'startRound' })).toEqual({ type: 'startRound' })
+    // Series A–C too, and always something.
+    for (const stage of [1, 2, 3, 4, 5] as const) expect(nextMove({ ...rich, stage })).toBeDefined()
+  })
+
+  it('a bored leaver gets work, not a raise', () => {
+    const l = live()
+    const e = l.employees[0]!
+    const s: GameState = { ...l, stage: 1, employees: [{ ...e, status: 'leaving', leaveCause: 'bored', leaveDay: l.time.day + 3, projectId: undefined }] }
+    const a = stepAction(s, { ...nextStep(s), move: 'keepStaff' })
+    expect(a?.type === 'assign' || (a?.type === 'respondResignation' && a.response === 'talk')).toBe(true)
+  })
+
+  it('stops at Unicorn', () => {
+    const l = live()
+    expect(nextMove({ ...l, stage: 6, finance: { ...l.finance, runway: 1 } })).toBeUndefined()
   })
 })

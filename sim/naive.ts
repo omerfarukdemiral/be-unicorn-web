@@ -10,7 +10,7 @@ import { CONTENT } from '../src/content/index'
 import { balance, createEngine, MEETING_PITCHES, staffAttention, stepAction, type Action, type GameState } from '../src/engine/index'
 import { autoPaydayChoice } from '../src/engine/loop'
 import { Rng, createRngState } from '../src/engine/rng'
-import { hireIsRed } from '../src/engine/loopSelectors'
+import { busiestOpen, hireIsRed } from '../src/engine/loopSelectors'
 import { moduleAsk } from '../src/engine/modules'
 import { firstFreeDesk } from '../src/engine/office'
 
@@ -28,6 +28,10 @@ const TRACE_FROM = arg('tfrom', 0)
 const SOLO = arg('solo', 0) === 1
 /** Share of bubbles (cards, leavers) the player never answers (--miss 0.33). */
 const MISS = Number(process.argv[process.argv.indexOf("--miss") + 1] ?? 0) * (process.argv.includes("--miss") ? 1 : 0) || 0.33
+/** Chip verbs that spend (round 6: none while cash is negative). */
+const SPEND: ReadonlySet<string> = new Set(['hire', 'openRing', 'buildModule', 'setAdBudget'])
+/** Stop at this stage (3 = Series A; --until 4 runs on to Series B). */
+const UNTIL = arg('until', 3)
 /** Days between two taps on an unchanged chip. */
 const TAP_EVERY_DAYS = arg('tap', 30)
 /** First product: the idea bubble's first option (Mobil); --web 1 for the earlier probes. */
@@ -68,7 +72,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
   let lastChip = ''
   let lastTap = -Infinity
   act({ type: 'setFounderFocus', focus: 'users' })
-  while (!s.gameOver && s.time.day < maxDays && s.stage < 3) {
+  while (!s.gameOver && s.time.day < maxDays && s.stage < UNTIL) {
     // Bubbles: concept cards, the decision card, a meeting, a leaver: the first option each.
     for (let i = 0; i < 5 && s.concepts.active; i++) if (!act({ type: 'openConcept', conceptId: s.concepts.active.id })) break
     if (s.finance.pendingPayday) act({ type: 'resolvePayday', choice: autoPaydayChoice(s) })
@@ -84,7 +88,10 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     for (const e of s.employees) {
       if (e.status !== 'leaving' || seenLeavers.has(e.id + ':' + e.leaveDay)) continue
       seenLeavers.add(e.id + ':' + e.leaveDay)
-      if (!(missRng.next() < MISS)) act({ type: 'respondResignation', employeeId: e.id, response: 'raise' })
+      if (missRng.next() < MISS) continue
+      // StaffBubble rows: a bored leaver sees the busiest projects first, everyone else "Zam yap".
+      const p = e.leaveCause === 'bored' ? busiestOpen(s, e.projectId) : undefined
+      act(p ? { type: 'assign', employeeId: e.id, projectId: p.id } : { type: 'respondResignation', employeeId: e.id, response: 'raise' })
     }
     for (const [id, need] of staffAttention(s)) if ((need === 'tired' || need === 'burnout') && s.employees.find((e) => e.id === id)?.pace !== 'calm') act({ type: 'setPace', employeeId: id, pace: 'calm' })
     // Desk bubbles (render/WorldBubbles deskTopics): a free desk and a non-red offer asks "N aday bekliyor" (first
@@ -105,6 +112,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
       lastChip = chipKey
       lastTap = s.time.day
     }
+    if (a && SPEND.has(a.type) && s.stats.cash < 0) moves.spendWhileNegative = (moves.spendWhileNegative ?? 0) + 1
     if (a && !(solo && a.type === 'hire') && act(a)) moves[a.type === 'founderAction' ? a.kind : a.type] = (moves[a.type === 'founderAction' ? a.kind : a.type] ?? 0) + 1
     // The idea bubble lists Mobil first.
     if (step?.id === 'idea') act({ type: 'startProject', category: CATEGORY })
@@ -122,11 +130,13 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     if (s.stage !== stage) stageDays[s.stage] = Math.floor(s.time.day)
     minCash = Math.min(minCash, s.stats.cash)
     for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed' && s.stage === 0) garageMissed++
+    for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed') moves.payrollMissed = (moves.payrollMissed ?? 0) + 1
+    if (s.stage >= 1 && !s.derived.nextStep?.move) moves.noChipDays = (moves.noChipDays ?? 0) + 0.5
     for (const e of s.events) if (e.id > seen && e.kind === 'resigned' && s.stage < 3) moves.resigned = (moves.resigned ?? 0) + 1
     for (const e of s.employees) if (e.status === 'leaving' && e.leaveCause) moves[`leave:${e.leaveCause}`] = (moves[`leave:${e.leaveCause}`] ?? 0) + 0.5
     seen = s.events[s.events.length - 1]?.id ?? seen
     if (trace && Math.floor(s.time.day) % TRACE_EVERY === 0 && s.time.day % 1 < 0.5 && s.time.day >= TRACE_FROM) {
-      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} morale ${Math.round(s.stats.morale)} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
+      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} morale ${Math.round(s.stats.morale)} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} burn ${JSON.stringify(Object.fromEntries(Object.entries(s.finance.burnBreakdown).map(([k, v]) => [k, Math.round(Number(v))])))} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
     }
   }
   return { seed, stageDays, garageMissed, minCash, over: s.gameOver ? `${s.gameOver.kind}@${s.gameOver.day}` : null, hires, moves }
@@ -141,6 +151,8 @@ if (process.argv[1]?.endsWith('naive.ts')) {
   }
   const pre = runs.map((r) => r.stageDays[1]).filter((d): d is number => d !== null).sort((a, b) => a - b)
   const seedD = runs.map((r) => r.stageDays[2]).filter((d): d is number => d !== null).sort((a, b) => a - b)
+  const bD = runs.map((r) => r.stageDays[4]).filter((d): d is number => d !== null).sort((a, b) => a - b)
+  if (UNTIL > 3) console.log(`Series B ${bD.length}/${runs.length} · median g${bD.length ? bD[Math.floor(bD.length / 2)] : '—'}`)
   console.log(`Seed median g${seedD.length ? seedD[Math.floor(seedD.length / 2)] : '—'} (${seedD.length}/${runs.length}) · Series A ${runs.filter((r) => r.stageDays[3] !== null).length}/${runs.length}`)
   console.log(`Pre-seed median g${pre.length ? pre[Math.floor(pre.length / 2)] : '—'} (${pre.length}/${runs.length}) · garage missed paydays ${runs.reduce((a, r) => a + r.garageMissed, 0)} · game over before A ${runs.filter((r) => r.over).length}`)
 }

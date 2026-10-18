@@ -1,6 +1,6 @@
 // Ekip: candidate pool (hire by dept) + team list (status, morale, resignation responses). HUD grammar (GAMEPLAY V2
 // §10.5): 36px person cards with a 4px gap (no hairline list), salary as the number, every hire carries the runway it leaves (HireRunway).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { idleBuilders } from '../../engine/loopSelectors'
 import { hireDeskCost } from '../../engine/office'
@@ -18,14 +18,20 @@ import { Bar, Button, Chip, cx, Dot, Empty, Pill, QualityStars } from '../primit
 import { useSpendPreview } from '../widgets'
 import { useTwoStep } from '../hooks'
 import { DEPT_COLOR, moraleTone, soft } from '../theme'
-import { useChipMark } from '../chipTarget'
+import { chipTarget, useChipMark, useChipTargetKey } from '../chipTarget'
 
 type Sub = 'hire' | 'team'
 
 export function TeamPanel() {
   const leaving = useGameStore((s) => s.state.employees.some((e) => e.status === 'leaving'))
   const teamSize = useGameStore((s) => s.state.employees.length)
-  const [sub, setSub] = useState<Sub>(leaving ? 'team' : 'hire')
+  // Round 9: a chip hire move opens the hire view even with someone leaving (the marked candidate is the point).
+  const chipHire = chipTarget()?.startsWith('candidate:') ?? false
+  const [sub, setSub] = useState<Sub>(leaving && !chipHire ? 'team' : 'hire')
+  const markKey = useChipTargetKey()
+  useEffect(() => {
+    if (markKey?.startsWith('candidate:')) setSub('hire')
+  }, [markKey])
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-1.5">
@@ -63,7 +69,20 @@ export function Avatar({ name, dept, size = 36 }: { name: string; dept: Dept; si
 }
 
 function HireView() {
-  const [dept, setDept] = useState<Dept | 'all'>('all')
+  // Round 9: the chip's hire move (hireEng / hireMarketing / hireGrowth) opens on the department it names, its pick
+  // first and marked; the filter stays until the player picks another chip or the panel closes. Players took the
+  // first affordable row, so the engineer the servers needed never came.
+  const markKey = useChipTargetKey()
+  const markedId = markKey?.startsWith('candidate:') ? markKey.slice('candidate:'.length) : null
+  const markedDept = useGameStore((s) => (markedId ? (s.state.candidates.find((c) => c.id === markedId)?.dept ?? null) : null))
+  const [dept, setDept] = useState<Dept | 'all'>(() => markedDept ?? 'all')
+  const [pinned, setPinned] = useState<string | null>(markedId)
+  useEffect(() => {
+    if (markedId && markedDept) {
+      setDept(markedDept)
+      setPinned(markedId)
+    }
+  }, [markedId, markedDept])
   const { candidates, day, showQuality, freeDesks, emptySlots, deskCost } = useGameStore(
     useShallow((s) => {
       const open = new Set(s.state.office.rings.filter((r) => r.unlocked).map((r) => r.index))
@@ -81,7 +100,9 @@ function HireView() {
     }),
   )
   const dispatch = useGameStore((s) => s.dispatch)
-  const list = candidates.filter((c) => dept === 'all' || c.dept === dept)
+  const filtered = candidates.filter((c) => dept === 'all' || c.dept === dept)
+  // The chip's pick leads the list while its department filter is on.
+  const list = pinned ? [...filtered.filter((c) => c.id === pinned), ...filtered.filter((c) => c.id !== pinned)] : filtered
   // A hire is a monthly salary (plus a desk when none is free): the first tap arms, the second commits.
   const [armed, tap] = useTwoStep()
   const [err, setErr] = useState<{ id: string; text: string } | null>(null)
@@ -95,11 +116,11 @@ function HireView() {
   return (
     <div className="flex flex-col gap-2">
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-        <Chip active={dept === 'all'} onClick={() => setDept('all')}>
+        <Chip active={dept === 'all'} onClick={() => (setDept('all'), setPinned(null))}>
           {t('shop.all')}
         </Chip>
         {DEPTS.map((d) => (
-          <Chip key={d} active={dept === d} onClick={() => setDept(d)}>
+          <Chip key={d} active={dept === d} onClick={() => (setDept(d), setPinned(null))}>
             <Dot color={DEPT_COLOR[d].dot} size={6} />
             {DEPT_TEXT[d].name}
           </Chip>

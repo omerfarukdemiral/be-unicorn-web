@@ -46,7 +46,7 @@ export function inView(el: Element): boolean {
 
 /** The row marked by the chip: a ref that scrolls it into view once, and the ring class while it is marked. */
 export function useChipMark<T extends HTMLElement>(key: string): { ref: RefObject<T | null>; marked: boolean; markClass: string } {
-  const marked = useSyncExternalStore(subscribe, () => chipTarget() === key, () => false)
+  const marked = useSyncExternalStore(subscribe, () => chipTarget() === key, () => chipTarget() === key)
   const ref = useRef<T>(null)
   useEffect(() => {
     if (!marked) return
@@ -65,5 +65,5 @@ export function useChipMark<T extends HTMLElement>(key: string): { ref: RefObjec
 
 /** The marked key right now (a place that must also select its marked item, e.g. the law book's open card). */
 export function useChipTargetKey(): string | null {
-  return useSyncExternalStore(subscribe, chipTarget, () => null)
+  return useSyncExternalStore(subscribe, chipTarget, chipTarget)
 }

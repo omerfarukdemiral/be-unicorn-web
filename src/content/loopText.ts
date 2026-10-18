@@ -37,6 +37,19 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.round': 'Tur penceresi açık',
   'step.roundWait': 'Tur sürüyor: haftalık pitch’i seç',
   'step.grow': 'Değerlemeyi büyüt · {v} / {t}',
+  // Phone strip (N9): a short word on line 1, the number on line 2; fits 360 wide next to the payday countdown.
+  'step.short.idea': 'Ürün fikri seç',
+  'step.short.findUsers': 'Kullanıcı bul',
+  'step.short.desk': 'Masa al',
+  'step.short.hire': 'İlk işe alım',
+  'step.short.launch': 'MVP yayını',
+  'step.short.users': 'Kullanıcı',
+  'step.short.revenue': 'İlk gelir',
+  'step.short.traction': 'Değerleme',
+  'step.short.round': 'Tur açık',
+  'step.short.roundWait': 'Pitch’i seç',
+  'step.short.grow': 'Değerleme',
+  'step.short.of': '{v}/{t}',
 
   // Horizon strip
   'horizon.span': '6 hafta',

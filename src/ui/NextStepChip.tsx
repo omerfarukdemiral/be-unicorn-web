@@ -9,12 +9,15 @@ import { blockingOverlay, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
-import { followStep, stepText } from './loopUi'
+import { followStep, stepShort, stepText } from './loopUi'
 import { useIsMobile } from './hooks'
 
 export interface NextStepView {
   step: NextStep | undefined
   text: string
+  /** Phone strip (N9): short label and its number ('' = none). */
+  shortLabel: string
+  shortValue: string
   /** Paused start with a project: the next link is time itself (StartCall asks the same). */
   needsStart: boolean
   /** StartCall card is on screen (the strip hides the step then). */
@@ -32,6 +35,9 @@ export function useNextStep(): NextStepView {
       return {
         step,
         text: step ? stepText(step, s.state) : '',
+        // Flat strings (useShallow compares top-level values): the phone's short label and its number.
+        shortLabel: step ? stepShort(step, s.state).label : '',
+        shortValue: step ? (stepShort(step, s.state).value ?? '') : '',
         needsStart: paused && step !== undefined && step.id !== 'idea',
         startCall: paused && !s.state.gameOver && blockingOverlay(s.ui) === null,
         canStartRound: !!s.state.derived.canStartRound,
@@ -50,6 +56,8 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
   const step = v.step
   if (!step || v.over) return null
   const text = v.needsStart ? t(touch || compact ? 'step.startTouch' : 'step.start') : v.text
+  // Phones (N9): a short word over its number; the number never truncates.
+  const short = compact && !v.needsStart ? { label: v.shortLabel, value: v.shortValue } : null
   // A tap still helps (opens the place or starts time), but nothing on the row asks for it.
   const onClick = () => (v.needsStart ? dispatch({ type: 'setSpeed', speed: 1 }) : followStep(step))
   const progress = step.progress
@@ -61,10 +69,16 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
         <Icon name="flag" size={14} />
       </span>
       <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{t('step.count', { i: step.index, n: step.total })}</span>
-      {/* Phones wrap to two lines instead of cutting the key word ("Tur sürüyor: haftalık pit…", N9). */}
-      <span key={step.id} className={cx('min-w-0 flex-1 animate-fade-in text-[13px] font-semibold text-ink', compact ? 'line-clamp-2 leading-tight' : 'truncate')}>
-        {text}
-      </span>
+      {short ? (
+        <span key={step.id} className="flex min-w-0 flex-1 animate-fade-in flex-col justify-center leading-tight">
+          <span className={cx('text-[13px] font-semibold text-ink', short.value ? 'truncate' : 'line-clamp-2')}>{short.label}</span>
+          {short.value && <span className="tabular whitespace-nowrap text-[12px] font-semibold text-ink-2">{short.value}</span>}
+        </span>
+      ) : (
+        <span key={step.id} className={cx('min-w-0 flex-1 animate-fade-in text-[13px] font-semibold text-ink', compact ? 'line-clamp-2 leading-tight' : 'truncate')}>
+          {text}
+        </span>
+      )}
       {progress !== undefined && (
         <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[2px] bg-brand/12">
           <span className="block h-full bg-brand transition-[width] duration-700" style={{ width: `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%` }} />

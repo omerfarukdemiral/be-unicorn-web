@@ -5,7 +5,7 @@ import type { EffectBundle, GameEvent, GameState, NextStep, ValuationBreakdown }
 import * as B from '../engine/balance'
 import { valuation } from '../engine/economy'
 import { cacFactors, type CacFactor } from '../engine/ads'
-import { CRISES, DECISIONS, moduleName, POLICIES, PRICING_GATE, STAGES } from '../content'
+import { CRISES, DECISIONS, moduleName, POLICIES, PRICING_GATE, STAGES, UI_TEXT } from '../content'
 import { withCase } from '../content/format'
 import { useGameStore } from '../store/gameStore'
 import { t } from './i18n'
@@ -125,6 +125,29 @@ export function stepText(step: NextStep, s: Pick<GameState, 'stats' | 'finance'>
       return t('step.traction', { v: money(s.finance.valuation), t: money(step.target ?? 0) })
     default:
       return t(`step.${step.id}`)
+  }
+}
+
+/**
+ * Phone strip (N9): a short label and the number apart, so the number never truncates. A step without a short text
+ * (a newer step) falls back to its full sentence as the label.
+ */
+export function stepShort(step: NextStep, s: Pick<GameState, 'stats' | 'finance'>): { label: string; value?: string } {
+  const key = `step.short.${step.id}`
+  const label = UI_TEXT[key] !== undefined ? t(key) : stepText(step, s)
+  const of = (v: string, tg: string) => t('step.short.of', { v, t: tg })
+  switch (step.id) {
+    case 'launch':
+      return { label, value: pct(step.progress ?? 0) }
+    case 'users':
+      return { label, value: of(num(s.stats.users), num(step.target ?? 0)) }
+    case 'revenue':
+      return { label, value: of(money(s.finance.mrr), money(step.target ?? 0)) }
+    case 'grow':
+    case 'traction':
+      return { label, value: of(money(s.finance.valuation), money(step.target ?? 0)) }
+    default:
+      return { label }
   }
 }
 

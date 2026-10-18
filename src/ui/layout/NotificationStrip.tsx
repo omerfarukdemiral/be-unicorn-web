@@ -437,8 +437,8 @@ export function NotificationStrip({
       >
         {/* Nothing to say on the left (no step, no message): the horizon takes the row instead of an empty half. */}
         {/* flex-auto (basis = the text): a content-width desktop pill sizes to its sentence instead of collapsing to min-w. */}
-        {/* Phones: basis 0, so a two-line step (N9) takes what the payday countdown leaves instead of cutting it. */}
-        {content !== null ? <div className={cx('relative flex h-full min-w-0 items-center', mobile ? 'flex-1 basis-0' : 'flex-auto')}>{content}</div> : <span className="flex-1" />}
+        {/* Phones: basis 0 and at least 42% of the row, so the two-line step (N9) and the payday countdown share it. */}
+        {content !== null ? <div className={cx('relative flex h-full min-w-0 items-center', mobile ? 'min-w-[42%] flex-1 basis-0' : 'flex-auto')}>{content}</div> : <span className="flex-1" />}
         {horizon && (
           <>
             {content !== null && <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />}

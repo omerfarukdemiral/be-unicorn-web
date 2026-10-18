@@ -27,6 +27,7 @@ import { ModulesSection } from './panels/ModulesSection'
 import { ChipRow } from './EffectChips'
 import { fatigueGood, fitChips, hiddenLossChip, LeadLine, loadChip, personLabel, PersonEffortRows, SprintRow, TeamOf } from './effort'
 import { Avatar, DeptPill, ResignationCard } from './panels/TeamPanel'
+import { ChipMark } from './ChipMark'
 
 export type RenderPreview = (target: Selection) => ReactNode
 
@@ -397,15 +398,17 @@ function EmployeeDetail({ id }: { id: string }) {
         >
           {e.deskSlotId ? t('detail.changeDesk') : t('detail.pickDesk')}
         </Button>
-        <ConfirmButton
-          icon="door"
-          label={t('detail.fire')}
-          confirmLabel={t('detail.fireConfirm', { name: e.name.split(' ')[0] ?? e.name })}
-          onConfirm={() => {
-            const r = dispatch({ type: 'fire', employeeId: e.id })
-            if (r.ok) closePanel()
-          }}
-        />
+        <ChipMark k={`fire:${e.id}`}>
+          <ConfirmButton
+            icon="door"
+            label={t('detail.fire')}
+            confirmLabel={t('detail.fireConfirm', { name: e.name.split(' ')[0] ?? e.name })}
+            onConfirm={() => {
+              const r = dispatch({ type: 'fire', employeeId: e.id })
+              if (r.ok) closePanel()
+            }}
+          />
+        </ChipMark>
       </section>
     </div>
   )

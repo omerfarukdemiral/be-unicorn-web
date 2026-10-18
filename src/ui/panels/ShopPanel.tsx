@@ -19,6 +19,7 @@ import { Button, Chip, CostPreview, cx, Empty, IconBadge, Pill, SectionTitle } f
 import { useLayoutMode } from '../hooks'
 import { useSpendPreview } from '../widgets'
 import { SLOT_ICON, slotTypeStage, soft, stageCode, stageName } from '../theme'
+import { useChipMark } from '../chipTarget'
 
 export function effectTags(e: FurnitureEffects): string[] {
   const out: string[] = []
@@ -207,8 +208,9 @@ function ShopItem({
   const preview = useSpendPreview(-item.price, item.upkeep ?? 0)
   const tags = effectTags(item.effects)
   const tip = [item.name, item.description, ...tags, locked ? stageName(lockStage) : ''].filter(Boolean).join('\n')
+  const mark = useChipMark<HTMLLIElement>(`item:${item.id}`)
   return (
-    <li title={tip} className="relative flex min-w-0 flex-col overflow-hidden rounded-control bg-surface-2/60">
+    <li ref={mark.ref} title={tip} className={cx('relative flex min-w-0 flex-col overflow-hidden rounded-control bg-surface-2/60', mark.markClass)}>
       {bought && (
         // Over the picture, clear of the Buy key; click-through so a repeat buy still lands.
         <div
@@ -282,8 +284,9 @@ function RingCta({
   onOpen: () => void
 }) {
   const preview = useSpendPreview(-openCost, rent)
+  const mark = useChipMark<HTMLDivElement>(`ring:${index}`)
   return (
-    <div aria-hidden={hidden || undefined} className={cx('mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3', hidden && 'invisible')}>
+    <div ref={mark.ref} aria-hidden={hidden || undefined} className={cx('mb-2 flex flex-wrap items-center gap-2 rounded-control border border-brand/30 bg-brand-soft p-2 pl-3', hidden && 'invisible', mark.markClass)}>
       <Icon name="building" size={16} className="shrink-0 text-brand-ink" />
       <span className="min-w-0 flex-1 text-xs font-semibold text-ink">{t('shop.noRoomOpenRing', { n: index, cost: money(openCost) })}</span>
       <span className="flex shrink-0 items-center gap-1.5">
@@ -349,8 +352,9 @@ function RingSection() {
 /** The next ring: its cost as the number, the rent under it, the commit with its runway preview. */
 function RingOffer({ index, openCost, rent, cash, onOpen }: { index: number; openCost: number; rent: number; cash: number; onOpen: () => void }) {
   const preview = useSpendPreview(-openCost, rent)
+  const mark = useChipMark<HTMLDivElement>(`ring:${index}`)
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-surface-2/60 p-2">
+    <div ref={mark.ref} className={cx('flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-surface-2/60 p-2', mark.markClass)}>
       <IconBadge icon="building" size={36} color="var(--color-brand)" />
       <div className="min-w-0 flex-1">
         <div className="ui-label">{t('shop.ringTitle', { n: index })}</div>

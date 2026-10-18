@@ -13,6 +13,7 @@ import { Button, CostPreview, cx, Label, Pill, Ring } from '../primitives'
 import { WIDGET_COLOR } from '../theme'
 import { useSpendPreview } from '../widgets'
 import { rivalRows, segmentTiles, type RivalRow, type SegmentTile } from './centerData'
+import { ChipMark } from '../ChipMark'
 
 export function MarketScreen() {
   // The views are rebuilt every step: compare them as one string of the numbers the screen prints.
@@ -43,7 +44,9 @@ export function MarketScreen() {
       <ul className="grid grid-cols-1 gap-2 min-[560px]:grid-cols-2 min-[860px]:grid-cols-5">
         {tiles.map((s) => (
           <li key={s.id}>
-            <SegmentCard seg={s} />
+            <ChipMark k={`segment:${s.id}`}>
+              <SegmentCard seg={s} />
+            </ChipMark>
           </li>
         ))}
       </ul>
@@ -64,7 +67,9 @@ export function MarketScreen() {
             <span className="tabular w-16 shrink-0 text-right text-[13px] font-semibold text-ink">{money(valuation)}</span>
           </li>
           {rivals.rows.map((r) => (
-            <RivalLine key={r.id} r={r} />
+            <ChipMark key={r.id} k={`rival:${r.id}`}>
+              <RivalLine r={r} />
+            </ChipMark>
           ))}
         </ul>
       )}

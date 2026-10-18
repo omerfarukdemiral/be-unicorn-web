@@ -3,7 +3,7 @@
 // closed = a signed law shuts it. One law is picked at a time; the bar under the trees carries its one sentence, the
 // signing ring, the survival law's equity price, the CostPreview and the single commit "İmzala". Time keeps flowing
 // (§14.1). The engine decides every gate (policyError) and the burn after a signature (signBurnDelta).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { policyError } from '../../engine'
 import { POLICY_SURVIVAL_EQUITY } from '../../engine/balance'
@@ -17,6 +17,8 @@ import { pct } from '../format'
 import { Button, CostPreview, cx, Label, Pill, Ring } from '../primitives'
 import { useSpendPreview } from '../widgets'
 import { lawbookView, signBurnDelta, type LawCard } from './centerData'
+import { ChipMark } from '../ChipMark'
+import { useChipTargetKey } from '../chipTarget'
 
 /** Tree hue (identity, never a warning): the survival tree takes the runway's gauge colour. */
 const TREE_COLOR: Record<PolicyTree, string> = {
@@ -50,6 +52,11 @@ export function LawbookScreen() {
   const firstWait = cards.find((c) => c.status === 'wait')?.id ?? null
   const lastSigned = useGameStore((s) => s.state.policies?.adopted.at(-1) ?? null)
   const [picked, setPicked] = useState<PolicyId | null>(null)
+  // Round 6: the chip's law move opens the book on the law it marked (the player signs it here).
+  const markKey = useChipTargetKey()
+  useEffect(() => {
+    if (markKey?.startsWith('law:')) setPicked(markKey.slice(4) as PolicyId)
+  }, [markKey])
   const sel = cards.find((c) => c.id === (picked ?? firstOpen ?? firstWait ?? lastSigned)) ?? null
 
   return (
@@ -76,7 +83,9 @@ export function LawbookScreen() {
               <ul className="flex flex-col gap-1">
                 {g.cards.map((c) => (
                   <li key={c.id}>
-                    <LawCardButton card={c} on={sel?.id === c.id} waitLeft={book.wait.left} onPick={() => setPicked(c.id)} />
+                    <ChipMark k={`law:${c.id}`}>
+                      <LawCardButton card={c} on={sel?.id === c.id} waitLeft={book.wait.left} onPick={() => setPicked(c.id)} />
+                    </ChipMark>
                   </li>
                 ))}
               </ul>

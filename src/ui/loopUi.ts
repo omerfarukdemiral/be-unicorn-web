@@ -11,6 +11,8 @@ import { cacFactors, type CacFactor } from '../engine/ads'
 import { CRISES, DECISIONS, moduleName, POLICIES, PRICING_GATE, STAGES, UI_TEXT } from '../content'
 import { withCase } from '../content/format'
 import { useGameStore } from '../store/gameStore'
+import type { Panel } from '../store/types'
+import { markChipTarget } from './chipTarget'
 import { t } from './i18n'
 import { fixed, money, num, pct, signedMoney } from './format'
 
@@ -255,6 +257,58 @@ export function stepGo(step: NextStep): StepGo {
 
 /** Chip click: opens the panel of the step (the targeted shop highlights the empty desk slot in the scene). */
 /**
+ * Round 6 (strategy freedom, the chip is no autopilot): small reversible moves act on the tap (ads, price, a sales call,
+ * the focus, a refactor, morale, starting an open round); these big or irreversible ones only open their place with the
+ * item marked, and the place's own button confirms.
+ */
+export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['acquire', 'newProduct', 'openSegment', 'signLaw', 'serverRoom', 'openRing', 'cutBurn', 'hireEng', 'hireMarketing', 'hireGrowth'])
+
+export type ConfirmPlace = { place: { panel: Panel } | { center: 'lawbook' | 'market' }; key: string | null }
+
+/** Where a confirm move is decided, and the item to mark there (the engine's pick, never acted on here). */
+export function confirmPlace(s: GameState, move: NextMove): ConfirmPlace {
+  const a = moveAction(s, move)
+  switch (a?.type) {
+    case 'hire':
+      return { place: { panel: { kind: 'team' } }, key: `candidate:${a.candidateId}` }
+    case 'placeItem':
+      return { place: { panel: { kind: 'shop' } }, key: `item:${a.itemId}` }
+    case 'openRing':
+      return { place: { panel: { kind: 'shop' } }, key: `ring:${a.ring}` }
+    case 'adoptPolicy':
+      return { place: { center: 'lawbook' }, key: `law:${a.policyId}` }
+    case 'openSegment':
+      return { place: { center: 'market' }, key: `segment:${a.id}` }
+    case 'acquireRival':
+      return { place: { center: 'market' }, key: `rival:${a.id}` }
+    case 'startProject':
+      return { place: { panel: { kind: 'projects' } }, key: `category:${a.category}` }
+    case 'fire':
+      return { place: { panel: { kind: 'detail', selection: { kind: 'employee', id: a.employeeId } } }, key: `fire:${a.employeeId}` }
+  }
+  // No pick right now: the place itself.
+  const fallback: Record<string, ConfirmPlace['place']> = {
+    acquire: { center: 'market' },
+    openSegment: { center: 'market' },
+    signLaw: { center: 'lawbook' },
+    serverRoom: { panel: { kind: 'shop' } },
+    openRing: { panel: { kind: 'shop' } },
+    newProduct: { panel: { kind: 'projects' } },
+    cutBurn: { panel: { kind: 'metrics' } },
+  }
+  return { place: fallback[move] ?? { panel: { kind: 'team' } }, key: null }
+}
+
+function openConfirmPlace(s: GameState, move: NextMove): void {
+  const { place, key } = confirmPlace(s, move)
+  const st = useGameStore.getState()
+  if ('center' in place) {
+    if (st.ui.overlay?.kind !== place.center) st.toggleCenter(place.center)
+  } else st.openPanel(place.panel, { root: true })
+  markChipTarget(key)
+}
+
+/**
  * The bubble that holds the round meeting now: the investor's visitor bubble when they came in, else the desk's pitch
  * bubble (same keys as render/WorldBubbles). null when no pitch is due.
  */
@@ -278,6 +332,8 @@ export function followStep(step: NextStep): void {
       }
       return openPanel({ kind: 'growth', section: 'round' }, { root: true })
     }
+    // Big or irreversible moves (round 6, strategy freedom): open the place, mark the item, the player confirms there.
+    if (CONFIRM_MOVES.has(step.move)) return openConfirmPlace(state, step.move)
     const a = moveAction(state, step.move)
     if (a && dispatch(a).ok) return
     // No verb (progress) or refused: the place where it lives. The round moves open the Growth panel's round section.

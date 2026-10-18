@@ -20,6 +20,7 @@ import { displayMaturity, projectVersion } from '../../engine/modules'
 import { AdFocusMark } from './AdFocus'
 import { LeadLine, SprintRow, TeamOf } from '../effort'
 import { Face } from '../bubbles/face'
+import { ChipMark } from '../ChipMark'
 
 export const MVP_MATURITY = 0.2
 
@@ -103,7 +104,7 @@ export function ProjectsPanel() {
         {/* A tile per category: icon + name; what the category is like sits behind its ⓘ (the button stays one tap). */}
         <div className="grid grid-cols-3 gap-1.5">
           {PROJECT_CATEGORIES.map((c) => (
-            <div key={c} className="relative">
+            <ChipMark key={c} k={`category:${c}`} className="relative">
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'startProject', category: c })}
@@ -119,7 +120,7 @@ export function ProjectsPanel() {
                   {PROJECT_CATEGORY_TEXT[c].description}
                 </InfoTip>
               </span>
-            </div>
+            </ChipMark>
           ))}
         </div>
       </div>

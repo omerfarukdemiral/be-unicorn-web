@@ -18,6 +18,7 @@ import { Bar, Button, Chip, cx, Dot, Empty, Pill, QualityStars } from '../primit
 import { useSpendPreview } from '../widgets'
 import { useTwoStep } from '../hooks'
 import { DEPT_COLOR, moraleTone, soft } from '../theme'
+import { useChipMark } from '../chipTarget'
 
 type Sub = 'hire' | 'team'
 
@@ -198,11 +199,13 @@ export function CandidateCard({
   onHire: () => void
 }) {
   const preview = useSpendPreview(-(deskCost ?? 0), c.salary)
+  // Round 6: the chip's hire move marks this candidate; the player hires with the row's own key.
+  const mark = useChipMark<HTMLLIElement>(`candidate:${c.id}`)
   const left = Math.ceil(c.expiresDay - day)
   // E3: the one category an engineer / product hire is fluent in; a match with a project they would build is faster.
   const skill = useGameStore(useShallow((s) => candidateFit(s.state, c)))
   return (
-    <li className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-1.5 py-1">
+    <li ref={mark.ref} className={cx('flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface-2/60 px-1.5 py-1', mark.markClass)}>
       <Avatar name={c.name} dept={c.dept} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">

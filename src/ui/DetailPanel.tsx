@@ -18,7 +18,7 @@ import { fixed, money, pct } from './format'
 import { Bar, Button, CostPreview, cx, Dot, Pill, QualityStars, SectionTitle, Stat } from './primitives'
 import { useSpendPreview } from './widgets'
 import { upgradeCost } from '../engine/loopSelectors'
-import { moraleTone } from './theme'
+import { iconTone, moraleTone, soft } from './theme'
 import { useIsMobile, useTwoStep } from './hooks'
 import { effectTags } from './panels/ShopPanel'
 import { AdFocusToggle } from './panels/AdFocus'
@@ -32,6 +32,16 @@ export type RenderPreview = (target: Selection) => ReactNode
 
 /** Close-up of the selection (render's ObjectPreview when available). */
 export function DetailPreview({ selection, renderPreview }: { selection: Selection; renderPreview?: RenderPreview }) {
+  const category = useGameStore((s) => (selection.kind === 'project' ? s.state.projects.find((p) => p.id === selection.id)?.category : undefined))
+  // A product is its category's icon, as on its card: the turntable model read as a black bar on a beige disc in the
+  // 64px phone thumbnail (a phone turning edge-on, N8).
+  if (category) {
+    return (
+      <div className="grid aspect-square w-full place-items-center rounded-control" style={{ background: soft(CATEGORY_COLOR[category], 14) }}>
+        <Icon name={CATEGORY_ICON[category]} size={32} style={{ color: iconTone(CATEGORY_COLOR[category]) }} />
+      </div>
+    )
+  }
   return (
     <div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-control border border-border bg-surface-2">
       {renderPreview ? <div className="absolute inset-0">{renderPreview(selection)}</div> : <Icon name={previewIcon(selection)} size={40} className="text-ink-3" />}

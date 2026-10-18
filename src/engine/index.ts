@@ -32,7 +32,7 @@ export { focusAction, focusWait, founderActionError, movesError, renewError, ren
 export { refreshCost } from './people'
 export { ringOpenCost, nextLockedRing, findAutoSlot, findAutoSlotFor, canPlaceAt, autoDeskItem, hireDeskCost, placementSpec, teamClusters, teamClusteredEmployees, teamIslands, type PlacementSpec, type TeamCluster, type TeamDesk } from './office'
 export { autoPlace, autoSeat, nearestFreeDesk, validateLayout, worldToGrid, ringOfCell, typeCaps, typeUse, decorCap, type LayoutCheck, type LayoutRefusal, type Placement } from './layout'
-export { nextStep, staffAttention, horizon, nextCrisis, daysToPayday, owedTotal, freeCash, heldWages, policyCost, previewSpend, cashProjection, companyProfile, targetProfile, covenantState, runwayAt, roundEndRunway, adBudgetSteps, AD_STEP_KEYS, PRICE_STEPS, nearestPriceStep, rivalNotch, idleBuilders, roundOutlook } from './loopSelectors'
+export { nextStep, stepAction, staffAttention, horizon, nextCrisis, daysToPayday, owedTotal, freeCash, heldWages, policyCost, previewSpend, cashProjection, companyProfile, targetProfile, covenantState, runwayAt, roundEndRunway, adBudgetSteps, AD_STEP_KEYS, PRICE_STEPS, nearestPriceStep, rivalNotch, idleBuilders, roundOutlook } from './loopSelectors'
 export type { CovenantLight, CovenantState, AdStepKey, RoundOutlook, StaffAttention } from './loopSelectors'
 export { projectDemand, projectLoad, workload, fatigueFactor, effectivePace, boredMoraleTerm, buildersOf, hasOpenWork, isSprinting, onLeave, ledMember, effortOn } from './effort'
 export { autoPaydayChoice, isPaydayChoice, releaseLevel, releaseWave } from './loop'

@@ -1,7 +1,9 @@
 // Core loop UI helpers (docs/CORE_LOOP.md): fresh engine events, effect summaries, next-step navigation.
 // Presentation only: every number comes from the engine (state.derived / finance / releases / outcomes).
 import { useEffect, useRef } from 'react'
-import type { EffectBundle, GameEvent, GameState, NextStep, ValuationBreakdown } from '../engine/types'
+import type { EffectBundle, GameEvent, GameState, NextMove, NextStep, ValuationBreakdown } from '../engine/types'
+import { moveAction } from '../engine/loopSelectors'
+import { moduleOffers } from '../engine/modules'
 import * as B from '../engine/balance'
 import { valuation } from '../engine/economy'
 import { cacFactors, type CacFactor } from '../engine/ads'
@@ -109,8 +111,9 @@ export function releaseName(level: number, update?: number, module?: string, ver
   return update !== undefined && update > 0 ? t('release.update', { n: update }) : releaseLevelName(level)
 }
 
-/** Chip text for a step (money / % filled from the engine's progress + target). */
-export function stepText(step: NextStep, s: Pick<GameState, 'stats' | 'finance'>): string {
+/** Chip text for a step (money / % filled from the engine's progress + target); a concrete move speaks instead. */
+export function stepText(step: NextStep, s: GameState): string {
+  if (step.move) return moveText(step.move, s)
   switch (step.id) {
     case 'launch':
       return t('step.launch', { v: pct(step.progress ?? 0) })
@@ -125,6 +128,23 @@ export function stepText(step: NextStep, s: Pick<GameState, 'stats' | 'finance'>
       return t('step.traction', { v: money(s.finance.valuation), t: money(step.target ?? 0) })
     default:
       return t(`step.${step.id}`)
+  }
+}
+
+/** The move's sentence, with the number the tap spends (engine moveAction picks it). */
+export function moveText(move: NextMove, s: GameState): string {
+  const a = moveAction(s, move)
+  switch (move) {
+    case 'ads':
+      return t('move.ads', { v: money(a?.type === 'setAdBudget' ? a.amount : 0) })
+    case 'module': {
+      if (a?.type !== 'buildModule') return t('move.module', { m: '', v: '' })
+      const p = s.projects.find((x) => x.id === a.projectId)
+      const offer = p ? moduleOffers(s, p).find((o) => o.id === a.moduleId) : undefined
+      return t('move.module', { m: moduleName(a.moduleId, p?.category), v: money(offer?.cost ?? 0) })
+    }
+    default:
+      return t(`move.${move}`)
   }
 }
 
@@ -179,6 +199,12 @@ export function stepGo(step: NextStep): StepGo {
 /** Chip click: opens the panel of the step (the targeted shop highlights the empty desk slot in the scene). */
 export function followStep(step: NextStep): void {
   const { openPanel, dispatch, state } = useGameStore.getState()
+  if (step.move) {
+    // The chip names one move: the tap does it; if the engine refuses, the place where it lives opens.
+    const a = moveAction(state, step.move)
+    if (a && dispatch(a).ok) return
+    return openPanel(step.move === 'module' ? { kind: 'projects' } : { kind: 'growth' }, { root: true })
+  }
   switch (stepGo(step)) {
     case 'projects':
       return openPanel({ kind: 'projects' }, { root: true })

@@ -37,6 +37,13 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.round': 'Tur penceresi açık',
   'step.roundWait': 'Tur sürüyor: haftalık pitch’i seç',
   'step.grow': 'Değerlemeyi büyüt · {v} / {t}',
+  // Fix round 3: the chip's concrete move (one sentence; a tap does it).
+  'move.salesCall': 'Kasa daralıyor: bir satış görüşmesi yap',
+  'move.adsCut': 'Kasa daralıyor: reklamı durdur',
+  'move.price': 'Kasa daralıyor: fiyatı bir kademe artır',
+  'move.focusUsers': 'Kullanıcı artmıyor: odağı kullanıcı bulmaya çevir',
+  'move.ads': 'Kullanıcı artmıyor: küçük bir reklam aç · {v}/ay',
+  'move.module': 'Ürün boşta: {m} modülünü kur · {v}',
 
   // Horizon strip
   'horizon.span': '6 hafta',

@@ -1367,7 +1367,16 @@ export interface NextStep {
   target?: number
   /** 'traction': valuation one more release adds (0 once VAL_RELEASE_MAX releases count). */
   value?: number
+  /**
+   * Fix round 3 (NEW-1/2: a guided player went broke or stalled at $250K of $300K): the one concrete move the chip
+   * names instead of the goal, when the run needs one (loopSelectors.nextMove); stepAction plays it.
+   */
+  move?: NextMove
 }
+
+/** Concrete garage / Pre-seed moves the chip can name: cash first, then growth, then the product. */
+export const NEXT_MOVES = ['salesCall', 'adsCut', 'price', 'focusUsers', 'ads', 'module'] as const
+export type NextMove = (typeof NEXT_MOVES)[number]
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */
 /** 'board': the board's quarter end (amount = target MRR, §8.3); 'renewal': a contract's last day (amount = its MRR, §8.4). */

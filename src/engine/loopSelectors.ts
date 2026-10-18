@@ -5,6 +5,8 @@ import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from
 import { effortOn, ledMember, onLeave } from './effort'
 import { projectVersion, updateSize, versionUpdates } from './modules'
 import { diligenceNow, offerFactor, priceRatio } from './round'
+import { founderActionError, salesCallPreview } from './founder'
+import { moduleOffers } from './modules'
 import { modifierMult } from './util'
 import { rivalOut } from './world'
 import {
@@ -16,6 +18,9 @@ import {
   type GameState,
   type HorizonItem,
   type NextCrisis,
+  type Action,
+  type NextMove,
+  type ProjectModuleId,
   type NextStep,
   type NextStepId,
   type SpendPreview,
@@ -51,6 +56,107 @@ export function cheapestHireRunway(s: GameState, deskCost: number | null): numbe
   return previewSpend(s, { cashDelta: -deskCost, burnDelta: policyCost(s, 'salary', salary) }).runwayAfter
 }
 
+/**
+ * What a tap on the chip does when it is one engine verb (the UI's followStep and sim/naive.ts share it), or null when
+ * the chip only opens a place. 'hire': the cheapest candidate with its desk; 'users' / 'traction': the users focus.
+ */
+export function stepAction(s: GameState, st: NextStep): Action | null {
+  if (st.move) return moveAction(s, st.move)
+  switch (st.id) {
+    case 'hire': {
+      // The MVP needs a builder: the cheapest engineer / product person, else the cheapest anyone.
+      const bySalary = [...s.candidates].sort((a, b) => a.salary - b.salary)
+      const c = bySalary.find((x) => x.dept === 'eng' || x.dept === 'product') ?? bySalary[0]
+      return c ? { type: 'hire', candidateId: c.id, autoDesk: true } : null
+    }
+    case 'findUsers':
+    case 'users':
+    case 'traction':
+      return s.founder.focus === 'users' ? null : { type: 'setFounderFocus', focus: 'users' }
+    default:
+      return null
+  }
+}
+
+/** The engine verb of a chip move (null when it is no longer possible). */
+export function moveAction(s: GameState, move: NextMove): Action | null {
+  switch (move) {
+    case 'salesCall':
+      return { type: 'founderAction', kind: 'salesCall' }
+    case 'adsCut':
+      return { type: 'setAdBudget', amount: 0 }
+    case 'price': {
+      const up = PRICE_STEPS.find((p) => p > s.finance.priceMultiplier + 1e-9)
+      return up !== undefined ? { type: 'setPrice', multiplier: up } : null
+    }
+    case 'focusUsers':
+      return { type: 'setFounderFocus', focus: 'users' }
+    case 'ads':
+      return { type: 'setAdBudget', amount: firstAdBudget(s) }
+    case 'module': {
+      const pick = moduleToBuild(s)
+      return pick ? { type: 'buildModule', projectId: pick.projectId, moduleId: pick.moduleId } : null
+    }
+  }
+}
+
+/** A first ad budget: half the MRR, at least the garage's paid floor, at most this stage's (no 2× MRR spend at Seed). */
+function firstAdBudget(s: GameState): number {
+  const lo = B.CAC_SPEND_FLOOR[0] ?? 0
+  return Math.round(Math.min(B.CAC_SPEND_FLOOR[s.stage] ?? lo, Math.max(lo, s.finance.mrr * NEXT_MOVE_AD_MRR)))
+}
+/** The first ad budget as a share of MRR. */
+const NEXT_MOVE_AD_MRR = 0.5
+
+/** A finished product not building anything, and its cheapest module that can start now. */
+function moduleToBuild(s: GameState): { projectId: string; moduleId: ProjectModuleId } | null {
+  for (const p of s.projects) {
+    if (p.maturity < 1 || p.build) continue
+    const offer = moduleOffers(s, p)
+      .filter((o) => !o.refresh && o.error === null && o.cost <= freeCash(s))
+      .sort((a, b) => a.cost - b.cost)[0]
+    if (offer) return { projectId: p.id, moduleId: offer.id }
+  }
+  return null
+}
+
+/**
+ * Fix round 3: the one concrete move a guided player needs now, garage and Pre-seed, no round running. Cash first
+ * (runway under HIRE_RUNWAY_MIN: a sales call, else stop the ads, else a price step up), then growth (users flat
+ * against last month: the users focus, else a first ad budget the runway carries), then the product (a finished one
+ * idle: its cheapest module). undefined = the goal itself is the move.
+ */
+export function nextMove(s: GameState): NextMove | undefined {
+  if (s.stage > NEXT_MOVE_MAX_STAGE || s.round?.active || !s.projects.some((p) => p.launched)) return undefined
+  const rw = s.finance.runway
+  const sales = founderActionError(s, 'salesCall') === null && salesCallPreview(s).factor >= NEXT_MOVE_SALES_FACTOR
+  if (rw !== null && rw < B.HIRE_RUNWAY_MIN) {
+    if (sales) return 'salesCall'
+    if (s.finance.adBudget > 0) return 'adsCut'
+    if (s.finance.priceMultiplier < NEXT_MOVE_PRICE_CAP - 1e-9) return 'price'
+  }
+  const last = s.finance.usersHistory[s.finance.usersHistory.length - 1]
+  const flat = last !== undefined && s.stats.users <= last * (1 + NEXT_MOVE_FLAT_GROWTH)
+  if (flat) {
+    if (s.founder.focus !== 'users' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
+    if (s.finance.adBudget <= 0) {
+      // Only an ad budget the runway carries (no ads on / ads cut loop).
+      const after = previewSpend(s, { burnDelta: firstAdBudget(s) }).runwayAfter
+      if (after === null || after >= B.HIRE_RUNWAY_MIN) return 'ads'
+    }
+  }
+  if (moduleToBuild(s)) return 'module'
+  return undefined
+}
+/** Moves are named up to Seed (a guided player must reach Series A; the chip closes from A on). */
+const NEXT_MOVE_MAX_STAGE = 2
+/** A sales call is named while the month's deals still pay at least half. */
+const NEXT_MOVE_SALES_FACTOR = 0.5
+/** The price move stops here (the chip never walks the price to the top). */
+const NEXT_MOVE_PRICE_CAP = 1.3
+/** Users within this of last month's count read as flat. */
+const NEXT_MOVE_FLAT_GROWTH = 0.02
+
 /** Day of a project's last update or 1.0 release (−∞ = none on record). */
 export function lastUpdateDay(s: GameState, projectId: string): number {
   const list = s.releases ?? []
@@ -65,6 +171,12 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
  * Links that are done stay done (a later stage never sends the player back to "pick an idea" once a project runs).
  */
 export function nextStep(s: GameState): NextStep {
+  const st = chainStep(s)
+  const move = st.id === 'idea' || st.id === 'hire' || st.id === 'round' || st.id === 'roundWait' ? undefined : nextMove(s)
+  return move ? { ...st, move } : st
+}
+
+function chainStep(s: GameState): NextStep {
   if (s.projects.length === 0) return step('idea')
   if (!s.projects.some((p) => p.launched)) {
     if (s.stage === 0 && s.employees.length === 0 && s.candidates.length > 0 && hireAffordable(s)) return step('hire')

@@ -190,6 +190,8 @@ export function capBubbles(lines: readonly RoutedLine[], bubbleOpen: string | nu
 
 /** Which bubbles the scene shows for this state (no real-time delays): routeCandidates → capBubbles. */
 export function routeBubbles(s: GameState, opts: { bubbleOpen: string | null }): RoutedLine[] {
+  // NEW-4: the run is over: no bubble asks anything behind the end screen.
+  if (s.gameOver) return []
   return capBubbles(routeCandidates(s, opts), opts.bubbleOpen)
 }
 

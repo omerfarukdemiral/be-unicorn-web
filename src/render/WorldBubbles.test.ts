@@ -128,6 +128,7 @@ describe('routeBubbles: who asks', () => {
     s.stats.cash = 1_000_000
     s.gameOver = { kind: 'bankrupt' } as GameState['gameOver']
     expect(open(s)).toEqual([])
+    expect(routeBubbles(s, { bubbleOpen: null })).toEqual([])
   })
 
   it('round window and first project are desk topics', () => {

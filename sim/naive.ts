@@ -51,7 +51,7 @@ export interface NaiveRun {
   moves: Record<string, number>
 }
 
-export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = false): NaiveRun {
+export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = false, until = UNTIL): NaiveRun {
   const api = createEngine(CONTENT)
   let s: GameState = api.createGame({ seed })
   const act = (a: Action): boolean => {
@@ -72,7 +72,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
   let lastChip = ''
   let lastTap = -Infinity
   act({ type: 'setFounderFocus', focus: 'users' })
-  while (!s.gameOver && s.time.day < maxDays && s.stage < UNTIL) {
+  while (!s.gameOver && s.time.day < maxDays && s.stage < until) {
     // Bubbles: concept cards, the decision card, a meeting, a leaver: the first option each.
     for (let i = 0; i < 5 && s.concepts.active; i++) if (!act({ type: 'openConcept', conceptId: s.concepts.active.id })) break
     if (s.finance.pendingPayday) act({ type: 'resolvePayday', choice: autoPaydayChoice(s) })
@@ -132,11 +132,12 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed' && s.stage === 0) garageMissed++
     for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed') moves.payrollMissed = (moves.payrollMissed ?? 0) + 1
     if (s.stage >= 1 && !s.derived.nextStep?.move) moves.noChipDays = (moves.noChipDays ?? 0) + 0.5
+    if (s.stage === 5 && s.derived.nextStep?.move) moves[`C:${s.derived.nextStep.move}`] = (moves[`C:${s.derived.nextStep.move}`] ?? 0) + 0.5
     for (const e of s.events) if (e.id > seen && e.kind === 'resigned' && s.stage < 3) moves.resigned = (moves.resigned ?? 0) + 1
     for (const e of s.employees) if (e.status === 'leaving' && e.leaveCause) moves[`leave:${e.leaveCause}`] = (moves[`leave:${e.leaveCause}`] ?? 0) + 0.5
     seen = s.events[s.events.length - 1]?.id ?? seen
     if (trace && Math.floor(s.time.day) % TRACE_EVERY === 0 && s.time.day % 1 < 0.5 && s.time.day >= TRACE_FROM) {
-      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} morale ${Math.round(s.stats.morale)} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} burn ${JSON.stringify(Object.fromEntries(Object.entries(s.finance.burnBreakdown).map(([k, v]) => [k, Math.round(Number(v))])))} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
+      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} morale ${Math.round(s.stats.morale)} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} pen ${(s.derived.penetration ?? 0).toFixed(2)} tam ${Math.round(s.derived.tam ?? 0)} ltv ${s.derived.ltvCac?.toFixed(1)} proj ${s.projects.length} mods ${s.projects.map((p) => (p.modules ?? []).length).join("/")} seg ${(s.market?.segments ?? []).length} debt ${Math.round(s.techDebt)} ovl ${s.derived.overload.toFixed(2)} netK ${Math.round(s.finance.net / 1000)} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
     }
   }
   return { seed, stageDays, garageMissed, minCash, over: s.gameOver ? `${s.gameOver.kind}@${s.gameOver.day}` : null, hires, moves }
@@ -147,7 +148,7 @@ if (process.argv[1]?.endsWith('naive.ts')) {
   for (let seed = FROM; seed <= SEEDS; seed++) {
     const r = playNaive(seed, DAYS, SOLO, TRACE === seed)
     runs.push(r)
-    console.log(`seed ${seed}: pre g${r.stageDays[1] ?? '—'} seed g${r.stageDays[2] ?? '—'} A g${r.stageDays[3] ?? '—'} · hires ${r.hires} · garage missed paydays ${r.garageMissed} · min cash ${Math.round(r.minCash)} · ${r.over ?? 'alive'} · moves ${JSON.stringify(r.moves)}`)
+    console.log(`seed ${seed}: pre g${r.stageDays[1] ?? '—'} seed g${r.stageDays[2] ?? '—'} A g${r.stageDays[3] ?? '—'} B g${r.stageDays[4] ?? '—'} C g${r.stageDays[5] ?? '—'} U g${r.stageDays[6] ?? '—'} · hires ${r.hires} · garage missed paydays ${r.garageMissed} · min cash ${Math.round(r.minCash)} · ${r.over ?? 'alive'} · moves ${JSON.stringify(r.moves)}`)
   }
   const pre = runs.map((r) => r.stageDays[1]).filter((d): d is number => d !== null).sort((a, b) => a - b)
   const seedD = runs.map((r) => r.stageDays[2]).filter((d): d is number => d !== null).sort((a, b) => a - b)

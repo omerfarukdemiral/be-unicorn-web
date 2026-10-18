@@ -22,6 +22,13 @@ describe('guided naive player', () => {
     expect(r.over).toBeNull()
   })
 
+  it('seed 8: the chip carries the guided player to Unicorn, never a missed payday', { timeout: 600_000 }, () => {
+    const r = playNaive(8, 3000, false, false, 7)
+    expect(r.stageDays[6]).not.toBeNull()
+    expect(r.moves.payrollMissed ?? 0).toBe(0)
+    expect(r.over).toMatch(/^unicorn/)
+  })
+
   it('solo (never hires): the chip keeps naming moves and the garage still reaches Pre-seed', { timeout: 120_000 }, () => {
     const r = playNaive(2, 700, true)
     expect(r.hires).toBe(0)

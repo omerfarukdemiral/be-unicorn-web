@@ -22,6 +22,8 @@ import {
   type Action,
   type Candidate,
   type Dept,
+  type MarketSegmentId,
+  type ProjectCategory,
   type NextMove,
   type PolicyId,
   type ProjectModuleId,
@@ -103,6 +105,32 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
       return { type: 'founderAction', kind: 'motivateTeam' }
     case 'startRound':
       return { type: 'startRound' }
+    case 'serverRoom':
+      return { type: 'placeItem', itemId: 'server-room' }
+    case 'signLaw': {
+      const law = growthLaw(s)
+      return law ? { type: 'adoptPolicy', policyId: law } : null
+    }
+    case 'adsTune':
+      return { type: 'setAdBudget', amount: lateAdTarget(s) }
+    case 'refactor':
+      return { type: 'founderAction', kind: 'refactorSprint' }
+    case 'acquire': {
+      const r = rivalToBuy(s)
+      return r ? { type: 'acquireRival', id: r } : null
+    }
+    case 'priceUp': {
+      const up = PRICE_STEPS.find((p) => p > s.finance.priceMultiplier + 1e-9)
+      return up !== undefined ? { type: 'setPrice', multiplier: up } : null
+    }
+    case 'newProduct': {
+      const category = nextCategory(s)
+      return category ? { type: 'startProject', category } : null
+    }
+    case 'openSegment': {
+      const seg = segmentToOpen(s)
+      return seg ? { type: 'openSegment', id: seg } : null
+    }
     case 'cutBurn': {
       // The survival laws first (they cut the month without a severance), then the newest non-engineer leaves.
       const law = survivalLaw(s)
@@ -141,7 +169,7 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
     case 'hireMarketing':
       return hireAction(s, 'marketing')
     case 'hireGrowth': {
-      const d = growthDept(s)
+      const d = growthDept(s, !underused(s))
       return d ? hireAction(s, d) : null
     }
     case 'openRing': {
@@ -155,6 +183,17 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
 
 /** The survival laws in the order that cuts the most for the least (the bots' order); the first one signable now. */
 const SURVIVAL_LAWS: readonly PolicyId[] = ['lean-office', 'founder-no-pay', 'salary-freeze', 'deferred-pay']
+/**
+ * Round 7: the company laws the bots sign and the guided player never did (churn, coordination, morale, CAC): the first
+ * one signable now. The bots' C runs: churn 3.3–4.9 %, LTV:CAC 2–2.8; the guided one 4.5–6 % and 1.2–1.6.
+ */
+const GROWTH_LAWS: readonly PolicyId[] = ['management', 'quality-gate', 'profit-share', 'ads-first', 'remote-first']
+function growthLaw(s: GameState): PolicyId | undefined {
+  const v = s.derived.policies
+  if (!v || s.stage < 2 || s.time.day < v.nextSignDay || movesError(s, B.MOVE_COST.adoptPolicy)) return undefined
+  return GROWTH_LAWS.find((id) => v.available.includes(id))
+}
+
 function survivalLaw(s: GameState): PolicyId | undefined {
   const v = s.derived.policies
   if (!v || s.time.day < v.nextSignDay || movesError(s, B.MOVE_COST.adoptPolicy)) return undefined
@@ -166,6 +205,77 @@ export function busiestOpen(s: GameState, skip?: string) {
   return s.projects.filter((p) => p.id !== skip && hasOpenWork(p)).sort((a, b) => projectLoad(s, b) - projectLoad(s, a))[0]
 }
 
+/**
+ * The next market segment the company can open now and carry (its price and upkeep under the cash guard). Round 7:
+ * the guided player sat at 40K TAM and 42% penetration through Series A (ads at LTV:CAC 1): the market, not the
+ * team, was the wall.
+ */
+function segmentToOpen(s: GameState): MarketSegmentId | undefined {
+  for (const v of s.derived.market?.segments ?? []) {
+    if (v.open || v.auto || v.error !== null) continue
+    if (cashSafe(s, v.cost, v.upkeep)) return v.id
+  }
+  return undefined
+}
+
+/**
+ * From Series B the paid channel carries growth (the bots hold ads near the MRR all of Series C, LTV:CAC 2–2.8): the
+ * budget the cash can hold, the bots' rule. min(MRR × NEXT_MOVE_AD_MRR_LATE, the month's result before ads + free
+ * cash / NEXT_MOVE_AD_CASH_MONTHS), × 0.6 while LTV:CAC sits under the late bar; never below 0.
+ */
+function lateAdTarget(s: GameState): number {
+  const beforeAds = s.finance.net + s.finance.adBudget
+  const cap = Math.min(s.finance.mrr * NEXT_MOVE_AD_MRR_LATE, beforeAds + Math.max(0, freeCash(s)) / NEXT_MOVE_AD_CASH_MONTHS)
+  const pays = (s.derived.ltvCac ?? Infinity) >= NEXT_MOVE_LTV_CAC_LATE
+  return Math.max(0, Math.round(cap * (pays ? 1 : NEXT_MOVE_AD_WEAK)))
+}
+/** The late ad budget is off its target by more than this share: the chip tunes it. */
+function lateAdsOff(s: GameState): boolean {
+  if (s.stage < 4) return false
+  const t = lateAdTarget(s)
+  const a = s.finance.adBudget
+  if (a > t * (1 + NEXT_MOVE_AD_TUNE)) return true
+  return a < t * (1 - NEXT_MOVE_AD_TUNE) && cashSafe(s, 0, t - a)
+}
+const NEXT_MOVE_AD_CASH_MONTHS = 8
+const NEXT_MOVE_AD_WEAK = 0.6
+const NEXT_MOVE_AD_TUNE = 0.25
+
+/** A rival the company can buy now and still carry (the market map's numbers, the cash guard on its price). */
+function rivalToBuy(s: GameState): string | undefined {
+  return (s.derived.market?.rivals ?? []).find((r) => r.error === null && cashSafe(s, r.price, 0))?.id
+}
+
+/** A category the company does not build yet (the richer, faster ones first). */
+const NEW_PRODUCT_ORDER: readonly ProjectCategory[] = ['ai', 'api', 'web', 'marketplace', 'game', 'mobile']
+function nextCategory(s: GameState): ProjectCategory | undefined {
+  const used = new Set(s.projects.map((p) => p.category))
+  return NEW_PRODUCT_ORDER.find((c) => !used.has(c))
+}
+
+/**
+ * Round 7: from Series A one finished product leaves the builders bored (they quit, growth hires stop) and the waves
+ * dry up; the bots open a second line there. One product per stage from A (A 2, B 3, C 4), every one finished first.
+ */
+function wantsProduct(s: GameState): boolean {
+  return s.stage >= 3 && s.projects.length < s.stage - 1 && s.projects.every((p) => p.maturity >= 1) && nextCategory(s) !== undefined
+}
+
+/** A price step up the product carries: from Series A, under NEXT_MOVE_PRICE_GROWTH_CAP, churn calm, last change ≥ 60 days ago. */
+function priceRoom(s: GameState): boolean {
+  const last = s.finance.priceChangeDay
+  return (
+    s.finance.priceMultiplier < NEXT_MOVE_PRICE_GROWTH_CAP - 1e-9 &&
+    s.stats.churn < NEXT_MOVE_PRICE_CHURN &&
+    (last === undefined || s.time.day - last >= NEXT_MOVE_PRICE_GAP_DAYS) &&
+    priceGateOpen(s)
+  )
+}
+/** Price control is open (setPrice refuses before). */
+function priceGateOpen(s: GameState): boolean {
+  return s.unlockedTools.includes('priceControl')
+}
+
 /** Someone walking out (the soonest leave day first). */
 function leaverOf(s: GameState) {
   return s.employees.filter((e) => e.status === 'leaving').sort((a, b) => (a.leaveDay ?? 0) - (b.leaveDay ?? 0))[0]
@@ -175,14 +285,27 @@ function leaverOf(s: GameState) {
 function growthMove(s: GameState): Action | null {
   if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return hireAction(s, 'marketing')
   const amount = biggerAdBudget(s)
-  if (amount <= s.finance.adBudget || !adsPay(s) || !cashSafe(s, 0, amount - s.finance.adBudget)) return null
+  if (s.stage >= 4 || amount <= s.finance.adBudget || !adsPay(s) || !cashSafe(s, 0, amount - s.finance.adBudget)) return null
   const after = previewSpend(s, { burnDelta: amount - s.finance.adBudget }).runwayAfter
   return after === null || after >= B.HIRE_RUNWAY_MIN ? { type: 'setAdBudget', amount } : null
 }
 
 /** More ads still pay: a customer brings back at least NEXT_MOVE_LTV_CAC × what it costs (no ad ramp into a stall). */
 function adsPay(s: GameState): boolean {
-  return (s.derived.ltvCac ?? Infinity) >= NEXT_MOVE_LTV_CAC
+  return (s.derived.ltvCac ?? Infinity) >= (cashIdle(s) ? NEXT_MOVE_LTV_CAC_IDLE : s.stage >= 4 ? NEXT_MOVE_LTV_CAC_LATE : NEXT_MOVE_LTV_CAC)
+}
+
+/** From Series A, idle or bored builders: no builder hire (they quit), deals and retention hires still go. */
+function underused(s: GameState): boolean {
+  return s.stage >= 3 && (idleBuilders(s).length > 0 || s.employees.some((e) => (e.boredDays ?? 0) > 0))
+}
+
+/**
+ * Servers near full: overloaded, or (from Series A) capacity under NEXT_MOVE_CAPACITY_HEADROOM × users. Round 7: a
+ * full office could no longer take the engineer the overload asked for (churn 3.5 → 8 %); the engineers come first.
+ */
+function serversTight(s: GameState): boolean {
+  return s.derived.overload > NEXT_MOVE_OVERLOAD || (s.stage >= 3 && s.derived.capacity < s.stats.users * NEXT_MOVE_CAPACITY_HEADROOM)
 }
 
 /** Days since the last hire (Infinity with nobody on staff): growth hires wait NEXT_MOVE_HIRE_GAP_DAYS between them. */
@@ -192,7 +315,7 @@ function daysSinceHire(s: GameState): number {
 
 /** The next ad step for a company with money to spare: double, at most NEXT_MOVE_AD_MRR of the MRR. */
 function biggerAdBudget(s: GameState): number {
-  return Math.round(Math.max(firstAdBudget(s), Math.min(s.finance.mrr * NEXT_MOVE_AD_MRR, s.finance.adBudget * 2)))
+  return Math.round(Math.max(firstAdBudget(s), Math.min(s.finance.mrr * adCapShare(s), s.finance.adBudget * 2)))
 }
 
 /** The office has no desk slot left but a locked ring the runway carries (its price and rent). */
@@ -222,15 +345,18 @@ export function deptHireRunway(s: GameState, dept: Dept): number | null | undefi
 
 /**
  * Round 6 guard for every move that spends (a profitable company at −$4.3K was told to hire, then missed payroll): no
- * payday waiting on the desk, the next payday still paid after the spend, and the free cash after it covers one
- * month of costs (burn + the new monthly cost) even when the company is profitable on paper.
+ * payday waiting on the desk, the next payday still paid after the spend, and the free cash after it (costs owed so far
+ * already taken off) covers a quarter month of costs, even when the company is profitable on paper.
  */
 export function cashSafe(s: GameState, cashCost: number, monthlyCost: number): boolean {
   if (s.finance.pendingPayday || s.finance.payrollMissed) return false
   const p = previewSpend(s, { cashDelta: -cashCost, burnDelta: monthlyCost })
   if (p.paydayShort) return false
-  return freeCash(s) - heldWages(s) - cashCost >= Math.max(0, s.finance.burn) + monthlyCost
+  // Free cash is after the costs already owed this month; a quarter month of costs on top is the buffer (a full month
+  // blocked every move of a profitable Series C company paying $6M a month).
+  return freeCash(s) - heldWages(s) - cashCost >= NEXT_MOVE_CASH_BUFFER * (Math.max(0, s.finance.burn) + monthlyCost)
 }
+const NEXT_MOVE_CASH_BUFFER = 0.25
 
 /** The hire leaves at least `months` of runway (profitable after it counts) and passes the cash guard. */
 function hireFits(s: GameState, dept: Dept, months: number): boolean {
@@ -246,11 +372,20 @@ function hireFits(s: GameState, dept: Dept, months: number): boolean {
  * that has a candidate and fits the runway with headroom.
  */
 const GROWTH_MIX: Readonly<Partial<Record<Dept, number>>> = { eng: 3, marketing: 3, sales: 2, product: 1, ops: 1 }
-function growthDept(s: GameState): Dept | undefined {
-  const total = Object.values(GROWTH_MIX).reduce((a, b) => a + (b ?? 0), 0)
+/**
+ * Round 7: from Series A the mix leans to deals and retention (the bots' Series C: ~8 sales lifting ARPU, 4 ops
+ * cutting churn; the guided company had LTV:CAC 1.4 against their 2–2.8).
+ */
+const GROWTH_MIX_LATE: Readonly<Partial<Record<Dept, number>>> = { eng: 3, marketing: 3, sales: 3, ops: 2, product: 1 }
+function growthDept(s: GameState, builders = true): Dept | undefined {
+  const mix = s.stage >= 3 ? GROWTH_MIX_LATE : GROWTH_MIX
+  const total = Object.values(mix).reduce((a, b) => a + (b ?? 0), 0)
   const team = s.employees.length + 1
-  const gap = (d: Dept) => ((GROWTH_MIX[d] ?? 0) / total) * team - (s.derived.deptCounts?.[d] ?? 0)
-  return (Object.keys(GROWTH_MIX) as Dept[])
+  const gap = (d: Dept) => ((mix[d] ?? 0) / total) * team - (s.derived.deptCounts?.[d] ?? 0)
+  // Tight servers: the seat goes to an engineer (a full office has no second chance).
+  const depts = serversTight(s) ? (['eng'] as Dept[]) : (Object.keys(mix) as Dept[])
+  return depts
+    .filter((d) => builders || d === 'eng' && serversTight(s) || (d !== 'eng' && d !== 'product'))
     .sort((a, b) => gap(b) - gap(a))
     .find((d) => hireFits(s, d, s.stage >= 3 ? NEXT_MOVE_LATE_HIRE_RUNWAY : B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
 }
@@ -262,6 +397,20 @@ function firstAdBudget(s: GameState): number {
 }
 /** The first ad budget as a share of MRR. */
 const NEXT_MOVE_AD_MRR = 0.5
+/**
+ * Round 7: the ad ceiling the chip climbs to, as a share of MRR: half before Series B, the whole MRR from B on (paid
+ * carries the late game; the bots peak at 0.5–1.7 × MRR), where the LTV:CAC bar is NEXT_MOVE_LTV_CAC_LATE.
+ */
+function adCapShare(s: GameState): number {
+  return cashIdle(s) ? NEXT_MOVE_AD_MRR_IDLE : s.stage >= 4 ? NEXT_MOVE_AD_MRR_LATE : NEXT_MOVE_AD_MRR
+}
+/** From Series B, a year of costs or more sitting in the bank (the board wants growth, the idle cash is priced down). */
+function cashIdle(s: GameState): boolean {
+  return s.stage >= 4 && freeCash(s) >= NEXT_MOVE_IDLE_MONTHS * Math.max(1, s.finance.burn)
+}
+const NEXT_MOVE_IDLE_MONTHS = 12
+const NEXT_MOVE_AD_MRR_IDLE = 1.5
+const NEXT_MOVE_AD_MRR_LATE = 1
 
 /** A finished product not building anything, and its cheapest module that can start now. */
 function moduleToBuild(s: GameState): { projectId: string; moduleId: ProjectModuleId } | null {
@@ -295,14 +444,30 @@ export function nextMove(s: GameState): NextMove | undefined {
   const sales = founderActionError(s, 'salesCall') === null && salesCallPreview(s).factor >= NEXT_MOVE_SALES_FACTOR
   if (rw !== null && rw < B.HIRE_RUNWAY_MIN) {
     if (sales) return 'salesCall'
-    if (s.finance.adBudget > 0) return 'adsCut'
-    if (s.finance.priceMultiplier < NEXT_MOVE_PRICE_CAP - 1e-9) return 'price'
+    if (s.finance.adBudget > 0 && s.stage < 4) return 'adsCut'
+    if (s.stage >= 4 && lateAdsOff(s)) return 'adsTune'
+    if (s.finance.priceMultiplier < NEXT_MOVE_PRICE_CAP - 1e-9 && priceGateOpen(s)) return 'price'
     // Nothing left to sell or stop: cut the month (round 6: a stalled Series A ran 8 → 0 months with the chip calm).
     if (s.employees.length > 1 && (survivalLaw(s) || rw < NEXT_MOVE_CUT_RUNWAY)) return 'cutBurn'
   }
-  // Servers full (users churn away on an overloaded product): an engineer, if the runway carries one.
+  // Servers full (round 7: overload took a Series C company's churn from 3.5 % to 8 %) (users churn away on an overloaded product): an engineer, if the runway carries one.
   const eng = s.derived.deptCounts?.eng ?? 0
-  if ((s.derived.overload > NEXT_MOVE_OVERLOAD || (eng === 0 && s.stage >= 1)) && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
+  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
+  // No seat for the engineer: a server room (capacity × 1.25 each) when the cash carries it.
+  const room = s.derived.serverRoom
+  if (serversTight(s) && room && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
+  // Round 7, the late walls the bots climb and the guided player did not: debt slowing the team, a second product,
+  // a bigger market, a rival's users, a price the product now carries.
+  if (s.stage >= 3 && s.techDebt >= NEXT_MOVE_REFACTOR_DEBT && founderActionError(s, 'refactorSprint') === null) return 'refactor'
+  if (wantsProduct(s)) return 'newProduct'
+  if (growthLaw(s)) return 'signLaw'
+  // A bigger market as soon as one can be carried (TAM is the late wall: penetration, ads at LTV:CAC 1).
+  if (segmentToOpen(s)) return 'openSegment'
+  if (lateAdsOff(s)) return 'adsTune'
+  if (s.stage >= 4 && rivalToBuy(s)) return 'acquire'
+  // From Series B a contract a month while the month's deals still pay in full (enterprise MRR).
+  if (s.stage >= 4 && sales && salesCallPreview(s).fullLeft > 0) return 'salesCall'
+  if (s.stage >= 3 && priceRoom(s)) return 'priceUp'
   const last = s.finance.usersHistory[s.finance.usersHistory.length - 1]
   const flat = last !== undefined && s.stats.users <= last * (1 + NEXT_MOVE_FLAT_GROWTH)
   // The users focus on a spent circle (the "6%" badge): talks feed the product instead.
@@ -310,7 +475,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (flat) {
     if ((s.founder.focus ?? 'build') === 'build' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
     if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
-    if (s.finance.adBudget <= 0 && cashSafe(s, 0, firstAdBudget(s))) {
+    if (s.stage < 4 && s.finance.adBudget <= 0 && cashSafe(s, 0, firstAdBudget(s))) {
       // Only an ad budget the runway carries (no ads on / ads cut loop).
       const after = previewSpend(s, { burnDelta: firstAdBudget(s) }).runwayAfter
       if (after === null || after >= B.HIRE_RUNWAY_MIN) return 'ads'
@@ -323,13 +488,12 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.stage >= 1) {
     // One growth hire at a time: the last one settles NEXT_MOVE_HIRE_GAP_DAYS before the next is named.
     // Never into an idle or bored team (they leave), and from Series A only with a year of runway after the hire.
-    const underused = s.stage >= 3 && (idleBuilders(s).length > 0 || s.employees.some((e) => (e.boredDays ?? 0) > 0))
-    if (!underused && daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s)) return 'hireGrowth'
+    if (daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s, !underused(s))) return 'hireGrowth'
     const roomy = (m: number) => rw === null || rw >= m
     // Office full: the next section, when the runway carries its price and rent.
     if (s.derived.hireDeskCost === null && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
     // Cash idle and ads small: the next ad step (the runway must still carry it).
-    if (roomy(NEXT_MOVE_ADS_UP_RUNWAY) && adsPay(s) && s.finance.adBudget < s.finance.mrr * NEXT_MOVE_AD_MRR * 0.75 && cashSafe(s, 0, biggerAdBudget(s) - s.finance.adBudget)) {
+    if (s.stage < 4 && roomy(NEXT_MOVE_ADS_UP_RUNWAY) && adsPay(s) && s.finance.adBudget < s.finance.mrr * adCapShare(s) * 0.75 && cashSafe(s, 0, biggerAdBudget(s) - s.finance.adBudget)) {
       const after = previewSpend(s, { burnDelta: biggerAdBudget(s) - s.finance.adBudget }).runwayAfter
       if (after === null || after >= B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) return 'adsUp'
     }
@@ -345,6 +509,8 @@ const NEXT_MOVE_SALES_FACTOR = 0.5
 const NEXT_MOVE_PRICE_CAP = 1.3
 /** Overload (users over server capacity, derived.overload) from which the chip asks for an engineer. */
 const NEXT_MOVE_OVERLOAD = 0.1
+/** From Series A, capacity kept this far ahead of the users. */
+const NEXT_MOVE_CAPACITY_HEADROOM = 1.3
 /** A growth hire keeps this many months over HIRE_RUNWAY_MIN. */
 const NEXT_MOVE_GROWTH_HEADROOM = 2
 /** Runway from which idle cash goes into the next ad step. */
@@ -353,8 +519,16 @@ const NEXT_MOVE_ADS_UP_RUNWAY = 12
 const NEXT_MOVE_MORALE = B.DILIGENCE_MORALE
 /** The users focus at this find return reads as spent (the slot greys out under a quarter). */
 const NEXT_MOVE_FIND_DEAD = 0.25
+/** Tech debt from which the chip asks for a refactor sprint (the bots' bar: speed × 0.8). */
+const NEXT_MOVE_REFACTOR_DEBT = 10
+/** The growth price moves stop here, need churn under this and a gap between steps. */
+const NEXT_MOVE_PRICE_GROWTH_CAP = 1.3
+const NEXT_MOVE_PRICE_CHURN = 0.06
+const NEXT_MOVE_PRICE_GAP_DAYS = 60
 /** LTV:CAC the ad moves ask for before raising the budget. */
-const NEXT_MOVE_LTV_CAC = 2
+const NEXT_MOVE_LTV_CAC = 1.5
+const NEXT_MOVE_LTV_CAC_LATE = 1.3
+const NEXT_MOVE_LTV_CAC_IDLE = 1
 /** From Series A a growth hire needs this much runway after it (a 20-person team that stalls burns fast). */
 const NEXT_MOVE_LATE_HIRE_RUNWAY = 12
 /** Under this runway the chip cuts the month even when no survival law is open (a hire leaves). */

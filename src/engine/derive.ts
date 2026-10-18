@@ -1,5 +1,8 @@
 // Recomputes stats/finance/derived from the raw state. Render/UI read these; they never compute formulas.
 import * as B from './balance'
+import { autoPlace } from './layout'
+/** The furniture the chip's server-room move places (content/furniture.ts). */
+export const SERVER_ROOM_ID = 'server-room'
 import * as E from './economy'
 import { loanMonthlyService } from './effects'
 import { crowdFactor, effortMorale, effortOn, effortOutput, fits, founderProject, isBuilder, peopleView } from './effort'
@@ -8,7 +11,7 @@ import { cheapestHireRunway, heldWages, horizon, nextCrisis, nextStep, owedTotal
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
 import { adFocusWarmup, adWeights, moduleMult, projectMix, projectWeights, wMean } from './modules'
-import { auraAt, bookshelfMorale, deskQualityAt, findSlot, hireDeskCost, officeEffects, openExtraRingCount, teamClusteredEmployees, type OfficeEffects } from './office'
+import { auraAt, bookshelfMorale, deskQualityAt, findSlot, hireDeskCost, officeEffects, placementSpec, openExtraRingCount, teamClusteredEmployees, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
 import { boardView, marketOf, marketUpkeep, marketView } from './world'
@@ -339,6 +342,8 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
   s.derived.hireDeskCost = hireDeskCost(s, content)
+  const server = content.furniture.find((f) => f.id === SERVER_ROOM_ID)
+  s.derived.serverRoom = server && s.stage >= server.stageUnlock && autoPlace(s.office, placementSpec(server)) ? { price: server.price, upkeep: server.upkeep ?? 0 } : null
   s.derived.hireRunway = cheapestHireRunway(s, s.derived.hireDeskCost)
   s.derived.nextStep = nextStep(s)
   s.derived.playStyle = playStyle(s)

@@ -1097,6 +1097,8 @@ export interface DerivedMetrics {
   hireRunway?: number | null
   /** What a hire's auto desk costs today (0 = a desk stands free, null = no desk slot left). */
   hireDeskCost?: number | null
+  /** A server room (capacity × 1.25) fits the office now: its price and upkeep; null = not unlocked or no room slot. */
+  serverRoom?: { price: number; upkeep: number } | null
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
   nextStep?: NextStep
   /** The player's play style today (engine/style.ts); null = none clear yet. */
@@ -1377,7 +1379,7 @@ export interface NextStep {
 }
 
 /** Concrete garage / Pre-seed moves the chip can name: cash first, then growth, then the product. */
-export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'progress'] as const
+export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'openSegment', 'newProduct', 'refactor', 'acquire', 'priceUp', 'adsTune', 'signLaw', 'serverRoom', 'progress'] as const
 export type NextMove = (typeof NEXT_MOVES)[number]
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */

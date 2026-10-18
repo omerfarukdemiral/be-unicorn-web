@@ -107,6 +107,23 @@ describe('nextMove', () => {
     expect(a?.type === 'assign' || (a?.type === 'respondResignation' && a.response === 'talk')).toBe(true)
   })
 
+  it('round 7, the late walls: a finished lone product at A opens a second, servers tight with no seat ask for a server room, a carried segment opens', () => {
+    const l = live()
+    const base: GameState = { ...l, stats: { ...l.stats, cash: 50_000_000 }, finance: { ...l.finance, runway: null, net: 1_000_000, burn: 1_000_000 } }
+    const done: GameState = { ...base, stage: 3, projects: base.projects.map((p) => ({ ...p, maturity: 1 })) }
+    expect(nextMove(done)).toBe('newProduct')
+    expect(stepAction(done, { ...nextStep(done), move: 'newProduct' })).toMatchObject({ type: 'startProject' })
+    const two: GameState = { ...done, projects: [...done.projects, { ...done.projects[0]!, id: 'p-two', category: 'ai' }] }
+    const tight: GameState = {
+      ...two,
+      stage: 4,
+      stats: { ...two.stats, users: 100_000 },
+      derived: { ...two.derived, capacity: 50_000, overload: 1, hireDeskCost: null, serverRoom: { price: 250_000, upkeep: 3_000 } },
+    }
+    expect(['serverRoom', 'refactor', 'signLaw', 'openSegment', 'adsTune', 'acquire']).toContain(nextMove(tight))
+    expect(stepAction(tight, { ...nextStep(tight), move: 'serverRoom' })).toEqual({ type: 'placeItem', itemId: 'server-room' })
+  })
+
   it('stops at Unicorn', () => {
     const l = live()
     expect(nextMove({ ...l, stage: 6, finance: { ...l.finance, runway: 1 } })).toBeUndefined()

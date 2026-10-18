@@ -24,13 +24,17 @@ export interface NextStepView {
   startCall: boolean
   canStartRound: boolean
   over: boolean
+  /** Pre-seed / Seed move: the chip shows without the garage count. */
+  afterGarage: boolean
 }
 
 export function useNextStep(): NextStepView {
   return useGameStore(
     useShallow((s) => {
-      // Past the garage the chip is closed: no step, so the strip keeps no resting row for it.
-      const step = s.state.stage > 0 ? undefined : s.state.derived.nextStep
+      // Past the garage the chip is closed, unless it names a concrete move (fix round 3: up to Seed, the guided player
+      // must not go broke with nothing on screen).
+      const next = s.state.derived.nextStep
+      const step = s.state.stage > 0 && !next?.move ? undefined : next
       const paused = !s.ui.runStarted && s.state.time.speed === 0
       return {
         step,
@@ -42,6 +46,7 @@ export function useNextStep(): NextStepView {
         startCall: paused && !s.state.gameOver && blockingOverlay(s.ui) === null,
         canStartRound: !!s.state.derived.canStartRound,
         over: !!s.state.gameOver,
+        afterGarage: s.state.stage > 0,
       }
     }),
   )
@@ -68,7 +73,8 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
       <span className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-brand-soft text-brand-ink" aria-hidden="true">
         <Icon name="flag" size={14} />
       </span>
-      <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{t('step.count', { i: step.index, n: step.total })}</span>
+      {/* A move after the garage has no place in the garage chain: no count. */}
+      {!v.afterGarage && <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{t('step.count', { i: step.index, n: step.total })}</span>}
       {short ? (
         <span key={step.id} className="flex min-w-0 flex-1 animate-fade-in flex-col justify-center leading-tight">
           <span className={cx('text-[13px] font-semibold text-ink', short.value ? 'truncate' : 'line-clamp-2')}>{short.label}</span>

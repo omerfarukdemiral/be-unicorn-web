@@ -25,7 +25,6 @@ import { celebrate, sceneTime, useLayout, useSceneTimers } from './sceneRegistry
 import { useGS, useSceneCovered, useUi } from './source'
 import { useYieldToBubbles } from './yieldToBubbles'
 import { DOOR_FADE } from './walker'
-import { measureIslands } from './frameFit'
 
 const MAX_FIGURES = 8
 const WALK_SPEED = 2.4 // world units / s
@@ -39,7 +38,8 @@ const WAVE_MS = 9000
 const PULSE_MS = 1400
 /** A scene float's life (ms); several stack upwards. */
 const FLOAT_MS = 1800
-const MAX_FLOATS = 3
+/** At most a users float and a payday float at once: several "+N" stacked over a desk covered its plates (round 3). */
+const MAX_FLOATS = 2
 
 interface SceneFloat {
   id: number
@@ -122,7 +122,14 @@ export function JuiceLayer() {
   }, [events, releases, generation, later])
 
   function addFloat(f: SceneFloat) {
-    setFloats((cur) => [...cur.filter((x) => sceneMs() - x.started < FLOAT_MS), f].slice(-MAX_FLOATS))
+    // One float per tone: a new users wave while one still rises adds into it ("+3" then "+1266" reads "+1269").
+    setFloats((cur) => {
+      const live = cur.filter((x) => sceneMs() - x.started < FLOAT_MS)
+      const same = live.find((x) => x.tone === f.tone)
+      const n = (t: string) => Number(t.replace(/[^0-9.]/g, '')) || 0
+      const merged = same && f.tone === 'users' ? { ...f, text: `+${Math.round(n(same.text) + n(f.text))}` } : f
+      return [...live.filter((x) => x.tone !== f.tone), merged].slice(-MAX_FLOATS)
+    })
     later(FLOAT_MS, () => setFloats((cur) => cur.filter((x) => x.id !== f.id)))
   }
 
@@ -222,21 +229,26 @@ function money(n: number): string {
   return a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(a / 1e3).toFixed(1)}K` : `$${Math.round(a)}`
 }
 
+/** The toast re-reads the HUD this often (ms): a card can widen while it shows (the garage's round timer chip). */
+const TOAST_MEASURE_MS = 200
+
 /**
- * Screen point (px, canvas space) of the release toast: centred on the free scene (left of the side panel), just under
- * the lowest top HUD island. On a phone the banner over the desk sat in the middle of the scene, over the team (fix
- * round §4); a toast at the top edge never covers it.
+ * Screen point (px, canvas space) of the release toast and its widest allowed width: centred on the free scene (left
+ * of the side panel), just under the lowest top HUD island, live (round 3: a stage card that widened while the toast
+ * showed slid over it). Visual rects (transforms included), not layout boxes. On a phone the banner over the desk sat
+ * in the middle of the scene, over the team (fix round §4); a toast at the top edge never covers it.
  */
-function useToastAnchor(): readonly [number, number] {
-  const gl = useThree((s) => s.gl)
-  const size = useThree((s) => s.size)
-  const inset = useUi((u) => u.sceneInset.right)
-  return useMemo(() => {
-    const freeRight = Math.max(size.width - inset, size.width * 0.3)
-    let top = 0
-    for (const r of measureIslands(gl.domElement)) if (r.top < size.height * 0.3 && r.bottom < size.height * 0.4 && r.left < freeRight) top = Math.max(top, r.bottom)
-    return [freeRight / 2, top + TOAST_GAP] as const
-  }, [gl, size, inset])
+function toastAnchor(canvas: HTMLElement, width: number, height: number, inset: number): { x: number; y: number; maxW: number } {
+  const c = canvas.getBoundingClientRect()
+  const freeRight = Math.max(width - inset, width * 0.3)
+  let top = 0
+  for (const el of document.querySelectorAll<HTMLElement>('[data-scene-island]')) {
+    const q = el.getBoundingClientRect()
+    if (!q.width || !q.height) continue
+    const r = { left: q.left - c.left, top: q.top - c.top, bottom: q.bottom - c.top }
+    if (r.top < height * 0.3 && r.bottom < height * 0.4 && r.left < freeRight) top = Math.max(top, r.bottom)
+  }
+  return { x: freeRight / 2, y: top + TOAST_GAP, maxW: Math.max(160, freeRight - 24) }
 }
 
 function ReleaseBanner({ wave, hidden }: { wave: Wave; hidden: boolean }) {
@@ -247,12 +259,20 @@ function ReleaseBanner({ wave, hidden }: { wave: Wave; hidden: boolean }) {
   // A decision bubble under the toast still wins: the toast steps aside (or fades) for it.
   useYieldToBubbles(box)
   const later = useSceneTimers()
-  const anchor = useToastAnchor()
-  const at = useRef(anchor)
-  at.current = anchor
-  const place = useMemo(() => () => [at.current[0], at.current[1]], [])
-  // One line: at most the free width less a margin each side (a long project name ends in "…").
-  const maxW = Math.max(160, anchor[0] * 2 - 24)
+  const gl = useThree((st) => st.gl)
+  const size = useThree((st) => st.size)
+  const inset = useUi((u) => u.sceneInset.right)
+  const at = useRef(toastAnchor(gl.domElement, size.width, size.height, inset))
+  const pill = useRef<HTMLDivElement>(null)
+  const measured = useRef(0)
+  useFrame(() => {
+    const now = performance.now()
+    if (now - measured.current < TOAST_MEASURE_MS) return
+    measured.current = now
+    at.current = toastAnchor(gl.domElement, size.width, size.height, inset)
+    if (pill.current) pill.current.style.maxWidth = `${at.current.maxW}px`
+  })
+  const place = useMemo(() => () => [at.current.x, at.current.y], [])
   useEffect(() => later(BANNER_MS, () => setOn(false)), [later])
   const r = wave.release
   const category = useGS((s) => s.projects.find((p) => p.id === r.projectId)?.category)
@@ -276,7 +296,8 @@ function ReleaseBanner({ wave, hidden }: { wave: Wave; hidden: boolean }) {
       <div ref={box} data-juice-banner="" style={{ visibility: hidden ? 'hidden' : undefined }}>
         <div
           className="animate-pop-in overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-3 py-1 shadow-pop"
-          style={{ maxWidth: maxW, background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', animationPlayState: play }}
+          ref={pill}
+          style={{ maxWidth: at.current.maxW, background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', animationPlayState: play }}
         >
           {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
           {line}

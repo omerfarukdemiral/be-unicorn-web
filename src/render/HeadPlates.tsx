@@ -10,12 +10,11 @@ import { memo, useMemo, useRef } from 'react'
 import { Vector3 } from 'three'
 import type { GameState } from '../engine/types'
 import { DEPT_COLORS } from './palette'
-import { declutterPlates, fatigueTone, hasOwnBubble, plateGlyph, plateSalary, plateShown, plateWidths, shortName, type PlateBox, type PlateGlyph, type PlateLevel } from './headPlate'
+import { declutterPlates, fatigueTone, plateGlyph, plateSalary, plateShown, plateWidths, shortName, type PlateBox, type PlateGlyph, type PlateLevel, type PlateRect } from './headPlate'
 import { useHtmlPortal } from './htmlPortal'
 import { DEPT_PATH, GLYPH_PATH } from './plateIcons'
 import { hoveredPerson, seatedRegistry, speakerPositions } from './sceneRegistry'
 import { useGS, useSceneCovered, useUi } from './source'
-import { shownBubbles } from './yieldToBubbles'
 import { panelSelection } from '../store/gameStore'
 
 /** Anchor height over the floor: just above a seated head. */
@@ -23,6 +22,8 @@ const ANCHOR_Y = 1.42
 const MEASURE_MS = 150
 /** A whole plate's height (px): the name row, the bar and the padding. */
 const PLATE_H = 28
+/** Plates keep this far (px) inside the screen's side edges. */
+const EDGE = 4
 const TONE_COLOR = { ok: 'var(--color-positive)', warn: 'var(--color-energy)', bad: 'var(--color-negative)' } as const
 const GLYPH_COLOR: Record<PlateGlyph | 'lead', string> = { tired: 'var(--color-energy)', morale: 'var(--color-g-sky)', bored: 'var(--color-ink-3)', lead: 'var(--color-g-equity)' }
 
@@ -125,10 +126,12 @@ export function HeadPlates() {
   const gate = useRef({ covered, zoom, selected })
   gate.current = { covered, zoom, selected }
   const last = useRef(0)
-  /** Per-plate measured gates, refreshed every MEASURE_MS (bubble rects are DOM reads). */
-  const measured = useRef(new Map<string, { own: boolean; overlap: boolean }>())
+  /** Obstacle rects and bubble owners, refreshed every MEASURE_MS (DOM reads). */
+  const obstacles = useRef<PlateRect[]>([])
+  const owners = useRef(new Set<string>())
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
+  const gl = useThree((s) => s.gl)
 
   const reg = useMemo(
     () => (id: string, r: Partial<Refs> | null) => {
@@ -150,8 +153,26 @@ export function HeadPlates() {
 
   useFrame(() => {
     const now = performance.now()
-    const measure = now - last.current > MEASURE_MS
-    if (measure) last.current = now
+    if (now - last.current > MEASURE_MS) {
+      last.current = now
+      // DOM reads, throttled: bubbles / status chips and the "+N" floats are obstacles plates keep off; a bubble of
+      // the person's own hides their plate (bubbles win).
+      const c = gl.domElement.getBoundingClientRect()
+      const obs: PlateRect[] = []
+      const speakers: (string | undefined)[] = []
+      for (const el of document.querySelectorAll<HTMLElement>('[data-bubble-key]')) {
+        if (el.style.visibility === 'hidden' || el.style.opacity === '0') continue
+        speakers.push(el.dataset.bubbleSpeaker)
+        const r = el.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) obs.push({ l: r.left - c.left, r: r.right - c.left, t: r.top - c.top, b: r.bottom - c.top })
+      }
+      for (const el of document.querySelectorAll<HTMLElement>('[data-juice-float] > *')) {
+        const r = el.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) obs.push({ l: r.left - c.left, r: r.right - c.left, t: r.top - c.top, b: r.bottom - c.top })
+      }
+      obstacles.current = obs
+      owners.current = new Set(speakers.filter((x): x is string => !!x))
+    }
     const pos = new Map<string, [number, number]>()
     const boxes: PlateBox[] = []
     const pinned = (id: string) => id === gate.current.selected || id === hoveredPerson.id
@@ -162,34 +183,20 @@ export function HeadPlates() {
       const x = (tmp.x + 1) * (size.width / 2)
       const y = (1 - tmp.y) * (size.height / 2)
       pos.set(id, [x, y])
-      // A plate a bubble hides takes no room.
-      const m = measured.current.get(id)
-      if (m?.own || m?.overlap) continue
+      if (owners.current.has(id)) continue
       boxes.push({ id, x, y, w: r.w, h: PLATE_H, pinned: pinned(id) })
     }
-    const levels = declutterPlates(boxes, gate.current.zoom === 0 ? 'icon' : 'full')
-    const bubbles = measure ? shownBubbles() : null
-    const bubbleEls = measure ? [...document.querySelectorAll<HTMLElement>('[data-bubble-key]')].filter((el) => el.style.visibility !== 'hidden' && el.style.opacity !== '0') : null
+    const laid = declutterPlates(boxes, gate.current.zoom === 0 ? 'icon' : 'full', obstacles.current, { minX: EDGE, maxX: size.width - EDGE })
     for (const [id, r] of refs.current) {
       const el = r.root
       if (!el) continue
       const p = pos.get(id)
-      if (measure && bubbles && bubbleEls) {
-        let own = false
-        let overlap = false
-        if (p) {
-          const rect = el.getBoundingClientRect()
-          overlap = rect.width > 0 && bubbles.some((b) => rect.left < b.right + 4 && b.left < rect.right + 4 && rect.top < b.bottom + 4 && b.top < rect.bottom + 4)
-        }
-        own = hasOwnBubble(id, bubbleEls.map((b) => b.dataset.bubbleSpeaker))
-        measured.current.set(id, { own, overlap })
-      }
-      const m = measured.current.get(id)
-      const level = levels.get(id) ?? 'full'
-      const shown = !!p && level !== 'hidden' && plateShown({ seated: true, covered: gate.current.covered, ownBubble: !!m?.own, overlapsBubble: !!m?.overlap })
+      const got = laid.get(id)
+      const level = got?.level ?? 'hidden'
+      const shown = !!p && level !== 'hidden' && plateShown({ seated: true, covered: gate.current.covered, ownBubble: owners.current.has(id), overlapsBubble: false })
       if (p) {
-        // Centered over the anchor, bottom edge on it.
-        el.style.transform = `translate3d(${Math.round(p[0])}px, ${Math.round(p[1])}px, 0) translate(-50%, -100%)`
+        // Centred over the anchor (slid inside the screen edge), bottom edge on it.
+        el.style.transform = `translate3d(${Math.round(got?.x ?? p[0])}px, ${Math.round(p[1])}px, 0) translate(-50%, -100%)`
       }
       if (shown !== r.shown) {
         r.shown = shown

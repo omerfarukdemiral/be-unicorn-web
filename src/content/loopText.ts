@@ -50,6 +50,21 @@ export const LOOP_TEXT: Record<string, string> = {
   'step.short.roundWait': 'Pitch’i seç',
   'step.short.grow': 'Değerleme',
   'step.short.of': '{v}/{t}',
+  // Fix round 3: the chip's concrete move (one sentence; a tap does it).
+  'move.salesCall': 'Kasa daralıyor: bir satış görüşmesi yap',
+  'move.adsCut': 'Kasa daralıyor: reklamı durdur',
+  'move.price': 'Kasa daralıyor: fiyatı bir kademe artır',
+  'move.focusUsers': 'Kullanıcı artmıyor: odağı kullanıcı bulmaya çevir',
+  'move.ads': 'Kullanıcı artmıyor: küçük bir reklam aç · {v}/ay',
+  'move.module': 'Ürün boşta: {m} modülünü kur · {v}',
+  // Phone strip short words for the moves (the number on line 2).
+  'move.short.salesCall': 'Müşteri ara',
+  'move.short.adsCut': 'Reklamı durdur',
+  'move.short.price': 'Fiyatı artır',
+  'move.short.focusUsers': 'Kullanıcı bul',
+  'move.short.ads': 'Reklam aç',
+  'move.short.module': 'Modül kur',
+  'move.short.perMonth': '{v}/ay',
 
   // Horizon strip
   'horizon.span': '6 hafta',

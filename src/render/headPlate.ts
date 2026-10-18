@@ -123,24 +123,40 @@ export interface PlateBox {
 /** Gap (px) two plates keep between them. */
 export const PLATE_GAP = 2
 
+export interface PlateRect {
+  l: number
+  r: number
+  t: number
+  b: number
+}
+
 /**
- * Plate declutter (fix round 2 N5): plates are laid out greedily, pinned ones first, then nearest the camera (lowest on
- * screen). Each takes the richest level whose rect touches no plate already placed: name + salary, then name only,
- * then icon + bar; one that fits at none hides. `minLevel` caps the richest level (the farthest zoom: icons only).
+ * Plate declutter (fix round 2 N5, round 3): plates are laid out greedily, pinned ones first, then nearest the camera
+ * (lowest on screen). Each takes the richest level whose rect touches no plate already placed and no obstacle (bubbles,
+ * status chips, "+N" floats): name + salary, then name only, then icon + bar; one that fits at none hides. A plate is
+ * slid sideways to stay inside `[minX, maxX]` (a left-edge desk's plate no longer runs off the phone). `minLevel` caps
+ * the richest level (the farthest zoom: icons only). Pinned plates ignore everything but the screen edge.
  */
-export function declutterPlates(items: readonly PlateBox[], minLevel: 'full' | 'icon' = 'full'): Map<string, PlateLevel> {
-  const out = new Map<string, PlateLevel>()
-  const placed: { l: number; r: number; t: number; b: number }[] = []
+export function declutterPlates(
+  items: readonly PlateBox[],
+  minLevel: 'full' | 'icon' = 'full',
+  obstacles: readonly PlateRect[] = [],
+  edge?: { minX: number; maxX: number },
+): Map<string, { level: PlateLevel; x: number }> {
+  const out = new Map<string, { level: PlateLevel; x: number }>()
+  const placed: PlateRect[] = [...obstacles]
   const order = [...items].sort((a, b) => (a.pinned === b.pinned ? b.y - a.y || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.pinned ? -1 : 1))
   const levels: Exclude<PlateLevel, 'hidden'>[] = minLevel === 'icon' ? ['icon'] : ['full', 'name', 'icon']
+  const touches = (box: PlateRect) => placed.some((p) => box.l < p.r + PLATE_GAP && p.l < box.r + PLATE_GAP && box.t < p.b + PLATE_GAP && p.t < box.b + PLATE_GAP)
   for (const it of order) {
-    let got: PlateLevel = 'hidden'
+    let got: { level: PlateLevel; x: number } = { level: 'hidden', x: it.x }
     for (const lv of it.pinned ? (['full'] as const) : levels) {
       const half = it.w[lv] / 2
-      const box = { l: it.x - half, r: it.x + half, t: it.y - it.h, b: it.y }
-      if (it.pinned || !placed.some((p) => box.l < p.r + PLATE_GAP && p.l < box.r + PLATE_GAP && box.t < p.b + PLATE_GAP && p.t < box.b + PLATE_GAP)) {
+      const x = edge ? Math.min(Math.max(it.x, edge.minX + half), Math.max(edge.minX + half, edge.maxX - half)) : it.x
+      const box = { l: x - half, r: x + half, t: it.y - it.h, b: it.y }
+      if (it.pinned || !touches(box)) {
         placed.push(box)
-        got = lv
+        got = { level: lv, x }
         break
       }
     }

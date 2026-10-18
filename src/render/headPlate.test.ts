@@ -98,20 +98,30 @@ describe('declutterPlates (fix round 2 N5)', () => {
   const w = { full: 90, name: 60, icon: 30 }
   const box = (id: string, x: number, y: number, pinned = false) => ({ id, x, y, w, h: 28, pinned })
   it('never overlaps: the one behind drops its salary, then its name, then hides', () => {
-    expect(declutterPlates([box('a', 0, 100), box('b', 400, 100)])).toEqual(new Map([['a', 'full'], ['b', 'full']]))
+    expect([...declutterPlates([box('a', 0, 100), box('b', 400, 100)]).values()].map((v) => v.level)).toEqual(['full', 'full'])
     // 80 px apart: two whole plates touch; with the salary gone (60 px) they clear.
-    expect(declutterPlates([box('front', 0, 100), box('back', 80, 90)]).get('back')).toBe('name')
-    expect(declutterPlates([box('front', 0, 100), box('back', 62, 90)]).get('back')).toBe('icon')
-    expect(declutterPlates([box('front', 0, 100), box('back', 5, 95)]).get('back')).toBe('hidden')
-    expect(declutterPlates([box('front', 0, 100), box('back', 5, 95)]).get('front')).toBe('full')
+    expect(declutterPlates([box('front', 0, 100), box('back', 80, 90)]).get('back')?.level).toBe('name')
+    expect(declutterPlates([box('front', 0, 100), box('back', 62, 90)]).get('back')?.level).toBe('icon')
+    expect(declutterPlates([box('front', 0, 100), box('back', 5, 95)]).get('back')?.level).toBe('hidden')
+    expect(declutterPlates([box('front', 0, 100), box('back', 5, 95)]).get('front')?.level).toBe('full')
   })
   it('the hovered / selected plate always shows whole, even behind another one', () => {
     const m = declutterPlates([box('front', 0, 100), box('sel', 5, 95, true)])
-    expect(m.get('sel')).toBe('full')
-    expect(m.get('front')).toBe('hidden')
+    expect(m.get('sel')?.level).toBe('full')
+    expect(m.get('front')?.level).toBe('hidden')
   })
   it('the farthest zoom is icons only', () => {
-    expect(declutterPlates([box('a', 0, 100)], 'icon').get('a')).toBe('icon')
+    expect(declutterPlates([box('a', 0, 100)], 'icon').get('a')?.level).toBe('icon')
+  })
+  it('obstacles (a status chip, a "+N" float) count as placed plates', () => {
+    const chip = { l: -50, r: 50, t: 60, b: 110 }
+    expect(declutterPlates([box('a', 0, 100)], 'full', [chip]).get('a')?.level).toBe('hidden')
+    expect(declutterPlates([box('a', 0, 100)], 'full', [{ l: 20, r: 80, t: 60, b: 110 }]).get('a')?.level).toBe('icon')
+  })
+  it('a plate at the screen edge slides inside it', () => {
+    const got = declutterPlates([box('a', 10, 100)], 'full', [], { minX: 4, maxX: 386 }).get('a')!
+    expect(got.level).toBe('full')
+    expect(got.x - 45).toBeGreaterThanOrEqual(4)
   })
   it('widths grow with the text', () => {
     const a = plateWidths({ name: 'Ali', salary: '$1K', lead: false, glyph: null })

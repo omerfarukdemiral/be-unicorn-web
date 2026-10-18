@@ -7,7 +7,7 @@
 // Usage: npx tsx sim/naive.ts [--seeds 12] [--days 1200] [--trace <seed>] [--solo 1]
 // Prints per seed: Pre-seed / Seed / A days, missed paydays in the garage, min cash, game over.
 import { CONTENT } from '../src/content/index'
-import { balance, createEngine, MEETING_PITCHES, staffAttention, stepAction, type Action, type GameState } from '../src/engine/index'
+import { balance, CONFIRM_MOVES, createEngine, MEETING_PITCHES, moveKey, staffAttention, stepAction, type Action, type GameState } from '../src/engine/index'
 import { autoPaydayChoice } from '../src/engine/loop'
 import { Rng, createRngState } from '../src/engine/rng'
 import { busiestOpen, hireIsRed } from '../src/engine/loopSelectors'
@@ -32,6 +32,8 @@ const MISS = Number(process.argv[process.argv.indexOf("--miss") + 1] ?? 0) * (pr
 const SPEND: ReadonlySet<string> = new Set(['hire', 'openRing', 'buildModule', 'setAdBudget'])
 /** Stop at this stage (3 = Series A; --until 4 runs on to Series B). */
 const UNTIL = arg('until', 3)
+/** --decline 1|2 (see the loop): declines big moves a big move (law, rival, product, segment, server room, section, hire, cut): snoozes it. */
+const DECLINE = arg('decline', 0)
 /** Days between two taps on an unchanged chip. */
 const TAP_EVERY_DAYS = arg('tap', 30)
 /** First product: the idea bubble's first option (Mobil); --web 1 for the earlier probes. */
@@ -69,6 +71,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
   const missRng = new Rng(createRngState(seed * 104729 + 7))
   const decided = new Set<string>()
   const seenLeavers = new Set<string>()
+  const declined = new Set<string>()
   let lastChip = ''
   let lastTap = -Infinity
   act({ type: 'setFounderFocus', focus: 'users' })
@@ -107,7 +110,15 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     // The tester taps the chip when its line changes, else about once a month (one look per ~8 loop turns).
     const chipKey = `${step?.id}/${step?.move ?? ''}`
     const tap = chipKey !== lastChip || s.time.day - lastTap >= TAP_EVERY_DAYS
-    const a = step && tap ? stepAction(s, step) : null
+    // --decline: the player opens a big move's place and leaves without confirming (the UI reports snoozeMove).
+    // 1 = every item the first time it is offered (it is taken when it comes back); 2 = never the non-hire ones
+    // (law, rival, product, segment, server room, section), hires and cuts as offered.
+    const big = step?.move !== undefined && CONFIRM_MOVES.has(step.move)
+    const key = big ? moveKey(s, step!.move!) : ''
+    const declines =
+      big && ((DECLINE === 1 && !declined.has(key)) || (DECLINE === 2 && !['hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn'].includes(step!.move!)))
+    if (declines && tap) declined.add(key)
+    const a = step && tap ? (declines ? ({ type: 'snoozeMove', move: step.move! } as Action) : stepAction(s, step)) : null
     if (tap) {
       lastChip = chipKey
       lastTap = s.time.day

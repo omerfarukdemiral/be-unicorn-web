@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { CONTENT } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
-import { nextMove, nextStep, stepAction } from '../loopSelectors'
+import { moveKey, nextMove, nextStep, snoozed, stepAction, trackChip } from '../loopSelectors'
+import { deserialize, serialize } from '../save'
 import type { GameState } from '../types'
 
 const api = createEngine(CONTENT)
+const applyAction = api.applyAction
 
 /** A garage with a launched product, a builder, and some users. */
 function live(seed = 1): GameState {
@@ -122,6 +124,42 @@ describe('nextMove', () => {
     }
     expect(['serverRoom', 'refactor', 'signLaw', 'openSegment', 'adsTune', 'acquire']).toContain(nextMove(tight))
     expect(stepAction(tight, { ...nextStep(tight), move: 'serverRoom' })).toEqual({ type: 'placeItem', itemId: 'server-room' })
+  })
+
+  it('round 8 snooze: a declined law falls through to the next one; 45 days ignored snoozes it; old saves load', () => {
+    const l = live()
+    const pol = { available: ['management', 'quality-gate'], adopted: [], nextSignDay: 0, mult: {}, movesBonus: 0, burnAsk: 0, payLater: 0 }
+    const base: GameState = {
+      ...l,
+      stage: 2,
+      stats: { ...l.stats, cash: 5_000_000 },
+      finance: { ...l.finance, runway: null, net: 100_000 },
+      founder: { ...l.founder, moves: { left: 3, weekStart: l.time.day } },
+      derived: { ...l.derived, policies: pol as never },
+    }
+    // Only the law matters here: the moves before it are kept off.
+    const lawFirst = (st: GameState) => nextMove({ ...st, employees: [], projects: st.projects.map((p) => ({ ...p, maturity: 1 })) })
+    expect(lawFirst(base)).toBe('signLaw')
+    expect(moveKey(base, 'signLaw')).toBe('signLaw:management')
+    const once: GameState = { ...base, chipSnooze: { 'signLaw:management': base.time.day + B.MOVE_SNOOZE_DAYS } }
+    expect(moveKey(once, 'signLaw')).toBe('signLaw:quality-gate')
+    const both: GameState = { ...once, chipSnooze: { ...once.chipSnooze, 'signLaw:quality-gate': base.time.day + 10 } }
+    expect(lawFirst(both)).not.toBe('signLaw')
+    expect(snoozed(both, 'signLaw:quality-gate')).toBe(true)
+    expect(snoozed({ ...both, time: { ...both.time, day: both.time.day + 11 } }, 'signLaw:quality-gate')).toBe(false)
+    // The action: only the move on the chip, and only confirm moves.
+    const onChip: GameState = { ...base, derived: { ...base.derived, nextStep: { id: 'grow', index: 6, total: 6, move: 'signLaw' } } }
+    const r = applyAction(onChip, { type: 'snoozeMove', move: 'signLaw' })
+    expect(r.ok).toBe(true)
+    expect(r.state.chipSnooze?.['signLaw:management']).toBe(Math.floor(base.time.day) + B.MOVE_SNOOZE_DAYS)
+    expect(applyAction(onChip, { type: 'snoozeMove', move: 'acquire' }).ok).toBe(false)
+    // Auto: the same confirm move 45 days on the chip.
+    const seen: GameState = { ...onChip, chipSeen: { key: 'signLaw:management', since: Math.floor(base.time.day) - B.MOVE_SNOOZE_SHOWN_DAYS } }
+    trackChip(seen)
+    expect(seen.chipSnooze?.['signLaw:management']).toBeGreaterThan(base.time.day)
+    // A save without the fields loads and plays.
+    const { chipSnooze: _a, chipSeen: _b, ...old } = seen
+    expect(deserialize(serialize(old as GameState))).not.toBeNull()
   })
 
   it('stops at Unicorn', () => {

@@ -191,7 +191,7 @@ const GROWTH_LAWS: readonly PolicyId[] = ['management', 'quality-gate', 'profit-
 function growthLaw(s: GameState): PolicyId | undefined {
   const v = s.derived.policies
   if (!v || s.stage < 2 || s.time.day < v.nextSignDay || movesError(s, B.MOVE_COST.adoptPolicy)) return undefined
-  return GROWTH_LAWS.find((id) => v.available.includes(id))
+  return GROWTH_LAWS.find((id) => v.available.includes(id) && !snoozed(s, `signLaw:${id}`))
 }
 
 function survivalLaw(s: GameState): PolicyId | undefined {
@@ -212,7 +212,7 @@ export function busiestOpen(s: GameState, skip?: string) {
  */
 function segmentToOpen(s: GameState): MarketSegmentId | undefined {
   for (const v of s.derived.market?.segments ?? []) {
-    if (v.open || v.auto || v.error !== null) continue
+    if (v.open || v.auto || v.error !== null || snoozed(s, `openSegment:${v.id}`)) continue
     if (cashSafe(s, v.cost, v.upkeep)) return v.id
   }
   return undefined
@@ -243,14 +243,14 @@ const NEXT_MOVE_AD_TUNE = 0.25
 
 /** A rival the company can buy now and still carry (the market map's numbers, the cash guard on its price). */
 function rivalToBuy(s: GameState): string | undefined {
-  return (s.derived.market?.rivals ?? []).find((r) => r.error === null && cashSafe(s, r.price, 0))?.id
+  return (s.derived.market?.rivals ?? []).find((r) => r.error === null && !snoozed(s, `acquire:${r.id}`) && cashSafe(s, r.price, 0))?.id
 }
 
 /** A category the company does not build yet (the richer, faster ones first). */
 const NEW_PRODUCT_ORDER: readonly ProjectCategory[] = ['ai', 'api', 'web', 'marketplace', 'game', 'mobile']
 function nextCategory(s: GameState): ProjectCategory | undefined {
   const used = new Set(s.projects.map((p) => p.category))
-  return NEW_PRODUCT_ORDER.find((c) => !used.has(c))
+  return NEW_PRODUCT_ORDER.find((c) => !used.has(c) && !snoozed(s, `newProduct:${c}`))
 }
 
 /**
@@ -274,6 +274,69 @@ function priceRoom(s: GameState): boolean {
 /** Price control is open (setPrice refuses before). */
 function priceGateOpen(s: GameState): boolean {
   return s.unlockedTools.includes('priceControl')
+}
+
+// ---------------------------------------------------------------------------
+// Chip snooze (round 8: the chip sat on "Yeni bir şirket kuralı imzalanabilir" for 600+ days while the player opened
+// the book and never signed). A confirm move the player opened and left, or that showed MOVE_SNOOZE_SHOWN_DAYS with no
+// action, is skipped for MOVE_SNOOZE_DAYS: the chip falls through to the next move.
+// ---------------------------------------------------------------------------
+
+/** Moves that ask the player to confirm something big in its own place (the ones that can be declined). */
+export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['signLaw', 'acquire', 'newProduct', 'openSegment', 'serverRoom', 'openRing', 'hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn'])
+
+/** True while `key` is snoozed (state.chipSnooze: key → first day it shows again). */
+export function snoozed(s: Pick<GameState, 'chipSnooze' | 'time'>, key: string): boolean {
+  return (s.chipSnooze?.[key] ?? -Infinity) > s.time.day
+}
+
+/** The snooze key of a move: the move and, for the ones that pick an item (law, rival, product, segment, dept), that item. */
+export function moveKey(s: GameState, move: NextMove): string {
+  switch (move) {
+    case 'signLaw':
+      return `signLaw:${growthLaw(s) ?? ''}`
+    case 'acquire':
+      return `acquire:${rivalToBuy(s) ?? ''}`
+    case 'newProduct':
+      return `newProduct:${nextCategory(s) ?? ''}`
+    case 'openSegment':
+      return `openSegment:${segmentToOpen(s) ?? ''}`
+    case 'hireGrowth':
+      return `hireGrowth:${growthDept(s, !underused(s)) ?? ''}`
+    default:
+      return move
+  }
+}
+
+/** Snoozes a confirm move for MOVE_SNOOZE_DAYS (snoozeMove action, or the daily auto-snooze). False for other moves. */
+export function snoozeMove(s: GameState, move: NextMove): boolean {
+  if (!CONFIRM_MOVES.has(move)) return false
+  ;(s.chipSnooze ??= {})[moveKey(s, move)] = Math.floor(s.time.day) + B.MOVE_SNOOZE_DAYS
+  delete s.chipSeen
+  return true
+}
+
+/**
+ * Daily: a confirm move on the chip for MOVE_SNOOZE_SHOWN_DAYS in a row with no action snoozes itself; expired snoozes
+ * are dropped (the save keeps only live ones).
+ */
+export function trackChip(s: GameState): void {
+  const day = Math.floor(s.time.day)
+  if (s.chipSnooze) {
+    for (const [k, until] of Object.entries(s.chipSnooze)) if (until <= day) delete s.chipSnooze[k]
+    if (Object.keys(s.chipSnooze).length === 0) delete s.chipSnooze
+  }
+  const move = s.derived.nextStep?.move
+  if (!move || !CONFIRM_MOVES.has(move)) {
+    delete s.chipSeen
+    return
+  }
+  const key = moveKey(s, move)
+  if (s.chipSeen?.key !== key) {
+    s.chipSeen = { key, since: day }
+    return
+  }
+  if (day - s.chipSeen.since >= B.MOVE_SNOOZE_SHOWN_DAYS) snoozeMove(s, move)
 }
 
 /** Someone walking out (the soonest leave day first). */
@@ -385,7 +448,7 @@ function growthDept(s: GameState, builders = true): Dept | undefined {
   // Tight servers: the seat goes to an engineer (a full office has no second chance).
   const depts = serversTight(s) ? (['eng'] as Dept[]) : (Object.keys(mix) as Dept[])
   return depts
-    .filter((d) => builders || d === 'eng' && serversTight(s) || (d !== 'eng' && d !== 'product'))
+    .filter((d) => (builders || (d === 'eng' && serversTight(s)) || (d !== 'eng' && d !== 'product')) && !snoozed(s, `hireGrowth:${d}`))
     .sort((a, b) => gap(b) - gap(a))
     .find((d) => hireFits(s, d, s.stage >= 3 ? NEXT_MOVE_LATE_HIRE_RUNWAY : B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
 }
@@ -448,14 +511,15 @@ export function nextMove(s: GameState): NextMove | undefined {
     if (s.stage >= 4 && lateAdsOff(s)) return 'adsTune'
     if (s.finance.priceMultiplier < NEXT_MOVE_PRICE_CAP - 1e-9 && priceGateOpen(s)) return 'price'
     // Nothing left to sell or stop: cut the month (round 6: a stalled Series A ran 8 → 0 months with the chip calm).
-    if (s.employees.length > 1 && (survivalLaw(s) || rw < NEXT_MOVE_CUT_RUNWAY)) return 'cutBurn'
+    // A snoozed cut comes back anyway once the runway is under NEXT_MOVE_CUT_RUNWAY (the payday is at stake).
+    if (s.employees.length > 1 && (!snoozed(s, 'cutBurn') || rw < NEXT_MOVE_CUT_RUNWAY) && (survivalLaw(s) || rw < NEXT_MOVE_CUT_RUNWAY)) return 'cutBurn'
   }
   // Servers full (round 7: overload took a Series C company's churn from 3.5 % to 8 %) (users churn away on an overloaded product): an engineer, if the runway carries one.
   const eng = s.derived.deptCounts?.eng ?? 0
-  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
+  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && !snoozed(s, 'hireEng') && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
   // No seat for the engineer: a server room (capacity × 1.25 each) when the cash carries it.
   const room = s.derived.serverRoom
-  if (serversTight(s) && room && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
+  if (serversTight(s) && room && !snoozed(s, 'serverRoom') && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
   // Round 7, the late walls the bots climb and the guided player did not: debt slowing the team, a second product,
   // a bigger market, a rival's users, a price the product now carries.
   if (s.stage >= 3 && s.techDebt >= NEXT_MOVE_REFACTOR_DEBT && founderActionError(s, 'refactorSprint') === null) return 'refactor'
@@ -474,7 +538,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.founder.focus === 'users' && (s.derived.findUsers?.factor ?? 1) < NEXT_MOVE_FIND_DEAD) return 'focusTalk'
   if (flat) {
     if ((s.founder.focus ?? 'build') === 'build' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
-    if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
+    if ((s.derived.deptCounts?.marketing ?? 0) === 0 && !snoozed(s, 'hireMarketing') && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
     if (s.stage < 4 && s.finance.adBudget <= 0 && cashSafe(s, 0, firstAdBudget(s))) {
       // Only an ad budget the runway carries (no ads on / ads cut loop).
       const after = previewSpend(s, { burnDelta: firstAdBudget(s) }).runwayAfter
@@ -491,7 +555,7 @@ export function nextMove(s: GameState): NextMove | undefined {
     if (daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s, !underused(s))) return 'hireGrowth'
     const roomy = (m: number) => rw === null || rw >= m
     // Office full: the next section, when the runway carries its price and rent.
-    if (s.derived.hireDeskCost === null && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
+    if (s.derived.hireDeskCost === null && !snoozed(s, 'openRing') && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
     // Cash idle and ads small: the next ad step (the runway must still carry it).
     if (s.stage < 4 && roomy(NEXT_MOVE_ADS_UP_RUNWAY) && adsPay(s) && s.finance.adBudget < s.finance.mrr * adCapShare(s) * 0.75 && cashSafe(s, 0, biggerAdBudget(s) - s.finance.adBudget)) {
       const after = previewSpend(s, { burnDelta: biggerAdBudget(s) - s.finance.adBudget }).runwayAfter

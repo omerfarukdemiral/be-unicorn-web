@@ -15,6 +15,7 @@ import { Rng } from './rng'
 import { checkRoundWindow, progressRound } from './round'
 import { DAYS_PER_MONTH, DAYS_PER_WEEK, FIXED_STEP_DAYS, type GameEventKind, type GameState } from './types'
 import { clone, modifierMult, pushActivity, pushEvent, type EngineContent } from './util'
+import { trackChip } from './loopSelectors'
 import { checkMilestones, dailyBoard, dailyVisitors, detectArchetype, expireBubbles, idleLine, monthEnd, sayLine, updateRivalPressure } from './world'
 
 const EVENT_LINE: Partial<Record<GameEventKind, OfficeLineTrigger>> = {
@@ -112,6 +113,8 @@ export function progressProjects(s: GameState, o: Outputs, dt: number): void {
 
 function daily(s: GameState, content: EngineContent, rng: Rng, day: number): void {
   recomputeDerived(s, content)
+  // Round 8: a confirm move left on the chip 45 days snoozes itself (the chip falls through).
+  trackChip(s)
   dailyEndgame(s, content)
   if (s.gameOver) return
   dailyPeople(s, content)

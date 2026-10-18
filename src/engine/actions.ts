@@ -17,7 +17,7 @@ import { checkName, nameKey } from './names'
 import { nextProjectName } from './projectNames'
 import { Rng } from './rng'
 import { isPaydayChoice, resolvePayday, starsOfStage } from './loop'
-import { idleBuilders, upgradeCost } from './loopSelectors'
+import { idleBuilders, snoozeMove, upgradeCost } from './loopSelectors'
 import { roundPitch, startRound } from './round'
 import {
   FOUNDER_ACTIONS,
@@ -611,6 +611,12 @@ const setFounderFocus: Handler<'setFounderFocus'> = ({ s }, a) => {
   return null
 }
 
+const snoozeMoveH: Handler<'snoozeMove'> = ({ s }, a) => {
+  // Only the move the chip names now (a stale UI must not snooze something else).
+  if (s.derived.nextStep?.move !== a.move) return 'invalid'
+  return snoozeMove(s, a.move) ? null : 'invalid'
+}
+
 const setSpeed: Handler<'setSpeed'> = ({ s }, a) => {
   if (![0, 1, 2, 4].includes(a.speed)) return 'invalid'
   s.time.speed = a.speed
@@ -801,6 +807,7 @@ const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   cancelModule,
   founderAction,
   setFounderFocus,
+  snoozeMove: snoozeMoveH,
   setSpeed,
   setAdBudget,
   setAdFocus,

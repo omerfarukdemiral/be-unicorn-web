@@ -1692,6 +1692,10 @@ export interface MetaState {
 }
 
 export interface GameState {
+  /** Round 8 chip snooze: move key → the first day the chip may name it again (loopSelectors.snoozeMove). */
+  chipSnooze?: Record<string, number>
+  /** The confirm move on the chip and the day it first showed (loopSelectors.trackChip auto-snoozes it). */
+  chipSeen?: { key: string; since: number }
   meta: MetaState
   rng: RngState
   time: TimeState
@@ -1798,6 +1802,11 @@ export type Action =
   | { type: 'founderAction'; kind: FounderActionKind; targetId?: string }
   /** The standing focus the founder repeats every day until changed (targetId: the project a 'talk' focus is about). */
   | { type: 'setFounderFocus'; focus: FounderFocus; targetId?: string }
+  /**
+   * Round 8: the player opened a confirm move's place (law book, market map, shop, Ekip…) and left without confirming:
+   * the chip skips that move (its item) for MOVE_SNOOZE_DAYS. Only the move on the chip now; anything else is refused.
+   */
+  | { type: 'snoozeMove'; move: NextMove }
   // Controls & growth
   | { type: 'setSpeed'; speed: GameSpeed }
   | { type: 'setAdBudget'; amount: number }

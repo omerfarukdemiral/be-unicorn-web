@@ -672,6 +672,9 @@ export const UI_TEXT: Record<string, string> = {
   'module.stale': '{module} eskidi, yenileyelim mi?',
   'bubble.module': '{project} için sıradaki modül: {module}?',
   'release.module': '{module} yayında',
+  // Release toast over the scene (render/Juice.tsx): always names the project, one line.
+  'release.toast': '{project} {level} yayında',
+  'release.toastModule': '{project}: {module} yayında',
   'module.tag.churn': 'Churn',
   'module.tag.arpu': 'ARPU',
   'module.tag.organic': 'Organik',
@@ -732,7 +735,6 @@ export const UI_TEXT: Record<string, string> = {
   'module.measured.infra': 'Altyapı ≈ −{x}/ay',
   'module.measured.every': 'Güncelleme {a}g\'de bir (öncesi {b}g)',
   'module.measured.every1': 'Güncelleme {a}g\'de bir',
-  'release.moduleUsersSub': '+{u} kullanıcı',
   'release.moduleUsers': '{module} yayında · +{u} kullanıcı',
   'release.version': '{project} v{v} yayında · +{n} slot',
   'release.versionFull': '{project} v{v} yayında · modüller tazelendi',

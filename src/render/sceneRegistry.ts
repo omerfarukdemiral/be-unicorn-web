@@ -53,6 +53,9 @@ export function speakerWalking(id: string): boolean {
 /** Employee id → standing still at their own desk this frame (head plates show only then). Written by Character. */
 export const seatedRegistry = new Map<string, boolean>()
 
+/** The person under the pointer (desktop hover), so their head plate always shows (HeadPlates' declutter). */
+export const hoveredPerson: { id: string | null } = { id: null }
+
 export function clearSpeaker(id: string): void {
   speakerPositions.delete(id)
   seatedRegistry.delete(id)

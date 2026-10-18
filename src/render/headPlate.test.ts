@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../engine/balance'
 import type { Employee, PersonEffort } from '../engine/types'
-import { CROWD_PX, LOW_MORALE, STACK_PX, crowdedIds, stackedIds, fatigueTone, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, popScale, shortName } from './headPlate'
+import { declutterPlates, plateWidths, CROWD_PX, LOW_MORALE, STACK_PX, crowdedIds, stackedIds, fatigueTone, hasOwnBubble, plateCompact, plateGlyph, plateSalary, plateShown, popScale, shortName } from './headPlate'
 
 const emp = (over: Partial<Employee>): Employee =>
   ({ id: 'e1', name: 'Ebru Kaya', dept: 'eng', quality: 1, salary: 1700, status: 'working', statusSinceDay: 0, hiredDay: 0, deskSlotId: 'd1', projectId: 'p1', morale: 70, ...over }) as Employee
@@ -91,5 +91,33 @@ describe('head plate (H1): own bubble', () => {
   it('matches the speaker id exactly, not as a substring', () => {
     expect(hasOwnBubble('e1', ['e12', 'desk', undefined])).toBe(false)
     expect(hasOwnBubble('e12', ['e12'])).toBe(true)
+  })
+})
+
+describe('declutterPlates (fix round 2 N5)', () => {
+  const w = { full: 90, name: 60, icon: 30 }
+  const box = (id: string, x: number, y: number, pinned = false) => ({ id, x, y, w, h: 28, pinned })
+  it('never overlaps: the one behind drops its salary, then its name, then hides', () => {
+    expect(declutterPlates([box('a', 0, 100), box('b', 400, 100)])).toEqual(new Map([['a', 'full'], ['b', 'full']]))
+    // 80 px apart: two whole plates touch; with the salary gone (60 px) they clear.
+    expect(declutterPlates([box('front', 0, 100), box('back', 80, 90)]).get('back')).toBe('name')
+    expect(declutterPlates([box('front', 0, 100), box('back', 62, 90)]).get('back')).toBe('icon')
+    expect(declutterPlates([box('front', 0, 100), box('back', 5, 95)]).get('back')).toBe('hidden')
+    expect(declutterPlates([box('front', 0, 100), box('back', 5, 95)]).get('front')).toBe('full')
+  })
+  it('the hovered / selected plate always shows whole, even behind another one', () => {
+    const m = declutterPlates([box('front', 0, 100), box('sel', 5, 95, true)])
+    expect(m.get('sel')).toBe('full')
+    expect(m.get('front')).toBe('hidden')
+  })
+  it('the farthest zoom is icons only', () => {
+    expect(declutterPlates([box('a', 0, 100)], 'icon').get('a')).toBe('icon')
+  })
+  it('widths grow with the text', () => {
+    const a = plateWidths({ name: 'Ali', salary: '$1K', lead: false, glyph: null })
+    const b = plateWidths({ name: 'Nazlıcan', salary: '$12K', lead: true, glyph: 'tired' })
+    expect(a.icon).toBeLessThan(a.name)
+    expect(a.name).toBeLessThan(a.full)
+    expect(b.full).toBeGreaterThan(a.full)
   })
 })

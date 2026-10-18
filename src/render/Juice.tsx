@@ -251,35 +251,35 @@ function ReleaseBanner({ wave, hidden }: { wave: Wave; hidden: boolean }) {
   const at = useRef(anchor)
   at.current = anchor
   const place = useMemo(() => () => [at.current[0], at.current[1]], [])
+  // One line: at most the free width less a margin each side (a long project name ends in "…").
+  const maxW = Math.max(160, anchor[0] * 2 - 24)
   useEffect(() => later(BANNER_MS, () => setOn(false)), [later])
   const r = wave.release
   const category = useGS((s) => s.projects.find((p) => p.id === r.projectId)?.category)
   if (!on) return null
   const level = UI_TEXT[`release.level.${Math.max(1, Math.min(5, r.level))}`] ?? String(r.level)
-  // MV2c: a module delivery names the module, a version release the version and its new slots; the rest keeps "Yayında! v1".
+  // Always names the project (three projects can each ship a v4.8): "Limanhub v4.8 yayında", "Limanhub: Geri bildirim
+  // yayında", "Limanhub v5 yayında · +2 slot". One line; the wave's numbers are the strip's.
   const isVersion = r.version !== undefined && r.version > 1 && r.minor === undefined && !r.module
+  const project = r.projectName
   const line = r.module
-    ? text('release.module', { module: moduleName(r.module, category) })
+    ? text('release.toastModule', { project, module: moduleName(r.module, category) })
     : isVersion
       ? slotsOpened(r.version!) > 0
-        ? text('release.version', { project: r.projectName, v: r.version!, n: slotsOpened(r.version!) })
-        : text('release.versionFull', { project: r.projectName, v: r.version! })
-      : r.version !== undefined && r.minor !== undefined
-        ? text('release.banner', { level: text('release.minor', { v: r.version, m: r.minor }) })
-        : text('release.banner', { level })
-  const sub = (r.module || isVersion) && r.users >= 1 ? text('release.moduleUsersSub', { u: Math.round(r.users) }) : ''
+        ? text('release.version', { project, v: r.version!, n: slotsOpened(r.version!) })
+        : text('release.versionFull', { project, v: r.version! })
+      : text('release.toast', { project, level: r.version !== undefined && r.minor !== undefined ? text('release.minor', { v: r.version, m: r.minor }) : level })
   return (
     <Html portal={portal} calculatePosition={place} zIndexRange={[15, 10]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none', transform: 'translateX(-50%)' }}>
       {/* A toast: anchored on the screen (top edge of the scene), not on the desk. Centred by the Html style, the yield
           (translate + fade) on the wrapper below. */}
       <div ref={box} data-juice-banner="" style={{ visibility: hidden ? 'hidden' : undefined }}>
         <div
-          className="animate-pop-in flex items-baseline gap-2 whitespace-nowrap rounded-full px-3 py-1 shadow-pop"
-          style={{ background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', animationPlayState: play }}
+          className="animate-pop-in overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-3 py-1 shadow-pop"
+          style={{ maxWidth: maxW, background: 'var(--color-brand)', color: 'var(--color-on-ink)', fontFamily: 'var(--font-ui, inherit)', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', animationPlayState: play }}
         >
           {/* Name only: the numbers are the strip's (one channel per number, docs/GAMEPLAY_V2.md §12 D9). */}
-          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>{line}</span>
-          {sub && <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>{sub}</span>}
+          {line}
         </div>
       </div>
     </Html>

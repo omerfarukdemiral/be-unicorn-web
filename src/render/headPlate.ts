@@ -104,3 +104,54 @@ export const hasOwnBubble = (id: string, speakers: Iterable<string | undefined>)
   for (const s of speakers) if (s === id) return true
   return false
 }
+
+/** How much of a plate shows: name + salary, name only (the salary chip goes first), icon + bar, or nothing. */
+export type PlateLevel = 'full' | 'name' | 'icon' | 'hidden'
+
+export interface PlateBox {
+  id: string
+  /** Anchor (CSS px): the plate is centred on x with its bottom edge on y. */
+  x: number
+  y: number
+  /** Widths (px) at each level; the height is shared. */
+  w: { full: number; name: number; icon: number }
+  h: number
+  /** Hovered or selected: placed first, always whole. */
+  pinned?: boolean
+}
+
+/** Gap (px) two plates keep between them. */
+export const PLATE_GAP = 2
+
+/**
+ * Plate declutter (fix round 2 N5): plates are laid out greedily, pinned ones first, then nearest the camera (lowest on
+ * screen). Each takes the richest level whose rect touches no plate already placed: name + salary, then name only,
+ * then icon + bar; one that fits at none hides. `minLevel` caps the richest level (the farthest zoom: icons only).
+ */
+export function declutterPlates(items: readonly PlateBox[], minLevel: 'full' | 'icon' = 'full'): Map<string, PlateLevel> {
+  const out = new Map<string, PlateLevel>()
+  const placed: { l: number; r: number; t: number; b: number }[] = []
+  const order = [...items].sort((a, b) => (a.pinned === b.pinned ? b.y - a.y || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.pinned ? -1 : 1))
+  const levels: Exclude<PlateLevel, 'hidden'>[] = minLevel === 'icon' ? ['icon'] : ['full', 'name', 'icon']
+  for (const it of order) {
+    let got: PlateLevel = 'hidden'
+    for (const lv of it.pinned ? (['full'] as const) : levels) {
+      const half = it.w[lv] / 2
+      const box = { l: it.x - half, r: it.x + half, t: it.y - it.h, b: it.y }
+      if (it.pinned || !placed.some((p) => box.l < p.r + PLATE_GAP && p.l < box.r + PLATE_GAP && box.t < p.b + PLATE_GAP && p.t < box.b + PLATE_GAP)) {
+        placed.push(box)
+        got = lv
+        break
+      }
+    }
+    out.set(it.id, got)
+  }
+  return out
+}
+
+/** Estimated plate widths (px) from its text: 11px semibold name, 10px tabular salary, 16px dept dot, 6px side padding. */
+export function plateWidths(p: { name: string; salary: string; lead: boolean; glyph: unknown }): PlateBox['w'] {
+  const icon = 12 + 16 + (p.lead ? 16 : 0)
+  const name = icon + 4 + p.name.length * 6.4 + (p.glyph ? 17 : 0)
+  return { icon, name, full: name + 4 + p.salary.length * 5.8 }
+}

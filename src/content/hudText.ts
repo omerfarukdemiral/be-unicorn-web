@@ -168,6 +168,9 @@ export const HUD_TEXT: Record<string, string> = {
   'report.daysShort': '{v}g',
   'move.nextOffice': 'Sonraki ofis',
   'pm.day': 'Gün',
+  // N-E: the team left and there was no cash to hire again: the cause is the cash, not the head count.
+  'pm.teamLostCash': 'Ekip gitti, yenisine kasa yetmedi',
+  'pm.cashLeft': 'Kasa {v}',
   'pm.peakMrr': 'Zirve MRR',
   'pm.cause': 'Neden',
   'victory.codex': 'Keşif',

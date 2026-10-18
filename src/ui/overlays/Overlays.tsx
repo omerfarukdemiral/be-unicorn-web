@@ -133,7 +133,7 @@ function peakMrr(history: readonly number[], mrr: number): number {
 /** Post-mortem: day, peak MRR and the first blind spot as the one sentence (its Defter card one tap away), then "Yeniden". */
 export function PostMortemOverlay() {
   const s = useGameStore(
-    useShallow((st) => ({ go: st.state.gameOver, day: st.state.time.day, stage: st.state.stage, peak: peakMrr(st.state.finance.mrrHistory, st.state.finance.mrr) })),
+    useShallow((st) => ({ go: st.state.gameOver, day: st.state.time.day, stage: st.state.stage, cash: st.state.stats.cash, peak: peakMrr(st.state.finance.mrrHistory, st.state.finance.mrr) })),
   )
   const [open, setOpenRaw] = useState<ConceptId | null>(null)
   // The page turn unmounts whichever key was focused (the book key, then "back"): focus follows it, so keyboard play
@@ -156,7 +156,11 @@ export function PostMortemOverlay() {
   // The sale (§8.2) is a sub-ending of its own, not a death: three numbers, the XP, "Yeniden".
   if (s.go.kind === 'acquired') return <AcquiredOverlay day={s.day} xp={s.go.xpEarned} />
   const cause = s.go.reasons[0]
-  const cid = cause?.conceptId
+  // N-E: a run that ends with nobody left ends because the cash could not hire again: say that, with the cash.
+  const teamCash = s.go.kind === 'teamLost' && cause?.code === 'teamLost'
+  const causeLine = cause ? (teamCash ? t('pm.teamLostCash') : t(`postMortem.${cause.code}`)) : ''
+  const causeValue = cause ? (teamCash ? t('pm.cashLeft', { v: money(s.cash) }) : cause.value !== undefined ? PM_FORMAT[cause.code](cause.value) : undefined) : undefined
+  const cid = teamCash ? (s.go.reasons.find((r) => r.code !== 'teamLost')?.conceptId ?? cause?.conceptId) : cause?.conceptId
   const xp = t('gameOver.xp', { v: fixed(s.go.xpEarned, 1) })
   // Lights out: the office goes grey under the card, the title is the red stamp (the one red here). No onClose: a lost
   // run is answered with "Yeniden", which stays pinned even while a Defter page is open.
@@ -196,10 +200,10 @@ export function PostMortemOverlay() {
           {cause && (
             <div className="ui-inset flex items-start gap-2 p-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <p className="text-lg font-semibold leading-snug text-ink">{t(`postMortem.${cause.code}`)}</p>
+                <p className="text-lg font-semibold leading-snug text-ink">{causeLine}</p>
                 <div className="flex flex-wrap items-baseline gap-2">
                   <Label>{t('pm.cause')}</Label>
-                  {cause.value !== undefined && <span className="tabular text-[15px] font-extrabold text-ink">{PM_FORMAT[cause.code](cause.value)}</span>}
+                  {causeValue !== undefined && <span className="tabular text-[15px] font-extrabold text-ink">{causeValue}</span>}
                 </div>
               </div>
               {cid && (

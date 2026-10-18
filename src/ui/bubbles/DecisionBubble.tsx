@@ -122,7 +122,7 @@ export function ReflectionView({ card, optionIndex, onClose }: { card: DecisionC
       <IconBadge icon="sparkle" size={32} color="var(--color-kind-concept)" />
       <div className="min-w-0 flex-1">
         <div className="ui-label truncate">{t('decision.youChose', { v: opt.label })}</div>
-        <OptionEffects fx={opt.effects} delayed={opt.delayed} className="mt-1" />
+        <OptionEffects fx={opt.effects} delayed={opt.delayed} className="mt-1" quiet />
       </div>
       {opt.conceptId && (
         <button

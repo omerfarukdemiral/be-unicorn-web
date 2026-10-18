@@ -1,6 +1,7 @@
 // Chip labels: every chip names its target in one word, a modifier's duration is a tail and not part of the number.
 import { describe, expect, it } from 'vitest'
-import { effectChips } from './EffectChips'
+import { effectChips, optionCashWarning } from './EffectChips'
+import { createGame } from '../engine'
 
 const ctx = { burn: 1000 }
 
@@ -27,5 +28,21 @@ describe('effectChips', () => {
     const chips = effectChips({ morale: 5, energy: -10 }, ctx)
     expect(chips.map((c) => c.label)).toEqual(['Moral', 'Enerji'])
     expect(chips.every((c) => c.tail === undefined)).toBe(true)
+  })
+})
+
+describe('round 9: an option that empties the cash says so', () => {
+  it('under zero: "Kasa −$X olur"; a payroll it would bounce: "Maaşa yetmez"; a safe one: nothing', () => {
+    const s = createGame({ seed: 3 })
+    s.stats.cash = 5_500
+    expect(optionCashWarning(s, { cash: -5_828 })?.text).toBe('Kasa −$328 olur')
+    expect(optionCashWarning(s, { morale: 2 })).toBeNull()
+    s.stats.cash = -328
+    expect(optionCashWarning(s, { morale: 2 })?.text).toBe('Kasa −$328 olur')
+    s.stats.cash = 5_500
+    s.finance.burn = 6_000
+    s.employees = [{ id: 'e1', name: 'A', dept: 'eng', quality: 1, salary: 6_000, status: 'working', statusSinceDay: 0, hiredDay: 0, morale: 70 } as never]
+    const w = optionCashWarning(s, { cash: -5_000 })
+    if (w) expect(w.text).toBe('Maaşa yetmez')
   })
 })

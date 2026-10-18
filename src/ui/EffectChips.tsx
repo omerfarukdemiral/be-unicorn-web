@@ -3,7 +3,8 @@
 // Each chip reads "icon Label ±N" (one word for the target, then the number); a temporary modifier adds a small
 // tail ("Kira −%10 90g"). A delayed part sits behind an hourglass with its day count. What the
 // engine keeps hidden (flags, queued cards) never shows; an option with nothing visible gets a single "?".
-import type { EffectBundle, ModifierKind } from '../engine/types'
+import type { EffectBundle, GameState, ModifierKind } from '../engine/types'
+import { previewSpend } from '../engine/loopSelectors'
 import { useShallow } from 'zustand/react/shallow'
 import { loanAmount } from '../engine'
 import { ACQUIRED_FLAG } from '../engine/balance'
@@ -98,6 +99,34 @@ export function ChipRow({ chips, className, faded }: { chips: readonly Chip[]; c
 }
 
 /** What an option does, as chips: now, then (⌛ N g) the delayed part; "?" when nothing is visible. */
+/** Round 9: the cash an option leaves (its own cash effects on today's cash; a loan and an angel add). */
+export function optionCashAfter(s: GameState, fx: EffectBundle): { cash: number; delta: number } {
+  const cash = s.stats.cash
+  let delta = fx.cash ?? 0
+  if (fx.cashPercent) delta += Math.max(0, cash) * fx.cashPercent
+  if (fx.cashBurnMonths) delta += s.finance.burn * fx.cashBurnMonths
+  if (fx.loan) delta += loanAmount(s, fx.loan)
+  return { cash: cash + delta, delta }
+}
+
+/**
+ * Round 9 (a "Kabul et" emptied the cash with nothing said): the red line an option carries when it leaves the cash
+ * under zero ("Kasa −$328 olur"), or spends so the next payroll bounces ("Maaşa yetmez"). The payroll check is the
+ * engine's previewSpend.
+ */
+export function optionCashWarning(s: GameState, fx: EffectBundle): Chip | null {
+  const { cash, delta } = optionCashAfter(s, fx)
+  if (cash < 0) {
+    const text = t('fx.cashBelow', { v: `−${money(-cash)}` })
+    return { icon: 'warning', label: '', text, good: false, title: text }
+  }
+  if (delta < 0 && previewSpend(s, { cashDelta: delta }).paydayShort) {
+    const text = t('team.runwayShort')
+    return { icon: 'warning', label: '', text, good: false, title: text }
+  }
+  return null
+}
+
 export function OptionEffects({
   fx,
   delayed,
@@ -111,11 +140,14 @@ export function OptionEffects({
   quiet?: boolean
 }) {
   const ctx = useGameStore(useShallow((s) => ({ burn: s.state.finance.burn, loan: fx.loan ? loanAmount(s.state, fx.loan) : undefined })))
+  // Round 9: the option that empties the cash says so, in red, before the tap (not on the reflection after it).
+  const warn = useGameStore((s) => (quiet ? null : optionCashWarning(s.state, fx)?.text ?? null))
   const now = effectChips(fx, ctx)
   const later = delayed ? effectChips(delayed.effects, ctx) : []
   return (
     <span className={cx('flex flex-col gap-1', className)}>
       {now.length > 0 && <ChipRow chips={now} />}
+      {warn && <ChipRow chips={[{ icon: 'warning', label: '', text: warn, good: false, title: warn }]} />}
       {delayed && (
         <span className="flex flex-wrap items-center gap-1">
           <span title={t('fx.delayedTitle', { v: delayed.days })} className="tabular inline-flex shrink-0 flex-nowrap items-center gap-0.5 whitespace-nowrap text-[11px] font-semibold text-ink-2">

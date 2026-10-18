@@ -197,6 +197,8 @@ export const LOOP_TEXT: Record<string, string> = {
   'fx.roundLabel': 'Tur süresi',
   'fx.daysShort': '{v}g',
   'fx.endsRun': 'Oyun biter',
+  // Round 9: an option that leaves the cash under zero says so, in red.
+  'fx.cashBelow': 'Kasa {v} olur',
   'fx.delayedTitle': '{v} gün sonra',
   'fx.mod.churn': 'Churn',
   'fx.mod.arpu': 'Kullanıcı başı gelir',

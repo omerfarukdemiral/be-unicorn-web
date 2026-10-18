@@ -126,7 +126,7 @@ describe('nextMove', () => {
     expect(stepAction(tight, { ...nextStep(tight), move: 'serverRoom' })).toEqual({ type: 'placeItem', itemId: 'server-room' })
   })
 
-  it('round 8 snooze: a declined law falls through to the next one; 45 days ignored snoozes it; old saves load', () => {
+  it('round 8/9 snooze: a declined law snoozes the whole kind (90 days, 180 after a second decline); 45 days ignored snoozes it; old saves load', () => {
     const l = live()
     const pol = { available: ['management', 'quality-gate'], adopted: [], nextSignDay: 0, mult: {}, movesBonus: 0, burnAsk: 0, payLater: 0 }
     const base: GameState = {
@@ -140,26 +140,37 @@ describe('nextMove', () => {
     // Only the law matters here: the moves before it are kept off.
     const lawFirst = (st: GameState) => nextMove({ ...st, employees: [], projects: st.projects.map((p) => ({ ...p, maturity: 1 })) })
     expect(lawFirst(base)).toBe('signLaw')
-    expect(moveKey(base, 'signLaw')).toBe('signLaw:management')
-    const once: GameState = { ...base, chipSnooze: { 'signLaw:management': base.time.day + B.MOVE_SNOOZE_DAYS } }
-    expect(moveKey(once, 'signLaw')).toBe('signLaw:quality-gate')
-    const both: GameState = { ...once, chipSnooze: { ...once.chipSnooze, 'signLaw:quality-gate': base.time.day + 10 } }
-    expect(lawFirst(both)).not.toBe('signLaw')
-    expect(snoozed(both, 'signLaw:quality-gate')).toBe(true)
-    expect(snoozed({ ...both, time: { ...both.time, day: both.time.day + 11 } }, 'signLaw:quality-gate')).toBe(false)
-    // The action: only the move on the chip, and only confirm moves.
+    expect(moveKey(base, 'signLaw')).toBe('signLaw')
+    const once: GameState = { ...base, chipSnooze: { signLaw: base.time.day + B.MOVE_SNOOZE_DAYS } }
+    expect(lawFirst(once)).not.toBe('signLaw')
+    expect(snoozed({ ...once, time: { ...once.time, day: once.time.day + B.MOVE_SNOOZE_DAYS + 1 } }, 'signLaw')).toBe(false)
+    // The action: only the move on the chip, and only confirm moves; the second decline doubles the snooze.
     const onChip: GameState = { ...base, derived: { ...base.derived, nextStep: { id: 'grow', index: 6, total: 6, move: 'signLaw' } } }
     const r = applyAction(onChip, { type: 'snoozeMove', move: 'signLaw' })
     expect(r.ok).toBe(true)
-    expect(r.state.chipSnooze?.['signLaw:management']).toBe(Math.floor(base.time.day) + B.MOVE_SNOOZE_DAYS)
+    expect(r.state.chipSnooze?.signLaw).toBe(Math.floor(base.time.day) + B.MOVE_SNOOZE_DAYS)
+    const again: GameState = { ...onChip, chipDeclines: r.state.chipDeclines }
+    expect(applyAction(again, { type: 'snoozeMove', move: 'signLaw' }).state.chipSnooze?.signLaw).toBe(Math.floor(base.time.day) + 2 * B.MOVE_SNOOZE_DAYS)
     expect(applyAction(onChip, { type: 'snoozeMove', move: 'acquire' }).ok).toBe(false)
     // Auto: the same confirm move 45 days on the chip.
-    const seen: GameState = { ...onChip, chipSeen: { key: 'signLaw:management', since: Math.floor(base.time.day) - B.MOVE_SNOOZE_SHOWN_DAYS } }
+    const seen: GameState = { ...onChip, chipSeen: { key: 'signLaw', since: Math.floor(base.time.day) - B.MOVE_SNOOZE_SHOWN_DAYS } }
     trackChip(seen)
-    expect(seen.chipSnooze?.['signLaw:management']).toBeGreaterThan(base.time.day)
+    expect(seen.chipSnooze?.signLaw).toBeGreaterThan(base.time.day)
     // A save without the fields loads and plays.
-    const { chipSnooze: _a, chipSeen: _b, ...old } = seen
+    const { chipSnooze: _a, chipSeen: _b, chipDeclines: _c, ...old } = seen
     expect(deserialize(serialize(old as GameState))).not.toBeNull()
+  })
+
+  it('round 9: low morale from overloaded servers names the engineer, not a pep talk; no pep talk that cannot lift over the quit line', () => {
+    const l = live()
+    const eng = { ...l.candidates[0]!, id: 'cand-eng-m', dept: 'eng' as const, salary: 500 }
+    const pre: GameState = { ...l, stage: 1, candidates: [...l.candidates, eng], stats: { ...l.stats, cash: 300_000, morale: 30 }, finance: { ...l.finance, runway: 30 } }
+    const over: GameState = { ...pre, derived: { ...pre.derived, overload: 3, moraleWhy: { target: -20, overload: 45, quitAt: 28 } } }
+    expect(nextMove(over)).toBe('hireEng')
+    const sunk: GameState = { ...pre, derived: { ...pre.derived, overload: 0, moraleWhy: { target: 5, overload: 0, quitAt: 28 } } }
+    expect(nextMove(sunk)).not.toBe('morale')
+    const close: GameState = { ...pre, derived: { ...pre.derived, overload: 0, moraleWhy: { target: 30, overload: 0, quitAt: 28 } } }
+    expect(['morale', 'keepStaff']).toContain(nextMove(close))
   })
 
   it('stops at Unicorn', () => {

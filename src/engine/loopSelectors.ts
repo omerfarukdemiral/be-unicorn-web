@@ -191,7 +191,7 @@ const GROWTH_LAWS: readonly PolicyId[] = ['management', 'quality-gate', 'profit-
 function growthLaw(s: GameState): PolicyId | undefined {
   const v = s.derived.policies
   if (!v || s.stage < 2 || s.time.day < v.nextSignDay || movesError(s, B.MOVE_COST.adoptPolicy)) return undefined
-  return GROWTH_LAWS.find((id) => v.available.includes(id) && !snoozed(s, `signLaw:${id}`))
+  return GROWTH_LAWS.find((id) => v.available.includes(id))
 }
 
 function survivalLaw(s: GameState): PolicyId | undefined {
@@ -212,7 +212,7 @@ export function busiestOpen(s: GameState, skip?: string) {
  */
 function segmentToOpen(s: GameState): MarketSegmentId | undefined {
   for (const v of s.derived.market?.segments ?? []) {
-    if (v.open || v.auto || v.error !== null || snoozed(s, `openSegment:${v.id}`)) continue
+    if (v.open || v.auto || v.error !== null) continue
     if (cashSafe(s, v.cost, v.upkeep)) return v.id
   }
   return undefined
@@ -243,14 +243,14 @@ const NEXT_MOVE_AD_TUNE = 0.25
 
 /** A rival the company can buy now and still carry (the market map's numbers, the cash guard on its price). */
 function rivalToBuy(s: GameState): string | undefined {
-  return (s.derived.market?.rivals ?? []).find((r) => r.error === null && !snoozed(s, `acquire:${r.id}`) && cashSafe(s, r.price, 0))?.id
+  return (s.derived.market?.rivals ?? []).find((r) => r.error === null && cashSafe(s, r.price, 0))?.id
 }
 
 /** A category the company does not build yet (the richer, faster ones first). */
 const NEW_PRODUCT_ORDER: readonly ProjectCategory[] = ['ai', 'api', 'web', 'marketplace', 'game', 'mobile']
 function nextCategory(s: GameState): ProjectCategory | undefined {
   const used = new Set(s.projects.map((p) => p.category))
-  return NEW_PRODUCT_ORDER.find((c) => !used.has(c) && !snoozed(s, `newProduct:${c}`))
+  return NEW_PRODUCT_ORDER.find((c) => !used.has(c))
 }
 
 /**
@@ -292,26 +292,22 @@ export function snoozed(s: Pick<GameState, 'chipSnooze' | 'time'>, key: string):
 
 /** The snooze key of a move: the move and, for the ones that pick an item (law, rival, product, segment, dept), that item. */
 export function moveKey(s: GameState, move: NextMove): string {
-  switch (move) {
-    case 'signLaw':
-      return `signLaw:${growthLaw(s) ?? ''}`
-    case 'acquire':
-      return `acquire:${rivalToBuy(s) ?? ''}`
-    case 'newProduct':
-      return `newProduct:${nextCategory(s) ?? ''}`
-    case 'openSegment':
-      return `openSegment:${segmentToOpen(s) ?? ''}`
-    case 'hireGrowth':
-      return `hireGrowth:${growthDept(s, !underused(s)) ?? ''}`
-    default:
-      return move
-  }
+  // Round 9: laws, rivals, products and segments snooze as a kind (per-law snoozes rotated four laws on the chip every
+  // 20–30 days); hires stay per department.
+  if (move === 'hireGrowth') return `hireGrowth:${growthDept(s, !underused(s)) ?? ''}`
+  return move
 }
 
-/** Snoozes a confirm move for MOVE_SNOOZE_DAYS (snoozeMove action, or the daily auto-snooze). False for other moves. */
+/**
+ * Snoozes a confirm move for MOVE_SNOOZE_DAYS × the times that key was declined (two declines: 180 days, the cap).
+ * The snoozeMove action and the daily auto-snooze both land here. False for other moves.
+ */
 export function snoozeMove(s: GameState, move: NextMove): boolean {
   if (!CONFIRM_MOVES.has(move)) return false
-  ;(s.chipSnooze ??= {})[moveKey(s, move)] = Math.floor(s.time.day) + B.MOVE_SNOOZE_DAYS
+  const key = moveKey(s, move)
+  const n = Math.min(B.MOVE_SNOOZE_MAX_DECLINES, ((s.chipDeclines ??= {})[key] ?? 0) + 1)
+  s.chipDeclines[key] = n
+  ;(s.chipSnooze ??= {})[key] = Math.floor(s.time.day) + B.MOVE_SNOOZE_DAYS * n
   delete s.chipSeen
   return true
 }
@@ -497,7 +493,19 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.stage > NEXT_MOVE_MAX_STAGE || !s.projects.some((p) => p.launched)) return undefined
   // People first (playtest round 5: three resignations sank Pre-seed): a leaver, then a team below the morale bar.
   if (leaverOf(s)) return 'keepStaff'
-  if (s.employees.length > 0 && s.stats.morale < NEXT_MOVE_MORALE && founderActionError(s, 'motivateTeam') === null) return 'morale'
+  if (s.employees.length > 0 && s.stats.morale < NEXT_MOVE_MORALE) {
+    // Round 9 (test6 PC: four pep talks, morale 6, three quit): name the cause. Overloaded servers (no engineer: the
+    // capacity floor) are the big one: the engineer, else a server room. A pep talk only when it lifts the target
+    // over the quit line; a target sunk by cash or owed wages falls through to the cash moves below.
+    const why = s.derived.moraleWhy
+    if (why && why.overload >= NEXT_MOVE_MORALE_OVERLOAD) {
+      if (!snoozed(s, 'hireEng') && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
+      const room = s.derived.serverRoom
+      if (room && !snoozed(s, 'serverRoom') && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
+    }
+    const lifts = !why || why.target + B.MOTIVATE_MORALE >= why.quitAt + NEXT_MOVE_MORALE_MARGIN
+    if (lifts && founderActionError(s, 'motivateTeam') === null) return 'morale'
+  }
   // The round window open and nothing started: the round brings the cash (round 6: the tester idled 400 days with
   // only the HUD's "Tur başlat" as a cue).
   if (s.derived.canStartRound && !s.round?.active) return 'startRound'
@@ -523,12 +531,12 @@ export function nextMove(s: GameState): NextMove | undefined {
   // Round 7, the late walls the bots climb and the guided player did not: debt slowing the team, a second product,
   // a bigger market, a rival's users, a price the product now carries.
   if (s.stage >= 3 && s.techDebt >= NEXT_MOVE_REFACTOR_DEBT && founderActionError(s, 'refactorSprint') === null) return 'refactor'
-  if (wantsProduct(s)) return 'newProduct'
-  if (growthLaw(s)) return 'signLaw'
+  if (!snoozed(s, 'newProduct') && wantsProduct(s)) return 'newProduct'
+  if (!snoozed(s, 'signLaw') && growthLaw(s)) return 'signLaw'
   // A bigger market as soon as one can be carried (TAM is the late wall: penetration, ads at LTV:CAC 1).
-  if (segmentToOpen(s)) return 'openSegment'
+  if (!snoozed(s, 'openSegment') && segmentToOpen(s)) return 'openSegment'
   if (lateAdsOff(s)) return 'adsTune'
-  if (s.stage >= 4 && rivalToBuy(s)) return 'acquire'
+  if (s.stage >= 4 && !snoozed(s, 'acquire') && rivalToBuy(s)) return 'acquire'
   // From Series B a contract a month while the month's deals still pay in full (enterprise MRR).
   if (s.stage >= 4 && sales && salesCallPreview(s).fullLeft > 0) return 'salesCall'
   if (s.stage >= 3 && priceRoom(s)) return 'priceUp'
@@ -581,6 +589,10 @@ const NEXT_MOVE_GROWTH_HEADROOM = 2
 const NEXT_MOVE_ADS_UP_RUNWAY = 12
 /** Morale under this (the diligence bar) names a pep talk. */
 const NEXT_MOVE_MORALE = B.DILIGENCE_MORALE
+/** Morale points overloaded servers take off from which the chip asks for the engineer first. */
+const NEXT_MOVE_MORALE_OVERLOAD = 10
+/** A pep talk is named only when the target it lifts clears the quit line by this much. */
+const NEXT_MOVE_MORALE_MARGIN = 5
 /** The users focus at this find return reads as spent (the slot greys out under a quarter). */
 const NEXT_MOVE_FIND_DEAD = 0.25
 /** Tech debt from which the chip asks for a refactor sprint (the bots' bar: speed × 0.8). */

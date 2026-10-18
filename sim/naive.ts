@@ -34,6 +34,8 @@ const SPEND: ReadonlySet<string> = new Set(['hire', 'openRing', 'buildModule', '
 const UNTIL = arg('until', 3)
 /** --decline 1|2 (see the loop): declines big moves a big move (law, rival, product, segment, server room, section, hire, cut): snoozes it. */
 const DECLINE = arg('decline', 0)
+/** --firstrow 1: hire moves take the first non-red row in Ekip instead of the engine's pick. */
+const FIRST_ROW = arg('firstrow', 0)
 /** Days between two taps on an unchanged chip. */
 const TAP_EVERY_DAYS = arg('tap', 30)
 /** First product: the idea bubble's first option (Mobil); --web 1 for the earlier probes. */
@@ -118,7 +120,16 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     const declines =
       big && ((DECLINE === 1 && !declined.has(key)) || (DECLINE === 2 && !['hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn'].includes(step!.move!)))
     if (declines && tap) declined.add(key)
-    const a = step && tap ? (declines ? ({ type: 'snoozeMove', move: step.move! } as Action) : stepAction(s, step)) : null
+    // --firstrow 1: a hire move opens Ekip and the player takes the first row that is not red, whoever it is (test6 PC).
+    // --firstrow 2: Ekip opens filtered to the dept the chip names (the fix asked of the UI), first non-red row of it.
+    const chipDept = (() => {
+      const pick = step && tap ? stepAction(s, step) : null
+      return pick?.type === 'hire' ? s.candidates.find((c) => c.id === pick.candidateId)?.dept : undefined
+    })()
+    const firstRow = FIRST_ROW && !declines && tap && step?.move && ['hireEng', 'hireMarketing', 'hireGrowth'].includes(step.move)
+      ? s.candidates.find((c) => !hireIsRed(s, c.salary) && (FIRST_ROW === 1 || c.dept === chipDept))
+      : undefined
+    const a = step && tap ? (declines ? ({ type: 'snoozeMove', move: step.move! } as Action) : firstRow ? ({ type: 'hire', candidateId: firstRow.id, autoDesk: true } as Action) : stepAction(s, step)) : null
     if (tap) {
       lastChip = chipKey
       lastTap = s.time.day
@@ -148,7 +159,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     for (const e of s.employees) if (e.status === 'leaving' && e.leaveCause) moves[`leave:${e.leaveCause}`] = (moves[`leave:${e.leaveCause}`] ?? 0) + 0.5
     seen = s.events[s.events.length - 1]?.id ?? seen
     if (trace && Math.floor(s.time.day) % TRACE_EVERY === 0 && s.time.day % 1 < 0.5 && s.time.day >= TRACE_FROM) {
-      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} morale ${Math.round(s.stats.morale)} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} pen ${(s.derived.penetration ?? 0).toFixed(2)} tam ${Math.round(s.derived.tam ?? 0)} ltv ${s.derived.ltvCac?.toFixed(1)} proj ${s.projects.length} mods ${s.projects.map((p) => (p.modules ?? []).length).join("/")} seg ${(s.market?.segments ?? []).length} debt ${Math.round(s.techDebt)} ovl ${s.derived.overload.toFixed(2)} netK ${Math.round(s.finance.net / 1000)} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
+      console.log(`  d${Math.floor(s.time.day)} st${s.stage} step ${step?.id}${(step as { move?: string } | undefined)?.move ? '/' + (step as { move?: string }).move : ''} cash ${Math.round(s.stats.cash)} rw ${s.finance.runway?.toFixed(1)} users ${Math.round(s.stats.users)} mrr ${Math.round(s.finance.mrr)} val ${Math.round(s.finance.valuation)} team ${s.employees.map((e) => e.dept[0]).join("")} morale ${Math.round(s.stats.morale)} why ${JSON.stringify(s.derived.moraleWhy ? { t: Math.round(s.derived.moraleWhy.target), o: Math.round(s.derived.moraleWhy.overload), q: s.derived.moraleWhy.quitAt } : null)} fat ${s.employees.map((e) => Math.round(e.fatigue ?? 0) + (e.boredDays ? "b" : "")).join(",")} mom ${(s.derived.momAvg ?? 0).toFixed(3)} mult ${s.derived.valuationMultiple?.toFixed(1)} churn ${s.stats.churn.toFixed(3)} pen ${(s.derived.penetration ?? 0).toFixed(2)} tam ${Math.round(s.derived.tam ?? 0)} ltv ${s.derived.ltvCac?.toFixed(1)} proj ${s.projects.length} mods ${s.projects.map((p) => (p.modules ?? []).length).join("/")} seg ${(s.market?.segments ?? []).length} debt ${Math.round(s.techDebt)} ovl ${s.derived.overload.toFixed(2)} netK ${Math.round(s.finance.net / 1000)} ads ${s.finance.adBudget} mat ${s.projects.map((p) => p.maturity.toFixed(2)).join("/")} round ${s.round?.active ? s.round.weeksLeft : '-'}`)
     }
   }
   return { seed, stageDays, garageMissed, minCash, over: s.gameOver ? `${s.gameOver.kind}@${s.gameOver.day}` : null, hires, moves }

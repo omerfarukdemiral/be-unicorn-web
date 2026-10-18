@@ -11,6 +11,7 @@ import { cheapestHireRunway, heldWages, horizon, nextCrisis, nextStep, owedTotal
 import { roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
 import { adFocusWarmup, adWeights, moduleMult, projectMix, projectWeights, wMean } from './modules'
+import { resignMorale } from './people'
 import { auraAt, bookshelfMorale, deskQualityAt, findSlot, hireDeskCost, officeEffects, placementSpec, openExtraRingCount, teamClusteredEmployees, type OfficeEffects } from './office'
 import { DAYS_PER_MONTH, DEPTS, POLICY_IDS, type Dept, type Employee, type GameState, type PoliciesView, type PolicyId, type PolicyKind, type ProjectCategory, type ProjectId, type ValuationBreakdown } from './types'
 import { adoptedPolicies, modifierMult, payLaterOpen, moraleModifierSum, policyMult, policySum, type EngineContent } from './util'
@@ -341,6 +342,7 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.market = marketView(s)
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
+  s.derived.moraleWhy = { target: globalMoraleTarget(s, content, o, s.derived.overload), overload: B.MORALE_OVERLOAD * s.derived.overload, quitAt: resignMorale(s, content) }
   s.derived.hireDeskCost = hireDeskCost(s, content)
   const server = content.furniture.find((f) => f.id === SERVER_ROOM_ID)
   s.derived.serverRoom = server && s.stage >= server.stageUnlock && autoPlace(s.office, placementSpec(server)) ? { price: server.price, upkeep: server.upkeep ?? 0 } : null

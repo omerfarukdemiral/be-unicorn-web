@@ -165,12 +165,13 @@ describe('routeBubbles: caps', () => {
     withPitch(s, true)
     s.finance.pendingPayday = { day: 30 } as PendingPayday
     s.employees = [emp('e2'), emp('e1', { status: 'leaving' })]
-    // E1 round 3: the person walking out is pinned above the desk's payday, which loses the third slot.
-    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'visitor:pitch:vr', 'staff:e1'])
-    // Without the pitch the payday comes back, still under the pinned leaver.
-    s.round = undefined
-    s.visitors = s.visitors.filter((v) => v.id !== 'vr')
-    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'staff:e1', 'desk:payday'])
+    // Fix round 5: two at once. The person walking out is pinned; the pitch and the payday queue.
+    expect(keys(open(s))).toEqual([`decision:${cardBy('investor')}`, 'staff:e1'])
+    // The decision answered: the pitch asks next, the payday still waits.
+    s.decisions.active = undefined
+    expect(keys(open(s))).toEqual(['visitor:pitch:vr', 'staff:e1'])
+    s.employees = [emp('e2')]
+    expect(keys(open(s))).toEqual(['visitor:pitch:vr', 'desk:payday'])
   })
 
   it('a decision asked at the desk hides the desk topic (one bubble per anchor)', () => {
@@ -187,20 +188,27 @@ describe('routeBubbles: caps', () => {
     withPitch(s, true)
     s.finance.pendingPayday = { day: 30 } as PendingPayday
     s.employees = [emp('e1')]
-    expect(keys(open(s, 'staff:e1'))).toEqual(['staff:e1', `decision:${cardBy('investor')}`, 'visitor:pitch:vr'])
+    expect(keys(open(s, 'staff:e1'))).toEqual(['staff:e1', `decision:${cardBy('investor')}`])
   })
 
-  it('reflection and ambient lines do not count against the cap', () => {
+  it('reflection and ambient lines only fill free slots, one ambient line at a time', () => {
     const s = game()
     withDecision(s, 'investor')
     withPitch(s, true)
     s.finance.pendingPayday = { day: 30 } as PendingPayday
     s.decisions.lastAnswer = { cardId: cardBy('cofounder'), optionIndex: 1, day: 3 }
     s.bubbles = [{ id: 'b1', lineId: 'x', speakerId: 'founder', day: 0, untilDay: 1 }]
+    // Two asks fill the scene: no reflection, no ambient line.
+    expect(open(s).filter((l) => l.kind === 'reflection' || l.kind === 'ambient')).toHaveLength(0)
+    s.decisions.active = undefined
+    s.round = undefined
+    s.visitors = []
+    s.finance.pendingPayday = undefined
+    s.bubbles.push({ id: 'b2', lineId: 'y', speakerId: 'e9', day: 0, untilDay: 1 })
     const ls = open(s)
-    expect(ls.filter((l) => l.kind !== 'reflection' && l.kind !== 'ambient')).toHaveLength(3)
+    expect(ls).toHaveLength(2)
     expect(ls.find((l) => l.kind === 'reflection')).toMatchObject({ key: `reflection:${cardBy('cofounder')}`, speakerId: 'desk', extra: '1' })
-    expect(ls.find((l) => l.kind === 'ambient')).toMatchObject({ key: 'amb:b1', speakerId: 'founder' })
+    expect(ls.filter((l) => l.kind === 'ambient').map((l) => l.key)).toEqual(['amb:b1'])
   })
 
   it(`idle builders ask ${MAX_IDLE} at a time; an open one still shows`, () => {
@@ -229,9 +237,10 @@ describe('BubbleTimeline', () => {
     const r0 = tl.step(c, null, 0)
     expect(shown(r0)).toEqual(['staff:e1', 'desk:payday'])
     expect(r0.nextAt).toBe(DECISION_DELAY_MS)
-    expect(shown(tl.step(c, null, DECISION_DELAY_MS))).toEqual(['decision:x', 'staff:e1', 'desk:payday'])
-    // Idle comes later and the cap (3) is already full.
-    expect(shown(tl.step(c, null, IDLE_DELAY_MS))).toEqual(['decision:x', 'staff:e1', 'desk:payday'])
+    // Fix round 5: the decision takes a slot, the payday queues behind the pinned leaver.
+    expect(shown(tl.step(c, null, DECISION_DELAY_MS))).toEqual(['decision:x', 'staff:e1'])
+    // Idle comes later and the cap (2) is already full.
+    expect(shown(tl.step(c, null, IDLE_DELAY_MS))).toEqual(['decision:x', 'staff:e1'])
   })
 
   it('a round pill nobody opens steps back so the next desk topic can ask', () => {

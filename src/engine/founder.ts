@@ -337,6 +337,8 @@ export function completeFounderAction(s: GameState, rng: Rng): void {
     case 'motivateTeam':
       s.modifiers.push({ id: newId(s, 'mod'), kind: 'morale', value: B.MOTIVATE_MORALE, untilDay: s.time.day + B.MOTIVATE_DAYS, source: 'motivateTeam' })
       incCounter(s, 'motivates')
+      // Round 10: the toast shows what the talk did ("+10 moral, 10 gün").
+      params.value = B.MOTIVATE_MORALE
       break
     case 'investorCoffee':
       if (s.round?.active) s.round.weeksLeft = Math.max(1, s.round.weeksLeft - B.COFFEE_ROUND_WEEKS)

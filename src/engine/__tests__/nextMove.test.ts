@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { CONTENT } from '../../content/index'
 import * as B from '../balance'
 import { createEngine } from '../index'
-import { moveKey, nextMove, nextStep, snoozed, stepAction, trackChip } from '../loopSelectors'
+import { moveKey, nextMove, nextStep, snoozed, stepAction, trackChip, weakestMetric } from '../loopSelectors'
 import { deserialize, serialize } from '../save'
 import type { GameState } from '../types'
 
@@ -171,6 +171,20 @@ describe('nextMove', () => {
     expect(nextMove(sunk)).not.toBe('morale')
     const close: GameState = { ...pre, derived: { ...pre.derived, overload: 0, moraleWhy: { target: 30, overload: 0, quitAt: 28 } } }
     expect(['morale', 'keepStaff']).toContain(nextMove(close))
+  })
+
+  it('round 10: an exhausted founder rests; cash or owed wages under the morale go to the cash moves; a lost cause says so; progress names the weakest number', () => {
+    const l = live()
+    const pre: GameState = { ...l, stage: 1, stats: { ...l.stats, cash: 300_000, morale: 30 }, finance: { ...l.finance, runway: 30 } }
+    expect(nextMove({ ...pre, founder: { ...pre.founder, energy: 0 } })).toBe('restFounder')
+    const owed: GameState = { ...pre, derived: { ...pre.derived, overload: 0, moraleWhy: { target: 20, team: 20, overload: 0, quitAt: 28, cash: 0, wages: 10, bored: 0 } } }
+    expect(['morale', 'moraleLost']).not.toContain(nextMove(owed))
+    const two: GameState = { ...pre, employees: [...pre.employees, { ...pre.employees[0]!, id: 'e-two', dept: 'marketing' }] }
+    const lost: GameState = { ...two, derived: { ...two.derived, overload: 0, moraleWhy: { target: 0, team: 0, overload: 0, quitAt: 28, cash: 0, wages: 0, bored: 0 } } }
+    expect(['moraleLost', 'keepStaff']).toContain(nextMove(lost))
+    const m = weakestMetric(pre)
+    expect(m?.stage).toBe(2)
+    expect(['valuation', 'growth', 'runway', 'morale', 'burn']).toContain(m?.id)
   })
 
   it('stops at Unicorn', () => {

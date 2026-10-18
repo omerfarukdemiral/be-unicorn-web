@@ -1101,7 +1101,17 @@ export interface DerivedMetrics {
    * Round 9: why morale sits where it sits (the chip names the cause, not a pep talk that cannot hold): the company's
    * morale target, the part overloaded servers take off it, and the morale under which people hand in notice.
    */
-  moraleWhy?: { target: number; overload: number; quitAt: number }
+  moraleWhy?: {
+    target: number
+    overload: number
+    quitAt: number
+    /** Round 10: the team's mean target (desk auras, boredom and flow in), the cash term (−40 under $0) and owed wages (−10). */
+    team?: number
+    cash?: number
+    wages?: number
+    /** Mean boredom term over the team (≤ 0). */
+    bored?: number
+  }
   /** A server room (capacity × 1.25) fits the office now: its price and upkeep; null = not unlocked or no room slot. */
   serverRoom?: { price: number; upkeep: number } | null
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
@@ -1377,6 +1387,11 @@ export interface NextStep {
   /** 'traction': valuation one more release adds (0 once VAL_RELEASE_MAX releases count). */
   value?: number
   /**
+   * Round 10, the 'progress' move: the next round's weakest number (loopSelectors.weakestMetric): 'valuation' toward
+   * the window, or a due-diligence item (growth MoM, runway months, morale, burn multiple), its value and target.
+   */
+  metric?: { id: 'valuation' | DiligenceId; value: number; target: number; stage: number }
+  /**
    * Fix round 3 (NEW-1/2: a guided player went broke or stalled at $250K of $300K): the one concrete move the chip
    * names instead of the goal, when the run needs one (loopSelectors.nextMove); stepAction plays it.
    */
@@ -1384,7 +1399,7 @@ export interface NextStep {
 }
 
 /** Concrete garage / Pre-seed moves the chip can name: cash first, then growth, then the product. */
-export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'openSegment', 'newProduct', 'refactor', 'acquire', 'priceUp', 'adsTune', 'signLaw', 'serverRoom', 'progress'] as const
+export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'openSegment', 'newProduct', 'refactor', 'acquire', 'priceUp', 'adsTune', 'signLaw', 'serverRoom', 'salesGrow', 'restFounder', 'easeLoad', 'moraleLost', 'progress'] as const
 export type NextMove = (typeof NEXT_MOVES)[number]
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */

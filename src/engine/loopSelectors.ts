@@ -22,6 +22,7 @@ import {
   type Action,
   type Candidate,
   type Dept,
+  type DiligenceItem,
   type MarketSegmentId,
   type ProjectCategory,
   type NextMove,
@@ -103,6 +104,19 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
     }
     case 'morale':
       return { type: 'founderAction', kind: 'motivateTeam' }
+    case 'salesGrow':
+      return { type: 'founderAction', kind: 'salesCall' }
+    case 'restFounder':
+      return { type: 'founderAction', kind: 'rest' }
+    case 'easeLoad': {
+      // The most bored builder onto the busiest project with open work.
+      const e = mostBored(s)
+      const p = e ? busiestOpen(s, e.projectId) : undefined
+      return e && p ? { type: 'assign', employeeId: e.id, projectId: p.id } : null
+    }
+    case 'moraleLost':
+      // Morale cannot come back with what is on hand: the cheapest survival move (a survival law, else one leaves).
+      return moveAction(s, 'cutBurn')
     case 'startRound':
       return { type: 'startRound' }
     case 'serverRoom':
@@ -283,7 +297,7 @@ function priceGateOpen(s: GameState): boolean {
 // ---------------------------------------------------------------------------
 
 /** Moves that ask the player to confirm something big in its own place (the ones that can be declined). */
-export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['signLaw', 'acquire', 'newProduct', 'openSegment', 'serverRoom', 'openRing', 'hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn'])
+export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['signLaw', 'acquire', 'newProduct', 'openSegment', 'serverRoom', 'openRing', 'hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn', 'moraleLost'])
 
 /** True while `key` is snoozed (state.chipSnooze: key → first day it shows again). */
 export function snoozed(s: Pick<GameState, 'chipSnooze' | 'time'>, key: string): boolean {
@@ -333,6 +347,29 @@ export function trackChip(s: GameState): void {
     return
   }
   if (day - s.chipSeen.since >= B.MOVE_SNOOZE_SHOWN_DAYS) snoozeMove(s, move)
+}
+
+/** The builder whose boredom costs the most morale, if any is bored. */
+function mostBored(s: GameState) {
+  return s.employees
+    .filter((e) => (e.dept === 'eng' || e.dept === 'product') && e.status !== 'leaving' && (e.boredDays ?? 0) > 0)
+    .sort((a, b) => (a.loadAvg ?? 1) - (b.loadAvg ?? 1))[0]
+}
+
+/**
+ * Round 10: the next round's weakest number, for the 'progress' move: the round's unmet due-diligence items first (the
+ * one furthest from its bar), else the valuation toward the window. undefined when there is no next round.
+ */
+export function weakestMetric(s: GameState): NextStep['metric'] {
+  const target = B.STAGE_TARGET_VALUATION[s.stage + 1]
+  if (target == null) return undefined
+  const stage = s.stage + 1
+  const gap = (d: DiligenceItem) => (d.id === 'burn' ? d.value / Math.max(1e-9, d.target) - 1 : 1 - d.value / Math.max(1e-9, d.target))
+  const weak = diligenceNow(s)
+    .filter((d) => d.asked !== false && !d.met)
+    .sort((a, b) => gap(b) - gap(a))[0]
+  if (weak) return { id: weak.id, value: weak.value, target: weak.target, stage }
+  return { id: 'valuation', value: s.finance.valuation, target: target * B.ROUND_EARLY_RATIO, stage }
 }
 
 /** Someone walking out (the soonest leave day first). */
@@ -493,18 +530,32 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.stage > NEXT_MOVE_MAX_STAGE || !s.projects.some((p) => p.launched)) return undefined
   // People first (playtest round 5: three resignations sank Pre-seed): a leaver, then a team below the morale bar.
   if (leaverOf(s)) return 'keepStaff'
+  // The founder at the end of the rope (energy 0: pitches and talks cost energy, the burnout card waits): a rest.
+  if (s.stage >= 1 && s.founder.energy <= NEXT_MOVE_REST_ENERGY && founderActionError(s, 'rest') === null) return 'restFounder'
   if (s.employees.length > 0 && s.stats.morale < NEXT_MOVE_MORALE) {
-    // Round 9 (test6 PC: four pep talks, morale 6, three quit): name the cause. Overloaded servers (no engineer: the
-    // capacity floor) are the big one: the engineer, else a server room. A pep talk only when it lifts the target
-    // over the quit line; a target sunk by cash or owed wages falls through to the cash moves below.
+    // Round 9/10: name the cause, never a pep talk that cannot hold (test7 phone: nine talks, morale 6, game over).
     const why = s.derived.moraleWhy
     if (why && why.overload >= NEXT_MOVE_MORALE_OVERLOAD) {
-      if (!snoozed(s, 'hireEng') && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
+      // With no engineer at all the servers sit at the 50-user floor: the first engineer is worth a thinner runway.
+      const noEng = (s.derived.deptCounts?.eng ?? 0) === 0
+      if (!snoozed(s, 'hireEng') && hireFits(s, 'eng', noEng ? NEXT_MOVE_FIRST_ENG_RUNWAY : B.HIRE_RUNWAY_MIN)) return 'hireEng'
       const room = s.derived.serverRoom
       if (room && !snoozed(s, 'serverRoom') && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
     }
-    const lifts = !why || why.target + B.MOTIVATE_MORALE >= why.quitAt + NEXT_MOVE_MORALE_MARGIN
-    if (lifts && founderActionError(s, 'motivateTeam') === null) return 'morale'
+    // Cash under $0 or wages owed sink the target: the cash moves below are the cure, no morale move here.
+    const money = (why?.cash ?? 0) > 0 || (why?.wages ?? 0) > 0
+    if (!money) {
+      // Bored builders: work (a module on a finished product, else the busiest project with open work).
+      if (why && (why.bored ?? 0) <= -NEXT_MOVE_BORED && mostBored(s)) {
+        if (moduleToBuild(s)) return 'module'
+        if (moveAction(s, 'easeLoad')) return 'easeLoad'
+      }
+      const team = why?.team ?? why?.target
+      const lifts = !why || team === undefined || team + B.MOTIVATE_MORALE >= why.quitAt + NEXT_MOVE_MORALE_MARGIN
+      if (lifts && founderActionError(s, 'motivateTeam') === null) return 'morale'
+      // Nothing on hand lifts it over the quit line: say so, with the cheapest survival move.
+      if (!lifts && s.employees.length > 1 && moveAction(s, 'cutBurn') && !snoozed(s, 'cutBurn')) return 'moraleLost'
+    }
   }
   // The round window open and nothing started: the round brings the cash (round 6: the tester idled 400 days with
   // only the HUD's "Tur başlat" as a cue).
@@ -524,7 +575,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   }
   // Servers full (round 7: overload took a Series C company's churn from 3.5 % to 8 %) (users churn away on an overloaded product): an engineer, if the runway carries one.
   const eng = s.derived.deptCounts?.eng ?? 0
-  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && !snoozed(s, 'hireEng') && hireFits(s, 'eng', B.HIRE_RUNWAY_MIN)) return 'hireEng'
+  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && !snoozed(s, 'hireEng') && hireFits(s, 'eng', eng === 0 && s.derived.overload > 0 ? NEXT_MOVE_FIRST_ENG_RUNWAY : B.HIRE_RUNWAY_MIN)) return 'hireEng'
   // No seat for the engineer: a server room (capacity × 1.25 each) when the cash carries it.
   const room = s.derived.serverRoom
   if (serversTight(s) && room && !snoozed(s, 'serverRoom') && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
@@ -538,7 +589,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (lateAdsOff(s)) return 'adsTune'
   if (s.stage >= 4 && !snoozed(s, 'acquire') && rivalToBuy(s)) return 'acquire'
   // From Series B a contract a month while the month's deals still pay in full (enterprise MRR).
-  if (s.stage >= 4 && sales && salesCallPreview(s).fullLeft > 0) return 'salesCall'
+  if (s.stage >= 4 && sales && salesCallPreview(s).fullLeft > 0) return 'salesGrow'
   if (s.stage >= 3 && priceRoom(s)) return 'priceUp'
   const last = s.finance.usersHistory[s.finance.usersHistory.length - 1]
   const flat = last !== undefined && s.stats.users <= last * (1 + NEXT_MOVE_FLAT_GROWTH)
@@ -593,6 +644,12 @@ const NEXT_MOVE_MORALE = B.DILIGENCE_MORALE
 const NEXT_MOVE_MORALE_OVERLOAD = 10
 /** A pep talk is named only when the target it lifts clears the quit line by this much. */
 const NEXT_MOVE_MORALE_MARGIN = 5
+/** Runway after the hire the first engineer of an overloaded company may leave (the cash guard still applies). */
+const NEXT_MOVE_FIRST_ENG_RUNWAY = 2
+/** Mean boredom term (morale points) from which the chip gives the bored builders work. */
+const NEXT_MOVE_BORED = 5
+/** Founder energy at or under which the chip names a rest (from Pre-seed, where energy only comes back resting). */
+const NEXT_MOVE_REST_ENERGY = 5
 /** The users focus at this find return reads as spent (the slot greys out under a quarter). */
 const NEXT_MOVE_FIND_DEAD = 0.25
 /** Tech debt from which the chip asks for a refactor sprint (the bots' bar: speed × 0.8). */
@@ -630,6 +687,10 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
 export function nextStep(s: GameState): NextStep {
   const st = chainStep(s)
   const move = st.id === 'idea' || st.id === 'hire' ? undefined : nextMove(s)
+  if (move === 'progress') {
+    const metric = weakestMetric(s)
+    return metric ? { ...st, move, metric } : { ...st, move }
+  }
   return move ? { ...st, move } : st
 }
 

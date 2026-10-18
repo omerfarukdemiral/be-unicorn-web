@@ -342,7 +342,21 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   s.derived.market = marketView(s)
   s.derived.valuationParts = valuationParts
   s.derived.maturityPerDay = maturityRates(s, o)
-  s.derived.moraleWhy = { target: globalMoraleTarget(s, content, o, s.derived.overload), overload: B.MORALE_OVERLOAD * s.derived.overload, quitAt: resignMorale(s, content) }
+  {
+    const target = globalMoraleTarget(s, content, o, s.derived.overload)
+    const n = s.employees.length
+    const team = n ? s.employees.reduce((a, e) => a + employeeMoraleTarget(s, content, e, target), 0) / n : target
+    const bored = n ? s.employees.reduce((a, e) => a + effortMorale(s, e), 0) / n : 0
+    s.derived.moraleWhy = {
+      target,
+      team,
+      overload: B.MORALE_OVERLOAD * s.derived.overload,
+      quitAt: resignMorale(s, content),
+      cash: s.stats.cash < 0 ? B.MORALE_NEGATIVE_CASH : 0,
+      wages: s.flags['wagesOwed'] === true ? B.WAGES_OWED_MORALE_TARGET : 0,
+      bored: Math.min(0, bored),
+    }
+  }
   s.derived.hireDeskCost = hireDeskCost(s, content)
   const server = content.furniture.find((f) => f.id === SERVER_ROOM_ID)
   s.derived.serverRoom = server && s.stage >= server.stageUnlock && autoPlace(s.office, placementSpec(server)) ? { price: server.price, upkeep: server.upkeep ?? 0 } : null

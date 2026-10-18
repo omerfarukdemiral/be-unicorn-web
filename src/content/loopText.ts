@@ -78,6 +78,17 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.adsTune': 'Reklam bütçesi kasaya uymuyor: ayarla',
   'move.signLaw': 'Yeni bir şirket kuralı imzalanabilir',
   'move.serverRoom': 'Sunucular doluyor, masa yok: sunucu odası kur',
+  // Round 10
+  'move.salesGrow': 'Satış görüşmesi: geliri artır',
+  'move.restFounder': 'Kurucu tükendi: biraz dinlen',
+  'move.easeLoad': 'Ekip boşta sıkılıyor: işi olan projeye ata',
+  'move.moraleLost': 'Moral toparlanmıyor: gideri kıs, ekibi küçült',
+  // The 'progress' move names the next round's weakest number (NextStep.metric): {s} stage, {v} value, {t} target.
+  'move.progress.valuation': '{s} için değerleme {v}/{t}',
+  'move.progress.growth': '{s} için aylık büyüme {v}/{t}',
+  'move.progress.runway': '{s} için runway {v}/{t} ay',
+  'move.progress.morale': '{s} için moral {v}/{t}',
+  'move.progress.burn': '{s} için burn çarpanı {v}/{t}',
   // Phone strip short words for the moves (the number on line 2).
   'move.short.salesCall': 'Müşteri ara',
   'move.short.adsCut': 'Reklamı durdur',
@@ -107,6 +118,10 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.short.adsTune': 'Reklamı ayarla',
   'move.short.signLaw': 'Kural imzala',
   'move.short.serverRoom': 'Sunucu odası',
+  'move.short.salesGrow': 'Müşteri ara',
+  'move.short.restFounder': 'Dinlen',
+  'move.short.easeLoad': 'İşe ata',
+  'move.short.moraleLost': 'Gideri kıs',
 
   // Horizon strip
   'horizon.span': '6 hafta',

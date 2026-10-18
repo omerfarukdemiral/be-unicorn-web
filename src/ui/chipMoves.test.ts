@@ -26,7 +26,7 @@ afterEach(() => markChipTarget(null))
 
 describe('chip move split', () => {
   it('big or irreversible moves only open their place: acquire, newProduct, openSegment, signLaw, serverRoom, openRing, cutBurn, hires', () => {
-    expect([...CONFIRM_MOVES].sort()).toEqual(['acquire', 'cutBurn', 'hireEng', 'hireGrowth', 'hireMarketing', 'newProduct', 'openRing', 'openSegment', 'serverRoom', 'signLaw'])
+    expect([...CONFIRM_MOVES].sort()).toEqual(['acquire', 'cutBurn', 'hireEng', 'hireGrowth', 'hireMarketing', 'moraleLost', 'newProduct', 'openRing', 'openSegment', 'serverRoom', 'signLaw'])
     for (const m of CONFIRM_MOVES) {
       useGameStore.getState().newGame({ seed: 4, founderXp: 0, runIndex: 0 })
       expect(tap(m), m).toEqual([])
@@ -36,7 +36,7 @@ describe('chip move split', () => {
   })
 
   it('small reversible moves act on the tap', () => {
-    const direct: NextMove[] = ['adsCut', 'focusUsers', 'focusTalk', 'salesCall', 'refactor', 'morale', 'startRound', 'price', 'priceUp', 'ads', 'adsUp', 'adsTune']
+    const direct: NextMove[] = ['adsCut', 'focusUsers', 'focusTalk', 'salesCall', 'salesGrow', 'restFounder', 'easeLoad', 'refactor', 'morale', 'startRound', 'price', 'priceUp', 'ads', 'adsUp', 'adsTune']
     for (const m of direct) expect(CONFIRM_MOVES.has(m), m).toBe(false)
     useGameStore.getState().newGame({ seed: 4, founderXp: 0, runIndex: 0 })
     expect(tap('adsCut')).toEqual([{ type: 'setAdBudget', amount: 0 }])

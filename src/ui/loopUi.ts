@@ -262,7 +262,7 @@ export function stepGo(step: NextStep): StepGo {
  * the focus, a refactor, morale, starting an open round); these big or irreversible ones only open their place with the
  * item marked, and the place's own button confirms.
  */
-export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['acquire', 'newProduct', 'openSegment', 'signLaw', 'serverRoom', 'openRing', 'cutBurn', 'hireEng', 'hireMarketing', 'hireGrowth'])
+export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['acquire', 'newProduct', 'openSegment', 'signLaw', 'serverRoom', 'openRing', 'cutBurn', 'moraleLost', 'hireEng', 'hireMarketing', 'hireGrowth'])
 
 export type ConfirmPlace = { place: { panel: Panel } | { center: 'lawbook' | 'market' }; key: string | null }
 
@@ -296,6 +296,7 @@ export function confirmPlace(s: GameState, move: NextMove): ConfirmPlace {
     openRing: { panel: { kind: 'shop' } },
     newProduct: { panel: { kind: 'projects' } },
     cutBurn: { panel: { kind: 'metrics' } },
+    moraleLost: { panel: { kind: 'metrics' } },
   }
   return { place: fallback[move] ?? { panel: { kind: 'team' } }, key: null }
 }

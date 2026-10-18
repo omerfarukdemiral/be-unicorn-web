@@ -478,12 +478,17 @@ function growthDept(s: GameState, builders = true): Dept | undefined {
   const total = Object.values(mix).reduce((a, b) => a + (b ?? 0), 0)
   const team = s.employees.length + 1
   const gap = (d: Dept) => ((mix[d] ?? 0) / total) * team - (s.derived.deptCounts?.[d] ?? 0)
+  // Round 11: from Series A, when the next round's weakest number is growth or valuation, the hire that drives it
+  // comes first (marketing, then sales); otherwise the mix decides.
+  const m = s.stage === 3 ? weakestMetric(s) : undefined
+  const growthWeak = m !== undefined && (m.id === 'growth' || m.id === 'valuation')
+  const drives = (d: Dept) => (growthWeak ? (d === 'marketing' ? 2 : d === 'sales' ? 1 : 0) : 0)
   // Tight servers: the seat goes to an engineer (a full office has no second chance).
   const depts = serversTight(s) ? (['eng'] as Dept[]) : (Object.keys(mix) as Dept[])
   return depts
     .filter((d) => (builders || (d === 'eng' && serversTight(s)) || (d !== 'eng' && d !== 'product')) && !snoozed(s, `hireGrowth:${d}`))
-    .sort((a, b) => gap(b) - gap(a))
-    .find((d) => hireFits(s, d, s.stage >= 3 ? NEXT_MOVE_LATE_HIRE_RUNWAY : B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
+    .sort((a, b) => drives(b) - drives(a) || gap(b) - gap(a))
+    .find((d) => hireFits(s, d, s.stage === 3 ? NEXT_MOVE_A_HIRE_RUNWAY : s.stage > 3 ? NEXT_MOVE_LATE_HIRE_RUNWAY : B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM))
 }
 
 /** A first ad budget: half the MRR, at least the garage's paid floor, at most this stage's (no 2× MRR spend at Seed). */
@@ -662,7 +667,12 @@ const NEXT_MOVE_PRICE_GAP_DAYS = 60
 const NEXT_MOVE_LTV_CAC = 1.5
 const NEXT_MOVE_LTV_CAC_LATE = 1.3
 const NEXT_MOVE_LTV_CAC_IDLE = 1
-/** From Series A a growth hire needs this much runway after it (a 20-person team that stalls burns fast). */
+/**
+ * In Series A a growth hire needs this much runway after it. [round 11: 12 → 6] At 12 the testers' Series A teams sat
+ * at four people for 800–1,200 days with no hire on the chip (the bots grow to ~36 there).
+ */
+const NEXT_MOVE_A_HIRE_RUNWAY = 6
+/** From Series B (paid and the market carry growth there; more seats only slowed the probe's Unicorn: 12/12 → 5/12). */
 const NEXT_MOVE_LATE_HIRE_RUNWAY = 12
 /** Under this runway the chip cuts the month even when no survival law is open (a hire leaves). */
 const NEXT_MOVE_CUT_RUNWAY = 2

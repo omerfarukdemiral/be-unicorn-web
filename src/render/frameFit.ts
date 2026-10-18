@@ -47,6 +47,62 @@ export function outlineOf(box: FitBox, height: number): Pt[] {
   return hull(pts)
 }
 
+/**
+ * Like outlineOf, for a set of floor points (the team's desks) each grown into a square of half-size `pad`: the hull
+ * of their screen projection, relative to the screen point of `center`. A team is a blob, not a box: on a portrait
+ * phone the box's bare side corners set the zoom (fix round 2 N2), the desks' own hull does not.
+ */
+export function outlineOfPoints(points: readonly Pt[], pad: number, height: number, center: Pt): Pt[] {
+  const pts: Pt[] = []
+  for (const [px, pz] of points)
+    for (const x of [px - pad, px + pad])
+      for (const z of [pz - pad, pz + pad])
+        for (const y of [0, height]) {
+          const dx = x - center[0]
+          const dz = z - center[1]
+          pts.push([dx * right.x + y * right.y + dz * right.z, -(dx * up.x + y * up.y + dz * up.z)])
+        }
+  return hull(pts)
+}
+
+/**
+ * outlineOfPoints about the floor point whose screen projection is the middle of the hull's bounding box, so a fit that
+ * centres its anchor centres the team itself (a lopsided team no longer wastes one side of a narrow phone).
+ */
+export function centredOutlineOfPoints(points: readonly Pt[], pad: number, height: number): { outline: Pt[]; center: Pt } {
+  let cx = 0
+  let cz = 0
+  for (const [x, z] of points) {
+    cx += x
+    cz += z
+  }
+  cx /= points.length || 1
+  cz /= points.length || 1
+  const o = outlineOfPoints(points, pad, height, [cx, cz])
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const [x, y] of o) {
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y)
+    maxY = Math.max(maxY, y)
+  }
+  // Floor move (dx, dz) → screen (sx, sy): sx = dx·right.x + dz·right.z, sy = −(dx·up.x + dz·up.z). Solve for the box middle.
+  const mx = (minX + maxX) / 2
+  const my = (minY + maxY) / 2
+  const a = right.x
+  const b = right.z
+  const c = -up.x
+  const d = -up.z
+  const det = a * d - b * c
+  const dx = (mx * d - b * my) / det
+  const dz = (a * my - mx * c) / det
+  const center: Pt = [cx + dx, cz + dz]
+  return { outline: outlineOfPoints(points, pad, height, center), center }
+}
+
 /** Andrew's monotone chain; counter-clockwise, no repeated end point. */
 export function hull(pts: readonly Pt[]): Pt[] {
   const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1])

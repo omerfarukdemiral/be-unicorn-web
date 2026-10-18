@@ -8,13 +8,13 @@ import type { GameState } from '../engine/types'
 import type { Selection, ZoomLevel } from '../store/types'
 import type { BubbleRenderer } from './bubbles'
 import { CAMERA_DIR, CELL, WALL_HEIGHT, ZOOM_FACTORS, clamp, damp, renderBudget } from './constants'
-import { fitOutline, gapCenterY, measureIslands, outlineOf, type Fit, type Rect } from './frameFit'
+import { fitOutline, gapCenterY, measureIslands, outlineOf, centredOutlineOfPoints, type Fit, type Rect } from './frameFit'
 import { DeskBadges } from './DeskBadges'
 import { HeadPlates } from './HeadPlates'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
-import { occupiedBox, type FrameBox, type OfficeLayout } from './layout'
+import { deskPoints, occupiedBox, type FrameBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
 import { DecorLayer } from './Decor'
 import { stagePalette } from './palette'
@@ -83,10 +83,13 @@ const OUTLINE_H = WALL_HEIGHT
 /** Portrait: the diamond's bare side tips may run this share of its width off each edge (figures read larger). */
 const PORTRAIT_SLACK = 0.04
 /**
- * Portrait framing the team: its box's side corners are bare floor past the outer desks (a team is a blob, not a
- * square), so more of them may run off the screen. At 0.04 a Series B team on a 390 px phone drew 19 px per unit.
+ * Portrait framing the team (fix round 2 N2): the outline is the hull of the desks themselves, each grown by
+ * TEAM_DESK_PAD (desk, chair and the person in it), up to TEAM_H (heads and plates), not the team's box: the box's
+ * bare side corners set the zoom and still clipped the edge desks. Nothing of it may leave the screen or slip under
+ * a HUD island.
  */
-const TEAM_PORTRAIT_SLACK = 0.1
+const TEAM_DESK_PAD = 0.75
+const TEAM_H = 2
 /** The diamond's bare tips may slip this share under a HUD island (frameFit.islandSlack). */
 const ISLAND_SLACK = 0.1
 /**
@@ -95,7 +98,7 @@ const ISLAND_SLACK = 0.1
  * phone's short side is a third of a desktop's: its cap is looser, or a team of three stays a few px tall.
  */
 const MAX_ZOOM_PER_PX = 1 / 12
-const MAX_ZOOM_PER_PX_PORTRAIT = 1 / 8.5
+const MAX_ZOOM_PER_PX_PORTRAIT = 1 / 5.5
 /** Islands are re-read this often (ms) in case one changed size without a resize (a wider gauge, a new tab). */
 const ISLAND_POLL_MS = 600
 
@@ -115,6 +118,8 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
   const office = useOffice()
   const occupied = useMemo(() => occupiedBox(layout, office.slots, OCCUPIED_PAD), [layout, office])
   const occupiedPortrait = useMemo(() => occupiedBox(layout, office.slots, OCCUPIED_PAD_PORTRAIT), [layout, office])
+  const desks = useMemo(() => deskPoints(layout, office.slots), [layout, office])
+  const teamHull = useMemo(() => (desks.length ? centredOutlineOfPoints(desks, TEAM_DESK_PAD, TEAM_H) : null), [desks])
   const selection = useUi((u) => panelSelection(u.panel))
   // Only the side panel still takes a band off the scene; the top and bottom HUD are corner islands (T07).
   const panelRight = useUi((u) => u.sceneInset.right)
@@ -149,23 +154,26 @@ function CameraRig({ zoomLevel }: { zoomLevel: ZoomLevel }) {
     const ringStage = layout.stage >= RING_FRAME_STAGE
     const team = portrait ? occupiedPortrait : occupied
     if (zoomLevel === 1 && team && ((portrait && ringStage) || team.r < frame.r * OCCUPIED_MIN_GAIN)) frame = team
+    // Portrait on the team: the desks' own hull, centred on its screen middle (TEAM_DESK_PAD).
+    const hull = portrait && frame === team ? teamHull : null
 
     // The fit only changes with the screen, the panel, the islands or the frame: cached on those.
     const biasDown = portrait && zoomLevel === 1 && ringStage
-    const key = `${size.width}x${size.height}|${Math.round(freeRight)}|${frame.minX},${frame.maxX},${frame.minZ},${frame.maxZ}|${biasDown ? 1 : 0}|${islands.current.map((r) => `${r.left},${r.top},${r.right},${r.bottom}`).join(';')}`
+    const key = `${desks.length}|${size.width}x${size.height}|${Math.round(freeRight)}|${frame.minX},${frame.maxX},${frame.minZ},${frame.maxZ}|${biasDown ? 1 : 0}|${islands.current.map((r) => `${r.left},${r.top},${r.right},${r.bottom}`).join(';')}`
     let fit = fitCache.current?.key === key ? fitCache.current.fit : null
     if (!fit) {
       // Islands under the side panel are hidden by it: only the ones in the free part count.
       const free = { left: 0, top: 0, right: freeRight, bottom: size.height }
       const focusY = biasDown ? gapCenterY(islands.current.filter((r) => r.left < freeRight), size.height) ?? undefined : undefined
-      fit = fitOutline({ focusY, outline: outlineOf(frame, OUTLINE_H), free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: portrait ? (frame === team ? TEAM_PORTRAIT_SLACK : PORTRAIT_SLACK) : 0, islandSlack: ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * (portrait ? MAX_ZOOM_PER_PX_PORTRAIT : MAX_ZOOM_PER_PX) })
+      const outline = hull ? hull.outline : outlineOf(frame, OUTLINE_H)
+      fit = fitOutline({ focusY, outline, free, islands: islands.current.filter((r) => r.left < freeRight), sideSlack: hull ? 0 : portrait ? PORTRAIT_SLACK : 0, islandSlack: hull ? 0 : ISLAND_SLACK, maxZoom: Math.min(size.width, size.height) * (portrait ? MAX_ZOOM_PER_PX_PORTRAIT : MAX_ZOOM_PER_PX) })
       fitCache.current = { key, fit }
     }
     const want = clamp(fit.zoom * ZOOM_FACTORS[zoomLevel], 12, 400)
 
     // Close zoom follows the selection (clamped to the office); otherwise frame the office (frameBox).
-    let fx = frame.cx
-    let fz = frame.cz
+    let fx = hull ? hull.center[0] : frame.cx
+    let fz = hull ? hull.center[1] : frame.cz
     if (zoomLevel === 2) {
       const f = focusOf(selection, layout)
       if (f) {

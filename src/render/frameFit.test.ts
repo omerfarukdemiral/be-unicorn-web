@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { computeLayout, furnishedBox } from './layout'
+import { computeLayout, deskPoints, furnishedBox } from './layout'
 import { createMockState } from './mockState'
-import { fitOutline, gapCenterY, hull, outlineOf, polyHitsRect, type Pt } from './frameFit'
+import { centredOutlineOfPoints, fitOutline, gapCenterY, hull, outlineOf, polyHitsRect, type Pt } from './frameFit'
 
 const box = { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }
 const screen = { left: 0, top: 0, right: 1440, bottom: 900 }
@@ -128,5 +128,30 @@ describe('portrait ring framing', () => {
     expect(fit.x).toBe(720)
     expect(fit.y).toBeCloseTo(523.3333, 3)
     expect(fit.zoom).toBeCloseTo(72.4829, 3)
+  })
+})
+
+describe('portrait team hull (fix round 2 N2)', () => {
+  it('390x844 Series C: every desk stays on screen and clear of the HUD, centred in the gap', () => {
+    const st = createMockState(5)
+    const L = computeLayout(st.office.slots, st.office.rings, st.office.stage)
+    const pts = deskPoints(L, st.office.slots)
+    const { outline } = centredOutlineOfPoints(pts, 0.75, 2)
+    const xs = outline.map((p) => p[0])
+    const ys = outline.map((p) => p[1])
+    const e = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) }
+    // Centred: the hull's middle is its anchor.
+    expect(Math.abs(e.minX + e.maxX)).toBeLessThan(1e-6)
+    const islands = [
+      { left: 8, top: 8, right: 330, bottom: 64 },
+      { left: 8, top: 716, right: 382, bottom: 836 },
+    ]
+    const fit = fitOutline({ outline, free: { left: 0, top: 0, right: 390, bottom: 844 }, islands, focusY: gapCenterY(islands, 844) ?? undefined, maxZoom: 390 / 5.5 })
+    expect(fit.x + e.minX * fit.zoom).toBeGreaterThanOrEqual(0)
+    expect(fit.x + e.maxX * fit.zoom).toBeLessThanOrEqual(390)
+    expect(fit.y + e.minY * fit.zoom).toBeGreaterThanOrEqual(64)
+    expect(fit.y + e.maxY * fit.zoom).toBeLessThanOrEqual(716)
+    // The team fills the width (the binding side on a phone).
+    expect((e.maxX - e.minX) * fit.zoom).toBeGreaterThan(390 * 0.85)
   })
 })

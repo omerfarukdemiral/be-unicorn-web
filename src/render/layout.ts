@@ -422,24 +422,33 @@ export function furnishedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'i
  * stands.
  */
 export function occupiedBox(layout: OfficeLayout, slots: readonly Pick<Slot, 'id' | 'itemId' | 'type'>[], pad: number): FrameBox | null {
+  const pts = deskPoints(layout, slots)
+  if (!pts.length) return null
   let minX = Infinity
   let maxX = -Infinity
   let minZ = Infinity
   let maxZ = -Infinity
-  for (const s of slots) {
-    if (s.id !== FOUNDER_SLOT_ID && (!s.itemId || s.type !== 'desk')) continue
-    const c = layout.itemCenter.get(s.id)?.pos ?? layout.slotWorld.get(s.id)
-    if (!c) continue
+  for (const c of pts) {
     minX = Math.min(minX, c[0])
     maxX = Math.max(maxX, c[0])
     minZ = Math.min(minZ, c[1])
     maxZ = Math.max(maxZ, c[1])
   }
-  if (minX === Infinity) return null
   const b = layout.bounds
   minX = Math.max(b.minX, minX - pad)
   maxX = Math.min(b.maxX, maxX + pad)
   minZ = Math.max(b.minZ, minZ - pad)
   maxZ = Math.min(b.maxZ, maxZ + pad)
   return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, r: Math.hypot(maxX - minX, maxZ - minZ) / 2 }
+}
+
+/** Floor centres of every placed desk (the founder's always): what occupiedBox and the portrait team outline frame. */
+export function deskPoints(layout: OfficeLayout, slots: readonly Pick<Slot, 'id' | 'itemId' | 'type'>[]): XZ[] {
+  const out: XZ[] = []
+  for (const s of slots) {
+    if (s.id !== FOUNDER_SLOT_ID && (!s.itemId || s.type !== 'desk')) continue
+    const c = layout.itemCenter.get(s.id)?.pos ?? layout.slotWorld.get(s.id)
+    if (c) out.push(c)
+  }
+  return out
 }

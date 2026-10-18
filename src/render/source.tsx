@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { Action, ActionResult, GameState } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import type { UiState } from '../store/types'
+import { useLayoutMode } from '../ui/hooks'
 
 const MockStateContext = createContext<GameState | null>(null)
 
@@ -48,8 +49,11 @@ export function storeApi() {
  */
 export function useSceneCovered(): boolean {
   const mock = useContext(MockStateContext)
+  // Round 6: the portrait phone's full-page sheet covers the office too; pills and plates above it showed through.
+  const sheet = useLayoutMode() === 'portrait'
   const covered = useGameStore(
     (s) =>
+      (sheet && s.ui.panel !== null) ||
       (!!s.ui.overlay && s.ui.overlay.kind !== 'payday') ||
       (!s.ui.runStarted && s.state.time.speed === 0 && !s.state.gameOver) ||
       // The office edit mode: bubbles, head plates and juice step aside for the grid (they wait, the world is held).

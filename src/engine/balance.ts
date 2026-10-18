@@ -904,6 +904,8 @@ export const HIRE_RUNWAY_MIN = 4
 /** Round 8 chip snooze: a declined (or 45 days ignored) confirm move is skipped this long. */
 export const MOVE_SNOOZE_DAYS = 90
 export const MOVE_SNOOZE_SHOWN_DAYS = 45
+/** Round 9: each decline of the same kind adds MOVE_SNOOZE_DAYS, up to this many (two declines: 180 days). */
+export const MOVE_SNOOZE_MAX_DECLINES = 2
 export const NEXT_STEP_FIRST_USERS = 3
 /** Each ☆ stage goal reached takes this much off the equity sold in the next round (1 point). */
 export const GOAL_STAR_EQUITY_DISCOUNT = 0.01

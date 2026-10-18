@@ -1097,6 +1097,11 @@ export interface DerivedMetrics {
   hireRunway?: number | null
   /** What a hire's auto desk costs today (0 = a desk stands free, null = no desk slot left). */
   hireDeskCost?: number | null
+  /**
+   * Round 9: why morale sits where it sits (the chip names the cause, not a pep talk that cannot hold): the company's
+   * morale target, the part overloaded servers take off it, and the morale under which people hand in notice.
+   */
+  moraleWhy?: { target: number; overload: number; quitAt: number }
   /** A server room (capacity × 1.25) fits the office now: its price and upkeep; null = not unlocked or no room slot. */
   serverRoom?: { price: number; upkeep: number } | null
   /** Next link of the main chain (docs/CORE_LOOP.md §5 "Sıradaki adım"). */
@@ -1694,6 +1699,8 @@ export interface MetaState {
 export interface GameState {
   /** Round 8 chip snooze: move key → the first day the chip may name it again (loopSelectors.snoozeMove). */
   chipSnooze?: Record<string, number>
+  /** Round 9: how many times each snooze key was declined (the next snooze lasts that many × MOVE_SNOOZE_DAYS). */
+  chipDeclines?: Record<string, number>
   /** The confirm move on the chip and the day it first showed (loopSelectors.trackChip auto-snoozes it). */
   chipSeen?: { key: string; since: number }
   meta: MetaState

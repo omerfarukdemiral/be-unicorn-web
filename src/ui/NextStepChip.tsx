@@ -61,7 +61,8 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
         <Icon name="flag" size={14} />
       </span>
       <span className="tabular shrink-0 text-[13px] font-semibold text-ink-2">{t('step.count', { i: step.index, n: step.total })}</span>
-      <span key={step.id} className="min-w-0 flex-1 animate-fade-in truncate text-[13px] font-semibold text-ink">
+      {/* Phones wrap to two lines instead of cutting the key word ("Tur sürüyor: haftalık pit…", N9). */}
+      <span key={step.id} className={cx('min-w-0 flex-1 animate-fade-in text-[13px] font-semibold text-ink', compact ? 'line-clamp-2 leading-tight' : 'truncate')}>
         {text}
       </span>
       {progress !== undefined && (

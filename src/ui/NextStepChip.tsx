@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { NextStep } from '../engine/types'
-import { blockingOverlay, useGameStore } from '../store/gameStore'
+import { blockingOverlay, resumeSpeed, useGameStore } from '../store/gameStore'
 import { Icon } from './icons'
 import { t } from './i18n'
 import { cx } from './primitives'
@@ -79,7 +79,7 @@ export function NextStepChip({ compact, className }: { compact?: boolean; classN
   const onClick = () => {
     if (covered || resting) return
     setResting(true)
-    if (v.needsStart) dispatch({ type: 'setSpeed', speed: 1 })
+    if (v.needsStart) dispatch({ type: 'setSpeed', speed: resumeSpeed(useGameStore.getState()) })
     else followStep(step)
   }
   const progress = step.progress

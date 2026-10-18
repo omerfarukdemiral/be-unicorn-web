@@ -120,7 +120,8 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
     case 'startRound':
       return { type: 'startRound' }
     case 'serverRoom':
-      return { type: 'placeItem', itemId: 'server-room' }
+      // Only when one fits the office now (derived.serverRoom: unlocked and a room spot free).
+      return s.derived.serverRoom ? { type: 'placeItem', itemId: 'server-room' } : null
     case 'signLaw': {
       const law = growthLaw(s)
       return law ? { type: 'adoptPolicy', policyId: law } : null
@@ -423,6 +424,8 @@ function ringFits(s: GameState, months: number): boolean {
 }
 
 function hireAction(s: GameState, dept: Dept): Action | null {
+  // No seat and no section left to open: no hire to offer (the place would only say "Boş slot yok").
+  if (s.derived.hireDeskCost === null) return null
   const c = cheapestOf(s, dept)
   return c ? { type: 'hire', candidateId: c.id, autoDesk: true } : null
 }

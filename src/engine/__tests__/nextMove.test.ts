@@ -5,6 +5,7 @@ import * as B from '../balance'
 import { createEngine } from '../index'
 import { moveKey, nextMove, nextStep, snoozed, stepAction, trackChip, weakestMetric } from '../loopSelectors'
 import { deserialize, serialize } from '../save'
+import { nextLockedRing } from '../office'
 import type { GameState } from '../types'
 
 const api = createEngine(CONTENT)
@@ -185,6 +186,38 @@ describe('nextMove', () => {
     const m = weakestMetric(pre)
     expect(m?.stage).toBe(2)
     expect(['valuation', 'growth', 'runway', 'morale', 'burn']).toContain(m?.id)
+  })
+
+  it('a full office with every ring open names no hire and no server room, and their taps have no verb', () => {
+    let s = live()
+    for (let i = 0; i < 40; i++) {
+      s = { ...s, stats: { ...s.stats, cash: s.stats.cash + 1_000_000 } }
+      const ring = nextLockedRing(s.office)
+      if (ring !== null) {
+        s = api.applyAction(s, { type: 'openRing', ring }).state
+        continue
+      }
+      if (!s.candidates.length) s = api.applyAction(s, { type: 'refreshCandidates' }).state
+      const c = s.candidates[0]
+      const r = c ? api.applyAction(s, { type: 'hire', candidateId: c.id, autoDesk: true }) : undefined
+      if (!r?.ok) break
+      s = r.state
+    }
+    s = api.applyAction(s, { type: 'setSpeed', speed: 0 }).state
+    expect(nextLockedRing(s.office)).toBeNull()
+    expect(s.derived.hireDeskCost).toBeNull()
+    const eng = { ...s.candidates[0]!, id: 'cand-eng-full', dept: 'eng' as const, salary: 500 }
+    for (const stage of [1, 3, 4] as const) {
+      const full: GameState = {
+        ...s,
+        stage,
+        candidates: [...s.candidates, eng],
+        stats: { ...s.stats, morale: 30, users: s.derived.capacity * 3 },
+        derived: { ...s.derived, overload: 2, serverRoom: null, moraleWhy: { target: -10, team: -10, overload: 30, quitAt: 28, cash: 0, wages: 0, bored: 0 } },
+      }
+      expect(['hireEng', 'hireMarketing', 'hireGrowth', 'serverRoom', 'openRing']).not.toContain(nextMove(full))
+      for (const m of ['hireEng', 'hireMarketing', 'hireGrowth', 'serverRoom'] as const) expect(stepAction(full, { ...nextStep(full), move: m }), m).toBeNull()
+    }
   })
 
   it('stops at Unicorn', () => {

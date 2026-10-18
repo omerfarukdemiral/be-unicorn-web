@@ -11,7 +11,7 @@ import { idleSpots, meetingSeats, type OfficeLayout, type XZ } from './layout'
 import { DEPT_COLORS, FOUNDER_COLORS, FOUNDER_LEGS, HAIR_COLORS, HIGHLIGHT, LEG_COLORS, SKIN_TONES } from './palette'
 import { GEO, HIT_MAT, flatMat } from './resources'
 import { FADE_MS, fadeScale, type GhostMode } from './departing'
-import { clearSpeaker, isCelebrating, sceneTime, seatedRegistry, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
+import { clearSpeaker, hoveredPerson, isCelebrating, sceneTime, seatedRegistry, setLastPos, setSpeakerPos, speakerPositions, type LastPos } from './sceneRegistry'
 import { STAND, hold, release, reserve } from './spots'
 import { fromBubble } from './bubbleHit'
 import { LEGS_BY_BAND } from './stageLook'
@@ -134,9 +134,11 @@ function useRespawn(): { mark: () => void; scale: () => number } {
 interface HitProps {
   onSelect: () => void
   selected: boolean
+  /** Registered as hoveredPerson while the pointer is over it (their head plate stays whole). */
+  hoverId?: string
 }
 
-function HitAndRing({ onSelect, selected }: HitProps) {
+function HitAndRing({ onSelect, selected, hoverId }: HitProps) {
   // The selection ring is always mounted and grows / shrinks (damped) instead of blinking.
   const ring = useRef<THREE.Mesh>(null)
   const k = useRef(selected ? 1 : 0)
@@ -166,9 +168,11 @@ function HitAndRing({ onSelect, selected }: HitProps) {
         onPointerOver={(e) => {
           e.stopPropagation()
           document.body.style.cursor = 'pointer'
+          if (hoverId) hoveredPerson.id = hoverId
         }}
         onPointerOut={() => {
           document.body.style.cursor = ''
+          if (hoverId && hoveredPerson.id === hoverId) hoveredPerson.id = null
         }}
       />
       <mesh ref={ring} geometry={GEO.ring} material={flatMat(HIGHLIGHT.selected, 0.9)} scale={selected ? [0.8, 1, 0.8] : [0.001, 1, 0.001]} visible={selected} position={[0, 0.02, 0]} />
@@ -347,7 +351,7 @@ export const EmployeeCharacter = memo(function EmployeeCharacter(props: Employee
     <>
       <group ref={root} position={[mover.x, 0, mover.z]} rotation-y={mover.yaw} visible={!mover.outside} scale={doorScale(mover.fade)}>
         <CharacterModel look={look} rig={rig} />
-        <HitAndRing selected={props.selected} onSelect={() => props.onSelect(employee.id)} />
+        <HitAndRing selected={props.selected} onSelect={() => props.onSelect(employee.id)} hoverId={employee.id} />
       </group>
       <group ref={icon} position={[mover.x, 0, mover.z]} visible={!mover.outside}>
         <StatusIcon status={iconKind} />

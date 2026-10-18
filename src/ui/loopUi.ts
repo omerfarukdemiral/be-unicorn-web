@@ -307,7 +307,7 @@ function openConfirmPlace(s: GameState, move: NextMove): void {
     if (st.ui.overlay?.kind !== place.center) st.toggleCenter(place.center)
   } else st.openPanel(place.panel, { root: true })
   markChipTarget(key)
-  // Round 8: the place closing without this action = declined (chipConfirm.onDeclined; the engine snooze hooks there).
+  // Round 8: the place closing without this action = declined (chipConfirm.onDeclined → the engine snoozeMove).
   wireConfirmWatch()
   watchConfirm(move, moveAction(s, move)?.type ?? null, 'center' in place ? 'overlay' : 'panel')
 }

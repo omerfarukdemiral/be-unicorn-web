@@ -43,6 +43,8 @@ export function wireConfirmWatch(): void {
   if (wired) return
   wired = true
   onAction(noteAction)
+  // Declined = the engine snoozes that move for 90 days (it refuses unless the move is still on the chip).
+  onDeclined((move) => useGameStore.getState().dispatch({ type: 'snoozeMove', move }))
   useGameStore.subscribe((st, prev) => {
     // A new run (or a load) starts with nothing waiting.
     if (st.ui.generation !== prev.ui.generation) {

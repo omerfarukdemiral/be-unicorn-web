@@ -59,7 +59,12 @@ const RUBBER: Surface = { roughness: 0.88, metalness: 0 }
 /** Leaves and grass: no sheen at all. */
 const FOLIAGE: Surface = { roughness: 0.9, metalness: 0 }
 
-const BY_KIND = { hair: HAIR, paint: PAINT, glass: CAR_GLASS, rubber: RUBBER, foliage: FOLIAGE } as const
+/** Clothes: cotton and wool, the softest falloff. */
+const FABRIC: Surface = { roughness: 0.92, metalness: 0 }
+/** Skin: a faint sheen. */
+const SKIN: Surface = { roughness: 0.55, metalness: 0 }
+
+const BY_KIND = { hair: HAIR, paint: PAINT, glass: CAR_GLASS, rubber: RUBBER, foliage: FOLIAGE, fabric: FABRIC, skin: SKIN } as const
 
 /** Callers that know what a part is name it; the colour table only guesses for the rest. */
 export type SurfaceKind = keyof typeof BY_KIND

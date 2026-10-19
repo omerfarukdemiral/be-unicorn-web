@@ -1,6 +1,7 @@
 // Shared geometries and materials. Everything is cached so 60 characters + a full office
 // reuse a handful of GPU buffers (PLAN §10 performance target).
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { REAL_LOOK, surfaceOf, type SurfaceKind } from './look'
 
 const geoCache = new Map<string, THREE.BufferGeometry>()
@@ -79,6 +80,28 @@ export const GEO = {
       return new THREE.ShapeGeometry(s).rotateX(-Math.PI / 2)
     })
   },
+}
+
+/**
+ * A box of size `s`: the unit box scaled (classic look), or, in the realistic look, a box with softly rounded edges at
+ * its real size (a scaled rounded box would squash its bevel). Edges that catch the light are what make a desk a desk.
+ */
+export function boxPart(s: readonly [number, number, number]): { geometry: THREE.BufferGeometry; scale: [number, number, number] } {
+  if (!REAL_LOOK) return { geometry: GEO.box, scale: [s[0], s[1], s[2]] }
+  const [w, h, d] = s.map((v) => Math.max(0.001, Math.round(Math.abs(v) * 1000) / 1000)) as [number, number, number]
+  const r = Math.min(0.02, Math.min(w, h, d) * 0.3)
+  return { geometry: cached(`rbox:${w}:${h}:${d}`, () => new RoundedBoxGeometry(w, h, d, 3, r)), scale: [1, 1, 1] }
+}
+
+/**
+ * Realistic look: a person's torso as a lathe, hips to shoulders in absolute height (feet at 0), round in plan; the
+ * caller flattens it front to back. Shoulders 0.18 wide each side so the arms (at ±0.22) hang against them.
+ */
+export function torsoGeo(): THREE.BufferGeometry {
+  return cached('torso', () => {
+    const pts: [number, number][] = [[0, 0.3], [0.13, 0.3], [0.15, 0.34], [0.145, 0.42], [0.14, 0.48], [0.155, 0.56], [0.18, 0.612], [0.172, 0.648], [0.12, 0.676], [0.05, 0.694], [0, 0.7]]
+    return new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 28)
+  })
 }
 
 /** Torus/capsule need their proportions baked in; cached per args. */

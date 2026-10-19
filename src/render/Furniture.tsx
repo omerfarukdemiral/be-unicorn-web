@@ -8,11 +8,13 @@ import { CONCEPTS } from '../content'
 import type { PrimitiveHint } from '../content'
 import { FOUNDER_SLOT_ID, type GameState, type Slot } from '../engine/types'
 import { useBake } from './bake'
+import { bushGeo, coniferGeo } from './foliage'
+import { REAL_LOOK } from './look'
 import { CELL } from './constants'
 import type { StageBand } from '../content/stageBand'
 import { resolveFurniture, type ResolvedFurniture } from './furnitureCatalog'
 import { BOOK_COLORS } from './palette'
-import { GEO, capsuleGeo, glassMat, glowMat, mat, torusGeo } from './resources'
+import { GEO, boxPart, capsuleGeo, glassMat, glowMat, mat, torusGeo } from './resources'
 import { MAX_EXTRAS_IN_SCENE, furnitureBand, founderDeskExtras, pickExtras } from './stageLook'
 import { useGS } from './source'
 import type { OfficeLayout, XZ } from './layout'
@@ -33,11 +35,12 @@ interface PartProps {
 
 /** One primitive part. Geometry & material are shared caches. */
 function P({ g = 'box', s, p, r, c, glow, shadow = true }: PartProps) {
+  const box = g === 'box' ? boxPart(s) : null
   return (
     <mesh
-      geometry={GEO[g]}
+      geometry={box ? box.geometry : GEO[g]}
       material={glow ? glowMat(c, 0.6) : mat(c)}
-      scale={s}
+      scale={box ? box.scale : s}
       position={p}
       rotation={r}
       castShadow={shadow}
@@ -47,6 +50,7 @@ function P({ g = 'box', s, p, r, c, glow, shadow = true }: PartProps) {
 }
 
 function Monitor({ x = 0, z = -0.14, yaw = 0, screen = '#bfe3ff' }: { x?: number; z?: number; yaw?: number; screen?: string }) {
+  if (REAL_LOOK) return <RealMonitor x={x} z={z} yaw={yaw} screen={screen} />
   return (
     <group position={[x, 0.34, z]} rotation={[0, yaw, 0]}>
       <P s={[0.04, 0.1, 0.04]} p={[0, 0.05, 0]} c="#3e3c48" />
@@ -57,12 +61,128 @@ function Monitor({ x = 0, z = -0.14, yaw = 0, screen = '#bfe3ff' }: { x?: number
 }
 
 function Chair({ z = 0.32, color = '#5b5866' }: { z?: number; color?: string }) {
+  if (REAL_LOOK) return <RealChair z={z} color={color} />
   return (
     <group position={[0, 0, z]}>
       <P g="cyl" s={[0.05, 0.16, 0.05]} p={[0, 0.08, 0]} c="#3e3c48" />
       <P g="cyl" s={[0.22, 0.02, 0.22]} p={[0, 0.01, 0]} c="#3e3c48" />
       <P s={[0.24, 0.04, 0.24]} p={[0, 0.18, 0]} c={color} />
       <P s={[0.24, 0.22, 0.04]} p={[0, 0.31, 0.12]} c={color} />
+    </group>
+  )
+}
+
+// --- Realistic look (look.ts): the pieces seen on every desk, modelled closer to the real thing ---------------------
+
+const STEEL = '#c0c4cc'
+const BLACK = '#2b2a33'
+
+/** A slim panel on an aluminium neck and foot plate. */
+function RealMonitor({ x, z, yaw, screen, y = 0.34, k = 1 }: { x: number; z: number; yaw: number; screen: string; y?: number; k?: number }) {
+  return (
+    <group position={[x, y, z]} rotation={[0, yaw, 0]} scale={k}>
+      <P s={[0.13, 0.01, 0.09]} p={[0, 0.005, 0.01]} c={STEEL} />
+      <P s={[0.022, 0.12, 0.016]} p={[0, 0.065, -0.012]} c={STEEL} />
+      <P s={[0.33, 0.2, 0.014]} p={[0, 0.2, 0]} c={BLACK} />
+      <P s={[0.31, 0.18, 0.004]} p={[0, 0.202, 0.008]} c={screen} glow shadow={false} />
+    </group>
+  )
+}
+
+/** Office chair: five-star base on casters, gas lift, padded seat and a slightly reclined back, armrests. */
+function RealChair({ z, color }: { z: number; color: string }) {
+  return (
+    <group position={[0, 0, z]}>
+      {[0, 1, 2, 3, 4].map((i) => {
+        const a = (i / 5) * Math.PI * 2
+        return (
+          <group key={i} rotation={[0, a, 0]}>
+            <P s={[0.012, 0.014, 0.11]} p={[0, 0.03, 0.055]} c={BLACK} />
+            <P g="sphere" s={[0.026, 0.026, 0.026]} p={[0, 0.013, 0.105]} c={BLACK} />
+          </group>
+        )
+      })}
+      <P g="cylSmooth" s={[0.03, 0.12, 0.03]} p={[0, 0.1, 0]} c={STEEL} />
+      <P s={[0.25, 0.045, 0.24]} p={[0, 0.18, 0]} c={color} />
+      <P s={[0.025, 0.1, 0.02]} p={[0, 0.22, 0.12]} c={BLACK} />
+      <group position={[0, 0.33, 0.135]} rotation={[-0.12, 0, 0]}>
+        <P s={[0.24, 0.2, 0.04]} p={[0, 0, 0]} c={color} />
+      </group>
+      {[-1, 1].map((sx) => (
+        <group key={sx}>
+          <P s={[0.014, 0.06, 0.014]} p={[sx * 0.135, 0.225, 0.02]} c={BLACK} />
+          <P s={[0.035, 0.014, 0.11]} p={[sx * 0.135, 0.258, 0.0]} c={BLACK} />
+        </group>
+      ))}
+    </group>
+  )
+}
+
+/** Screen colour of a lit desk monitor (an editor's light theme). */
+const SCREEN = '#cfe6ff'
+
+/**
+ * Realistic look: a desk drawn from content's deskParts (content/furniture.ts) is recognised by its layout (top, four
+ * legs, three chair parts, then one or two monitors and a stand) and rebuilt as a real desk; whatever an item adds
+ * after those parts (lamp, mug, laptop) is drawn from its hints as before.
+ */
+function RealDeskFromHints({ hints, colors }: { hints: readonly PrimitiveHint[]; colors: ResolvedFurniture['colors'] }) {
+  const top = hints[0]!
+  const screens = hints.slice(8).filter((h) => h.kind === 'box' && h.size[1] >= 0.19 && h.size[2] <= 0.04)
+  const monitors = screens.length >= 2 ? 2 : 1
+  const rest = hints.slice(8 + (monitors === 1 ? 2 : 3))
+  const [w, , d] = top.size
+  const topY = top.pos[1]
+  const surface = topY + top.size[1] / 2
+  const legH = topY - top.size[1] / 2
+  const leg = colors.secondary
+  return (
+    <group>
+      <P s={[w, 0.04, d]} p={[0, topY + 0.005, top.pos[2]]} c={colors.primary} />
+      {/* steel frame: four slim legs and a rail under the top */}
+      {[-1, 1].map((sx) =>
+        [-0.25, 0.15].map((z) => <P key={`${sx}${z}`} s={[0.035, legH, 0.035]} p={[sx * (w / 2 - 0.05), legH / 2, z]} c={leg} />),
+      )}
+      <P s={[w - 0.12, 0.04, 0.02]} p={[0, legH - 0.03, -0.25]} c={leg} />
+      {/* keyboard, mouse */}
+      <P s={[0.28, 0.014, 0.09]} p={[0, surface + 0.007, 0.09]} c="#e9e8ee" />
+      <P s={[0.25, 0.004, 0.065]} p={[0, surface + 0.016, 0.09]} c="#d3d2da" shadow={false} />
+      <P g="sphere" s={[0.035, 0.016, 0.055]} p={[0.22, surface + 0.008, 0.1]} c="#e9e8ee" />
+      {monitors === 1 ? (
+        <RealMonitor x={0} z={-0.22} yaw={0} screen={SCREEN} y={surface} k={1.05} />
+      ) : (
+        <>
+          <RealMonitor x={-0.18} z={-0.2} yaw={0.25} screen={SCREEN} y={surface} k={0.95} />
+          <RealMonitor x={0.18} z={-0.2} yaw={-0.25} screen={SCREEN} y={surface} k={0.95} />
+        </>
+      )}
+      <group scale={1.4}>
+        <RealChair z={0.38 / 1.4} color={colors.accent} />
+      </group>
+      {rest.length > 0 && <Primitives hints={rest} colors={colors} />}
+    </group>
+  )
+}
+
+/** Realistic look: a green sphere or cone in content's hints is foliage (plant tops), drawn as leaf clumps. */
+function isLeafGreen(hex: string): boolean {
+  const c = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  c.getHSL(hsl)
+  return hsl.h > 0.18 && hsl.h < 0.45 && hsl.s > 0.2 && hsl.l < 0.7
+}
+
+/** A potted plant: glazed pot, soil, and leafy clumps instead of balls. */
+function RealPlant({ colors, k }: { colors: ResolvedFurniture['colors']; k: number }) {
+  const leaf = mat('#4f7f3c', 'foliage')
+  const leafLight = mat('#6e9c4a', 'foliage')
+  return (
+    <group scale={[k, k, k]}>
+      <P g="cylSmooth" s={[0.26, 0.22, 0.26]} p={[0, 0.11, 0]} c={colors.secondary} />
+      <P g="cylSmooth" s={[0.23, 0.01, 0.23]} p={[0, 0.215, 0]} c="#4a3a2c" />
+      <mesh geometry={bushGeo()} material={leaf} scale={[0.36, 0.34, 0.36]} position={[0, 0.36, 0]} castShadow receiveShadow />
+      <mesh geometry={bushGeo()} material={leafLight} scale={[0.24, 0.26, 0.24]} position={[0.06, 0.52, 0.03]} rotation={[0, 1.3, 0]} castShadow receiveShadow />
+      <mesh geometry={bushGeo()} material={leaf} scale={[0.18, 0.22, 0.18]} position={[-0.06, 0.64, -0.03]} rotation={[0, 2.4, 0]} castShadow receiveShadow />
     </group>
   )
 }
@@ -108,6 +228,7 @@ function Desk({ colors, variant }: { colors: ResolvedFurniture['colors']; varian
 
 function Plant({ colors, big = false }: { colors: ResolvedFurniture['colors']; big?: boolean }) {
   const k = big ? 1.4 : 1
+  if (REAL_LOOK) return <RealPlant colors={colors} k={k} />
   return (
     <group scale={[k, k, k]}>
       <P g="cyl" s={[0.26, 0.22, 0.26]} p={[0, 0.11, 0]} c={colors.secondary} />
@@ -363,21 +484,23 @@ function Primitives({ hints, colors }: { hints: readonly PrimitiveHint[]; colors
     <group>
       {hints.map((h, i) => {
         const color = h.color === 'primary' || h.color === 'secondary' || h.color === 'accent' ? colors[h.color] : h.color
-        const m = mat(color)
+        const leafy = REAL_LOOK && (h.kind === 'sphere' || h.kind === 'cone') && isLeafGreen(color)
+        const m = mat(color, leafy ? 'foliage' : undefined)
         const [a, b, c] = h.size
-        let geo: THREE.BufferGeometry = GEO.box
-        let scale: V3 = [a, b, c]
+        const box = boxPart([a, b, c])
+        let geo: THREE.BufferGeometry = box.geometry
+        let scale: V3 = box.scale
         switch (h.kind) {
           case 'cylinder':
             geo = GEO.cyl
             scale = [a * 2, b, c * 2]
             break
           case 'cone':
-            geo = GEO.cone
+            geo = leafy ? coniferGeo() : GEO.cone
             scale = [a * 2, b, c * 2]
             break
           case 'sphere':
-            geo = GEO.sphere
+            geo = leafy ? bushGeo() : GEO.sphere
             scale = [a * 2, b * 2, c * 2]
             break
           case 'torus':
@@ -414,7 +537,9 @@ export const FurnitureModel = memo(function FurnitureModel({ resolved, span = fa
   const { shape, colors, item } = resolved
   const hints = item?.visual.primitives
   let body: ReactNode
-  if (hints && hints.length > 0 && shape !== 'bookshelf' && shape !== 'serverRack') {
+  if (REAL_LOOK && hints && hints.length >= 10 && shape.startsWith('desk')) {
+    body = <RealDeskFromHints hints={hints} colors={colors} />
+  } else if (hints && hints.length > 0 && shape !== 'bookshelf' && shape !== 'serverRack') {
     body = <Primitives hints={hints} colors={colors} />
   } else {
     switch (shape) {

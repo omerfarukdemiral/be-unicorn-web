@@ -12,13 +12,14 @@ import { useBake } from './bake'
 import { gridToWorld, yawOf } from './constants'
 import type { Box } from './layout'
 import { PASTEL, PROP_COLORS } from './palette'
-import { GEO, glassMat, glowMat, mat } from './resources'
+import { GEO, boxPart, glassMat, glowMat, mat } from './resources'
 import { useDecorView, useLayout } from './sceneRegistry'
 
 type V3 = [number, number, number]
 
 function B({ s, p, c, r }: { s: V3; p: V3; c: string; r?: V3 }) {
-  return <mesh geometry={GEO.box} material={mat(c)} scale={s} position={p} rotation={r} castShadow receiveShadow />
+  const box = boxPart(s)
+  return <mesh geometry={box.geometry} material={mat(c)} scale={box.scale} position={p} rotation={r} castShadow receiveShadow />
 }
 function Cyl({ s, p, c, r }: { s: V3; p: V3; c: string; r?: V3 }) {
   return <mesh geometry={GEO.cyl} material={mat(c)} scale={s} position={p} rotation={r} castShadow receiveShadow />

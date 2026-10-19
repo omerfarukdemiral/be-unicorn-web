@@ -1,6 +1,7 @@
 // Shared geometries and materials. Everything is cached so 60 characters + a full office
 // reuse a handful of GPU buffers (PLAN §10 performance target).
 import * as THREE from 'three'
+import { REAL_LOOK, surfaceOf, type SurfaceKind } from './look'
 
 const geoCache = new Map<string, THREE.BufferGeometry>()
 
@@ -20,25 +21,25 @@ export const GEO = {
   },
   /** Radius 0.5, height 1 → scale [d, h, d]. Low-poly (8 sides). */
   get cyl() {
-    return cached('cyl', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 8))
+    return cached('cyl', () => new THREE.CylinderGeometry(0.5, 0.5, 1, REAL_LOOK ? 20 : 8))
   },
   get cylSmooth() {
-    return cached('cylSmooth', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 14))
+    return cached('cylSmooth', () => new THREE.CylinderGeometry(0.5, 0.5, 1, REAL_LOOK ? 32 : 14))
   },
   /** Radius 0.5 cone, height 1. */
   get cone() {
-    return cached('cone', () => new THREE.ConeGeometry(0.5, 1, 8))
+    return cached('cone', () => new THREE.ConeGeometry(0.5, 1, REAL_LOOK ? 20 : 8))
   },
   /** Radius 0.5 low-poly sphere. */
   get sphere() {
-    return cached('sphere', () => new THREE.IcosahedronGeometry(0.5, 1))
+    return cached('sphere', () => new THREE.IcosahedronGeometry(0.5, REAL_LOOK ? 3 : 1))
   },
   get sphereSmooth() {
-    return cached('sphereSmooth', () => new THREE.SphereGeometry(0.5, 14, 10))
+    return cached('sphereSmooth', () => new THREE.SphereGeometry(0.5, REAL_LOOK ? 32 : 14, REAL_LOOK ? 20 : 10))
   },
   /** Radius 0.5 half sphere (hair caps, domes). */
   get dome() {
-    return cached('dome', () => new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2))
+    return cached('dome', () => new THREE.SphereGeometry(0.5, REAL_LOOK ? 24 : 10, REAL_LOOK ? 12 : 6, 0, Math.PI * 2, 0, Math.PI / 2))
   },
   /** Unit plane lying on XZ. */
   get plane() {
@@ -84,13 +85,13 @@ export const GEO = {
 export function torusGeo(radius: number, tube: number): THREE.BufferGeometry {
   const r = Math.round(radius * 100) / 100
   const t = Math.round(tube * 100) / 100
-  return cached(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, Math.max(0.005, t), 6, 16))
+  return cached(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, Math.max(0.005, t), REAL_LOOK ? 12 : 6, REAL_LOOK ? 32 : 16))
 }
 
 export function capsuleGeo(radius: number, length: number): THREE.BufferGeometry {
   const r = Math.round(radius * 100) / 100
   const l = Math.round(length * 100) / 100
-  return cached(`capsule:${r}:${l}`, () => new THREE.CapsuleGeometry(Math.max(0.01, r), Math.max(0, l), 3, 8))
+  return cached(`capsule:${r}:${l}`, () => new THREE.CapsuleGeometry(Math.max(0.01, r), Math.max(0, l), REAL_LOOK ? 6 : 3, REAL_LOOK ? 16 : 8))
 }
 
 const matCache = new Map<string, THREE.Material>()
@@ -103,12 +104,12 @@ const matCache = new Map<string, THREE.Material>()
  */
 export const BAKE_KIND = new WeakMap<THREE.Material, 'color' | 'same' | 'glass'>()
 
-/** Flat-shaded pastel standard material, cached by colour. */
-export function mat(color: string): THREE.MeshStandardMaterial {
-  const key = `std:${color}`
+/** Flat-shaded pastel standard material, cached by colour. The realistic look shades smooth and reads its surface from the colour. */
+export function mat(color: string, surface?: SurfaceKind): THREE.MeshStandardMaterial {
+  const key = surface && REAL_LOOK ? `std:${color}:${surface}` : `std:${color}`
   let m = matCache.get(key)
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0 })
+    m = new THREE.MeshStandardMaterial(REAL_LOOK ? { color, ...surfaceOf(color, surface) } : { color, flatShading: true, roughness: 0.85, metalness: 0 })
     BAKE_KIND.set(m, 'color')
     matCache.set(key, m)
   }
@@ -120,7 +121,7 @@ export function glowMat(color: string, intensity = 1): THREE.MeshStandardMateria
   const key = `glow:${color}:${intensity}`
   let m = matCache.get(key)
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, flatShading: true, roughness: 0.4 })
+    m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: REAL_LOOK ? intensity * 2.6 : intensity, flatShading: !REAL_LOOK, roughness: REAL_LOOK ? 0.15 : 0.4 })
     BAKE_KIND.set(m, 'same')
     matCache.set(key, m)
   }
@@ -143,7 +144,7 @@ export function glassMat(color = '#cfe8f5', opacity = 0.35): THREE.MeshStandardM
   const key = `glass:${color}:${opacity}`
   let m = matCache.get(key)
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, transparent: true, opacity, roughness: 0.1, depthWrite: false })
+    m = new THREE.MeshStandardMaterial({ color, transparent: true, opacity, roughness: REAL_LOOK ? 0.04 : 0.1, metalness: REAL_LOOK ? 0.1 : 0, depthWrite: false })
     BAKE_KIND.set(m, 'glass')
     matCache.set(key, m)
   }

@@ -88,10 +88,10 @@ export const CharacterModel = memo(function CharacterModel({ look, rig }: { look
           <mesh geometry={GEO.sphere} material={mat(EYE)} scale={[0.04, 0.05, 0.03]} position={[-0.06, 0.02, 0.135]} />
           <mesh geometry={GEO.sphere} material={mat(EYE)} scale={[0.04, 0.05, 0.03]} position={[0.06, 0.02, 0.135]} />
           {look.hairStyle !== 3 && (
-            <mesh geometry={GEO.dome} material={mat(look.hair)} scale={[0.33, 0.3, 0.33]} position={[0, 0.02, -0.01]} rotation={[-0.25, 0, 0]} />
+            <mesh geometry={GEO.dome} material={mat(look.hair, 'hair')} scale={[0.33, 0.3, 0.33]} position={[0, 0.02, -0.01]} rotation={[-0.25, 0, 0]} />
           )}
-          {look.hairStyle === 1 && <mesh geometry={GEO.box} material={mat(look.hair)} scale={[0.3, 0.26, 0.1]} position={[0, -0.08, -0.12]} />}
-          {look.hairStyle === 2 && <mesh geometry={GEO.sphere} material={mat(look.hair)} scale={[0.13, 0.13, 0.13]} position={[0, 0.17, -0.08]} />}
+          {look.hairStyle === 1 && <mesh geometry={GEO.box} material={mat(look.hair, 'hair')} scale={[0.3, 0.26, 0.1]} position={[0, -0.08, -0.12]} />}
+          {look.hairStyle === 2 && <mesh geometry={GEO.sphere} material={mat(look.hair, 'hair')} scale={[0.13, 0.13, 0.13]} position={[0, 0.17, -0.08]} />}
           {acc.includes('headphones') && (
             <>
               <mesh geometry={torusGeo(0.17, 0.02)} material={mat('#3e3c48')} position={[0, 0.02, 0]} />

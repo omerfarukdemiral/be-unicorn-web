@@ -2,7 +2,7 @@
 // warm soft lighting + shadows, and all office layers.
 import { OrthographicCamera } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { GameState } from '../engine/types'
 import type { Selection, ZoomLevel } from '../store/types'
@@ -14,6 +14,7 @@ import { HeadPlates } from './HeadPlates'
 import { EffectsLayer } from './Effects'
 import { JuiceLayer } from './Juice'
 import { FurnitureLayer } from './Furniture'
+import { REAL_LOOK } from './look'
 import { deskPoints, occupiedBox, type FrameBox, type OfficeLayout } from './layout'
 import { Office } from './Office'
 import { DecorLayer } from './Decor'
@@ -36,6 +37,10 @@ export interface OfficeSceneProps {
   renderBubble?: BubbleRenderer
   ambientBubbles?: boolean
 }
+
+// The realistic look's post pass (postprocessing + n8ao) loads only when ?look=real asks for it.
+const RoomLight = lazy(() => import('./RealLook').then((m) => ({ default: m.RoomLight })))
+const RealPost = lazy(() => import('./RealLook').then((m) => ({ default: m.RealPost })))
 
 const CAM_DIST = 60
 const CAM_FAR = 140
@@ -237,7 +242,9 @@ function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
     l.shadow.needsUpdate = true
   }, [r, cx, cz])
   const budget = renderBudget(lowPower, layout.stage)
-  const mapSize = budget.shadowMapSize
+  const real = REAL_LOOK && !lowPower
+  // The realistic look takes its fill from the room environment (RoomLight): the sun carries more of the light.
+  const mapSize = real ? 4096 : budget.shadowMapSize
   // A runtime drop to lowPower turns the sun's shadow off; free the map it already allocated.
   useEffect(() => {
     const l = light.current
@@ -249,20 +256,25 @@ function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
   const sun = sunFor(band, lowPower)
   return (
     <>
-      <hemisphereLight args={['#fff4e4', '#e6d2b8', 1.35]} />
+      {real && (
+        <Suspense fallback={null}>
+          <RoomLight />
+        </Suspense>
+      )}
+      <hemisphereLight args={['#fff4e4', '#e6d2b8', real ? 0.3 : 1.35]} />
       {/* Fill 0.4 (was 0.25): pastel walls keep their hue on the shaded face instead of going grey. */}
-      <ambientLight intensity={0.4} />
+      <ambientLight intensity={real ? 0 : 0.4} />
       <directionalLight
         ref={light}
         key={mapSize}
         position={[layout.center[0] - 8, 16, layout.center[1] + 10]}
-        intensity={1.6}
+        intensity={real ? 2.3 : 1.6}
         color={sun.color}
         castShadow={budget.shadows}
         shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.02}
-        shadow-radius={sun.radius}
+        shadow-radius={real ? sun.radius * 1.2 : sun.radius}
       />
     </>
   )
@@ -343,6 +355,11 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
       </group>
       <HeadPlates />
       <WorldBubbles renderBubble={renderBubble} ambient={ambientBubbles} />
+      {REAL_LOOK && !lowPower && (
+        <Suspense fallback={null}>
+          <RealPost />
+        </Suspense>
+      )}
     </>
   )
 }

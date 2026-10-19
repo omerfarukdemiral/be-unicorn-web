@@ -5,6 +5,7 @@
 // The source meshes stay in the tree, hidden: React still owns them, and the cleanup shows them again.
 import { useLayoutEffect, type DependencyList, type RefObject } from 'react'
 import * as THREE from 'three'
+import { REAL_LOOK } from './look'
 import { BAKE_KIND } from './resources'
 
 export type ShadowMode = 'keep' | 'all' | 'none'
@@ -43,8 +44,27 @@ const BAKED = 'baked'
 /** The shared material of every vertex-coloured bake: mat() with the colour moved into the vertices. */
 let bakedMaterial: THREE.MeshStandardMaterial | null = null
 export function bakedMat(): THREE.MeshStandardMaterial {
-  bakedMaterial ??= new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85, metalness: 0 })
+  bakedMaterial ??= REAL_LOOK ? surfaceMat() : new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85, metalness: 0 })
   return bakedMaterial
+}
+
+/**
+ * Realistic look: a merged mesh keeps each part's roughness and metalness in a `pbr` vertex attribute (mergeBucket),
+ * read in place of the material's single factors. One draw call still holds steel, wood and porcelain.
+ */
+function surfaceMat(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 1 })
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 pbr;\nvarying vec2 vPbr;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = pbr;')
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vPbr;')
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPbr.x;')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPbr.y;')
+  }
+  m.customProgramCacheKey = () => 'bake-pbr'
+  return m
 }
 
 /** Mesh that a bake may take: a plain Mesh with one bakeable material, drawn normally. */
@@ -116,6 +136,7 @@ export function mergeBucket(b: Bucket, skinned: boolean): THREE.BufferGeometry {
   const pos = new Float32Array(count * 3)
   const nor = new Float32Array(count * 3)
   const col = b.material ? null : new Float32Array(count * 3)
+  const pbr = col && REAL_LOOK ? new Float32Array(count * 2) : null
   const skinIndex = skinned ? new Uint16Array(count * 4) : null
   const skinWeight = skinned ? new Float32Array(count * 4) : null
   let k = 0
@@ -128,7 +149,8 @@ export function mergeBucket(b: Bucket, skinned: boolean): THREE.BufferGeometry {
     nm.getNormalMatrix(p.matrix)
     // A mirrored part flips its winding: swap two corners so front faces stay front faces.
     const flip = p.matrix.determinant() < 0
-    const c = (p.mesh.material as THREE.MeshStandardMaterial).color
+    const pm = p.mesh.material as THREE.MeshStandardMaterial
+    const c = pm.color
     for (let t = 0; t < tris; t++) {
       for (let j = 0; j < 3; j++) {
         const corner = flip && j > 0 ? 3 - j : j
@@ -148,6 +170,10 @@ export function mergeBucket(b: Bucket, skinned: boolean): THREE.BufferGeometry {
           col[k * 3 + 1] = c.g
           col[k * 3 + 2] = c.b
         }
+        if (pbr) {
+          pbr[k * 2] = pm.roughness
+          pbr[k * 2 + 1] = pm.metalness
+        }
         if (skinIndex && skinWeight) {
           skinIndex[k * 4] = p.bone
           skinWeight[k * 4] = 1
@@ -160,6 +186,7 @@ export function mergeBucket(b: Bucket, skinned: boolean): THREE.BufferGeometry {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
   if (col) geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  if (pbr) geo.setAttribute('pbr', new THREE.BufferAttribute(pbr, 2))
   if (skinIndex && skinWeight) {
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndex, 4))
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4))

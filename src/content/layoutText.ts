@@ -36,6 +36,8 @@ export const LAYOUT_TEXT: Record<string, string> = {
   'layout.reason.invalid': 'Buraya olmaz.',
   'layout.reason.cash': 'Kasa yetmiyor.',
   'layout.reason.sell': 'Eşyayı mağazada satarsın.',
+  'layout.turnLeft': 'Sola döndür',
+  'layout.turnRight': 'Sağa döndür',
   'layout.keys': 'R / sağ tık: döndür · Delete: kaldır · Shift: art arda koy',
   'layout.tab.desks': 'Masalar',
   'layout.tab.separator': 'Ayırıcı',

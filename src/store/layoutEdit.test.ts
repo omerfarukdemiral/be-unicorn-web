@@ -291,6 +291,9 @@ describe('carry and drop (grid v2)', () => {
     expect(e.selected).toBe('r1-s0')
     e = run(o, e, { kind: 'rotate' }, { kind: 'rotate' })
     expect(e.carry).toMatchObject({ r: 2 })
+    // The on-piece buttons turn both ways: left from 2 is 1, then back.
+    expect(run(o, e, { kind: 'rotate', dir: -1 }).carry).toMatchObject({ r: 1 })
+    expect(run(o, e, { kind: 'rotate', dir: -1 }, { kind: 'rotate', dir: -1 }, { kind: 'rotate', dir: -1 }).carry).toMatchObject({ r: 3 })
     expect(e.draft.slots).toEqual({})
     expect(draftOffice(o, e.draft, 'r1-s0').slots.some((s) => s.id === 'r1-s0')).toBe(false)
     const dropped = run(o, e, { kind: 'drop' })

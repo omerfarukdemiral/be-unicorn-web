@@ -17,6 +17,7 @@ import { FloorModel, WallModel, floorPose, wallPose } from './Decor'
 import { FurnitureModel } from './Furniture'
 import { resolveFurniture } from './furnitureCatalog'
 import { useHtmlPortal } from './htmlPortal'
+import { Icon } from '../ui/icons'
 import { HIGHLIGHT } from './palette'
 import { useLayout, useOffice } from './sceneRegistry'
 import { storeApi, useGS, useUi } from './source'
@@ -140,6 +141,16 @@ function Editor({ edit }: { edit: LayoutEdit }) {
       const did = decorAt(e.draft, c)
       return did ? { what: 'decor', id: did, r: 0 } : null
     }
+    /**
+     * The pointer is on (or just under) the turn buttons riding on the piece in the hand: the piece holds its cell, so
+     * the buttons stay where the pointer is going and a click just under them still puts the piece down there.
+     */
+    const onTools = (ev: PointerEvent | MouseEvent): boolean => {
+      const t = document.querySelector('[data-hand-tools]')
+      if (!t) return false
+      const r = t.getBoundingClientRect()
+      return ev.clientX > r.left - TOOLS_PAD && ev.clientX < r.right + TOOLS_PAD && ev.clientY > r.top - TOOLS_PAD && ev.clientY < r.bottom + TOOLS_BRIDGE
+    }
     let lastC: GridPos | null = null
     let lastW: WallSeg | null = null
     let press: Press | null = null
@@ -194,9 +205,10 @@ function Editor({ edit }: { edit: LayoutEdit }) {
     }
     const onDown = (ev: PointerEvent) => {
       if (ev.button !== 0) return
-      const { c, w } = pick(ev)
       const e = storeApi().ui.layoutEdit
       if (!e) return
+      const held = (e.carry || e.armed) && onTools(ev)
+      const { c, w } = held ? { c: lastC, w: lastW } : pick(ev)
       if (e.carry || e.armed) {
         putDown(c, w, ev.shiftKey)
         press = null
@@ -216,9 +228,10 @@ function Editor({ edit }: { edit: LayoutEdit }) {
       el.setPointerCapture?.(ev.pointerId)
     }
     const onMove = (ev: PointerEvent) => {
+      const e = storeApi().ui.layoutEdit
+      if ((e?.carry || e?.armed) && onTools(ev)) return
       const { c, w } = pick(ev)
       setTarget(c, w)
-      const e = storeApi().ui.layoutEdit
       const under = e && !e.carry && !e.armed ? pieceUnder(c, w, e) : null
       editorHover.current = under
       el.style.cursor = e?.carry ? 'grabbing' : e?.armed ? 'copy' : under ? 'grab' : ''
@@ -234,7 +247,9 @@ function Editor({ edit }: { edit: LayoutEdit }) {
         putDown(c, w, ev.shiftKey)
       }
     }
-    const onLeave = () => {
+    const onLeave = (ev: PointerEvent) => {
+      // Onto the turn buttons: the piece stays where it is.
+      if ((ev.relatedTarget as Element | null)?.closest?.('[data-hand-tools]')) return
       setTarget(null, null)
       editorHover.current = null
     }
@@ -312,6 +327,7 @@ function Editor({ edit }: { edit: LayoutEdit }) {
     <group name="layoutEditor">
       <Glow quads={glow} />
       {hand && check && <HandGhost hand={hand} hover={hover} hoverWall={hoverWall} ok={check.ok} bounds={bounds} />}
+      {hand && hand.what !== 'wall' && hover && <HandTools hand={hand} hover={hover} portal={portal} />}
       {reason && (
         <Html portal={portal} position={reason.at} center zIndexRange={[14, 12]} wrapperClass="pointer-events-none" style={{ pointerEvents: 'none' }}>
           <div
@@ -324,6 +340,38 @@ function Editor({ edit }: { edit: LayoutEdit }) {
         </Html>
       )}
     </group>
+  )
+}
+
+/** Screen px around the turn buttons that still count as "on" them, and the bridge down to the piece. */
+const TOOLS_PAD = 10
+const TOOLS_BRIDGE = 48
+
+/**
+ * Sola / Sağa döndür riding on the piece in the hand (grid v2 playtest: the turn lives on the object, not in the
+ * panel). DOM over the canvas, so a click on a button never reaches the floor; the pointer moving onto them holds the
+ * piece on its cell (Editor's onTools).
+ */
+function HandTools({ hand, hover, portal }: { hand: Exclude<Hand, { what: 'wall' }>; hover: GridPos; portal: ReturnType<typeof useHtmlPortal> }) {
+  const [x, z] = gridToWorld(hover)
+  const d = rightDir(hand.r)
+  const span = hand.what === 'item' && hand.size === 2
+  const at: [number, number, number] = span ? [x + (d.x * CELL) / 2, 1.15, z + (d.z * CELL) / 2] : [x, 1.15, z]
+  const turn = (dir: 1 | -1) => storeApi().layoutEditOp({ kind: 'rotate', dir })
+  const btn = 'grid h-9 w-9 place-items-center rounded-full bg-surface text-ink shadow-[0_2px_8px_rgb(0_0_0/0.22)] transition-transform hover:scale-110 active:scale-95'
+  return (
+    <Html portal={portal} position={at} center zIndexRange={[15, 13]}>
+      <div data-hand-tools="" className="flex gap-1.5" style={{ transform: 'translateY(-26px)' }} onPointerDown={(ev) => ev.stopPropagation()} onContextMenu={(ev) => ev.preventDefault()}>
+        <button type="button" className={btn} aria-label={UI_TEXT['layout.turnLeft']} title={UI_TEXT['layout.turnLeft']} onClick={() => turn(-1)}>
+          <span style={{ transform: 'scaleX(-1)', display: 'grid' }}>
+            <Icon name="refresh" size={18} />
+          </span>
+        </button>
+        <button type="button" className={btn} aria-label={UI_TEXT['layout.turnRight']} title={`${UI_TEXT['layout.turnRight']} (R)`} onClick={() => turn(1)}>
+          <Icon name="refresh" size={18} />
+        </button>
+      </div>
+    </Html>
   )
 }
 

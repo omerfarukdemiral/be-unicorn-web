@@ -88,7 +88,8 @@ export interface DraftPiece {
 export type LayoutOp =
   | { kind: 'select'; id: SlotId | null }
   | { kind: 'place'; id: SlotId; x: number; z: number; r?: Rotation }
-  | { kind: 'rotate'; id?: SlotId }
+  /** A quarter turn; `dir` −1 turns left (counter-clockwise), default right. */
+  | { kind: 'rotate'; id?: SlotId; dir?: 1 | -1 }
   | { kind: 'team'; team: Dept; id?: SlotId }
   | { kind: 'undo' }
   | { kind: 'redo' }
@@ -419,10 +420,10 @@ export function reduceLayoutEdit(office: OfficeState, e: LayoutEdit, op: LayoutO
     case 'place':
     case 'rotate': {
       // A carried piece turns in the hand; the ghost shows whether it fits (a click checks it).
-      if (op.kind === 'rotate' && !op.id && e.carry && e.carry.what !== 'wall') return { ...e, carry: { ...e.carry, r: ((e.carry.r + 1) & 3) as Rotation }, refused: null }
+      if (op.kind === 'rotate' && !op.id && e.carry && e.carry.what !== 'wall') return { ...e, carry: { ...e.carry, r: ((e.carry.r + (op.dir ?? 1)) & 3) as Rotation }, refused: null }
       if (op.kind === 'rotate' && !op.id && !e.selected) {
         // R turns the armed piece, else the selected floor piece.
-        if (e.armed && (e.armed.item || !isWallKind(e.armed.kind))) return { ...e, armedRot: (((e.armedRot ?? 0) + 1) & 3) as Rotation }
+        if (e.armed && (e.armed.item || !isWallKind(e.armed.kind))) return { ...e, armedRot: (((e.armedRot ?? 0) + (op.dir ?? 1)) & 3) as Rotation }
         const p = e.decorSel ? e.draft.decor.find((x) => x.id === e.decorSel) : undefined
         if (!p) return e
         const c = checkFloor(office, e, p.id, p.kind, p.pos.x, p.pos.z, ((p.rotation + 1) & 3) as Rotation, cash)

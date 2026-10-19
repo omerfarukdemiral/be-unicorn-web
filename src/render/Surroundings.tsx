@@ -7,6 +7,8 @@ import * as THREE from 'three'
 import { CELL, hash01, renderBudget } from './constants'
 import type { Box, OfficeLayout } from './layout'
 import { PROP_COLORS, SURROUND, stagePalette } from './palette'
+import { broadleafGeo, bushGeo, coniferGeo, trunkGeo } from './foliage'
+import { REAL_LOOK } from './look'
 import { GEO, mat } from './resources'
 import { useLayout } from './sceneRegistry'
 import { BUILDING_D, Street } from './Street'
@@ -127,22 +129,32 @@ function Plants({ items, kind }: { items: Plant[]; kind: 'tree' | 'bush' }) {
   useInstances(trunks, kind === 'tree' ? items : [], placeTrunk)
   useInstances(crownsD, dark, top)
   useInstances(crownsL, light, top)
-  const geo = kind === 'tree' ? GEO.cone : GEO.sphere
+  // Realistic look: the darker trees are conifers, the lighter ones broadleaf; bushes are leafy clumps.
+  const geoD = REAL_LOOK ? (kind === 'tree' ? coniferGeo() : bushGeo()) : kind === 'tree' ? GEO.cone : GEO.sphere
+  const geoL = REAL_LOOK ? (kind === 'tree' ? broadleafGeo() : bushGeo()) : geoD
+  const leaf = (c: string) => mat(REAL_LOOK ? REAL_LEAF[c] ?? c : c, 'foliage')
   return (
     <>
-      {kind === 'tree' && items.length > 0 && <instancedMesh key={`t${items.length}`} ref={trunks} args={[GEO.cyl, mat(PROP_COLORS.trunk), items.length]} castShadow />}
-      {dark.length > 0 && <instancedMesh key={`d${dark.length}`} ref={crownsD} args={[geo, mat(PROP_COLORS.tree), dark.length]} castShadow receiveShadow />}
-      {light.length > 0 && <instancedMesh key={`l${light.length}`} ref={crownsL} args={[geo, mat(PROP_COLORS.treeLight), light.length]} castShadow receiveShadow />}
+      {kind === 'tree' && items.length > 0 && <instancedMesh key={`t${items.length}`} ref={trunks} args={[REAL_LOOK ? trunkGeo() : GEO.cyl, mat(REAL_LOOK ? '#5a4332' : PROP_COLORS.trunk), items.length]} castShadow />}
+      {dark.length > 0 && <instancedMesh key={`d${dark.length}`} ref={crownsD} args={[geoD, leaf(PROP_COLORS.tree), dark.length]} castShadow receiveShadow />}
+      {light.length > 0 && <instancedMesh key={`l${light.length}`} ref={crownsL} args={[geoL, leaf(PROP_COLORS.treeLight), light.length]} castShadow receiveShadow />}
     </>
   )
 }
 
+/** Realistic look: leaf greens of real trees (the palette's are candy-bright). */
+const REAL_LEAF: Record<string, string> = { [PROP_COLORS.tree]: '#4c7a3a', [PROP_COLORS.treeLight]: '#6f9a45' }
+/** Realistic look: lawn, asphalt, concrete pavement, worn white paint. */
+const REAL_GROUND = { lawn: '#93b45f', road: '#55575c', pavement: '#d9d5cc', kerb: '#bdb8ae', marking: '#e9e7e0' }
+
 /** Flat slab a hair above the ground, under the office floor (−0.09 … −0.08). */
-function Slab({ minX, maxX, minZ, maxZ, y, color }: Box & { y: number; color: string }) {
-  return <mesh geometry={GEO.box} material={mat(color)} scale={[maxX - minX, 0.02, maxZ - minZ]} position={[(minX + maxX) / 2, y, (minZ + maxZ) / 2]} receiveShadow />
+function Slab({ minX, maxX, minZ, maxZ, y, color, h = 0.02 }: Box & { y: number; color: string; h?: number }) {
+  return <mesh geometry={GEO.box} material={mat(color)} scale={[maxX - minX, h, maxZ - minZ]} position={[(minX + maxX) / 2, y + (h - 0.02) / 2, (minZ + maxZ) / 2]} receiveShadow />
 }
 
 const STREET_HALF = 90
+/** Realistic look: pavement height over the road (the office floor sits at −0.09, the road top at −0.09 too). */
+const KERB_H = 0.07
 const DASH = CELL * 0.7
 
 export function Surroundings({ lowPower = false }: { lowPower?: boolean }) {
@@ -170,13 +182,19 @@ export function Surroundings({ lowPower = false }: { lowPower?: boolean }) {
   return (
     <group>
       {/* the lot: ground to the screen edge */}
-      <mesh geometry={GEO.plane} material={mat(pal.ground)} scale={[220, 1, 220]} position={[0, -0.11, 0]} receiveShadow />
-      <Slab {...apron} y={-0.1} color={SURROUND.pavement} />
-      <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z0} maxZ={road.z1} y={-0.1} color={SURROUND.road} />
-      <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={farWalk.z0} maxZ={farWalk.z1} y={-0.1} color={SURROUND.pavement} />
-      {/* kerb between the near pavement and the carriageway */}
-      <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z1} maxZ={road.z1 + ROAD_GAP} y={-0.1} color={SURROUND.pavement} />
-      <instancedMesh ref={dashRef} args={[GEO.box, mat(SURROUND.marking), dashes.length]} />
+      <mesh geometry={GEO.plane} material={mat(REAL_LOOK ? REAL_GROUND.lawn : pal.ground, 'foliage')} scale={[220, 1, 220]} position={[0, -0.11, 0]} receiveShadow />
+      <Slab {...apron} y={-0.1} color={REAL_LOOK ? REAL_GROUND.pavement : SURROUND.pavement} />
+      <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z0} maxZ={road.z1} y={-0.1} color={REAL_LOOK ? REAL_GROUND.road : SURROUND.road} />
+      {/* realistic look: the far pavement stands a kerb's height above the carriageway, kerb stones line both sides */}
+      <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={farWalk.z0} maxZ={farWalk.z1} y={-0.1} color={REAL_LOOK ? REAL_GROUND.pavement : SURROUND.pavement} h={REAL_LOOK ? KERB_H : 0.02} />
+      <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z1} maxZ={road.z1 + ROAD_GAP} y={-0.1} color={REAL_LOOK ? REAL_GROUND.pavement : SURROUND.pavement} />
+      {REAL_LOOK && (
+        <>
+          <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={road.z1} maxZ={road.z1 + 0.12} y={-0.1} color={REAL_GROUND.kerb} h={KERB_H + 0.005} />
+          <Slab minX={-STREET_HALF} maxX={STREET_HALF} minZ={farWalk.z1 - 0.12} maxZ={farWalk.z1} y={-0.1} color={REAL_GROUND.kerb} h={KERB_H + 0.005} />
+        </>
+      )}
+      <instancedMesh ref={dashRef} args={[GEO.box, mat(REAL_LOOK ? REAL_GROUND.marking : SURROUND.marking), dashes.length]} />
       <Street road={road} farWalk={farWalk} nearWalkZ={road.z1 + ROAD_GAP * 0.55} x0={apron.minX - SHOP_REACH} x1={apron.maxX + SHOP_REACH} seed={`street:${layout.stage}`} traffic={renderBudget(lowPower, layout.stage).traffic} />
       <Plants items={plan.trees} kind="tree" />
       <Plants items={plan.bushes} kind="bush" />

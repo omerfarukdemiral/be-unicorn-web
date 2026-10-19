@@ -261,14 +261,14 @@ function Lights({ lowPower, band }: { lowPower: boolean; band: StageBand }) {
           <RoomLight />
         </Suspense>
       )}
-      <hemisphereLight args={['#fff4e4', '#e6d2b8', real ? 0.3 : 1.35]} />
+      <hemisphereLight args={['#fff4e4', '#e6d2b8', real ? 0.5 : 1.35]} />
       {/* Fill 0.4 (was 0.25): pastel walls keep their hue on the shaded face instead of going grey. */}
       <ambientLight intensity={real ? 0 : 0.4} />
       <directionalLight
         ref={light}
         key={mapSize}
         position={[layout.center[0] - 8, 16, layout.center[1] + 10]}
-        intensity={real ? 2.3 : 1.6}
+        intensity={real ? 2.2 : 1.6}
         color={sun.color}
         castShadow={budget.shadows}
         shadow-mapSize={[mapSize, mapSize]}

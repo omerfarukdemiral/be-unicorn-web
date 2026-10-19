@@ -50,10 +50,21 @@ const BY_COLOR: Record<string, Surface> = {
 /** Hair: a soft sheen, never the hardware its colour shares (black hair is the monitor ink, grey hair the aluminium). */
 const HAIR: Surface = { roughness: 0.55, metalness: 0 }
 
+/** Car paint: a clear-coat sheen over a metallic flake. */
+const PAINT: Surface = { roughness: 0.24, metalness: 0.45 }
+/** Tinted car glass: a dark mirror of the sky. */
+const CAR_GLASS: Surface = { roughness: 0.06, metalness: 0.7 }
+/** Tyres, bumpers, rubber trim. */
+const RUBBER: Surface = { roughness: 0.88, metalness: 0 }
+/** Leaves and grass: no sheen at all. */
+const FOLIAGE: Surface = { roughness: 0.9, metalness: 0 }
+
+const BY_KIND = { hair: HAIR, paint: PAINT, glass: CAR_GLASS, rubber: RUBBER, foliage: FOLIAGE } as const
+
 /** Callers that know what a part is name it; the colour table only guesses for the rest. */
-export type SurfaceKind = 'hair'
+export type SurfaceKind = keyof typeof BY_KIND
 
 export function surfaceOf(color: string, kind?: SurfaceKind): Surface {
-  if (kind === 'hair') return HAIR
+  if (kind) return BY_KIND[kind]
   return BY_COLOR[color.toLowerCase()] ?? DIFFUSE
 }

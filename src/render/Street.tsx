@@ -6,9 +6,11 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useBake } from './bake'
+import { CharacterModel, createRig, type CharacterLook, type Rig } from './CharacterModel'
 import { hash01 } from './constants'
-import { PASTEL } from './palette'
+import { HAIR_COLORS, PASTEL, SKIN_TONES } from './palette'
 import { GEO, glowMat, mat } from './resources'
+import { rimGeo, tyreGeo, vehicleGeos, vehicleSpec, type VehicleKind } from './vehicleGeo'
 import { useGS, useMockState, useUi } from './source'
 import { facadeTexture, type FacadeSpec } from './surfaces'
 import { speedMultiplier } from './walker'
@@ -80,12 +82,17 @@ function Building({ b, x0, zFront }: Placed & { zFront: number }) {
   )
 }
 
+/** Street lamp: a cast base, a tapered pole, an arm reaching over the kerb and a lantern lit from below. */
 function Lamp({ x, z }: { x: number; z: number }) {
+  const pole = '#3d4046'
   return (
     <group position={[x, 0, z]}>
-      <mesh geometry={GEO.cyl} material={mat('#5b5866')} scale={[0.07, 1.9, 0.07]} position={[0, 0.95, 0]} />
-      <mesh geometry={GEO.box} material={mat('#5b5866')} scale={[0.36, 0.05, 0.08]} position={[0.14, 1.88, 0]} />
-      <mesh geometry={GEO.sphere} material={glowMat('#fff2c4', 0.6)} scale={[0.16, 0.12, 0.16]} position={[0.28, 1.82, 0]} />
+      <mesh geometry={GEO.cylSmooth} material={mat(pole)} scale={[0.16, 0.18, 0.16]} position={[0, 0.09, 0]} castShadow />
+      <mesh geometry={GEO.cylSmooth} material={mat(pole)} scale={[0.06, 2.1, 0.06]} position={[0, 1.2, 0]} castShadow />
+      <mesh geometry={GEO.cylSmooth} material={mat(pole)} scale={[0.09, 0.12, 0.09]} position={[0, 2.28, 0]} />
+      <mesh geometry={GEO.box} material={mat(pole)} scale={[0.5, 0.035, 0.05]} position={[0.22, 2.32, 0]} castShadow />
+      <mesh geometry={GEO.box} material={mat(pole)} scale={[0.3, 0.06, 0.16]} position={[0.46, 2.3, 0]} castShadow />
+      <mesh geometry={GEO.box} material={glowMat('#fff2c4', 0.9)} scale={[0.24, 0.015, 0.12]} position={[0.46, 2.265, 0]} />
     </group>
   )
 }
@@ -101,40 +108,70 @@ interface Mover {
   speed: number
   offset: number
   color: string
-  bus?: boolean
+  kind: VehicleKind
 }
 
+/** Real-world paints (white, silver and black outnumber everything else on a real street), one city bus. */
 const CARS: readonly Mover[] = [
-  { lane: 0, speed: 2.6, offset: 0, color: '#3f7fe8' },
-  { lane: 0, speed: 2.2, offset: 27, color: '#fdfcf8' },
-  { lane: 0, speed: 1.7, offset: 52, color: '#ffcf3d', bus: true },
-  { lane: 1, speed: 2.4, offset: 12, color: '#e0483e' },
-  { lane: 1, speed: 2.9, offset: 40, color: '#14a98f' },
-  { lane: 1, speed: 2.1, offset: 66, color: '#6b4ef0' },
+  { lane: 0, speed: 2.6, offset: 0, color: '#2e4a78', kind: 'sedan' },
+  { lane: 0, speed: 2.2, offset: 27, color: '#ecebe7', kind: 'suv' },
+  { lane: 0, speed: 1.7, offset: 52, color: '#e9a92a', kind: 'bus' },
+  { lane: 1, speed: 2.4, offset: 12, color: '#9b2b2b', kind: 'hatch' },
+  { lane: 1, speed: 2.9, offset: 40, color: '#b9bdc3', kind: 'sedan' },
+  { lane: 1, speed: 2.1, offset: 66, color: '#f2f1ed', kind: 'van' },
 ]
 
 /** traffic 'thin' (lowPower): every other car and walker. */
 const THIN_CARS = CARS.filter((_, i) => i % 2 === 0)
 
+const TRIM = '#26272b'
+const TYRE = '#1b1b1e'
+const RIM = '#c9ccd6'
+const GLASS = '#18202a'
+
 function Vehicle({ m }: { m: Mover }) {
-  const len = m.bus ? 3.2 : 1.5
-  const h = m.bus ? 1.0 : 0.4
+  const spec = vehicleSpec(m.kind)
+  const geo = vehicleGeos(m.kind)
+  const paint = mat(m.color, 'paint')
+  const bus = m.kind === 'bus'
+  const half = spec.width / 2
+  const wz = half - spec.tyreW / 2 - 0.02
+  const glassTop = Math.max(...spec.glass.map((p) => p[1]))
+  const glassBot = Math.min(...spec.glass.map((p) => p[1]))
+  const front = spec.head[0]
+  const back = spec.tail[0]
   const root = useRef<THREE.Group>(null)
   useBake(root, [m])
   return (
     <group ref={root}>
-      <mesh geometry={GEO.box} material={mat(m.color)} scale={[len, h, 0.78]} position={[0, 0.14 + h / 2, 0]} />
-      {m.bus ? (
-        <mesh geometry={GEO.box} material={mat('#bfe3ff')} scale={[len * 0.86, 0.3, 0.8]} position={[0.05, 0.86, 0]} />
-      ) : (
-        <>
-          <mesh geometry={GEO.box} material={mat(m.color)} scale={[len * 0.52, 0.3, 0.66]} position={[-0.08, 0.69, 0]} />
-          <mesh geometry={GEO.box} material={mat('#bfe3ff')} scale={[len * 0.54, 0.2, 0.68]} position={[-0.08, 0.68, 0]} />
-        </>
-      )}
-      {[-1, 1].map((sx) =>
+      <mesh geometry={geo.body} material={paint} castShadow receiveShadow />
+      <mesh geometry={geo.glass} material={mat(GLASS, 'glass')} castShadow />
+      <mesh geometry={geo.roof} material={paint} castShadow />
+      {/* pillars between the side windows */}
+      {spec.pillars.map((x) => (
+        <mesh key={x} geometry={GEO.box} material={paint} scale={[bus ? 0.1 : 0.07, glassTop - glassBot, spec.width - (bus ? 0.02 : 0.08)]} position={[x, (glassTop + glassBot) / 2, 0]} />
+      ))}
+      {/* sills and bumpers: black plastic */}
+      <mesh geometry={GEO.box} material={mat(TRIM, 'rubber')} scale={[spec.len * 0.98, 0.07, spec.width + 0.01]} position={[0, spec.body[0]![1] + 0.02, 0]} />
+      <mesh geometry={GEO.box} material={mat(TRIM, 'rubber')} scale={[0.08, 0.1, spec.width * 0.92]} position={[front + 0.03, spec.body[0]![1] + 0.08, 0]} />
+      <mesh geometry={GEO.box} material={mat(TRIM, 'rubber')} scale={[0.08, 0.1, spec.width * 0.92]} position={[back - 0.03, spec.body[0]![1] + 0.08, 0]} />
+      {/* grille */}
+      <mesh geometry={GEO.box} material={mat(TRIM)} scale={[0.02, 0.07, spec.width * 0.42]} position={[front + 0.04, spec.head[1] - 0.04, 0]} />
+      {/* lamps */}
+      {[-1, 1].map((sz) => (
+        <group key={sz}>
+          <mesh geometry={GEO.box} material={glowMat('#fff6de', 0.9)} scale={[0.03, 0.06, 0.2]} position={[front + 0.02, spec.head[1], sz * (half - 0.16)]} />
+          <mesh geometry={GEO.box} material={glowMat('#d8322c', 0.8)} scale={[0.03, 0.06, 0.18]} position={[back - 0.02, spec.tail[1], sz * (half - 0.15)]} />
+          {!bus && <mesh geometry={GEO.box} material={paint} scale={[0.07, 0.05, 0.08]} position={[spec.glass[0]![0] - 0.06, spec.glass[0]![1] + 0.06, sz * (half + 0.03)]} />}
+        </group>
+      ))}
+      {/* wheels */}
+      {spec.axles.map((ax) =>
         [-1, 1].map((sz) => (
-          <mesh key={`${sx}${sz}`} geometry={GEO.cyl} material={mat('#2b2a33')} scale={[0.3, 0.12, 0.3]} position={[sx * len * 0.32, 0.15, sz * 0.38]} rotation={[Math.PI / 2, 0, 0]} />
+          <group key={`${ax}${sz}`} position={[ax, spec.wheelR, sz * wz]}>
+            <mesh geometry={tyreGeo(spec.wheelR, spec.tyreW)} material={mat(TYRE, 'rubber')} castShadow />
+            <mesh geometry={rimGeo(spec.wheelR)} material={mat(RIM)} position={[0, 0, sz * (spec.tyreW / 2 - 0.005)]} />
+          </group>
         )),
       )}
     </group>
@@ -142,25 +179,23 @@ function Vehicle({ m }: { m: Mover }) {
 }
 
 const WALKERS: readonly { side: 0 | 1; speed: number; offset: number; color: string }[] = [
-  { side: 0, speed: 0.6, offset: 0, color: '#d9529b' },
-  { side: 0, speed: -0.5, offset: 21, color: '#14a98f' },
-  { side: 1, speed: 0.55, offset: 9, color: '#f5a81c' },
+  { side: 0, speed: 0.6, offset: 0, color: '#9a4a66' },
+  { side: 0, speed: -0.5, offset: 21, color: '#2f6b5e' },
+  { side: 1, speed: 0.55, offset: 9, color: '#c98a2b' },
   { side: 1, speed: -0.45, offset: 33, color: '#3e3c48' },
-  { side: 0, speed: 0.5, offset: 45, color: '#86bdf7' },
+  { side: 0, speed: 0.5, offset: 45, color: '#5d7fa8' },
 ]
 
 const THIN_WALKERS = WALKERS.filter((_, i) => i % 2 === 0)
 
-function Walker({ color }: { color: string }) {
-  const root = useRef<THREE.Group>(null)
-  useBake(root, [color])
-  return (
-    <group ref={root}>
-      <mesh geometry={GEO.cyl} material={mat(color)} scale={[0.26, 0.55, 0.2]} position={[0, 0.5, 0]} />
-      <mesh geometry={GEO.cyl} material={mat('#3e3c48')} scale={[0.2, 0.25, 0.16]} position={[0, 0.13, 0]} />
-      <mesh geometry={GEO.sphere} material={mat('#f0c39b')} scale={[0.22, 0.22, 0.22]} position={[0, 0.9, 0]} />
-    </group>
-  )
+/** A passer-by: the office's own person model, so the street and the staff are one cast. */
+function walkerLook(color: string, i: number): CharacterLook {
+  return { body: color, skin: SKIN_TONES[i % SKIN_TONES.length]!, hair: HAIR_COLORS[(i * 3) % HAIR_COLORS.length]!, hairStyle: i % 3, accessories: i % 2 ? ['briefcase'] : [], legs: i % 2 ? '#2f3344' : '#3d5378' }
+}
+
+function Walker({ color, i, rig }: { color: string; i: number; rig: Rig }) {
+  const look = useMemo(() => walkerLook(color, i), [color, i])
+  return <CharacterModel look={look} rig={rig} />
 }
 
 /** Moving traffic and pedestrians over a span of the street; positions wrap so the flow never ends. The street keeps
@@ -171,6 +206,7 @@ function Flow({ lanes, walks, x0, x1, thin }: { lanes: [number, number]; walks: 
   const span = x1 - x0
   const carRefs = useRef<(THREE.Group | null)[]>([])
   const people = useRef<(THREE.Group | null)[]>([])
+  const rigs = useMemo(() => walkers.map(() => createRig()), [walkers])
   const place = (t: number) => {
     const wrap = (v: number) => x0 + (((v % span) + span) % span)
     cars.forEach((m, i) => {
@@ -183,8 +219,17 @@ function Flow({ lanes, walks, x0, x1, thin }: { lanes: [number, number]; walks: 
     walkers.forEach((w, i) => {
       const g = people.current[i]
       if (!g) return
-      g.position.set(wrap(t * w.speed + w.offset), Math.abs(Math.sin(t * 6 + i)) * 0.04, walks[w.side])
+      const phase = t * 7 + i
+      g.position.set(wrap(t * w.speed + w.offset), Math.abs(Math.sin(phase)) * 0.025, walks[w.side])
       g.rotation.y = w.speed > 0 ? Math.PI / 2 : -Math.PI / 2
+      const r = rigs[i]
+      if (r?.legL && r.legR && r.armL && r.armR) {
+        const sw = Math.sin(phase) * 0.55
+        r.legL.rotation.x = sw
+        r.legR.rotation.x = -sw
+        r.armL.rotation.x = -sw * 0.7
+        r.armR.rotation.x = sw * 0.7
+      }
     })
   }
   const speed = useGS((s) => s.time.speed)
@@ -206,7 +251,7 @@ function Flow({ lanes, walks, x0, x1, thin }: { lanes: [number, number]; walks: 
       ))}
       {walkers.map((w, i) => (
         <group key={i} ref={(g) => void (people.current[i] = g)}>
-          <Walker color={w.color} />
+          <Walker color={w.color} i={i} rig={rigs[i]!} />
         </group>
       ))}
     </group>

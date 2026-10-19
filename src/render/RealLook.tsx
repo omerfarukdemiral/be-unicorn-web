@@ -8,7 +8,7 @@ import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 /** Image-based light: reflections on steel and glass, soft fill on every shaded face (instead of a flat ambient). */
-export function RoomLight({ intensity = 0.25 }: { intensity?: number }) {
+export function RoomLight({ intensity = 0.45 }: { intensity?: number }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   useEffect(() => {
@@ -33,11 +33,11 @@ const AO_DEBUG = import.meta.env.DEV && typeof location !== 'undefined' && locat
 export function RealPost() {
   return (
     <EffectComposer multisampling={0}>
-      <N8AO aoRadius={AO_RADIUS} distanceFalloff={1} intensity={4.5} quality="high" halfRes={false} color="#1d1712" renderMode={AO_DEBUG ? 1 : 0} />
+      <N8AO aoRadius={AO_RADIUS} distanceFalloff={1} intensity={2.4} quality="high" halfRes={false} color="#1d1712" renderMode={AO_DEBUG ? 1 : 0} />
       <Bloom luminanceThreshold={1.1} luminanceSmoothing={0.15} intensity={0.5} mipmapBlur />
       <ToneMapping mode={ToneMappingMode.NEUTRAL} />
-      <BrightnessContrast contrast={0.08} />
-      <Vignette offset={0.32} darkness={0.32} />
+      <BrightnessContrast brightness={0.02} contrast={0.05} />
+      <Vignette offset={0.4} darkness={0.18} />
       <SMAA />
     </EffectComposer>
   )

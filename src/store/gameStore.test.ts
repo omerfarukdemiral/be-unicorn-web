@@ -283,6 +283,8 @@ describe('time: paused start and focus pauses', () => {
   })
 
   it('opening a decision card pauses; answering / closing resumes the previous speed', () => {
+    // The pause mechanism alone (the P5 auto-slow has its own tests).
+    store().setSlowOnMoments(false)
     store().dispatch({ type: 'setSpeed', speed: 2 })
     const cardId = withDecision()
     store().openPanel({ kind: 'decision', cardId })
@@ -304,6 +306,7 @@ describe('time: paused start and focus pauses', () => {
     expect(effectiveSpeed(store())).toBe(0)
     store().closePanel()
     expect(effectiveSpeed(store())).toBe(2)
+    store().setSlowOnMoments(true)
   })
 
   it('a Defter (concept) card pauses; plain panels (shop, team, growth) do not', () => {
@@ -390,6 +393,7 @@ describe('focus (CORE_LOOP phase 0)', () => {
   }
 
   it('the expanded scene decision bubble pauses; collapsing it resumes the previous speed', () => {
+    store().setSlowOnMoments(false)
     store().dispatch({ type: 'setSpeed', speed: 2 })
     withDecision()
     store().setDecisionExpanded(true)
@@ -402,6 +406,7 @@ describe('focus (CORE_LOOP phase 0)', () => {
     store().setDecisionExpanded(false)
     expect(store().ui.pauseReasons).toEqual([])
     expect(effectiveSpeed(store())).toBe(2)
+    store().setSlowOnMoments(true)
   })
 
   it('expanded bubble + the same card in the panel count as one decision pause', () => {
@@ -645,19 +650,20 @@ describe('focus (CORE_LOOP phase 0)', () => {
     store().setSlowOnMoments(true)
   })
 
-  it('F1: a decision card never drops 4×; open it pauses, answered the chosen 4× runs on at once', () => {
+  it('P5: a decision card at 4× runs 1× until it closes; open it pauses, answered the chosen 4× runs on at once', () => {
     store().dispatch({ type: 'setSpeed', speed: 4 })
     const card = untilCard()
-    // Arrived collapsed: the world keeps the player's 4×, no auto setSpeed in the replay.
-    expect(store().state.time.speed).toBe(4)
-    expect(effectiveSpeed(store())).toBe(4)
-    expect(store().ui.slowdownResumeDay).toBeNull()
-    expect(store().exportReplay().actions.filter((a) => a.action.type === 'setSpeed').map((a) => a.action)).toEqual([{ type: 'setSpeed', speed: 4 }])
-    // Expanded: a focus pause, the chosen speed untouched.
+    // Arrived collapsed: 1× while it waits, 4× is what comes back.
+    expect(store().state.time.speed).toBe(1)
+    expect(store().ui.decisionSlow).toBe(4)
+    expect(resumeSpeed(store())).toBe(4)
+    // Held for as long as the card is open (no wall-clock end).
+    for (let i = 0; i < 8 && store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 4)
+    if (store().state.decisions.active) expect(store().state.time.speed).toBe(1)
+    // Expanded: a focus pause.
     store().setDecisionExpanded(true)
     expect(store().ui.pauseReasons).toEqual(['decision'])
     expect(effectiveSpeed(store())).toBe(0)
-    expect(store().state.time.speed).toBe(4)
     // Answered: 4× right away, a tick moves the world at 4×.
     expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
     expect(store().ui.pauseReasons).toEqual([])
@@ -668,19 +674,36 @@ describe('focus (CORE_LOOP phase 0)', () => {
     expect(store().state.time.speed).toBe(4)
   })
 
-  it('F1: the phone path (scene bubble open, answered) and several cards in a row keep 4×', () => {
+  it('P5: the phone path (scene bubble open, answered) and several cards in a row: 1× each, 4× after each', () => {
     store().dispatch({ type: 'setSpeed', speed: 4 })
     for (let n = 0; n < 3; n++) {
       const card = untilCard()
       expect(card, `card ${n}`).toBeDefined()
-      expect(store().state.time.speed).toBe(4)
+      expect(store().state.time.speed).toBe(1)
       store().setBubbleOpen(`decision:${card.cardId}`)
       expect(effectiveSpeed(store())).toBe(0)
       expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
       expect(store().ui.bubbleOpen).toBeNull()
       expect(effectiveSpeed(store())).toBe(4)
     }
-    expect(store().exportReplay().actions.some((a) => a.action.type === 'setSpeed' && a.action.speed === 1)).toBe(false)
+  })
+
+  it('P5: the player picking a speed while a card waits wins (no auto restore after)', () => {
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    const card = untilCard()
+    expect(store().state.time.speed).toBe(1)
+    store().dispatch({ type: 'setSpeed', speed: 2 })
+    expect(store().ui.decisionSlow).toBeNull()
+    expect(store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 }).ok).toBe(true)
+    expect(store().state.time.speed).toBe(2)
+  })
+
+  it('P5: with "Önemli anda yavaşla" off a card keeps 4×', () => {
+    store().setSlowOnMoments(false)
+    store().dispatch({ type: 'setSpeed', speed: 4 })
+    untilCard()
+    expect(store().state.time.speed).toBe(4)
+    store().setSlowOnMoments(true)
   })
 
   it('F1: a collapsed card does not hold a release slowdown at 1×', () => {
@@ -1137,13 +1160,13 @@ describe('center screens (docs/GAMEPLAY_V2.md §14.3)', () => {
     expect(store().ui.overlay).toBeNull()
   })
 
-  it('stats open + decisionShown: the screen closes, 4× stays (F1), the tick goes on', () => {
+  it('stats open + decisionShown: the screen closes, 1× while it waits (P5), the tick goes on', () => {
     store().dispatch({ type: 'setSpeed', speed: 4 })
     store().openOverlay({ kind: 'stats' })
     for (let i = 0; i < 400 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.decisions.active).toBeDefined()
     expect(store().ui.overlay).toBeNull()
-    expect(store().state.time.speed).toBe(4)
+    expect(store().state.time.speed).toBe(1)
     const day = store().state.time.day
     store().tick(SECONDS_PER_DAY)
     expect(store().state.time.day).toBeGreaterThan(day)

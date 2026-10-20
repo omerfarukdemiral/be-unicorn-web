@@ -161,6 +161,7 @@ function effortCrisisStep(prev: GameState, next: GameState): void {
   // At 1× inside a moment slowdown the player's speed is the one waiting to come back.
   const waiting = next.time.speed === 1 && ui.slowdownResumeDay !== null
   const hold = ui.effortHold
+  if (ui.decisionSlow) return
   if (crisis.length > 0 && !hold && ui.slowOnMoments && (next.time.speed > 1 || waiting) && (waiting || performance.now() - lastHoldEnd >= SLOWDOWN_COOLDOWN_MS)) {
     autoSetSpeed(1)
     useGameStore.setState((s) => ({
@@ -273,6 +274,7 @@ const initialUi = (saved = readUiSave()): UiState => ({
   slowdownResumeDay: null,
   chosenSpeed: 1,
   effortHold: null,
+  decisionSlow: null,
   pinnedMetrics: saved.pinnedMetrics ?? [],
   seenMetrics: saved.seenMetrics ?? [...INITIAL_WIDGETS],
   pinTouched: saved.pinTouched ?? false,
@@ -384,6 +386,7 @@ export function effectiveSpeed(st: { state: GameState; ui: UiState }): GameSpeed
  */
 export function resumeSpeed(st: { state: GameState; ui: UiState }): GameSpeed {
   const sp = st.state.time.speed
+  if (st.ui.decisionSlow && sp > 0) return st.ui.decisionSlow
   if (sp > 0 && st.ui.slowdownResumeDay === null && st.ui.effortHold === null) return sp
   if (st.ui.effortHold && sp > 0) return st.ui.effortHold.prevSpeed
   return st.ui.chosenSpeed
@@ -527,7 +530,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     // The player's own running speed is the one every pause hands back (N6).
     if (action.type === 'setSpeed' && !autoSpeed && action.speed > 0 && get().ui.chosenSpeed !== action.speed) set((s) => ({ ui: { ...s.ui, chosenSpeed: action.speed } }))
     // The player's own speed choice always wins over a pending 4× restore.
-    if (action.type === 'setSpeed' && !autoSpeed && (get().ui.slowdownResumeDay !== null || get().ui.effortHold !== null)) set((s) => ({ ui: { ...s.ui, slowdownResumeDay: null, effortHold: null } }))
+    if (action.type === 'setSpeed' && !autoSpeed && (get().ui.slowdownResumeDay !== null || get().ui.effortHold !== null || get().ui.decisionSlow !== null)) set((s) => ({ ui: { ...s.ui, slowdownResumeDay: null, effortHold: null, decisionSlow: null } }))
     if (res.state.gameOver && !state.gameOver) onGameOver(res.state)
     // The expanded scene bubble's card is gone (answered): its focus pause ends with it.
     if (!res.state.decisions.active && get().ui.decisionExpanded) get().setDecisionExpanded(false)
@@ -886,6 +889,36 @@ if (typeof window !== 'undefined') {
     else if (ui.slowdownResumeDay !== null) endSlowdownIfDue()
   }, 250)
 }
+
+/**
+ * P5 auto-slow: a decision waiting on the player (a card, a round pitch, the payday desk). While one is open at 2× /
+ * 4× the run goes 1× until it closes ("her şey için düşünebilmeyi isterdim").
+ */
+export function decisionWaiting(s: GameState): boolean {
+  return !!s.decisions.active || (!!s.round?.active && s.round.pitchDue !== undefined) || !!s.finance.pendingPayday
+}
+
+useGameStore.subscribe((st, prev) => {
+  if (st.state === prev.state) return
+  const was = decisionWaiting(prev.state)
+  const is = decisionWaiting(st.state)
+  if (was === is || st.state.gameOver) return
+  const { ui, state } = st
+  if (is) {
+    if (!ui.slowOnMoments || ui.decisionSlow) return
+    const back = resumeSpeed(st)
+    // A moment slowdown or an effort hold already at 1× hands its pending speed over: the decision now owns it.
+    if (state.time.speed < 2 && !(state.time.speed === 1 && back > 1)) return
+    useGameStore.setState((s) => ({ ui: { ...s.ui, decisionSlow: back, slowdownAt: performance.now(), slowdownResumeDay: null, effortHold: null } }))
+    if (state.time.speed !== 1) autoSetSpeed(1)
+    return
+  }
+  if (!ui.decisionSlow) return
+  const back = ui.decisionSlow
+  useGameStore.setState((s) => ({ ui: { ...s.ui, decisionSlow: null } }))
+  lastHoldEnd = performance.now()
+  if (state.time.speed === 1) autoSetSpeed(back)
+})
 
 useGameStore.subscribe((st, prev) => {
   if (prev.ui.pauseReasons.length === 0 || st.ui.pauseReasons.length > 0) return

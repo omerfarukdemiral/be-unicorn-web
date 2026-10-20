@@ -75,7 +75,8 @@ describe('effort crisis hold', () => {
     useGameStore.setState((x) => ({ state: { ...x.state, employees: x.state.employees.map((e) => ({ ...e, fatigue: 10, loadAvg: 1, status: 'working' as const, burnoutDays: 0 })) } }))
     const day = store().state.time.day
     run(() => store().state.time.day > day + 20, 800)
-    expect(store().state.time.speed).toBe(2)
+    // A card that came meanwhile holds 1× (P5) and hands the player's 2× back.
+    expect(store().state.time.speed === 2 || store().ui.decisionSlow === 2).toBe(true)
   })
 
   it('a resignation notice (any cause) holds too, for the person on notice', () => {
@@ -87,7 +88,7 @@ describe('effort crisis hold', () => {
     expect(store().state.time.speed).toBe(1)
   })
 
-  it('round 6: a payday waiting when the person is answered does not keep the 1× (no tap needed)', () => {
+  it('P5: a payday desk waiting is a decision: the hold hands its 4× over and 1× stays until the desk closes', () => {
     burntRun(4)
     run(() => store().ui.effortHold !== null)
     useGameStore.setState((x) => ({
@@ -95,10 +96,11 @@ describe('effort crisis hold', () => {
     }))
     run(() => store().ui.effortHold === null, 40)
     expect(store().ui.effortHold).toBeNull()
-    expect(store().state.time.speed).toBe(4)
+    expect(store().state.time.speed).toBe(1)
+    expect(store().ui.decisionSlow).toBe(4)
   })
 
-  it('a collapsed, unanswered card does not outlive the hold window (F1); an expanded one stops ticks', () => {
+  it('a card arriving during the hold takes it over (P5: 1× until answered); an expanded one stops ticks', () => {
     burntRun(4)
     run(() => store().ui.effortHold !== null)
     const untilDay = store().ui.effortHold!.untilDay
@@ -108,14 +110,14 @@ describe('effort crisis hold', () => {
     const day = store().state.time.day
     for (let i = 0; i < 20; i++) store().tick(SECONDS_PER_DAY / 8)
     expect(store().state.time.day).toBe(day)
-    // Collapsed and never answered: the hold still ends on schedule and 4× returns.
+    // Collapsed and never answered: the card owns the 1× now and gives the 4× back once it closes.
     store().setDecisionExpanded(false)
-    run(() => store().ui.effortHold === null, 400)
-    expect(store().state.decisions.active?.cardId).toBe('remote-vs-office')
     expect(store().ui.effortHold).toBeNull()
+    expect(store().ui.decisionSlow).toBe(4)
+    expect(store().state.time.speed).toBe(1)
+    expect(untilDay).toBeGreaterThan(0)
+    useGameStore.setState((x) => ({ state: { ...x.state, decisions: { ...x.state.decisions, active: undefined } } }))
     expect(store().state.time.speed).toBe(4)
-    // Wall time ends it (round 6): a few game days at 1×, never the old day window plus.
-    expect(store().state.time.day).toBeLessThan(untilDay + B.EFFORT_HOLD_DAYS)
   })
 
   it('1× needs no hold, and "Önemli anda yavaşla" off leaves the speed alone', () => {

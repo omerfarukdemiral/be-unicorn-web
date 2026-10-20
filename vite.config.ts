@@ -53,5 +53,7 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.{ts,tsx}', 'sim/**/*.test.ts', 'api/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',
+    // Long bot-run tests (guidance, crisis calendar) passed alone but hit the 5 s default when the full suite ran in parallel.
+    testTimeout: 30_000,
   },
 })

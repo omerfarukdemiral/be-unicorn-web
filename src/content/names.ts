@@ -30,7 +30,7 @@ export const NPC_NAMES: Readonly<Record<NpcRole, readonly string[]>> = {
 export const PROJECT_NAMES: readonly string[] = [
   'Yakamoz', 'Tılsım AI', 'Anka Labs', 'Kervan.io', 'Poyraz', 'Lodos Pay', 'Pervane', 'Nabızly',
   'Kovanix', 'Martı Go', 'Simurg', 'Rotacı', 'Şimşekpay', 'Mavibulut', 'Otağ', 'Yörünge Studio',
-  'Kıvılcım Labs', 'Limanhub', 'Hevesly', 'Tohum.app', 'Zemberek', 'Pusula AI', 'Dalgaverse', 'Kandil',
+  'Kıvılcım Labs', 'Limanhub', 'Hevesly', 'Tohum.app', 'Zemberek', 'Pusula AI', 'Rüzgargülü', 'Kandil',
   'Meltem', 'Kuzey Yıldızı', 'Gündoğan', 'Çıra.io', 'Fenerly', 'Köprüm',
 ]
 

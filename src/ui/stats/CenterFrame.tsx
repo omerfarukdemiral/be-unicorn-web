@@ -5,17 +5,18 @@
 // or Esc (shortcuts.ts) closes it. A board dealt onto the table, not a web dialog: the shared card material (.ui-card +
 // --shadow-panel), the kind as a duotone sticker (identity, never a warning), no header bar and no visible title (the
 // active tab names the board).
-// The header's tab strip switches between the three screens (İstatistik | Kanun Kitabı | Pazar haritası) without
-// closing the frame; tab switches are static (only the first open is dealt).
+// One menu for the whole board (owner playtest: a tab strip on top plus the stats rail beside it read as two scattered
+// menus): Para, Büyüme, Ekip, Profil, then Kanun Kitabı and Pazar haritası. From 900px it is a rail on the left, below
+// that one scrolling strip on top. Switches never close the frame and are static (only the first open is dealt).
 import type { ReactNode } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import type { CenterKind, StatsTab } from '../../store/types'
 import type { IconName } from '../icons'
 import { t } from '../i18n'
-import { Chip, cx, IconBadge, IconButton, Segmented } from '../primitives'
+import { Chip, cx, IconButton, Segmented } from '../primitives'
 import { LawbookScreen } from '../center/LawbookScreen'
 import { MarketScreen } from '../center/MarketScreen'
-import { StatsScreen } from './StatsScreen'
+import { STATS_TABS, StatsScreen } from './StatsScreen'
 import { GAP } from '../layout/tokens'
 import { useMoneyIslandClearance } from '../layout/moneyClearance'
 
@@ -25,8 +26,17 @@ const KIND: Record<CenterKind, { icon: IconName; color: string }> = {
   market: { icon: 'pie', color: 'var(--color-g-users)' },
 }
 
-/** Tab strip order. */
+/** Screen order. */
 export const CENTER_TABS: readonly CenterKind[] = ['stats', 'lawbook', 'market']
+
+const STATS_ICON: Record<StatsTab, IconName> = { money: 'cash', growth: 'trend', team: 'users', profile: 'compass' }
+
+/** The menu's items: the four stats pages, then the other two boards. */
+const NAV: readonly { kind: CenterKind; tab?: StatsTab; icon: IconName; text: string }[] = [
+  ...STATS_TABS.map((tab) => ({ kind: 'stats' as const, tab, icon: STATS_ICON[tab], text: `stats.tab.${tab}` })),
+  { kind: 'lawbook', icon: KIND.lawbook.icon, text: 'center.lawbook' },
+  { kind: 'market', icon: KIND.market.icon, text: 'center.market' },
+]
 
 /** Width cap of the center card (the scene stays visible around it on a wide screen). */
 export const CENTER_MAX_W = 960
@@ -36,7 +46,7 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
   const money = useMoneyIslandClearance()
   const openOverlay = useGameStore((s) => s.openOverlay)
 
-  const k = KIND[kind]
+  const at = kind === 'stats' ? (tab ?? 'money') : undefined
   return (
     <div
       data-center-frame={kind}
@@ -49,30 +59,39 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
         aria-labelledby="center-title"
         onClick={(e) => e.stopPropagation()}
         // The board hugs its content (the office shows under a short lawbook or market); past the scene height its own
-        // scroller takes over. Stats keeps a tall floor so its charts do not jump between tabs.
+        // scroller takes over. Stats keeps a tall floor so its charts do not jump between pages.
         className={cx(
-          'relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal',
+          'relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal min-[900px]:flex-row',
           'ui-card shadow-panel',
           kind === 'stats' && 'min-h-[70%]',
         )}
         style={{ maxWidth: CENTER_MAX_W }}
       >
-        <header className="flex shrink-0 items-center gap-2 px-3 pt-2">
-          <IconBadge icon={k.icon} size={24} color={k.color} />
-          {/* Named for screen readers only: the active tab already says which board this is. */}
-          <h2 id="center-title" className="sr-only">
-            {t(`center.${kind}`)}
-          </h2>
-          <Segmented label={t('center.tabs')} className="max-[639px]:flex-1 max-[639px]:justify-between">
-            {CENTER_TABS.map((id) => (
-              <Chip key={id} segment active={kind === id} icon={KIND[id].icon} label={t(`center.${id}`)} onClick={() => kind !== id && openOverlay({ kind: id })}>
-                <span className="hidden min-[900px]:inline">{t(`center.${id}`)}</span>
-              </Chip>
+        {/* Named for screen readers only: the active item already says which board this is. */}
+        <h2 id="center-title" className="sr-only">
+          {t(`center.${kind}`)}
+        </h2>
+        <nav className="mr-11 shrink-0 overflow-x-auto py-2 pl-3 pr-3 [scrollbar-width:none] min-[900px]:mr-0 min-[900px]:overflow-visible min-[900px]:py-3 min-[900px]:pr-0">
+          <Segmented label={t('center.tabs')} className="min-[900px]:w-[168px] min-[900px]:flex-col min-[900px]:items-stretch">
+            {NAV.map((n, i) => (
+              <span key={n.text} className={cx('contents', i === STATS_TABS.length && 'min-[900px]:[&>button]:mt-3')}>
+                <Chip
+                  segment
+                  active={n.kind === kind && n.tab === at}
+                  icon={n.icon}
+                  onClick={() => (n.kind !== kind || n.tab !== at) && openOverlay(n.kind === 'stats' ? { kind: 'stats', tab: n.tab } : { kind: n.kind })}
+                >
+                  {t(n.text)}
+                </Chip>
+              </span>
             ))}
           </Segmented>
-          <IconButton icon="close" label={t('common.close')} onClick={onClose} size={36} className="ml-auto" />
-        </header>
-        <div className="flex min-h-0 flex-1 flex-col">{children ?? <CenterContent kind={kind} tab={tab} />}</div>
+        </nav>
+        <div className="absolute right-1.5 top-1.5 z-10">
+          <IconButton icon="close" label={t('common.close')} onClick={onClose} size={36} />
+        </div>
+        {/* From 900px the close button sits in its own gutter on the right, clear of each screen's header. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col min-[900px]:pr-9 min-[900px]:pt-3">{children ?? <CenterContent kind={kind} tab={tab} />}</div>
       </section>
     </div>
   )

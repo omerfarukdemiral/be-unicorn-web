@@ -18,13 +18,11 @@ import { BarChart, LineChart, LockedTile, PieChart, RadarChart, type LinePoint }
 import { Icon, type IconName } from '../icons'
 import { t } from '../i18n'
 import { fixed, money, num, pct } from '../format'
-import { Chip, cx, Segmented } from '../primitives'
+import { cx } from '../primitives'
 import { Legend, ramp, WIDGET_COLOR } from '../theme'
 import { calendarMarks, costSplit, COST_KEYS, deptBars, growthView, leadRival, moneyView, profileView, projectionMonths, runwayAt, statsKey, statsLocks, statsMemo, teamView, type CostKey, type LiveTip, type StatsSeries } from './statsData'
 
 export const STATS_TABS: readonly StatsTab[] = ['money', 'growth', 'team', 'profile']
-
-const TAB_ICON: Record<StatsTab, IconName> = { money: 'cash', growth: 'trend', team: 'users', profile: 'compass' }
 
 const COST_TEXT: Record<CostKey, string> = {
   salaries: 'burn.salaries',
@@ -46,9 +44,8 @@ const BAR_H = 200
 const dayText = (x: number): string => t('stats.day', { d: Math.round(x) })
 const plain = (n: number): string => fixed(n, 0)
 
-/** `tab` = the overlay's ({kind: 'stats', tab}); a chip switches it through openOverlay. */
+/** `tab` = the overlay's ({kind: 'stats', tab}); the CenterFrame's menu switches it through openOverlay. */
 export function StatsScreen({ tab }: { tab: StatsTab }) {
-  const openOverlay = useGameStore((s) => s.openOverlay)
   // Re-render on a new receipt only; the series object is the memo's until then.
   const key = useGameStore(useShallow((s) => statsKey(s.state.finance.receipts)))
   const memo = useRef(statsMemo()).current
@@ -76,26 +73,14 @@ export function StatsScreen({ tab }: { tab: StatsTab }) {
     firstOpen.current = false
   }, [])
 
+  // The page menu lives in the CenterFrame (one menu for the whole board).
   return (
-    // Two tab bars stacked under the board's own tabs read as a web page: from 900px the stats tabs stand as a
-    // vertical rail beside the charts instead. Below that they stay a horizontal strip over the scroller.
-    <div className="flex min-h-0 flex-1 flex-col min-[900px]:flex-row">
-      <div className="shrink-0 overflow-x-auto px-3 pb-2 pt-1 [scrollbar-width:none] min-[900px]:overflow-visible min-[900px]:pb-3 min-[900px]:pr-0">
-        <Segmented label={t('stats.tabs')} className="min-[900px]:w-[140px] min-[900px]:flex-col min-[900px]:items-stretch min-[900px]:self-start">
-          {STATS_TABS.map((id) => (
-            <Chip key={id} segment active={tab === id} icon={TAB_ICON[id]} onClick={() => openOverlay({ kind: 'stats', tab: id })}>
-              {t(`stats.tab.${id}`)}
-            </Chip>
-          ))}
-        </Segmented>
-      </div>
-      <div className="ui-scroll min-h-0 flex-1 px-3 pb-3 safe-bottom" data-stats-tab={tab} data-stats-n={key.n}>
-        <div className="grid grid-cols-1 gap-3 min-[640px]:grid-cols-2">
-          {tab === 'money' && <MoneyTab series={series} live={live} sel={sel} onSelect={setSel} animate={animate} />}
-          {tab === 'growth' && <GrowthTab series={series} live={live} sel={sel} onSelect={setSel} animate={animate} />}
-          {tab === 'team' && <TeamTab series={series} live={live} sel={sel} onSelect={setSel} animate={animate} />}
-          {tab === 'profile' && <ProfileTab day={live.day} />}
-        </div>
+    <div className="ui-scroll min-h-0 flex-1 px-3 pb-3 safe-bottom" data-stats-tab={tab} data-stats-n={key.n}>
+      <div className="grid grid-cols-1 gap-3 min-[640px]:grid-cols-2">
+        {tab === 'money' && <MoneyTab series={series} live={live} sel={sel} onSelect={setSel} animate={animate} />}
+        {tab === 'growth' && <GrowthTab series={series} live={live} sel={sel} onSelect={setSel} animate={animate} />}
+        {tab === 'team' && <TeamTab series={series} live={live} sel={sel} onSelect={setSel} animate={animate} />}
+        {tab === 'profile' && <ProfileTab day={live.day} />}
       </div>
     </div>
   )

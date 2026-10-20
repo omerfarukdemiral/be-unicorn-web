@@ -58,12 +58,11 @@ export function CenterFrame({ kind, tab, onClose, children }: { kind: CenterKind
         role="dialog"
         aria-labelledby="center-title"
         onClick={(e) => e.stopPropagation()}
-        // The board hugs its content (the office shows under a short lawbook or market); past the scene height its own
-        // scroller takes over. Stats keeps a tall floor so its charts do not jump between pages.
+        // One fixed size for every page (owner playtest: the board grew and shrank with each menu click): the scene
+        // height up to 680px, each page scrolls inside it.
         className={cx(
-          'relative flex max-h-full w-full min-w-0 flex-col self-center overflow-hidden animate-deal min-[900px]:flex-row',
+          'relative flex h-[min(100%,680px)] w-full min-w-0 flex-col self-center overflow-hidden animate-deal min-[900px]:flex-row',
           'ui-card shadow-panel',
-          kind === 'stats' && 'min-h-[70%]',
         )}
         style={{ maxWidth: CENTER_MAX_W }}
       >

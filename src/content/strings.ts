@@ -377,6 +377,7 @@ const BASE_TEXT: Record<string, string> = {
   'projects.start': 'Başlat',
   'projects.empty': 'Proje yok: kategori seç',
   'projects.assign': 'Ata',
+  'projects.details': 'Detaylar',
   'projects.assigned': '{n} kişi',
   'projects.assignEmpty': 'Ekipte geliştirici yok',
   'projects.founderHere': 'Kodluyorsun',

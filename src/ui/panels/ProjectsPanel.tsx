@@ -206,6 +206,10 @@ function ProjectCard({ project: p }: { project: Project }) {
         {/* From Pre-seed the count is supply / demand in the load's colour (E3); the garage keeps the head count. */}
         {effort ? <TeamOf project={p} /> : <span className="tabular text-[11px] text-ink-2">{t('projects.assigned', { n: p.assignedIds.length })}</span>}
         <LeadLine project={p} />
+        {/* The name was the only way into the detail page; this says there is one. */}
+        <Button size="sm" tone="ghost" icon="info" onClick={() => select({ kind: 'project', id: p.id })}>
+          {t('projects.details')}
+        </Button>
         {/* F4: no one who can build, nothing to assign: the button goes straight to hiring instead of an empty drawer. */}
         {builders ? (
           <Button size="sm" tone="ghost" icon={open ? 'chevronUp' : 'users'} onClick={() => setOpen((o) => !o)}>

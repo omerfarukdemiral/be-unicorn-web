@@ -79,7 +79,7 @@ export const IMPORTANT_EVENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEve
 /** Events that start an effort crisis: the game drops to 1× and the person's bubble is pinned (E1 round 3). */
 export const EFFORT_CRISIS_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>(['burnedOut', 'resignNotice'])
 
-/** Game days at 1× after an important moment before 4× comes back (~6 s at 1×, SECONDS_PER_DAY = 2). */
+/** Game days at 1× after an important moment before 4× comes back (~8 s at 1×, SECONDS_PER_DAY = 2.8). */
 export const SLOWDOWN_WINDOW_DAYS = 3
 
 /** NEW-5: wall time an important moment holds 1× before the player's speed comes back (≤ 3 s with the timer slack). */

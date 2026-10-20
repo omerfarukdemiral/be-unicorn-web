@@ -6,8 +6,8 @@
 // Time constants (PLAN §4.1)
 // ---------------------------------------------------------------------------
 
-/** Real seconds per game day at 1x. */
-export const SECONDS_PER_DAY = 2
+/** Real seconds per game day at 1x (2026-10-21 clarity & pace: 2 → 2.8, 1× runs 40% slower; 2× and 4× stay its multiples). */
+export const SECONDS_PER_DAY = 2.8
 export const DAYS_PER_MONTH = 30
 export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
@@ -631,6 +631,9 @@ export interface DecisionsState {
   /** Last answered option, for the reflection line in UI. */
   lastAnswer?: DecisionHistoryEntry
   lastCardDay: number
+  /** One decision at a time (engine/pace.ts): the kind open at the last daily, and the day the last one closed. */
+  openKind?: 'card' | 'meeting' | 'payday' | 'leaver'
+  closedDay?: number
   /** Landed delayed effects, newest last (capped). */
   outcomes?: DecisionOutcome[]
 }

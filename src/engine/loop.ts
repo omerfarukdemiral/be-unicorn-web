@@ -1,6 +1,6 @@
 // Core loop beats (docs/CORE_LOOP.md §4–§5): payday + month receipt, release moments, stage goals (☆).
 import * as B from './balance'
-import { bringCardNow, isCardEligible } from './decisions'
+import { bringCardNow, isCardEligible, stepBackActive } from './decisions'
 import { recomputeDerived } from './derive'
 import { clamp, ledgerCosts } from './economy'
 import { applyMorale, loanOf, syncDebt } from './effects'
@@ -74,7 +74,11 @@ export function payday(s: GameState, content: EngineContent): void {
   }
   // On the desk before the covenant check: the month waiting is still owed, so runway judges it as a paid month would.
   const desk: PendingPayday | null = short ? { day: Math.floor(s.time.day), ledger: l, deferredBefore, interest: loan.interest, runwayBefore } : null
-  if (desk) s.finance.pendingPayday = desk
+  if (desk) {
+    s.finance.pendingPayday = desk
+    // One decision at a time (pace.ts): the desk has the screen, an open card waits behind it.
+    stepBackActive(s, content)
+  }
   // The month is paid at the old salaries; a raise earned today shows on the next receipt (salary-freeze: none).
   yearlyRaises(s, content)
   // crunch-culture (§7.2): the month's shortcuts land as tech debt.

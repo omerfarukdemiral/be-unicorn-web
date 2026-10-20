@@ -15,6 +15,7 @@ import { scheduleCrisis } from './decisions'
 import { applyMorale, loanOf, syncDebt, unlockTool, unlockWidget } from './effects'
 import { actionEnergy, enterMoveBudget, movesError, spendMoves } from './founder'
 import { relocateOffice, syncSeats } from './office'
+import { decisionSlotFree, openDecision } from './pace'
 import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, InvestorStyle, MeetingTopic, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
 import { INVESTOR_STYLES, MEETING_PITCHES, ROUND_MEETINGS, ROUND_SIZES } from './types'
@@ -539,24 +540,36 @@ function weekPassed(s: GameState, r: RoundState): boolean {
   repriceEquity(s, r)
   setOfferAmount(r, to)
   r.lastMove = { week, from, to }
-  // The next meeting falls due on its week. One left unanswered stays open until then, and is gone (a 0 in the
-  // investor's average) once the next one opens or the round closes.
-  const opened = r.meetingsOpened ?? 0
-  const at = (r.meetingWeeks ?? meetingWeeksFor(r.weeksTotal))[opened]
   if (r.weeksLeft <= 0) delete r.pitchDue
-  else if (at !== undefined && week >= at) {
-    const meeting = ROUND_MEETINGS[opened]!
-    r.meetingsOpened = opened + 1
-    r.meeting = meeting
-    r.pitchDue = week
-    if (meeting === 'diligence') r.topic = meetingTopic(s)
-    r.pitchWeeks = (r.pitchWeeks ?? (r.pitches ?? []).length) + 1
-    r.pitchBonus = pitchAverage(r)
-    pushEvent(s, { kind: 'roundMeeting', refId: meeting })
-  }
+  else maybeOpenMeeting(s)
   pushActivity(s, 'roundOffer', { done: week, total: r.weeksTotal, from: Math.round(from), amount: Math.round(to) })
   pushEvent(s, { kind: 'roundWeek', value: to })
   return true
+}
+
+/**
+ * The next meeting falls due on its week (weekly, and daily from tick.ts once it is due). One decision at a time
+ * (pace.ts): it opens when the slot is free, or in the round's last week when nothing else is open. One left
+ * unanswered stays open until the next one is due, and is gone (a 0 in the investor's average) once that one opens or
+ * the round closes.
+ */
+export function maybeOpenMeeting(s: GameState): void {
+  const r = s.round
+  if (!r?.active || r.weeksLeft <= 0) return
+  const week = r.weeksTotal - r.weeksLeft
+  const opened = r.meetingsOpened ?? 0
+  const at = (r.meetingWeeks ?? meetingWeeksFor(r.weeksTotal))[opened]
+  if (at === undefined || week < at) return
+  const replaces = r.pitchDue !== undefined && !s.decisions.active
+  if (!replaces && !decisionSlotFree(s) && !(r.weeksLeft <= 1 && !openDecision(s))) return
+  const meeting = ROUND_MEETINGS[opened]!
+  r.meetingsOpened = opened + 1
+  r.meeting = meeting
+  r.pitchDue = week
+  if (meeting === 'diligence') r.topic = meetingTopic(s)
+  r.pitchWeeks = (r.pitchWeeks ?? (r.pitches ?? []).length) + 1
+  r.pitchBonus = pitchAverage(r)
+  pushEvent(s, { kind: 'roundMeeting', refId: meeting })
 }
 
 /** The open meeting's answer (docs/CORE_LOOP.md §4.3): moves the investor's impression, the round length or the equity. */

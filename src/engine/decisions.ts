@@ -10,6 +10,7 @@ import type { Rng } from './rng'
 import type { CalendarEntry, DecisionCardId, GameState } from './types'
 import { newId, pushActivity, pushEvent, type EngineContent } from './util'
 import { directorOf } from './world'
+import { decisionSlotFree, openDecision } from './pace'
 
 function safeCondition(c: DecisionCard, s: GameState): boolean {
   if (!c.condition) return true
@@ -88,6 +89,12 @@ function showCard(s: GameState, card: DecisionCard): void {
 /** Daily: show a queued card, or roll for a new one after the cooldown. */
 export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng): void {
   if (s.decisions.active || s.gameOver) return
+  // One decision at a time (pace.ts): a rescue at the head of the queue never waits (the bankruptcy clock runs), a
+  // crisis card skips the gap but not another open decision; everything else waits for the free slot.
+  const head = s.decisions.queue[0]
+  const rescue = head !== undefined && isRescue(content, head)
+  const crisis = head !== undefined && !!content.crises?.some((c) => c.cardId === head)
+  if (!rescue && !(crisis ? !openDecision(s) : decisionSlotFree(s))) return
   while (s.decisions.queue.length) {
     const id = s.decisions.queue.shift()!
     const card = content.decisions.find((c) => c.id === id)
@@ -199,6 +206,18 @@ export function applyDueEffects(s: GameState, content: EngineContent): void {
     if (list.length > B.OUTCOMES_MAX) list.splice(0, list.length - B.OUTCOMES_MAX)
     pushEvent(s, { kind: 'delayedEffect', refId: p.sourceCardId, value: optionIndex })
   }
+}
+
+/**
+ * The payday desk takes the screen (pace.ts: a payday card never shares it with a decision): an unanswered card that
+ * is no rescue steps back to the head of the queue (its visitor leaves; it comes again once the slot frees).
+ */
+export function stepBackActive(s: GameState, content: EngineContent): void {
+  const a = s.decisions.active
+  if (!a || isRescue(content, a.cardId)) return
+  for (const v of s.visitors) if (v.id === a.visitorId) v.leaveDay = Math.min(v.leaveDay, s.time.day)
+  s.decisions.queue = [a.cardId, ...s.decisions.queue.filter((id) => id !== a.cardId)]
+  s.decisions.active = undefined
 }
 
 /**

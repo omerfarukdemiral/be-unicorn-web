@@ -764,6 +764,8 @@ export const CANDIDATE_DEPT_WEIGHT: Readonly<Record<Dept, number>> = { eng: 3, p
 // Decisions (PLAN §6.3)
 // ---------------------------------------------------------------------------
 export const FIRST_CARD_DAY = 8
+/** One decision at a time (engine/pace.ts): the next one opens no sooner than this many days after the last closed. */
+export const DECISION_GAP_DAYS = 6
 /** [Faz 3] Fewer, heavier cards (CORE_LOOP §5 "Karar sıklığı"): ~1 per 30–40 days instead of ~1 per 13. */
 export const CARD_COOLDOWN_DAYS = 25
 /**

@@ -228,6 +228,9 @@ describe('status order (E1 §4)', () => {
     const s = company(1, 2, 'web', { loadAvg: 0.3, quality: 0.6 })
     days(s, 89, 0.3)
     expect(person(s).status).not.toBe('leaving')
+    // Day 90 is a payday: its receipt holds new decisions for two days (engine/pace.ts), the notice comes on day 92.
+    days(s, 2, 0.3)
+    expect(person(s).status).not.toBe('leaving')
     days(s, 1, 0.3)
     expect(person(s, 'e1').leaveCause).toBe('bored')
     // e2 is as bored, but waits for e1's notice to be answered.

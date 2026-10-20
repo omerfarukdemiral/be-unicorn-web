@@ -5,6 +5,7 @@ import { employeeMoraleTarget, globalMoraleTarget, type Outputs } from './derive
 import { candidateSkill, dailyEffort, effortOn, isBreakDay, nearCommonArea, onLeave } from './effort'
 import type { Rng } from './rng'
 import { DEPTS, type Candidate, type Dept, type Employee, type GameState, type LeaveCause } from './types'
+import { decisionSlotFree } from './pace'
 import { incCounter, newId, policyHas, policyMult, policyQualityCap, policySum, pushActivity, pushEvent, type EngineContent } from './util'
 
 /** Pool size: base + stage up to the max, plus what the policies add on top of the max (hire-fast +2, GAMEPLAY V2 §7.2: the law's point is a bigger pool than any stage gives). */
@@ -116,10 +117,7 @@ export function dailyPeople(s: GameState, content: EngineContent): void {
       continue
     }
     const grace = Number(s.flags[`retained:${e.id}`] ?? -1)
-    if (e.morale < quitAt && day >= grace) {
-      notice(s, e, 'morale')
-      continue
-    }
+    if (e.morale < quitAt && day >= grace && notice(s, e, 'morale')) continue
     const off = onLeave(e, day)
     if (effort && !off && e.dept !== 'sales' && day >= grace) {
       if ((e.fatigue ?? 0) >= B.FATIGUE_BURNOUT) {
@@ -129,15 +127,11 @@ export function dailyPeople(s: GameState, content: EngineContent): void {
           pushEvent(s, { kind: 'burnedOut', refId: e.id })
         }
       } else if (e.burnoutDays) e.burnoutDays = 0
-      if ((e.burnoutDays ?? 0) >= B.BURNOUT_RESIGN_DAYS) {
-        notice(s, e, 'burnout')
-        continue
-      }
+      if ((e.burnoutDays ?? 0) >= B.BURNOUT_RESIGN_DAYS && notice(s, e, 'burnout')) continue
       const la = e.loadAvg ?? 1
       if (la < B.UNDERLOAD) e.boredDays = (e.boredDays ?? 0) + 1
       else if (la >= B.BORED_RESET_LOAD && e.boredDays) e.boredDays = 0
-      if ((e.boredDays ?? 0) >= B.BORED_QUIT_DAYS && !boredNotice) {
-        notice(s, e, 'bored')
+      if ((e.boredDays ?? 0) >= B.BORED_QUIT_DAYS && !boredNotice && notice(s, e, 'bored')) {
         boredNotice = true
         continue
       }
@@ -156,7 +150,9 @@ export function dailyPeople(s: GameState, content: EngineContent): void {
  * The resignation notice: RESIGN_WARNING_DAYS to answer it (respondResignation; BURNOUT_NOTICE_DAYS for a burnout),
  * tagged with its cause. Every cause pushes `resignNotice` (value = days left): the store slows the game on it.
  */
-function notice(s: GameState, e: Employee, cause: LeaveCause): void {
+function notice(s: GameState, e: Employee, cause: LeaveCause): boolean {
+  // One decision at a time (pace.ts): the notice waits for the free slot (the cause is checked again tomorrow).
+  if (!decisionSlotFree(s)) return false
   const days = cause === 'burnout' ? B.BURNOUT_NOTICE_DAYS : B.RESIGN_WARNING_DAYS
   setStatus(e, 'leaving', s.time.day)
   e.leaveDay = s.time.day + days
@@ -164,6 +160,7 @@ function notice(s: GameState, e: Employee, cause: LeaveCause): void {
   pushActivity(s, 'resignWarning', { name: e.name, id: e.id, cause })
   pushEvent(s, { kind: 'resignNotice', refId: e.id, value: days })
   if (cause === 'bored') pushEvent(s, { kind: 'bored', refId: e.id })
+  return true
 }
 
 /**

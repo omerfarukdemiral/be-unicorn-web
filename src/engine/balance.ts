@@ -587,6 +587,10 @@ export const ROUND_FAIL_MORALE = -8
 /** The one-time down round after a failed one: amount × this, equity × this, and no offer floor. */
 export const DOWN_ROUND_AMOUNT = 0.7
 export const DOWN_ROUND_EQUITY = 1.5
+/** P2 (2026-10-21): a closed down round caps the valuation at this share of the valuation before it… */
+export const DOWN_ROUND_VALUATION = 0.85
+/** …for this many days (the new stage does not lift a rescued company over its old price at once). */
+export const DOWN_ROUND_CAP_DAYS = 120
 /** Equity a round can sell at most (a co-investor or a down round never takes more). */
 export const ROUND_EQUITY_MAX = 0.5
 
@@ -766,6 +770,28 @@ export const CANDIDATE_DEPT_WEIGHT: Readonly<Record<Dept, number>> = { eng: 3, p
 export const FIRST_CARD_DAY = 8
 /** One decision at a time (engine/pace.ts): the next one opens no sooner than this many days after the last closed. */
 export const DECISION_GAP_DAYS = 6
+/** Notice cards kept in state (engine/notices.ts). */
+export const NOTICES_MAX = 20
+
+// Delegated hiring (2026-10-21, engine/staffing.ts) ------------------------------
+/** From this stage (Series A) department leads hire toward the player's headcount targets. */
+export const STAFFING_FROM_STAGE = 3
+/** Highest headcount target a department takes. */
+export const STAFF_TARGET_MAX = 60
+/** The leads hire once a week (day % this), at most STAFF_BATCH_MAX per department per pass. */
+export const STAFF_PASS_DAYS = 7
+export const STAFF_BATCH_MAX = 3
+/** Candidates a lead weighs per seat (the best one is hired at its market salary). */
+export const STAFF_POOL = 3
+
+// Praise (2026-10-21, content/praise.ts, engine/praise.ts) -------------------------
+/** At most one praise card per this many game days. */
+export const PRAISE_GAP_DAYS = 30
+/** A milestone waiting behind the gap longer than this is dropped (stale news). */
+export const PRAISE_STALE_DAYS = 45
+/** 'close': within this many times their months, or this share of their value. */
+export const PRAISE_CLOSE_TIME = 1.35
+export const PRAISE_CLOSE_VALUE = 0.75
 /** [Faz 3] Fewer, heavier cards (CORE_LOOP §5 "Karar sıklığı"): ~1 per 30–40 days instead of ~1 per 13. */
 export const CARD_COOLDOWN_DAYS = 25
 /**

@@ -83,6 +83,8 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.restFounder': 'Kurucu tükendi: biraz dinlen',
   'move.easeLoad': 'Ekip boşta sıkılıyor: işi olan projeye ata',
   'move.moraleLost': 'Moral toparlanmıyor: gideri kıs, ekibi küçült',
+  // 2026-10-21, from Series A (NextStep.team): {d} the department (NOTICE_DEPT), {n} the new headcount target.
+  'move.teamTarget': '{d} hedefini {n} kişiye çıkar',
   // The 'progress' move names the next round's weakest number (NextStep.metric): {s} stage, {v} value, {t} target.
   'move.progress.valuation': '{s} için değerleme {v}/{t}',
   'move.progress.growth': '{s} için aylık büyüme {v}/{t}',
@@ -100,6 +102,7 @@ export const LOOP_TEXT: Record<string, string> = {
   'move.short.hireEng': 'Geliştirici al',
   'move.short.hireMarketing': 'Pazarlamacı al',
   'move.short.hireGrowth': 'Ekibi büyüt',
+  'move.short.teamTarget': 'Ekip hedefi',
   'move.short.openRing': 'Yeni bölüm',
   'move.short.adsUp': 'Reklam artır',
   'move.short.keepStaff': 'Ekibi tut',

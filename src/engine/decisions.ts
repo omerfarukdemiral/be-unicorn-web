@@ -11,6 +11,7 @@ import type { CalendarEntry, DecisionCardId, GameState } from './types'
 import { newId, pushActivity, pushEvent, type EngineContent } from './util'
 import { directorOf } from './world'
 import { decisionSlotFree, openDecision } from './pace'
+import { noticeText, pushNotice, type NoticeTextKey } from './notices'
 
 function safeCondition(c: DecisionCard, s: GameState): boolean {
   if (!c.condition) return true
@@ -122,13 +123,15 @@ export function maybeShowDecision(s: GameState, content: EngineContent, rng: Rng
 
 export type AnswerError = 'notFound' | 'invalid'
 
-export function answerDecision(s: GameState, content: EngineContent, cardId: DecisionCardId, optionIndex: number): AnswerError | null {
+export function answerDecision(s: GameState, content: EngineContent, cardId: DecisionCardId, optionIndex: number, byDefault = false): AnswerError | null {
   if (s.decisions.active?.cardId !== cardId) return 'notFound'
   const card = content.decisions.find((c) => c.id === cardId)
   if (!card) return 'notFound'
   const opt = card.options[optionIndex]
   if (!opt || !Number.isInteger(optionIndex)) return 'invalid'
+  const before = { cash: s.stats.cash, equity: s.stats.equity, loan: s.finance.loan?.principal ?? 0 }
   applyEffects(s, content, opt.effects, cardId)
+  rescueNotice(s, cardId, optionIndex, byDefault, before)
   if (opt.delayed) {
     s.decisions.pending.push({
       id: newId(s, 'd'),
@@ -148,6 +151,25 @@ export function answerDecision(s: GameState, content: EngineContent, cardId: Dec
   s.decisions.active = undefined
   pushEvent(s, { kind: 'decisionAnswered', refId: cardId, value: optionIndex })
   return null
+}
+
+/**
+ * P2 (2026-10-21, "para bitince şirketim büyüdü onu anlamadım"): the money a rescue brought and its price, as one
+ * notice card (answered or defaulted). Rows: the angel, the emergency loan / savings and the round's bridge loan.
+ */
+const RESCUE_NOTICE: Readonly<Record<string, readonly (NoticeTextKey | null)[]>> = {
+  [B.ANGEL_CARD_ID]: ['angel', null],
+  [B.RESCUE_CARD_ID]: ['loan', 'savings'],
+  [B.BRIDGE_CARD_ID]: ['bridge', null],
+}
+function rescueNotice(s: GameState, cardId: DecisionCardId, option: number, byDefault: boolean, before: { cash: number; equity: number; loan: number }): void {
+  let key = RESCUE_NOTICE[cardId]?.[option] ?? null
+  if (!key) return
+  if (key === 'angel' && byDefault) key = 'angelDefault'
+  const cash = s.stats.cash - before.cash
+  const equity = Math.max(0, before.equity - s.stats.equity)
+  const loan = Math.max(0, (s.finance.loan?.principal ?? 0) - before.loan)
+  pushNotice(s, { kind: 'rescue', tone: 'bad', text: noticeText(key, { cash, equity }), cash, ...(equity > 0 ? { equity } : {}), ...(loan > 0 ? { loan } : {}) })
 }
 
 /** The option an unanswered card falls back to (written on the card: "Cevapsız kalırsa: …"). */
@@ -177,7 +199,7 @@ export function applyDefaultDecision(s: GameState, content: EngineContent): void
   }
   if (s.time.day - a.shownDay < defaultAfterDaysOf(card)) return
   const i = defaultOptionOf(card)
-  if (answerDecision(s, content, card.id, i) !== null) return
+  if (answerDecision(s, content, card.id, i, true) !== null) return
   pushActivity(s, 'decisionDefaulted', { option: card.options[i]?.label ?? '' })
   pushEvent(s, { kind: 'decisionDefaulted', refId: card.id, value: i })
 }

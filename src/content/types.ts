@@ -365,6 +365,9 @@ export interface StageGoal {
   check: (s: GameState, base: StageBaseline) => boolean
 }
 
+export type { PraiseRow, PraiseOn, PraiseMeasure } from './praise'
+import type { PraiseRow } from './praise'
+
 export interface ContentBundle {
   stages: readonly StageDef[]
   concepts: readonly Concept[]
@@ -385,4 +388,6 @@ export interface ContentBundle {
   crises?: readonly CrisisDef[]
   /** Company policies, the Kanun Kitabı (GAMEPLAY V2 §7.2); optional so engine fakes run without it. */
   policies?: readonly Policy[]
+  /** Praise milestones (content/praise.ts, engine/praise.ts); optional so engine fakes run without it. */
+  praise?: readonly PraiseRow[]
 }

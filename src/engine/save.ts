@@ -4,6 +4,8 @@ import { movesPerWeek } from './founder'
 import { newLoan } from './effects'
 import { peopleView } from './effort'
 import { FURNITURE } from '../content/furniture'
+import { staffingOf } from './util'
+import { STAFFING_FROM_STAGE } from './balance'
 import { DAYS_PER_MONTH, DEFAULT_COMPANY_NAME, DEPTS, FOUNDER_SLOT_ID, SAVE_VERSION, type Dept, type GameState, type OfficeState, type PartialReceipt, type ToolId } from './types'
 import { placeStarterDecor, repairOffice } from './layout'
 import { syncSeats } from './office'
@@ -124,6 +126,15 @@ const MIGRATIONS: Record<number, Migration> = {
     repairOffice(office as OfficeState)
     const game = st as unknown as GameState
     if (Array.isArray(game.employees)) syncSeats(game)
+    return st
+  },
+  // v6 → v7 (2026-10-21 clarity & pace): from Series A the department leads hire toward a headcount target; a save
+  // there starts with every target at today's headcount (nobody hired, nobody fired). No notices yet; the praise rows
+  // already passed are marked done on the first daily (praise.praiseOf), so a load never floods.
+  6: (st) => {
+    const game = st as unknown as GameState
+    if (typeof game.stage === 'number' && game.stage >= STAFFING_FROM_STAGE && Array.isArray(game.employees) && !game.staffing) staffingOf(game)
+    if (!Array.isArray(game.notices)) game.notices = []
     return st
   },
 }

@@ -13,7 +13,7 @@ export const DAYS_PER_WEEK = 7
 /** The store advances the engine in fixed chunks of this many days (determinism). */
 export const FIXED_STEP_DAYS = 0.25
 /** Bump when GameState shape changes incompatibly; save.ts migrates. */
-export const SAVE_VERSION = 6
+export const SAVE_VERSION = 7
 
 /** Company name when none was given (and for pre-v3 saves). */
 export const DEFAULT_COMPANY_NAME = 'İsimsiz Startup'
@@ -1143,6 +1143,8 @@ export interface DerivedMetrics {
   market?: MarketView
   /** The board's quarter (GAMEPLAY V2 §8.3); absent before Series A. */
   board?: BoardView
+  /** Delegated hiring (engine/staffing.ts), from Series A: per department headcount, target and what holds the next hire. */
+  staffing?: StaffingView
   /** Contracts up for renewal (GAMEPLAY V2 §8.4), the soonest first, with both offers priced. */
   renewals?: RenewalView[]
   /**
@@ -1399,10 +1401,12 @@ export interface NextStep {
    * names instead of the goal, when the run needs one (loopSelectors.nextMove); stepAction plays it.
    */
   move?: NextMove
+  /** 'teamTarget' (from Series A): the department and the new headcount target the chip suggests. */
+  team?: { dept: Dept; target: number }
 }
 
 /** Concrete garage / Pre-seed moves the chip can name: cash first, then growth, then the product. */
-export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'openSegment', 'newProduct', 'refactor', 'acquire', 'priceUp', 'adsTune', 'signLaw', 'serverRoom', 'salesGrow', 'restFounder', 'easeLoad', 'moraleLost', 'progress'] as const
+export const NEXT_MOVES = ['keepStaff', 'morale', 'startRound', 'pitch', 'salesCall', 'adsCut', 'price', 'hireEng', 'focusUsers', 'hireMarketing', 'ads', 'module', 'hireGrowth', 'openRing', 'adsUp', 'focusTalk', 'growthAsk', 'cutBurn', 'openSegment', 'newProduct', 'refactor', 'acquire', 'priceUp', 'adsTune', 'signLaw', 'serverRoom', 'salesGrow', 'restFounder', 'easeLoad', 'moraleLost', 'progress', 'teamTarget'] as const
 export type NextMove = (typeof NEXT_MOVES)[number]
 
 /** 'saturation': penetration ≥ MARKET_SATURATION_PEN (GAMEPLAY V2 §8.1): ads go to waste, a segment waits. */
@@ -1648,6 +1652,8 @@ export type GameEventKind =
   | 'contractRenewed'
   /** A contract left: not renewed in time, or 'hold' refused (refId = contract id, value = the MRR lost). */
   | 'contractLost'
+  /** A notice was written (2026-10-21; refId = its kind, value = its id): the UI shows GameState.notices' newest. */
+  | 'notice'
 
 /**
  * One-shot events for render/UI effects (confetti, move scene, sounds).
@@ -1686,6 +1692,55 @@ export type CounterKey =
   | 'hires' | 'fires' | 'resignations' | 'manualFinds' | 'userTalks' | 'motivates'
   | 'investorCoffees' | 'salesCalls' | 'crunches' | 'projectsStarted' | 'roundsClosed'
   | 'peakTeam' | 'lowGrowthMonths' | 'profitMonths' | 'refactors' | 'renewals'
+
+// ---------------------------------------------------------------------------
+// Delegated hiring, notices, praise (2026-10-21 clarity & pace)
+// ---------------------------------------------------------------------------
+
+export interface StaffingState {
+  /** Headcount target per department (from Series A); a missing dept holds at today's headcount. */
+  targets: Partial<Record<Dept, number>>
+  /** Day the player last changed a target (the chip waits between two team moves). */
+  setDay?: number
+}
+
+/** Why a department's lead does not hire right now: no cash (runway / payday guard), no seat left, or at target. */
+export type StaffingBlock = 'cash' | 'desk' | null
+
+export interface StaffingView {
+  depts: Record<Dept, { count: number; target: number; blocked: StaffingBlock }>
+  /** Day of the next weekly hiring pass. */
+  nextDay: number
+}
+
+export type NoticeKind = 'rescue' | 'roundWhileBroke' | 'teamHired' | 'praise'
+
+export interface Notice {
+  id: number
+  day: number
+  kind: NoticeKind
+  /** The one sentence to show, ready (Turkish, numbers formatted). */
+  text: string
+  tone: 'good' | 'bad' | 'neutral'
+  /** Cash that came in (+), equity sold (fraction), loan principal taken: the price in numbers for the card's chips. */
+  cash?: number
+  equity?: number
+  loan?: number
+  /** teamHired: who joined, by department. */
+  hires?: Partial<Record<Dept, number>>
+  /** praise: the content row and how the player compares ('neutral' = a fact line). */
+  praiseId?: string
+  grade?: 'ahead' | 'close' | 'neutral'
+}
+
+export interface PraiseState {
+  /** Content rows already used (shown or passed). */
+  done: string[]
+  /** Rows reached and waiting behind the gap: id → day reached. */
+  pending?: Record<string, number>
+  /** Day of the last praise shown (one per PRAISE_GAP_DAYS). */
+  lastDay?: number
+}
 
 // ---------------------------------------------------------------------------
 // GameState
@@ -1775,6 +1830,12 @@ export interface GameState {
   market?: MarketState
   /** The board's quarter (GAMEPLAY V2 §8.3) from Series A; older saves from A on get theirs lazily (world.boardOf). */
   board?: BoardState
+  /** Delegated hiring from Series A (engine/staffing.ts); older saves get theirs lazily (targets = today's headcount). */
+  staffing?: StaffingState
+  /** One-line cards for the player, newest last (at most NOTICES_MAX): rescues, praise, team hires (engine/notices.ts). */
+  notices?: Notice[]
+  /** Praise milestones (engine/praise.ts); older saves lazily, the ones already passed count as done. */
+  praise?: PraiseState
 }
 
 // ---------------------------------------------------------------------------
@@ -1790,6 +1851,11 @@ export type Action =
   | { type: 'assignDesk'; employeeId: EmployeeId; slotId: SlotId | null }
   | { type: 'respondResignation'; employeeId: EmployeeId; response: 'raise' | 'talk' | 'letGo' }
   | { type: 'refreshCandidates' }
+  /**
+   * From Series A (STAFFING_FROM_STAGE): the department's headcount target; its lead hires toward it every week (best
+   * of a small pool, market salary, within the cash guard). A target under today's headcount fires nobody.
+   */
+  | { type: 'setHireTarget'; dept: Dept; target: number }
   // Effort (E1, from Pre-seed; no moves)
   /** Personal pace; clears the lead's auto-calm. */
   | { type: 'setPace'; employeeId: EmployeeId; pace: Pace }

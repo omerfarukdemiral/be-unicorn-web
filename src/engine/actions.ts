@@ -38,7 +38,7 @@ import {
   type PolicyId,
   type Slot,
 } from './types'
-import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, type EngineContent } from './util'
+import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, staffingOf, type EngineContent } from './util'
 import { acquireError, acquireRival, openSegment, segmentError } from './world'
 
 export type { Action, ActionType, ActionOf, TimedAction, ActionResult, ActionErrorCode } from './types'
@@ -76,23 +76,42 @@ const hire: Handler<'hire'> = ({ s, content }, a) => {
     const err = deskError(s, slot)
     if (err) return err
   } else {
-    // Grid §3/§5: a free desk by the hire's team (a spare ring desk may be carried there first); else any free desk.
-    slot = autoSeat(s.office, c.dept)
-    if (!slot && a.autoDesk) {
-      // F6: refusing here sent the player to the shop, the desk got bought and the hire was never retried
-      // ("para gidiyor, kişi gelmiyor"). The panel's hire now buys the desk too, auto placed by the hire's team
-      // (grid §3, desk cap included); any failure costs nothing (clone).
-      const item = autoDeskItem(s, content)
-      const place = item && autoPlace(s.office, placementSpec(item), { team: c.dept })
-      if (!item || !place) return 'noFreeSlot'
-      if (s.stats.cash < item.price) return 'insufficientCash'
-      storeDecor(s.office, place.bumped)
-      slot = putItem(s.office, place, item.id, placementSpec(item))
-      boughtOn(s, item, slot)
-    }
-    if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
+    const seat = seatFor(s, content, c.dept, a.autoDesk === true)
+    if (typeof seat === 'string') return seat
+    slot = seat
   }
   hireCandidate(s, c, slot?.id)
+  return null
+}
+
+/**
+ * A desk for a new `dept` hire: grid §3/§5, a free desk by the hire's team (a spare ring desk may be carried there
+ * first), else any free desk; with `autoDesk` the cheapest open desk is bought onto the auto slot by the team (F6:
+ * refusing sent the player to the shop and the hire was never retried). The delegated hiring (staffing.ts) shares it.
+ */
+export function seatFor(s: GameState, content: EngineContent, dept: Dept, autoDesk: boolean): Slot | ActionErrorCode {
+  let slot = autoSeat(s.office, dept)
+  if (!slot && autoDesk) {
+    const item = autoDeskItem(s, content)
+    const place = item && autoPlace(s.office, placementSpec(item), { team: dept })
+    if (!item || !place) return 'noFreeSlot'
+    if (s.stats.cash < item.price) return 'insufficientCash'
+    storeDecor(s.office, place.bumped)
+    slot = putItem(s.office, place, item.id, placementSpec(item))
+    boughtOn(s, item, slot)
+  }
+  if (!slot) return onlyEmptyDeskSlots(s.office) ? 'noDesk' : 'noFreeSlot'
+  return slot
+}
+
+/** From Series A (STAFFING_FROM_STAGE): the department's headcount target; the leads hire toward it (staffing.ts). */
+const setHireTarget: Handler<'setHireTarget'> = ({ s }, a) => {
+  if (s.stage < B.STAFFING_FROM_STAGE) return 'notUnlocked'
+  if (!(DEPTS as readonly string[]).includes(a.dept) || !Number.isInteger(a.target) || a.target < 0 || a.target > B.STAFF_TARGET_MAX) return 'invalid'
+  const st = staffingOf(s)
+  if (st.targets[a.dept] === a.target) return null
+  st.targets[a.dept] = a.target
+  st.setDay = s.time.day
   return null
 }
 
@@ -782,6 +801,7 @@ const renameProject: Handler<'renameProject'> = ({ s }, a) => {
 
 const HANDLERS: { [K in Action['type']]: Handler<K> } = {
   hire,
+  setHireTarget,
   fire,
   renameProject,
   assignDesk,

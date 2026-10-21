@@ -7,6 +7,7 @@ import { freeCash } from './loopSelectors'
 import { enterStage, pushStageReport } from './round'
 import type { ConceptId, GameState, PostMortemCode, PostMortemReason } from './types'
 import { pushActivity, pushEvent, type EngineContent } from './util'
+import { dailyPraise } from './praise'
 
 const REASON_CONCEPT: Record<PostMortemCode, ConceptId | undefined> = {
   runwayIgnored: 'runway',
@@ -64,6 +65,8 @@ export function winRun(s: GameState, content?: EngineContent): void {
   s.gameOver = { kind: 'unicorn', day: s.time.day, reasons: [], xpEarned: B.XP_PER_STAGE * (B.LAST_STAGE + 1) }
   s.time.speed = 0
   pushEvent(s, { kind: 'victory', value: s.finance.valuation })
+  // The Unicorn praise is not held by the gap (the run ends here).
+  if (content) dailyPraise(s, content, true)
 }
 
 /**

@@ -42,3 +42,7 @@ export { loanAmount, loanMonthlyService } from './effects'
 export { policyError } from './actions'
 export { adPreview, adStepWarning, cacFactors, cacReason, CAC_FACTOR_ORDER, type AdPreview, type CacFactor, type CacFactorKey } from './ads'
 export { boardEquity, policyEquity } from './round'
+// 2026-10-21 clarity & pace: one decision at a time, delegated hiring from Series A, notices.
+export { openDecision, decisionSlotFree, type OpenDecision } from './pace'
+export { marketSalary, staffingView } from './staffing'
+export { headcount, staffingOf } from './util'

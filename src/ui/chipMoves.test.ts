@@ -26,7 +26,7 @@ afterEach(() => markChipTarget(null))
 
 describe('chip move split', () => {
   it('big or irreversible moves only open their place: acquire, newProduct, openSegment, signLaw, serverRoom, openRing, cutBurn, hires', () => {
-    expect([...CONFIRM_MOVES].sort()).toEqual(['acquire', 'cutBurn', 'hireEng', 'hireGrowth', 'hireMarketing', 'moraleLost', 'newProduct', 'openRing', 'openSegment', 'serverRoom', 'signLaw'])
+    expect([...CONFIRM_MOVES].sort()).toEqual(['acquire', 'cutBurn', 'hireEng', 'hireGrowth', 'hireMarketing', 'moraleLost', 'newProduct', 'openRing', 'openSegment', 'serverRoom', 'signLaw', 'teamTarget'])
     for (const m of CONFIRM_MOVES) {
       useGameStore.getState().newGame({ seed: 4, founderXp: 0, runIndex: 0 })
       expect(tap(m), m).toEqual([])

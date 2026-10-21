@@ -1,7 +1,7 @@
 // Pure core-loop selectors (docs/CORE_LOOP.md §5): the next link of the main chain and the horizon ahead.
 // recomputeDerived stores both in state.derived (render/ui read them there); sim may call them directly.
 import * as B from './balance'
-import { growthScore, ledgerCosts, runway, valuation, valuationPreRevenue } from './economy'
+import { growthScore, ledgerCosts, runway, salary as economySalary, valuation, valuationPreRevenue } from './economy'
 import { effortOn, hasOpenWork, ledMember, onLeave, projectLoad } from './effort'
 import { projectVersion, updateSize, versionUpdates } from './modules'
 import { diligenceNow, growthAsk, investorGrowth as investorGrowthOf, offerFactor, priceRatio } from './round'
@@ -193,7 +193,65 @@ export function moveAction(s: GameState, move: NextMove): Action | null {
     }
     case 'adsUp':
       return { type: 'setAdBudget', amount: biggerAdBudget(s) }
+    case 'teamTarget': {
+      const t = s.derived.nextStep?.team ?? teamFromHireMove(s)
+      return t ? { type: 'setHireTarget', dept: t.dept, target: t.target } : null
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Delegated hiring on the chip (2026-10-21): from Series A the hire moves become team moves ("Geliştirme hedefini
+// 12'ye çıkar"); the department leads hire toward it (staffing.ts). Never "hire one engineer" there.
+// ---------------------------------------------------------------------------
+
+/** Below Series A any hire move goes; from it only when its department has a team move to offer. */
+function teamOk(s: GameState, dept: Dept): boolean {
+  return s.stage < B.STAFFING_FROM_STAGE || teamSuggestion(s, dept) !== null
+}
+
+/**
+ * The team move for `dept`: none while its lead is still filling a raised target (or the move is snoozed); else
+ * headcount + a step (a quarter of the department, 1–4), shrunk until the runway carries all of it at market salary.
+ */
+export function teamSuggestion(s: GameState, dept: Dept): { dept: Dept; target: number } | null {
+  if (s.stage < B.STAFFING_FROM_STAGE || snoozed(s, `teamTarget:${dept}`)) return null
+  const v = s.derived.staffing?.depts[dept]
+  const count = v?.count ?? s.derived.deptCounts?.[dept] ?? 0
+  const target = v?.target ?? count
+  if (target > count) return null
+  const desk = s.derived.hireDeskCost
+  if (desk === null || desk === undefined) return null
+  const salary = policyCost(s, 'salary', Math.round(salaryOf(dept, s.stage)))
+  const bar = B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM
+  for (let step = Math.max(1, Math.min(NEXT_MOVE_TEAM_STEP_MAX, Math.round(count * NEXT_MOVE_TEAM_STEP_SHARE))); step >= 1; step--) {
+    if (!cashSafe(s, desk * step, salary * step)) continue
+    const after = previewSpend(s, { cashDelta: -desk * step, burnDelta: salary * step }).runwayAfter
+    if (after === null || after >= bar) return { dept, target: count + step }
+  }
+  return null
+}
+const NEXT_MOVE_TEAM_STEP_SHARE = 0.25
+const NEXT_MOVE_TEAM_STEP_MAX = 4
+
+function salaryOf(dept: Dept, stage: number): number {
+  return economySalary(B.BASE_SALARY[dept], stage)
+}
+
+/** The department a hire move names (hireGrowth: the growth mix's). */
+function hireMoveDept(s: GameState, move: NextMove): Dept | undefined {
+  return move === 'hireEng' ? 'eng' : move === 'hireMarketing' ? 'marketing' : move === 'hireGrowth' ? growthDept(s, !underused(s)) : undefined
+}
+
+function teamFromHireMove(s: GameState): { dept: Dept; target: number } | null {
+  const raw = nextMoveRaw(s)
+  const d = raw ? hireMoveDept(s, raw) : undefined
+  return d ? teamSuggestion(s, d) : null
+}
+
+function teamAction(s: GameState, dept: Dept): Action | null {
+  const t = teamSuggestion(s, dept)
+  return t ? { type: 'setHireTarget', dept: t.dept, target: t.target } : null
 }
 
 /** The survival laws in the order that cuts the most for the least (the bots' order); the first one signable now. */
@@ -298,7 +356,7 @@ function priceGateOpen(s: GameState): boolean {
 // ---------------------------------------------------------------------------
 
 /** Moves that ask the player to confirm something big in its own place (the ones that can be declined). */
-export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['signLaw', 'acquire', 'newProduct', 'openSegment', 'serverRoom', 'openRing', 'hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn', 'moraleLost'])
+export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['signLaw', 'acquire', 'newProduct', 'openSegment', 'serverRoom', 'openRing', 'hireEng', 'hireMarketing', 'hireGrowth', 'cutBurn', 'moraleLost', 'teamTarget'])
 
 /** True while `key` is snoozed (state.chipSnooze: key → first day it shows again). */
 export function snoozed(s: Pick<GameState, 'chipSnooze' | 'time'>, key: string): boolean {
@@ -310,6 +368,7 @@ export function moveKey(s: GameState, move: NextMove): string {
   // Round 9: laws, rivals, products and segments snooze as a kind (per-law snoozes rotated four laws on the chip every
   // 20–30 days); hires stay per department.
   if (move === 'hireGrowth') return `hireGrowth:${growthDept(s, !underused(s)) ?? ''}`
+  if (move === 'teamTarget') return `teamTarget:${(s.derived.nextStep?.move === 'teamTarget' ? s.derived.nextStep.team?.dept : undefined) ?? teamFromHireMove(s)?.dept ?? ''}`
   return move
 }
 
@@ -380,7 +439,7 @@ function leaverOf(s: GameState) {
 
 /** What raises the MoM the next round asks for: a marketer if there is none, else the next ad step the runway carries. */
 function growthMove(s: GameState): Action | null {
-  if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return hireAction(s, 'marketing')
+  if ((s.derived.deptCounts?.marketing ?? 0) === 0 && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN) && teamOk(s, 'marketing')) return s.stage >= B.STAFFING_FROM_STAGE ? teamAction(s, 'marketing') : hireAction(s, 'marketing')
   const amount = biggerAdBudget(s)
   if (s.stage >= 4 || amount <= s.finance.adBudget || !adsPay(s) || !cashSafe(s, 0, amount - s.finance.adBudget)) return null
   const after = previewSpend(s, { burnDelta: amount - s.finance.adBudget }).runwayAfter
@@ -535,6 +594,11 @@ function moduleToBuild(s: GameState): { projectId: string; moduleId: ProjectModu
  * idle: its cheapest module). undefined = the goal itself is the move.
  */
 export function nextMove(s: GameState): NextMove | undefined {
+  const m = nextMoveRaw(s)
+  return m !== undefined && s.stage >= B.STAFFING_FROM_STAGE && hireMoveDept(s, m) !== undefined ? 'teamTarget' : m
+}
+
+function nextMoveRaw(s: GameState): NextMove | undefined {
   if (s.stage > NEXT_MOVE_MAX_STAGE || !s.projects.some((p) => p.launched)) return undefined
   // People first (playtest round 5: three resignations sank Pre-seed): a leaver, then a team below the morale bar.
   if (leaverOf(s)) return 'keepStaff'
@@ -546,7 +610,7 @@ export function nextMove(s: GameState): NextMove | undefined {
     if (why && why.overload >= NEXT_MOVE_MORALE_OVERLOAD) {
       // With no engineer at all the servers sit at the 50-user floor: the first engineer is worth a thinner runway.
       const noEng = (s.derived.deptCounts?.eng ?? 0) === 0
-      if (!snoozed(s, 'hireEng') && hireFits(s, 'eng', noEng ? NEXT_MOVE_FIRST_ENG_RUNWAY : B.HIRE_RUNWAY_MIN)) return 'hireEng'
+      if (!snoozed(s, 'hireEng') && hireFits(s, 'eng', noEng ? NEXT_MOVE_FIRST_ENG_RUNWAY : B.HIRE_RUNWAY_MIN) && teamOk(s, 'eng')) return 'hireEng'
       const room = s.derived.serverRoom
       if (room && !snoozed(s, 'serverRoom') && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
     }
@@ -566,7 +630,7 @@ export function nextMove(s: GameState): NextMove | undefined {
     }
   }
   // Round 12: nobody left after the garage: the cheapest builder the cash carries (2 months of runway after it).
-  if (s.stage >= 1 && s.employees.length === 0 && !snoozed(s, 'hireEng') && hireFits(s, 'eng', NEXT_MOVE_FIRST_ENG_RUNWAY)) return 'hireEng'
+  if (s.stage >= 1 && s.employees.length === 0 && !snoozed(s, 'hireEng') && hireFits(s, 'eng', NEXT_MOVE_FIRST_ENG_RUNWAY) && teamOk(s, 'eng')) return 'hireEng'
   // The round window open and nothing started: the round brings the cash (round 6: the tester idled 400 days with
   // only the HUD's "Tur başlat" as a cue).
   if (s.derived.canStartRound && !s.round?.active) return 'startRound'
@@ -585,7 +649,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   }
   // Servers full (round 7: overload took a Series C company's churn from 3.5 % to 8 %) (users churn away on an overloaded product): an engineer, if the runway carries one.
   const eng = s.derived.deptCounts?.eng ?? 0
-  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && !snoozed(s, 'hireEng') && hireFits(s, 'eng', eng === 0 && s.derived.overload > 0 ? NEXT_MOVE_FIRST_ENG_RUNWAY : B.HIRE_RUNWAY_MIN)) return 'hireEng'
+  if ((serversTight(s) || (eng === 0 && s.stage >= 1)) && !snoozed(s, 'hireEng') && hireFits(s, 'eng', eng === 0 && s.derived.overload > 0 ? NEXT_MOVE_FIRST_ENG_RUNWAY : B.HIRE_RUNWAY_MIN) && teamOk(s, 'eng')) return 'hireEng'
   // No seat for the engineer: a server room (capacity × 1.25 each) when the cash carries it.
   const room = s.derived.serverRoom
   if (serversTight(s) && room && !snoozed(s, 'serverRoom') && cashSafe(s, room.price, room.upkeep)) return 'serverRoom'
@@ -607,7 +671,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.founder.focus === 'users' && (s.derived.findUsers?.factor ?? 1) < NEXT_MOVE_FIND_DEAD) return 'focusTalk'
   if (flat) {
     if ((s.founder.focus ?? 'build') === 'build' && (s.derived.findUsers?.factor ?? 1) >= B.FOCUS_FIND_MIN_FACTOR) return 'focusUsers'
-    if ((s.derived.deptCounts?.marketing ?? 0) === 0 && !snoozed(s, 'hireMarketing') && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN)) return 'hireMarketing'
+    if ((s.derived.deptCounts?.marketing ?? 0) === 0 && !snoozed(s, 'hireMarketing') && hireFits(s, 'marketing', B.HIRE_RUNWAY_MIN) && teamOk(s, 'marketing')) return 'hireMarketing'
     if (s.stage < 4 && s.finance.adBudget <= 0 && cashSafe(s, 0, firstAdBudget(s))) {
       // Only an ad budget the runway carries (no ads on / ads cut loop).
       const after = previewSpend(s, { burnDelta: firstAdBudget(s) }).runwayAfter
@@ -621,7 +685,7 @@ export function nextMove(s: GameState): NextMove | undefined {
   if (s.stage >= 1) {
     // One growth hire at a time: the last one settles NEXT_MOVE_HIRE_GAP_DAYS before the next is named.
     // Never into an idle or bored team (they leave), and from Series A only with a year of runway after the hire.
-    if (daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s, !underused(s))) return 'hireGrowth'
+    if (daysSinceHire(s) >= NEXT_MOVE_HIRE_GAP_DAYS && growthDept(s, !underused(s)) && teamOk(s, growthDept(s, !underused(s))!)) return 'hireGrowth'
     const roomy = (m: number) => rw === null || rw >= m
     // Office full: the next section, when the runway carries its price and rent.
     if (s.derived.hireDeskCost === null && !snoozed(s, 'openRing') && roomy(B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM) && ringFits(s, B.HIRE_RUNWAY_MIN + NEXT_MOVE_GROWTH_HEADROOM)) return 'openRing'
@@ -714,7 +778,14 @@ export function lastUpdateDay(s: GameState, projectId: string): number {
  */
 export function nextStep(s: GameState): NextStep {
   const st = chainStep(s)
-  const move = st.id === 'idea' || st.id === 'hire' ? undefined : nextMove(s)
+  const raw = st.id === 'idea' || st.id === 'hire' ? undefined : nextMoveRaw(s)
+  // From Series A a hire move is a team move: the department and its new target ride on the step.
+  const teamDept = raw !== undefined && s.stage >= B.STAFFING_FROM_STAGE ? hireMoveDept(s, raw) : undefined
+  if (teamDept) {
+    const team = teamSuggestion(s, teamDept)
+    return team ? { ...st, move: 'teamTarget', team } : st
+  }
+  const move = raw
   if (move === 'progress') {
     const metric = weakestMetric(s)
     return metric ? { ...st, move, metric } : { ...st, move }

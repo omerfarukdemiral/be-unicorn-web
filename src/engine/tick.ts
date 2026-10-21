@@ -14,6 +14,8 @@ import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
 import { checkRoundWindow, maybeOpenMeeting, progressRound } from './round'
 import { trackDecisionSlot } from './pace'
+import { dailyStaffing } from './staffing'
+import { dailyPraise } from './praise'
 import { DAYS_PER_MONTH, DAYS_PER_WEEK, FIXED_STEP_DAYS, type GameEventKind, type GameState } from './types'
 import { clone, modifierMult, pushActivity, pushEvent, type EngineContent } from './util'
 import { trackChip } from './loopSelectors'
@@ -127,10 +129,14 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   s.modifiers = s.modifiers.filter((m) => m.untilDay > s.time.day)
   s.candidates = s.candidates.filter((c) => c.expiresDay > s.time.day)
   if (day % DAYS_PER_WEEK === 0) fillCandidates(s, content, rng)
+  // From Series A the department leads hire toward the player's targets (staffing.ts), on the weekly pass.
+  dailyStaffing(s, content, rng, day)
   applyDueEffects(s, content)
   // GAMEPLAY V2 §6.1: a payday desk left unanswered for PAYDAY_DECIDE_DAYS applies the default order.
   checkPaydayDesk(s, content)
   checkMilestones(s)
+  // 2026-10-21: a milestone set against a famous company's number (one per PRAISE_GAP_DAYS, only ahead or close).
+  dailyPraise(s, content)
   // MV2a: a module's measured effect freezes 30 days after delivery.
   freezeModuleMeasures(s)
   if (day % DAYS_PER_MONTH === 0) {

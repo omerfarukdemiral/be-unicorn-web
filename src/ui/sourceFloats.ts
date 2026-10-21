@@ -147,6 +147,9 @@ export function pushFloats(items: Omit<SourceFloat, 'id'>[]): void {
   if (!timer) advance()
 }
 
+/** A float is on screen now (first-run hints wait for it: they would cover it). */
+export const floatShowing = (): boolean => current !== null
+
 /** Drops everything (a new run, a load). */
 export function clearFloats(): void {
   if (timer) clearTimeout(timer)

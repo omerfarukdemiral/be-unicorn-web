@@ -1,10 +1,11 @@
 // First-run hints (P5): the first time each of the five main HUD numbers moves meaningfully, its tooltip opens by
 // itself for HINT_MS, once, then never again (localStorage 'be-unicorn:hints'). That is the whole tutorial: no modal.
-// One hint at a time, HINT_GAP_MS apart; a tip not on screen (the phone hides energy behind a sheet) waits its turn.
+// One hint at a time, HINT_GAP_MS apart, never over a source float; a tip not on screen (the phone hides energy behind a sheet) waits its turn.
 import { freeCash } from '../engine/loopSelectors'
 import type { GameState } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
 import { hintTip, tipOpen } from './Tip'
+import { floatShowing } from './sourceFloats'
 
 export const HINT_IDS = ['cash', 'users', 'energy', 'morale', 'runway'] as const
 export type HintId = (typeof HINT_IDS)[number]
@@ -72,7 +73,7 @@ if (typeof window !== 'undefined') {
     if (!st.ui.runStarted || st.state.gameOver) return
     if (!base) base = hintBase(st.state)
     // Never over an open decision, panel bubble or another tip: the player is reading something else.
-    if (st.ui.pauseReasons.length > 0 || tipOpen()) return
+    if (st.ui.pauseReasons.length > 0 || tipOpen() || floatShowing()) return
     const now = performance.now()
     if (now - lastShown < HINT_GAP_MS) return
     for (const id of HINT_IDS) {

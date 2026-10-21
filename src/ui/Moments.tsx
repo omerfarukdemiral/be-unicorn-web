@@ -62,7 +62,7 @@ export function useMomentSource(onMoments: (add: Moment[]) => void): void {
   })
 }
 
-/** Icon, identity hue and the panel a moment opens. No red here (docs/LAYOUT.md §4.1): a negative receipt uses the burn identity hue. */
+/** Icon, identity hue and the panel a moment opens. The icon keeps the burn identity hue; the numbers wear their sign colour (P5: − red, + green). */
 export function momentLook(m: Moment): { icon: IconName; color: string; panel: Panel } {
   const panel = momentPanel(m.kind)
   switch (m.kind) {
@@ -143,7 +143,7 @@ export function MomentLine({ m }: { m: Moment }) {
           <span className={main}>{t('receipt.title', { m: r.month + 1 })}</span>
           <span className={sub}>
             {' · '}
-            {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-ink')}>{sgn(r.net)}</span> · {t('strip.paid')} {neg(r.paid)}
+            {t('receipt.net')} <span className={cx('font-semibold', r.net >= 0 ? 'text-positive-ink' : 'text-negative-ink')}>{sgn(r.net)}</span> · {t('strip.paid')} <span className={r.paid > 0.5 ? 'text-negative-ink' : undefined}>{neg(r.paid)}</span>
             {adUsersText(r) && ` · ${adUsersText(r)}`}
             {runway && ` · ${t('receipt.runway')} ${runway}`}
           </span>

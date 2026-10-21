@@ -339,7 +339,7 @@ function ProfitWidget({ variant }: WidgetProps) {
       icon="trend"
       label={t('hud.profitProjection')}
       title={t('hud.profitTitle')}
-      value={<span className={net >= 0 ? 'text-positive-ink' : undefined}>{t('hud.netPerMonth', { v: signedMoney(net) })}</span>}
+      value={<span className={net >= 0 ? 'text-positive-ink' : 'text-negative-ink'}>{t('hud.netPerMonth', { v: signedMoney(net) })}</span>}
       sub={panel ? t('hud.profitFormula', { mrr: money(mrr), burn: money(burn) }) : net >= 0 ? t('hud.profitable') : undefined}
     >
       {panel && <Spark values={hist} line={burn} color={WIDGET_COLOR.profitProjection} />}

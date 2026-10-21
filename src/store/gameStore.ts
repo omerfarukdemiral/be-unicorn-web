@@ -7,6 +7,7 @@
 // the center screen, and at 4× an important moment slows the run to 1× for a few game days, then back to 4×
 // (docs/GAMEPLAY_V2.md §3.6, §12). A card shown
 // lands in the Keşif record (localStorage 'be-unicorn:codex', outside the engine and the save, §9.2).
+import { openDecision } from '../engine/pace'
 import { create } from 'zustand'
 import { DECISIONS } from '../content'
 import { applyAction, createGame, step } from '../engine'
@@ -895,7 +896,9 @@ if (typeof window !== 'undefined') {
  * 4× the run goes 1× until it closes ("her şey için düşünebilmeyi isterdim").
  */
 export function decisionWaiting(s: GameState): boolean {
-  return !!s.decisions.active || (!!s.round?.active && s.round.pitchDue !== undefined) || !!s.finance.pendingPayday
+  // engine/pace.ts's one open decision, minus a notice period (the effort hold already slows for the notice itself).
+  const open = openDecision(s)
+  return open !== null && open !== 'leaver'
 }
 
 useGameStore.subscribe((st, prev) => {

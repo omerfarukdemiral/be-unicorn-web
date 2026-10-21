@@ -18,6 +18,8 @@ const ALARMS: ReadonlySet<string> = new Set<AlarmKind>(['paydayShort', 'crisis',
 
 export function priorityOf(kind: TransientKind): StripPriority {
   if (kind === 'runwayLow') return 0
+  // P2 (owner): the cash ran out and something paid for it; that card must be seen, as a cash alarm is.
+  if (kind === 'rescue') return 1
   return ALARMS.has(kind) ? 1 : 2
 }
 
@@ -188,7 +190,7 @@ export const OFFICE_LINES_PER_DAY = 1
 export const DEDUPE_DAYS = 30
 
 /** P2 kinds outside the quota: the month receipt (its own beat) and a rejected action (the player's own click). */
-const QUOTA_FREE: ReadonlySet<TransientKind> = new Set<TransientKind>(['receipt', 'error'])
+const QUOTA_FREE: ReadonlySet<TransientKind> = new Set<TransientKind>(['receipt', 'error', 'rescue'])
 
 /** Office line triggers that may still speak (docs/GAMEPLAY_V2.md §9.4): people coming and going, a crisis. */
 export const OFFICE_LINE_TRIGGERS: ReadonlySet<string> = new Set(['hire', 'fire', 'resign', 'crisis'])

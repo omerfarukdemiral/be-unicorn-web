@@ -4,7 +4,7 @@
 // They are items of the ONE notification strip: `useMomentSource` turns fresh engine events into moments,
 // `MomentLine` draws one as a single line, `momentLook` gives its icon / hue / panel. Nothing here pauses time.
 // The receipt ends on one teaser: the next storm on the horizon, "→ 12g · Yatırımcı kışı" ("?" until revealed, §5.1).
-import type { GameState, MonthReceipt } from '../engine/types'
+import type { GameState, MonthReceipt, Notice } from '../engine/types'
 import { moduleName } from '../content'
 import { slotsOpened } from '../engine/modules'
 import type { Panel } from '../store/types'
@@ -19,6 +19,8 @@ export type Moment =
   | { key: number; kind: 'receipt'; receipt: MonthReceipt; next?: ReceiptTeaser }
   | { key: number; kind: 'release'; project: string; level: number; update?: number; version?: number; minor?: number; module?: string; users: number; mrr: number }
   | { key: number; kind: 'outcome'; option: string; effects: string }
+  /** Engine notices (engine/notices.ts): the leads' hires, a rescue and its price. Praise has its own card (PraiseCard). */
+  | { key: number; kind: 'hired' | 'rescue'; notice: Notice }
 
 /** The receipt's teaser: days to the next crisis on the horizon and its name ("?" while hidden). */
 export interface ReceiptTeaser {
@@ -48,6 +50,9 @@ export function useMomentSource(onMoments: (add: Moment[]) => void): void {
         const r = s.releases?.find((x) => x.id === e.refId)
         const mod = r?.module ? moduleName(r.module, s.projects.find((p) => p.id === r.projectId)?.category) : undefined
         if (r) add.push({ key: e.id, kind: 'release', project: r.projectName, level: r.level, ...(r.update !== undefined ? { update: r.update } : {}), ...(r.version !== undefined ? { version: r.version } : {}), ...(r.minor !== undefined ? { minor: r.minor } : {}), ...(mod ? { module: mod } : {}), users: r.users, mrr: r.mrr })
+      } else if (e.kind === 'notice' && e.refId !== 'praise') {
+        const n = s.notices?.find((x) => x.id === e.value)
+        if (n) add.push({ key: e.id, kind: n.kind === 'teamHired' ? 'hired' : 'rescue', notice: n })
       } else if (e.kind === 'delayedEffect') {
         const o = [...(s.decisions.outcomes ?? [])].reverse().find((x) => x.cardId === e.refId)
         if (o) add.push({ key: e.id, kind: 'outcome', option: optionLabel(o.cardId, o.optionIndex) ?? '', effects: effectSummary(o.effects) })
@@ -67,6 +72,10 @@ export function momentLook(m: Moment): { icon: IconName; color: string; panel: P
       return { icon: 'rocket', color: 'var(--color-brand)', panel }
     case 'outcome':
       return { icon: 'hourglass', color: 'var(--color-kind-decision)', panel }
+    case 'hired':
+      return { icon: 'users', color: 'var(--color-positive)', panel }
+    case 'rescue':
+      return { icon: 'cash', color: 'var(--color-negative)', panel }
   }
 }
 
@@ -114,6 +123,9 @@ export function momentText(m: Moment): string {
       return t('strip.release', { project: m.project, level: releaseName(m.level, m.update, undefined, m.version, m.minor), u: Math.round(m.users), m: money(m.mrr) })
     case 'outcome':
       return t('outcome.line', { option: m.option, effects: m.effects })
+    case 'hired':
+    case 'rescue':
+      return m.notice.text
   }
 }
 
@@ -159,6 +171,10 @@ export function MomentLine({ m }: { m: Moment }) {
           <span className={sub}> · {t('outcome.line', { option: m.option, effects: m.effects })}</span>
         </span>
       )
+    case 'hired':
+    case 'rescue':
+      // One sentence with the price already in it (engine/notices.ts).
+      return <span className="font-text font-semibold text-ink">{m.notice.text}</span>
   }
 }
 

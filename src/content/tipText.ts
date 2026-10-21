@@ -56,11 +56,12 @@ export const TIP_TEXT: Record<string, string> = {
   'tip.team.up': 'İşe alım',
   'tip.team.down': 'İstifa, işten çıkarma',
   'tip.dept.name': '{dept}: kişi sayısı',
+  'tip.dept.value': 'Şu an {n} kişi, hedef {t}',
   'tip.dept.up': 'İşe alım; Seri A’dan sonra lider hedefe kadar kendi alır',
   'tip.dept.down': 'İstifa, işten çıkarma',
 
   'tip.project.name': 'Proje ilerlemesi',
-  'tip.project.up': 'Projedeki mühendisler, iyi masa, dinç ekip',
+  'tip.project.up': 'Projedeki geliştiriciler, iyi masa, dinç ekip',
   'tip.project.down': 'Teknik borç, yorgunluk, eksik kadro',
   'tip.project.live': 'Bugünkü hız: günde +%{v}',
   'tip.version.name': 'Yayındaki sürüm',
@@ -130,4 +131,16 @@ export const TIP_TEXT: Record<string, string> = {
   'float.src.manual': 'Saha',
   'float.src.enterprise': 'Kurumsal',
   'float.src.churn': 'Kayıp',
+  // Praise card (ui/PraiseCard.tsx).
+  'praise.title': 'Takdir',
+  'praise.fact': 'Bir kıyas',
+  // Ekip › Hedefler (P3, delegated hiring from Series A).
+  'team.targets': 'Hedefler',
+  'team.targetsLine': 'Liderler her hafta hedefe kadar kendileri alır, kasa izin verdikçe. Sonraki tur {d} gün sonra.',
+  'team.targetHiring': '{n} kişi aranıyor · maaş ~{v}/ay',
+  'team.targetDone': 'Hedefte · maaş ~{v}/ay',
+  'team.targetCash': 'Kasa izin vermiyor: alım bekliyor',
+  'team.targetDesk': 'Masa yeri yok: yeni halka aç',
+  'team.targetUp': '{d} hedefini artır',
+  'team.targetDown': '{d} hedefini azalt',
 }

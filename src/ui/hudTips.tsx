@@ -3,8 +3,8 @@
 import type { ComponentType } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import * as B from '../engine/balance'
-import type { BurnBreakdown, GameState, HudWidget } from '../engine/types'
-import { STAGES, UI_TEXT } from '../content'
+import type { BurnBreakdown, Dept, GameState, HudWidget } from '../engine/types'
+import { DEPT_TEXT, STAGES, UI_TEXT } from '../content'
 import { useGameStore } from '../store/gameStore'
 import { cashFlow } from './cashflow'
 import { fixed, money, signedMoney, signedNum } from './format'
@@ -158,3 +158,8 @@ export function projectTip(projectId: string): ComponentType {
 }
 
 export const VERSION_TIP: TipContent = { name: t('tip.version.name'), up: t('tip.version.up') }
+
+/** A department's headcount over its target (Ekip › Hedefler). */
+export function deptTip(dept: Dept, count: number, target: number): TipContent {
+  return { name: t('tip.dept.name', { dept: DEPT_TEXT[dept].name }), value: t('tip.dept.value', { n: count, t: target }), up: t('tip.dept.up'), down: t('tip.dept.down') }
+}

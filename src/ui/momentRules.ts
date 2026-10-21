@@ -5,10 +5,11 @@
 // (docs/GAMEPLAY_V2.md §12 D9).
 import type { Panel } from '../store/types'
 
-export type MomentKind = 'receipt' | 'release' | 'outcome'
+/** 'hired': the leads' weekly hires (one line); 'rescue': a rescue / broke round with its price (engine notices). */
+export type MomentKind = 'receipt' | 'release' | 'outcome' | 'hired' | 'rescue'
 
 /** Every card closes by itself within 4 s (hovering holds it open). */
-export const MOMENT_LIFE_MS: Record<MomentKind, number> = { receipt: 4000, release: 4000, outcome: 4000 }
+export const MOMENT_LIFE_MS: Record<MomentKind, number> = { receipt: 4000, release: 4000, outcome: 4000, hired: 3500, rescue: 6000 }
 
 /** Cards waiting behind the shown ones. */
 export const MOMENT_QUEUE_MAX = 3
@@ -41,5 +42,9 @@ export function momentPanel(kind: MomentKind): Panel {
       return { kind: 'projects' }
     case 'outcome':
       return { kind: 'growth' }
+    case 'hired':
+      return { kind: 'team' }
+    case 'rescue':
+      return { kind: 'metrics', focus: 'burnBreakdown' }
   }
 }

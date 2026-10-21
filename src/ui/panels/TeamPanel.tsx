@@ -19,22 +19,33 @@ import { useSpendPreview } from '../widgets'
 import { useTwoStep } from '../hooks'
 import { DEPT_COLOR, moraleTone, soft } from '../theme'
 import { chipTarget, useChipMark, useChipTargetKey } from '../chipTarget'
+import { marketSalary } from '../../engine/staffing'
+import { Tip } from '../Tip'
+import { deptTip } from '../hudTips'
 
-type Sub = 'hire' | 'team'
+type Sub = 'targets' | 'hire' | 'team'
 
 export function TeamPanel() {
   const leaving = useGameStore((s) => s.state.employees.some((e) => e.status === 'leaving'))
   const teamSize = useGameStore((s) => s.state.employees.length)
   // Round 9: a chip hire move opens the hire view even with someone leaving (the marked candidate is the point).
   const chipHire = chipTarget()?.startsWith('candidate:') ?? false
-  const [sub, setSub] = useState<Sub>(leaving && !chipHire ? 'team' : 'hire')
+  // P3: from Series A the leads hire toward a target per department; the targets are the first view there.
+  const delegated = useGameStore((s) => s.state.stage >= B.STAFFING_FROM_STAGE)
+  const [sub, setSub] = useState<Sub>(leaving && !chipHire ? 'team' : delegated && !chipHire ? 'targets' : 'hire')
   const markKey = useChipTargetKey()
   useEffect(() => {
     if (markKey?.startsWith('candidate:')) setSub('hire')
+    if (markKey?.startsWith('team:')) setSub('targets')
   }, [markKey])
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-1.5">
+        {delegated && (
+          <Chip active={sub === 'targets'} onClick={() => setSub('targets')} icon="flag">
+            {t('team.targets')}
+          </Chip>
+        )}
         <Chip active={sub === 'hire'} onClick={() => setSub('hire')} icon="plus">
           {t('team.candidates')}
         </Chip>
@@ -42,8 +53,98 @@ export function TeamPanel() {
           {t('team.members', { n: teamSize })}
         </Chip>
       </div>
-      {sub === 'hire' ? <HireView /> : <TeamList />}
+      {sub === 'targets' && delegated ? <TargetsView /> : sub === 'team' ? <TeamList /> : <HireView />}
     </div>
+  )
+}
+
+/**
+ * P3 (owner: "şirket büyüyünce onlarla ben uğraşmayayım"): one row a department, today's headcount over its target and
+ * − / + on the target. The leads fill the gap each week within the cash guard (engine/staffing.ts); a row says what
+ * holds it (cash, no desk room). The chip's team move marks its row; + there confirms it.
+ */
+function TargetsView() {
+  const view = useGameStore((s) => s.state.derived.staffing)
+  const day = useGameStore((s) => Math.floor(s.state.time.day))
+  const salaries = useGameStore(useShallow((s) => Object.fromEntries(DEPTS.map((d) => [d, marketSalary(s.state, d)])) as Record<Dept, number>))
+  const dispatch = useGameStore((s) => s.dispatch)
+  const markKey = useChipTargetKey()
+  if (!view) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="font-text text-[12px] leading-snug text-ink-2">{t('team.targetsLine', { d: view.nextDay - day })}</p>
+      <ul className="flex flex-col gap-1">
+        {DEPTS.map((d) => {
+          const v = view.depts[d]
+          const suggested = markKey?.startsWith(`team:${d}:`) ? Number(markKey.split(':')[2]) : null
+          // The buttons are disabled at 0 and STAFF_TARGET_MAX; the engine clamps too.
+          const set = (target: number) => dispatch({ type: 'setHireTarget', dept: d, target })
+          return (
+            <TargetRow key={d} dept={d} count={v.count} target={v.target} blocked={v.blocked} salary={salaries[d]} suggested={suggested} onSet={set} />
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function TargetRow({
+  dept,
+  count,
+  target,
+  blocked,
+  salary,
+  suggested,
+  onSet,
+}: {
+  dept: Dept
+  count: number
+  target: number
+  blocked: 'cash' | 'desk' | null
+  salary: number
+  suggested: number | null
+  onSet: (target: number) => void
+}) {
+  const marked = suggested !== null
+  const gap = target - count
+  return (
+    <li
+      data-target-row={dept}
+      className={cx('flex min-h-12 items-center gap-2 rounded-control px-2 py-1.5', marked && 'ring-2 ring-brand ring-offset-1 animate-attention')}
+      style={{ background: soft(DEPT_COLOR[dept].dot, 8) }}
+    >
+      <Dot color={DEPT_COLOR[dept].dot} size={8} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[14px] font-semibold text-ink">{DEPT_TEXT[dept].name}</span>
+        <span className={cx('tabular block text-[11px] font-semibold', blocked === 'cash' ? 'text-negative-ink' : blocked === 'desk' ? 'text-energy-ink' : 'text-ink-2')}>
+          {blocked === 'cash'
+            ? t('team.targetCash')
+            : blocked === 'desk'
+              ? t('team.targetDesk')
+              : gap > 0
+                ? t('team.targetHiring', { n: gap, v: money(salary) })
+                : t('team.targetDone', { v: money(salary) })}
+        </span>
+      </span>
+      <Tip content={deptTip(dept, count, target)} className="tabular shrink-0 text-[15px] font-bold text-ink">
+        {count}
+        <span className="text-ink-3">/{target}</span>
+      </Tip>
+      <span className="flex shrink-0 items-center gap-1">
+        <Button size="sm" tone="ghost" icon="minus" aria-label={t('team.targetDown', { d: DEPT_TEXT[dept].name })} disabled={target <= 0} onClick={() => onSet(target - 1)} className="px-2" />
+        <Button
+          size="sm"
+          tone={marked ? 'commit' : 'secondary'}
+          icon="plus"
+          aria-label={t('team.targetUp', { d: DEPT_TEXT[dept].name })}
+          disabled={target >= B.STAFF_TARGET_MAX}
+          onClick={() => onSet(marked && suggested! > target ? suggested! : target + 1)}
+          className="px-2"
+        >
+          {marked && suggested! > target ? String(suggested) : undefined}
+        </Button>
+      </span>
+    </li>
   )
 }
 

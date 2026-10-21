@@ -19,6 +19,7 @@ import { cashFlow } from '../cashflow'
 import { useFreshEvents } from '../loopUi'
 import { guidedGoal } from '../guidance'
 import { Tip } from '../Tip'
+import { FLOAT_SHOW_MS, useSourceFloat, type FloatGauge } from '../sourceFloats'
 import { CashTip, MoraleTip, NetTip, RunwayTip, UsersTip } from '../hudTips'
 
 /** Counts finished founder actions of `kinds` (a fresh count re-keys the value: one `pop-once`). */
@@ -73,6 +74,7 @@ export function BarChip({
   hero = false,
   tip,
   tipId,
+  float,
   children,
 }: {
   icon: IconName
@@ -92,12 +94,19 @@ export function BarChip({
   tip?: ComponentType
   /** First-run hint id (ui/firstHints.ts). */
   tipId?: string
+  /** P5 source float slot: "Reklam +40" over (desktop) / under (phones) this gauge. */
+  float?: FloatGauge
   children?: ReactNode
 }) {
   const mobile = density === 'mobile'
   const rootClass = cx('relative flex min-w-0 items-center rounded-control', mobile ? 'h-11 gap-1 px-0.5' : density === 'tight' ? 'h-10 gap-1.5 px-1' : hero ? 'gap-2.5 px-1' : 'h-10 gap-2 px-1', className)
   const aria = ariaValue !== undefined ? `${label}: ${ariaValue}` : typeof value === 'string' ? `${label}: ${value}` : undefined
-  const body = <BarChipBody {...{ icon, color, value, sub, mark, density, hero, children }} />
+  const body = (
+    <>
+      <BarChipBody {...{ icon, color, value, sub, mark, density, hero, children }} />
+      {float && <SourceFloatTag gauge={float} below={density !== 'full'} />}
+    </>
+  )
   if (tip)
     return (
       <Tip block id={tipId} content={tip} ariaLabel={aria} className={rootClass}>
@@ -108,6 +117,27 @@ export function BarChip({
     <div className={rootClass} title={title ?? label} aria-label={aria}>
       {body}
     </div>
+  )
+}
+
+/** The one source float on screen, if it is this gauge's turn. Never takes pointer events. */
+function SourceFloatTag({ gauge, below }: { gauge: FloatGauge; below: boolean }) {
+  const f = useSourceFloat(gauge)
+  if (!f) return null
+  return (
+    <span
+      key={f.id}
+      aria-live="polite"
+      data-source-float={gauge}
+      className={cx(
+        'tabular animate-rise-float pointer-events-none absolute left-1 z-10 whitespace-nowrap rounded-full bg-surface px-2 text-[12px] font-bold leading-5 shadow-card',
+        below ? 'top-[calc(100%+2px)]' : 'bottom-[calc(100%+2px)]',
+        f.good ? 'text-positive-ink' : 'text-negative-ink',
+      )}
+      style={{ animationDuration: `${FLOAT_SHOW_MS}ms` }}
+    >
+      {f.text}
+    </span>
   )
 }
 
@@ -216,6 +246,7 @@ export function CashChip({ density, hero = false }: { density: MetricDensity; he
       title={title}
       tip={CashTip}
       tipId="cash"
+      float="cash"
       value={<span className={danger ? 'text-negative-ink' : undefined}>{ledgerMoney(shown)}</span>}
       // Burning is normal, so a negative net never turns red (red is for real danger only, LAYOUT §4.1): the money
       // island (hero) wears it as a soft pill in the burn hue with its flame, green when profitable (T09); phones keep
@@ -287,6 +318,7 @@ export function UsersChip({ density }: { density: MetricDensity }) {
       title={over ? `${t('top.usersTitle', { v: num(users) })}\n${t('top.usersOverload')}` : t('top.usersTitle', { v: num(users) })}
       tip={UsersTip}
       tipId="users"
+      float="users"
       value={<Pop n={pop}>{num(users)}</Pop>}
       ariaValue={num(users)}
     >

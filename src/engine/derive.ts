@@ -8,8 +8,9 @@ import { loanMonthlyService } from './effects'
 import { crowdFactor, effortMorale, effortOn, effortOutput, fits, founderProject, isBuilder, peopleView } from './effort'
 import { findUsersPreview, movesView, renewalViews, salesCallPreview } from './founder'
 import { cheapestHireRunway, heldWages, horizon, nextCrisis, nextStep, owedTotal } from './loopSelectors'
-import { roundRetryIn, roundView, roundWindowOpen } from './round'
+import { downRoundCap, roundRetryIn, roundView, roundWindowOpen } from './round'
 import { playStyle } from './style'
+import { staffingView } from './staffing'
 import { adFocusWarmup, adWeights, moduleMult, projectMix, projectWeights, wMean } from './modules'
 import { resignMorale } from './people'
 import { auraAt, bookshelfMorale, deskQualityAt, findSlot, hireDeskCost, officeEffects, placementSpec, openExtraRingCount, teamClusteredEmployees, type OfficeEffects } from './office'
@@ -258,11 +259,18 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   // Investor winter (GAMEPLAY V2 §5.1): a lower ceiling and a higher growth ask while its modifiers last.
   const capMult = modifierMult(s, 'multipleCap')
   const multCap = E.multipleCap(s.stage, capMult)
-  const multiple = E.valuationMultiple(momAvg, s.stage, penalty, capMult, modifierMult(s, 'diligenceMom'))
+  let multiple = E.valuationMultiple(momAvg, s.stage, penalty, capMult, modifierMult(s, 'diligenceMom'))
   const launched = s.projects.filter((p) => p.launched).length
   const releases = Math.min(B.VAL_RELEASE_MAX, s.releaseCount ?? 0)
   const pre = E.valuationPreRevenue(s.stats.users, launched, releases)
-  const valuation = E.valuation(mrr, multiple, pre, s.stage)
+  let valuation = E.valuation(mrr, multiple, pre, s.stage)
+  // P2 (2026-10-21): a down round prices the company under what it was worth before (round.ts closeRound); the new
+  // stage must not lift it back for DOWN_ROUND_CAP_DAYS. The multiple carries the cut, so the breakdown still adds up.
+  const downCap = downRoundCap(s)
+  if (downCap !== null && valuation > downCap && mrr > 0) {
+    multiple *= downCap / valuation
+    valuation = E.valuation(mrr, multiple, pre, s.stage)
+  }
   const blend = E.revenueBlend(mrr)
   const mode = blend > 0 && valuation !== pre ? 'post' : 'pre'
   const valuationParts: ValuationBreakdown = {
@@ -361,6 +369,10 @@ export function recomputeDerived(s: GameState, content: EngineContent): Outputs 
   const server = content.furniture.find((f) => f.id === SERVER_ROOM_ID)
   s.derived.serverRoom = server && s.stage >= server.stageUnlock && autoPlace(s.office, placementSpec(server)) ? { price: server.price, upkeep: server.upkeep ?? 0 } : null
   s.derived.hireRunway = cheapestHireRunway(s, s.derived.hireDeskCost)
+  // From Series A: the department leads' headcount, targets and what holds the next hire (the chip reads it).
+  const staffing = staffingView(s)
+  if (staffing) s.derived.staffing = staffing
+  else delete s.derived.staffing
   s.derived.nextStep = nextStep(s)
   s.derived.playStyle = playStyle(s)
   // GAMEPLAY V2 §8.3–8.4: the board's quarter and the contracts up for renewal (the horizon lists both).

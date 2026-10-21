@@ -94,6 +94,9 @@ export function createGame(opts: NewGameOptions, content: EngineContent): GameSt
     rivals: [],
     // GAMEPLAY V2 §8.1: the garage sells to its early adopters (the 'early' segment, already there).
     market: defaultMarket(0, 0),
+    // 2026-10-21: notice cards and praise milestones start empty (delegated hiring starts at Series A).
+    notices: [],
+    praise: { done: [] },
   }
   const rng = new Rng(s.rng)
   fillCandidates(s, content, rng, true)

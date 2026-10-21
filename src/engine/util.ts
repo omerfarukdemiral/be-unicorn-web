@@ -1,10 +1,10 @@
 // Shared engine helpers: content context, id/activity/event writers, modifier queries.
 import type { ContentBundle, FurnitureItem, Policy, PolicyEffect } from '../content/index'
 import { ACTIVITY_MAX, EVENTS_MAX, LAST_STAGE, POLICY_NEVER_SIGNED } from './balance'
-import type { ActivityKind, GameEvent, GameState, ModifierKind, PolicyKind, PolicyState, StageBaseline } from './types'
+import { DEPTS, type ActivityKind, type Dept, type GameEvent, type GameState, type ModifierKind, type PolicyKind, type PolicyState, type StaffingState, type StageBaseline } from './types'
 
 /** The slice of content the engine reads. Tests inject fakes. */
-export type EngineContent = Pick<ContentBundle, 'concepts' | 'decisions' | 'furniture' | 'officeLines' | 'employeeNames' | 'goals' | 'crises' | 'policies'>
+export type EngineContent = Pick<ContentBundle, 'concepts' | 'decisions' | 'furniture' | 'officeLines' | 'employeeNames' | 'goals' | 'crises' | 'policies' | 'praise'>
 
 export function clone<T>(v: T): T {
   return structuredClone(v)
@@ -120,3 +120,19 @@ export function stageBaseline(s: GameState): StageBaseline {
   }
 }
 
+
+/** Headcount by department, leavers out (they are on their way). */
+export function headcount(s: Pick<GameState, 'employees'>): Record<Dept, number> {
+  const out = { eng: 0, product: 0, marketing: 0, sales: 0, ops: 0 } as Record<Dept, number>
+  for (const e of s.employees) if (e.status !== 'leaving') out[e.dept] += 1
+  return out
+}
+
+/** Delegated hiring (staffing.ts); lazily created with every target at today's headcount (nobody hired, nobody fired). */
+export function staffingOf(s: GameState): StaffingState {
+  if (s.staffing) return s.staffing
+  const now = headcount(s)
+  const targets: StaffingState['targets'] = {}
+  for (const d of DEPTS) targets[d] = now[d]
+  return (s.staffing = { targets })
+}

@@ -8,8 +8,8 @@ import { clone } from '../util'
 import { api, build, company, content, current, legacy, withModules } from './moduleFixtures'
 
 describe('save and modules', () => {
-  it('SAVE_VERSION is 6 (one office grid; every module field is optional)', () => {
-    expect(SAVE_VERSION).toBe(6)
+  it('SAVE_VERSION is 7 (v7: delegated hiring targets; every module field is optional)', () => {
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('modules and a running build round-trip', () => {

@@ -416,8 +416,8 @@ describe('stage move carry-over', () => {
 })
 
 describe('saves', () => {
-  it('SAVE_VERSION is 6', () => {
-    expect(SAVE_VERSION).toBe(6)
+  it('SAVE_VERSION is 7', () => {
+    expect(SAVE_VERSION).toBe(7)
   })
 
   it('the v4 fixture loads with team labels and empty decor, every piece on its old cell', () => {
@@ -425,7 +425,7 @@ describe('saves', () => {
     expect(raw.version).toBe(4)
     const before = raw.state.office.slots.map((x) => [x.id, x.pos.x, x.pos.z, x.rotation, x.itemId ?? null])
     const s = deserialize(JSON.stringify(raw))!
-    expect(s.meta.saveVersion).toBe(6)
+    expect(s.meta.saveVersion).toBe(7)
     expect(s.office.slots.map((x) => [x.id, x.pos.x, x.pos.z, x.rotation, x.itemId ?? null])).toEqual(before)
     expect(s.office).toMatchObject({ decor: [], walls: [], storage: [], saved: [] })
     for (const slot of s.office.slots) {
@@ -452,7 +452,7 @@ describe('saves', () => {
     const moved = old.slots.find((x) => x.pos.x === -6 && x.pos.z === 3 && x.itemId)!
     const sitter = moved.occupantId!
     const s = deserialize(JSON.stringify(raw))!
-    expect(s.meta.saveVersion).toBe(6)
+    expect(s.meta.saveVersion).toBe(7)
     expect(validateLayout(s.office).ok).toBe(true)
     // Everything else stays on its cell.
     const keep = (o: OfficeState) => o.slots.filter((x) => x.itemId && x.occupantId !== sitter).map((x) => [x.id, x.pos.x, x.pos.z, x.rotation])

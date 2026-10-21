@@ -22,6 +22,8 @@ import { HUD_TEXT } from './hudText'
 import { LAYOUT_TEXT } from './layoutText'
 import { GOALS, goalsOfStage } from './goals'
 import { POLICIES, REMOTE_FIRST_FLAG } from './policies'
+import { PRAISE } from './praise'
+import { NOTICE_DEPT, NOTICE_TEXT } from './noticeText'
 import { MARKET_SEGMENTS, segmentDef, type MarketSegmentDef } from './markets'
 
 /**
@@ -42,6 +44,7 @@ export { GOALS, goalsOfStage }
 export { CRISES, CRISIS_CARDS, BOARD_CARDS }
 export { THREAD_CARDS, SECRET_CARDS, TEASERS, STYLE_CARDS }
 export { POLICIES, REMOTE_FIRST_FLAG }
+export { PRAISE, NOTICE_DEPT, NOTICE_TEXT }
 export { MARKET_SEGMENTS, segmentDef, type MarketSegmentDef }
 export {
   ACTION_ERROR_TEXT,
@@ -77,4 +80,5 @@ export const CONTENT: ContentBundle = {
   goals: GOALS,
   crises: CRISES,
   policies: POLICIES,
+  praise: PRAISE,
 }

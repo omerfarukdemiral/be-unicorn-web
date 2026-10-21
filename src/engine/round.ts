@@ -16,6 +16,7 @@ import { applyMorale, loanOf, syncDebt, unlockTool, unlockWidget } from './effec
 import { actionEnergy, enterMoveBudget, movesError, spendMoves } from './founder'
 import { relocateOffice, syncSeats } from './office'
 import { decisionSlotFree, openDecision } from './pace'
+import { noticeText, pushNotice } from './notices'
 import type { Rng } from './rng'
 import type { ActionErrorCode, DiligenceId, DiligenceItem, GameState, InvestorStyle, MeetingTopic, PitchOption, RoundPitch, RoundSize, RoundSizeOption, RoundState, RoundView, StageIndex, StageReport } from './types'
 import { INVESTOR_STYLES, MEETING_PITCHES, ROUND_MEETINGS, ROUND_SIZES } from './types'
@@ -657,9 +658,22 @@ export function pushStageReport(s: GameState, content: EngineContent): void {
   if (list.length > B.STAGE_REPORTS_MAX) list.splice(0, list.length - B.STAGE_REPORTS_MAX)
 }
 
+/** The valuation ceiling a closed down round left (null: none, or its days are over). */
+export function downRoundCap(s: GameState): number | null {
+  const cap = s.flags[DOWN_CAP]
+  const until = s.flags[DOWN_CAP_UNTIL]
+  return typeof cap === 'number' && typeof until === 'number' && s.time.day < until ? cap : null
+}
+const DOWN_CAP = 'downRoundCap'
+const DOWN_CAP_UNTIL = 'downRoundCapUntil'
+
 export function closeRound(s: GameState, content: EngineContent, rng: Rng): void {
   const r = s.round
   if (!r?.active) return
+  // P2 (2026-10-21): what the close is worth to a till that ran dry, said on one notice card with its price.
+  const broke = s.finance.payrollMissed || s.stats.cash < 0 || s.finance.pendingPayday !== undefined
+  const valuationBefore = s.finance.valuation
+  const equityBefore = s.stats.equity
   // The close prices today's numbers (canlı teklif).
   r.diligence = diligenceNow(s)
   if (r.months !== undefined) r.amountBy = roundAmountParts(s, r.targetStage, r.months).by
@@ -698,4 +712,15 @@ export function closeRound(s: GameState, content: EngineContent, rng: Rng): void
   pushStageReport(s, content)
   enterStage(s, r.targetStage, rng)
   s.round = undefined
+  const cash = r.offer.amount - repay - owed
+  const equity = Math.max(0, equityBefore - s.stats.equity)
+  if (r.down) {
+    // A down round is a rescue at a lower price: the new stage does not lift the valuation over it for a while.
+    const cap = valuationBefore * B.DOWN_ROUND_VALUATION
+    s.flags[DOWN_CAP] = cap
+    s.flags[DOWN_CAP_UNTIL] = s.time.day + B.DOWN_ROUND_CAP_DAYS
+    pushNotice(s, { kind: 'roundWhileBroke', tone: 'bad', text: noticeText('downRound', { cash, equity, valuation: cap }), cash, equity })
+  } else if (broke) {
+    pushNotice(s, { kind: 'roundWhileBroke', tone: 'neutral', text: noticeText('roundWhileBroke', { cash, equity }), cash, equity })
+  }
 }

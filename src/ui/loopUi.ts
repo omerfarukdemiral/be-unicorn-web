@@ -294,7 +294,7 @@ export function stepGo(step: NextStep): StepGo {
  * the focus, a refactor, morale, starting an open round); these big or irreversible ones only open their place with the
  * item marked, and the place's own button confirms.
  */
-export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['acquire', 'newProduct', 'openSegment', 'signLaw', 'serverRoom', 'openRing', 'cutBurn', 'moraleLost', 'hireEng', 'hireMarketing', 'hireGrowth'])
+export const CONFIRM_MOVES: ReadonlySet<NextMove> = new Set<NextMove>(['acquire', 'newProduct', 'openSegment', 'signLaw', 'serverRoom', 'openRing', 'cutBurn', 'moraleLost', 'hireEng', 'hireMarketing', 'hireGrowth', 'teamTarget'])
 
 export type ConfirmPlace = { place: { panel: Panel } | { center: 'lawbook' | 'market' }; key: string | null }
 
@@ -310,6 +310,9 @@ export function confirmPlace(s: GameState, move: NextMove): ConfirmPlace {
   switch (a?.type) {
     case 'hire':
       return { place: { panel: { kind: 'team' } }, key: `candidate:${a.candidateId}` }
+    // From Series A (engine staffing.ts): the department's target row in Ekip; its +/− confirms.
+    case 'setHireTarget':
+      return { place: { panel: { kind: 'team' } }, key: `team:${a.dept}:${a.target}` }
     case 'placeItem':
       return { place: { panel: { kind: 'shop' } }, key: `item:${a.itemId}` }
     case 'openRing':

@@ -7,6 +7,8 @@
 // A known storm (§5.1) is a "?" tile with its countdown ("? · 58g") until CRISIS_TELEGRAPH_DAYS, then its own icon and
 // name. A loan in covenant trouble (§6.2) shows the days to the next check beside the desk's countdown.
 import { useShallow } from 'zustand/react/shallow'
+import { Tip } from './Tip'
+import { paydayTip } from './hudTips'
 import { covenantState } from '../engine'
 import type { CrisisId, HorizonItem } from '../engine/types'
 import { useGameStore } from '../store/gameStore'
@@ -146,11 +148,8 @@ export function PaydayCountdown({ compact }: { compact?: boolean }) {
   const fill = amount > 0 ? Math.min(1, Math.max(0, cash / amount)) : 1
   const color = covered ? 'var(--color-positive)' : 'var(--color-negative)'
   return (
-    <span
-      data-payday-countdown=""
-      title={t('horizon.paydayCountdownTitle', { d: left, cash: money(cash), pay: money(amount) })}
-      className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-semibold text-ink"
-    >
+    <Tip id="payday" content={paydayTip(left, amount, cash)} className="shrink-0">
+    <span data-payday-countdown="" className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-semibold text-ink">
       <span className={cx('inline-flex items-center gap-0.5', !covered && 'animate-heartbeat')} style={{ color }}>
         <Icon name="cash" size={14} />
         {t('horizon.daysShort', { v: left })}
@@ -165,6 +164,7 @@ export function PaydayCountdown({ compact }: { compact?: boolean }) {
       <span className={covered ? 'text-ink-2' : 'text-negative-ink'}>{money(amount)}</span>
       {covered && <Icon name="check" size={12} className="text-positive-ink" />}
     </span>
+    </Tip>
   )
 }
 

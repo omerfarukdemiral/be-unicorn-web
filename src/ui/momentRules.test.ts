@@ -7,8 +7,8 @@ import { runwayTone, ledgerMoney } from './widgets'
 const m = (key: number, kind: MomentKind) => ({ key, kind })
 
 describe('moment cards', () => {
-  it('every card closes by itself within 4 s', () => {
-    for (const ms of Object.values(MOMENT_LIFE_MS)) expect(ms).toBeLessThanOrEqual(4000)
+  it('every card closes by itself within 4 s; a rescue (cash ran out, its price) gets the alarms\' 6 s', () => {
+    for (const [k, ms] of Object.entries(MOMENT_LIFE_MS)) expect(ms).toBeLessThanOrEqual(k === 'rescue' ? 6000 : 4000)
   })
 
   it('a newer receipt replaces the older one in place; others queue', () => {
@@ -33,8 +33,8 @@ describe('moment cards', () => {
     expect(momentPanel('outcome')).toEqual({ kind: 'growth' })
   })
 
-  it('achievements and round beats are no moments (docs/GAMEPLAY_V2.md §12 D9): only receipt, release, outcome', () => {
-    expect(Object.keys(MOMENT_LIFE_MS).sort()).toEqual(['outcome', 'receipt', 'release'])
+  it('achievements and round beats are no moments (docs/GAMEPLAY_V2.md §12 D9): receipt, release, outcome and the engine notices (hires, rescue)', () => {
+    expect(Object.keys(MOMENT_LIFE_MS).sort()).toEqual(['hired', 'outcome', 'receipt', 'release', 'rescue'])
   })
 })
 

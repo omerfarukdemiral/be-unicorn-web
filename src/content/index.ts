@@ -12,6 +12,7 @@ import { OFFICE_LINES } from './officeLines'
 import { EMPLOYEE_NAMES, ENTERPRISE_NAMES, NPC_NAMES, PROJECT_NAMES } from './names'
 import { ACTIVITY_TEXT, DEPT_TEXT, NPC_TEXT, POST_MORTEM_TEXT, PROJECT_CATEGORY_TEXT } from './text'
 import { UI_TEXT as BASE_UI_TEXT } from './strings'
+import { TIP_TEXT } from './tipText'
 import { TIME_TEXT } from './timeText'
 import { LOOP_TEXT } from './loopText'
 import { TOP_BAR_TEXT } from './topBarText'
@@ -33,7 +34,7 @@ import { MARKET_SEGMENTS, segmentDef, type MarketSegmentDef } from './markets'
 const DECISIONS: readonly DecisionCard[] = [...CARD_DECISIONS, ...THREAD_CARDS, ...SECRET_CARDS, ...CRISIS_CARDS, ...BOARD_CARDS, ...STYLE_CARDS]
 
 /** strings.ts + feature tables (time flow, core loop, V2 HUD). One flat key → text dictionary. */
-const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT, ...HUD_TEXT, ...LAYOUT_TEXT }
+const UI_TEXT: Record<string, string> = { ...BASE_UI_TEXT, ...TIME_TEXT, ...LOOP_TEXT, ...TOP_BAR_TEXT, ...BOTTOM_BAR_TEXT, ...METRICS_TEXT, ...ONLINE_TEXT, ...HUD_TEXT, ...LAYOUT_TEXT, ...TIP_TEXT }
 
 export * from './types'
 export { STAGES, CONCEPTS, PRICING_GATE, DECISIONS, FURNITURE, OFFICE_LINES, EMPLOYEE_NAMES }

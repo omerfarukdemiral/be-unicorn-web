@@ -1,5 +1,7 @@
 // Projeler: 6 categories to start, active projects with maturity (MVP ≥ 0.2) and assignments.
 // No project yet: a ghost slot breathes where the first one will sit (guidance as an object, docs/GAMEPLAY_V2.md §11).
+import { Tip } from '../Tip'
+import { projectTip, VERSION_TIP } from '../hudTips'
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { PROJECT_CATEGORIES, type Project, type ProjectCategory } from '../../engine/types'
@@ -153,9 +155,23 @@ export function MaturityBar({ value, color = 'var(--color-brand)' }: { value: nu
   )
 }
 
+/** "%40" of an unfinished project, with its tip (P5: what moves it, today's pace). */
+function ProjectPct({ project: p }: { project: Project }) {
+  const [tip] = useState(() => projectTip(p.id))
+  return (
+    <Tip content={tip} className="tabular text-xs font-semibold">
+      {pct(p.maturity)}
+    </Tip>
+  )
+}
+
 /** "v2": the version a finished product is on. */
 export function VersionBadge({ project: p }: { project: Project }) {
-  return <span data-version-badge="" className="tabular rounded-md bg-brand-soft px-1.5 py-0.5 text-xs font-bold text-brand-ink">{t('module.version', { v: projectVersion(p) })}</span>
+  return (
+    <Tip content={VERSION_TIP}>
+      <span data-version-badge="" className="tabular rounded-md bg-brand-soft px-1.5 py-0.5 text-xs font-bold text-brand-ink">{t('module.version', { v: projectVersion(p) })}</span>
+    </Tip>
+  )
 }
 
 /** The version line of a finished product: the bar restarts at 60 % per version; the text says the next version and how far, or the module in the making. */
@@ -186,7 +202,7 @@ function ProjectCard({ project: p }: { project: Project }) {
         </button>
         <AdFocusMark projectId={p.id} />
         {p.launched ? <Pill tint="var(--color-positive)" dot="var(--color-positive)">{t('projects.live')}</Pill> : <Pill dot="var(--color-ink-3)">{t('projects.building')}</Pill>}
-        {finished ? <VersionBadge project={p} /> : <span className="tabular text-xs font-semibold">{pct(p.maturity)}</span>}
+        {finished ? <VersionBadge project={p} /> : <ProjectPct project={p} />}
       </div>
       {p.launched && <ProductUsers projectId={p.id} />}
       {/* At 1.0 the bar has nothing left to say: the card shows what the product grew into (modules, GAMEPLAY V2). */}

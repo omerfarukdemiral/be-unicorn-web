@@ -107,7 +107,7 @@ export function DayClock({ compact }: { compact?: boolean }) {
   const r = 7
   const c = 2 * Math.PI * r
   return (
-    <span className="inline-flex min-w-0 items-center gap-1" title={t('time.monthProgress', { m: month + 1, d: dayOfMonth })}>
+    <span className="inline-flex min-w-0 items-center gap-1">
       {/* Phones: the short date alone (the 2-row top bar has no room for the ring next to name + round). */}
       {!compact && <svg width={size} height={size} viewBox="0 0 18 18" className="shrink-0 -rotate-90" aria-hidden="true">
         <circle cx={9} cy={9} r={r} fill="none" stroke="var(--color-border)" strokeWidth={2.5} />

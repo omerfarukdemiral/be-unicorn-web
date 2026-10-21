@@ -9,9 +9,12 @@ const SUFFIXES: [number, string][] = [
 ]
 
 /** 1234 → "1.2K", 25000 → "25K", 3_400_000 → "3.4M". */
+/** The real minus sign (U+2212): a hyphen reads as a dash next to "$" (P5 sign audit). */
+export const MINUS = '−'
+
 export function compact(n: number): string {
   if (!Number.isFinite(n)) return '—'
-  const sign = n < 0 ? '-' : ''
+  const sign = n < 0 ? MINUS : ''
   const a = Math.abs(n)
   for (const [v, s] of SUFFIXES) {
     if (a >= v) {
@@ -29,13 +32,25 @@ function trimZero(s: string): string {
 
 export function money(n: number): string {
   if (!Number.isFinite(n)) return '—'
-  return n < 0 ? `-$${compact(-n)}` : `$${compact(n)}`
+  // U+2060 (word joiner) keeps the sign on the number's line when a tooltip wraps.
+  return n < 0 ? `${MINUS}\u2060$${compact(-n)}` : `$${compact(n)}`
 }
 
-/** Signed money: "+$1.2K" / "-$800". */
+/** Signed money: "+$1.2K" / "−$800". */
 export function signedMoney(n: number): string {
-  if (n > 0) return `+${money(n)}`
+  if (n > 0) return `+\u2060${money(n)}`
   return money(n)
+}
+
+/** Signed count: "+40" / "−12" (0 → "0"). */
+export function signedNum(n: number): string {
+  if (n > 0) return `+${compact(n)}`
+  return compact(n)
+}
+
+/** Tailwind ink class of a delta's sign: green up, red down, neutral at 0 (P5: every delta wears its sign and colour). */
+export function deltaInk(n: number): string {
+  return n > 0 ? 'text-positive-ink' : n < 0 ? 'text-negative-ink' : 'text-ink-2'
 }
 
 export function pct(fraction: number, digits = 0): string {

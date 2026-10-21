@@ -141,6 +141,11 @@ export interface UiState {
    */
   effortHold: { employeeIds: string[]; untilDay: number; prevSpeed: GameSpeed } | null
   /**
+   * P5 auto-slow: a decision opened (card, round pitch, payday desk) while the run went at 2× / 4×, so the store set
+   * 1× until it closes; this is the speed it hands back then. The player's own setSpeed cancels it. null = none.
+   */
+  decisionSlow: GameSpeed | null
+  /**
    * Gauges pinned to the top bar (docs/LAYOUT.md §5.2): at most PIN_MAX, oldest first. A pin whose gauge is locked
    * (e.g. a new run) is not shown but keeps its place. Persisted in localStorage 'be-unicorn:ui'.
    */

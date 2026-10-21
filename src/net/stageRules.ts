@@ -9,7 +9,7 @@ export const STAGE_TARGET: readonly number[] = [0, 500_000, 3_000_000, 15_000_00
 /** Office slots per stage (Unicorn keeps Series C's). */
 export const STAGE_SLOTS: readonly number[] = [4, 10, 18, 30, 44, 60, 60]
 /** engine SECONDS_PER_DAY and the fastest GameSpeed. */
-export const SECONDS_PER_DAY = 2
+export const SECONDS_PER_DAY = 2.8
 export const MAX_SPEED = 4
 /** Share of the fastest measured day a submission may reach a stage at (DECISIONS #20). */
 export const MIN_STAGE_SHARE = 0.65

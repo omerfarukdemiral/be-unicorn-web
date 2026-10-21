@@ -9,6 +9,7 @@ import {
   createEngine,
   createRngState,
   DAYS_PER_WEEK,
+  SECONDS_PER_DAY,
   loanAmount,
   modules as moduleLib,
   nextCrisis,
@@ -402,9 +403,9 @@ const MOMENT_KINDS: ReadonlySet<GameEventKind> = new Set<GameEventKind>([...BEAT
 const EFFORT_ACTIONS: ReadonlySet<string> = new Set(['setPace', 'sprint', 'giveLeave', 'setLead', 'ackStaff'])
 const MOVE_ACTIONS: ReadonlySet<string> = new Set(['startProject', 'hire', 'placeItem', 'openRing', 'founderAction', 'startRound', 'roundPitch', 'answerDecision', 'openConcept', 'fire', 'upgradeItem', 'adoptPolicy', 'openSegment', 'acquireRival', 'renewContract', 'buildModule', 'refreshModule', 'sprint', 'giveLeave', 'setLead'])
 
-/** 1x: 1 day = 2 s → 5 min = 150 days, 10 min = 300 days. */
-export const DAYS_5_MIN = 150
-export const DAYS_10_MIN = 300
+/** 1x: 1 day = SECONDS_PER_DAY s (2.8 → 5 min = 107 days, 10 min = 214 days). */
+export const DAYS_5_MIN = Math.round(300 / SECONDS_PER_DAY)
+export const DAYS_10_MIN = Math.round(600 / SECONDS_PER_DAY)
 
 type Ctx = { s: GameState; act: (a: Action) => boolean; content: EngineContent; mem: Record<string, number> }
 

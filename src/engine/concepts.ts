@@ -5,6 +5,7 @@ import { CONCEPT_GAP_DAYS, CONCEPT_VISITOR_DAYS } from './balance'
 import { snapshotWhere, unlockAny } from './effects'
 import type { ConceptId, GameState } from './types'
 import { newId, pushEvent } from './util'
+import { openDecision } from './pace'
 
 function safeTrigger(c: Concept, s: GameState): boolean {
   try {
@@ -39,6 +40,8 @@ const SHOWN_FLAG = 'conceptShownDay'
  */
 export function promoteConcept(s: GameState, concepts: readonly Concept[], force = false): void {
   if (s.concepts.active || !s.concepts.queue.length) return
+  // One thing at a time (pace.ts): no lesson bubble over an open decision.
+  if (!force && openDecision(s)) return
   const last = s.flags[SHOWN_FLAG]
   if (!force && typeof last === 'number' && s.time.day - last < CONCEPT_GAP_DAYS) return
   const id = s.concepts.queue.shift()

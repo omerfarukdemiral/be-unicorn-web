@@ -164,11 +164,11 @@ describe('gameStore (engine wired)', () => {
       // Answer decision cards with the first option.
       const card = st.decisions.active
       if (card) store().dispatch({ type: 'answerDecision', cardId: card.cardId, optionIndex: 0 })
-      if (day === 150) learnedAt5 = st.concepts.learned.length
+      if (day === Math.round(300 / SECONDS_PER_DAY)) learnedAt5 = st.concepts.learned.length
     })
     const s = store().state
     expect(s.gameOver).toBeUndefined()
-    expect(s.time.day).toBeGreaterThan(290)
+    expect(s.time.day).toBeGreaterThan(600 / SECONDS_PER_DAY - 10)
     expect(learnedAt5).toBeGreaterThanOrEqual(3)
     expect(s.concepts.learned).toContain('runway')
     expect(s.unlockedWidgets.length).toBeGreaterThan(startWidgets)

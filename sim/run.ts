@@ -25,8 +25,12 @@ const DAYS = arg('days', 4500)
 const OUT = arg('out', 'sim/REPORT.md')
 const STAGES = ['Garaj', 'Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Unicorn']
 const CARELESS_LIMIT_DAYS = (4 * 60) / SECONDS_PER_DAY // 4 min at 1x
-/** Unicorn median band (design §1.7, MV2d: 55–90 dk) and the archetype spread limit (≤ 1.6×). */
-const TARGET_MIN = [55, 90] as const
+/** Unicorn median band (2026-10-21 clarity & pace: 1× is 40% slower, 55–90 → 75–120 dk) and the archetype spread limit (≤ 1.6×). */
+const TARGET_MIN = [75, 120] as const
+/** Good-bot Unicorn tolerance (55–95 dk before the 1.4× slower day). */
+const GOOD_TOL = [75, 130] as const
+/** Longest gap between beats inside a round (20 s before the slower day). */
+const ROUND_GAP_MAX_SEC = 30
 const SPREAD_MAX = 1.6
 
 const toMin = (days: number): number => (days * SECONDS_PER_DAY) / 60
@@ -268,7 +272,7 @@ for (const [kind, runs] of byArch) {
 line()
 line(`- findUsers hiçbir arketipte en sık aksiyon değil: **${findUsersTop ? 'HAYIR' : 'EVET'}**`)
 line(`- Kullanıcı bul + konuş tıklaması koşu başına ≤ ${FOCUS_CLICKS_MAX} (en kötü koşu): **${worstClicks <= FOCUS_CLICKS_MAX ? 'EVET' : 'HAYIR'}** (${worstClicks})`)
-line(`- Tur penceresinde en uzun boşluk ≤ 20 sn: **${worstGapSec <= 20 ? 'EVET' : `HAYIR (${worstGapSec.toFixed(0)} sn)`}**`)
+line(`- Tur penceresinde en uzun boşluk ≤ ${ROUND_GAP_MAX_SEC} sn: **${worstGapSec <= ROUND_GAP_MAX_SEC ? 'EVET' : `HAYIR (${worstGapSec.toFixed(0)} sn)`}**`)
 line()
 
 line('## Para kısıtı ve ölü süre (docs/CORE_LOOP.md §10 Faz 3)')
@@ -591,9 +595,9 @@ if (unicornMedians.length) {
   const hi = Math.max(...mins)
   const ratio = hi / lo
   const dist = lo < TARGET_MIN[0] ? `hedefin ${(TARGET_MIN[0] - lo).toFixed(0)} dk altında (en hızlı)` : hi > TARGET_MIN[1] ? `hedefin ${(hi - TARGET_MIN[1]).toFixed(0)} dk üstünde (en yavaş)` : 'hedef aralıkta'
-  line(`- Unicorn’a varış 55–90 dk: medyanlar ${mins.map((m) => m.toFixed(1)).join(' / ')} dk → **${dist}**; arketip farkı ${ratio.toFixed(2)}× (hedef ≤ ${SPREAD_MAX}×) — yalnızca çoğunluğu Unicorn’a ulaşan ${unicornMedians.length}/4 arketip sayıldı`)
+  line(`- Unicorn’a varış ${TARGET_MIN[0]}–${TARGET_MIN[1]} dk: medyanlar ${mins.map((m) => m.toFixed(1)).join(' / ')} dk → **${dist}**; arketip farkı ${ratio.toFixed(2)}× (hedef ≤ ${SPREAD_MAX}×) — yalnızca çoğunluğu Unicorn’a ulaşan ${unicornMedians.length}/4 arketip sayıldı`)
 } else {
-  line(`- Unicorn’a varış 55–90 dk: hiçbir arketipte seed’lerin çoğu ${toMin(DAYS).toFixed(0)} dk içinde Unicorn’a ulaşmadı → **hedefin gerisinde**`)
+  line(`- Unicorn’a varış ${TARGET_MIN[0]}–${TARGET_MIN[1]} dk: hiçbir arketipte seed’lerin çoğu ${toMin(DAYS).toFixed(0)} dk içinde Unicorn’a ulaşmadı → **hedefin gerisinde**`)
 }
 const goodFail = goodRuns.filter(failedRun).length / goodRuns.length
 line(`- İlk 5 dk’da iki anlamlı an arası medyan ≤ 10 sn (her arketip): **${gap5Worst * SECONDS_PER_DAY <= 10 ? 'EVET' : 'HAYIR'}** (en kötü arketip ${sec(gap5Worst)})`)
@@ -666,10 +670,10 @@ if (planConc.length) {
   line(`- idleAfterProfit Unicorn: ${text} · tepe sonrası düşüş medyanı ${pct(drop, 1)} (hedef ≥ %30): **${yes(ok && drop >= 0.3)}**`)
 }
 {
-  // Good-bot Unicorn time (55–95 min tolerance) and how much longer the coaster takes (B1 info line: ≥ 25%).
+  // Good-bot Unicorn time (GOOD_TOL) and how much longer the coaster takes (B1 info line: ≥ 25%).
   const good = uniOf(goodRuns)
   const gm = good === null ? null : toMin(good)
-  line(`- İyi bot Unicorn medyanı: ${fmtMin(good)} (tolerans 55–95 dk): **${yes(gm !== null && gm >= 55 && gm <= 95)}**`)
+  line(`- İyi bot Unicorn medyanı: ${fmtMin(good)} (tolerans ${GOOD_TOL[0]}–${GOOD_TOL[1]} dk): **${yes(gm !== null && gm >= GOOD_TOL[0] && gm <= GOOD_TOL[1])}**`)
   const coaster = v2('coaster')
   const cDays = coaster.map((r) => r.stageDays[6] ?? DAYS)
   const cMed = median(cDays)
@@ -723,7 +727,7 @@ crit('Dikkatsiz burner iflas', band(carelessBurner.filter(failedRun).length, car
     const mins = unicornMedians.map(toMin)
     const spread = Math.max(...mins) / Math.min(...mins)
     const inBand = mins.every((m) => m >= TARGET_MIN[0] && m <= TARGET_MIN[1])
-    line(`- Unicorn medyanı (arketip) 55–90 dk ve fark ≤ ${SPREAD_MAX}×: ${mins.map((m) => m.toFixed(1)).join(' / ')} dk · ${spread.toFixed(2)}×: **${yes(inBand && spread <= SPREAD_MAX && unicornMedians.length === 4)}**`)
+    line(`- Unicorn medyanı (arketip) ${TARGET_MIN[0]}–${TARGET_MIN[1]} dk ve fark ≤ ${SPREAD_MAX}×: ${mins.map((m) => m.toFixed(1)).join(' / ')} dk · ${spread.toFixed(2)}×: **${yes(inBand && spread <= SPREAD_MAX && unicornMedians.length === 4)}**`)
   }
 }
 line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${saveMax.toFixed(1)} KB (hedef < 120): **${yes(saveMed < 70 && saveMax < 120)}**`)
@@ -755,7 +759,7 @@ line(`- Kayıt boyutu medyan ${saveMed.toFixed(1)} KB (hedef < 70) · maks ${sav
   const uniCensored = (runs: BotRun[]) => median(runs.map((r) => r.stageDays[6] ?? DAYS))
   const uc = uniCensored(goodRuns)
   const ucm = uc === null ? null : toMin(uc)
-  line(`- İyi bot Unicorn medyanı, ulaşmayan = ${toMin(DAYS).toFixed(0)} dk (${goodRuns.filter((r) => r.stageDays[6] != null).length}/${goodRuns.length} ulaştı): ${fmtMin(uc)} (tolerans 55–95 dk): **${yes(ucm !== null && ucm >= 55 && ucm <= 95)}** · kriz içeriği olmadan ${fmtMin(uniCensored(calmRuns))} (${calmRuns.filter((r) => r.stageDays[6] != null).length}/${calmRuns.length})`)
+  line(`- İyi bot Unicorn medyanı, ulaşmayan = ${toMin(DAYS).toFixed(0)} dk (${goodRuns.filter((r) => r.stageDays[6] != null).length}/${goodRuns.length} ulaştı): ${fmtMin(uc)} (tolerans ${GOOD_TOL[0]}–${GOOD_TOL[1]} dk): **${yes(ucm !== null && ucm >= GOOD_TOL[0] && ucm <= GOOD_TOL[1])}** · kriz içeriği olmadan ${fmtMin(uniCensored(calmRuns))} (${calmRuns.filter((r) => r.stageDays[6] != null).length}/${calmRuns.length})`)
 }
 {
   // GAMEPLAY V2 §8.2 named rivals: the lead paces the valuation, the share presses the channels.

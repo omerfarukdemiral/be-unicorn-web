@@ -12,7 +12,8 @@ import { completeFounderAction, dailyContracts, dailyFounder, regenEnergy, runFo
 import { flowProjectUsers, syncProjectUsers, updateSize } from './modules'
 import { dailyPeople, driftMorale, fillCandidates } from './people'
 import { Rng } from './rng'
-import { checkRoundWindow, progressRound } from './round'
+import { checkRoundWindow, maybeOpenMeeting, progressRound } from './round'
+import { trackDecisionSlot } from './pace'
 import { DAYS_PER_MONTH, DAYS_PER_WEEK, FIXED_STEP_DAYS, type GameEventKind, type GameState } from './types'
 import { clone, modifierMult, pushActivity, pushEvent, type EngineContent } from './util'
 import { trackChip } from './loopSelectors'
@@ -113,6 +114,8 @@ export function progressProjects(s: GameState, o: Outputs, dt: number): void {
 
 function daily(s: GameState, content: EngineContent, rng: Rng, day: number): void {
   recomputeDerived(s, content)
+  // One decision at a time (pace.ts): note the day the last open decision closed.
+  trackDecisionSlot(s)
   // Round 8: a confirm move left on the chip 45 days snoozes itself (the chip falls through).
   trackChip(s)
   dailyEndgame(s, content)
@@ -149,6 +152,8 @@ function daily(s: GameState, content: EngineContent, rng: Rng, day: number): voi
   // The crisis day brings its card before the roll (one card a day, the crisis first: GAMEPLAY V2 §3 md.11).
   fireCalendar(s, content, rng)
   applyDefaultDecision(s, content)
+  // A meeting that came due while another decision was open opens first (the round's clock runs).
+  maybeOpenMeeting(s)
   maybeShowDecision(s, content, rng)
   dailyVisitors(s, rng)
   eventLines(s, content, rng)

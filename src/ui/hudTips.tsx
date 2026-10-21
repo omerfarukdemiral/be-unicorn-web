@@ -1,5 +1,6 @@
 // What each HUD number's tooltip says (P5): name + what raises / lowers it + the live main source. Rendered only while
 // a tip is open (ui/Tip.tsx), so the live lines cost nothing until asked for. Text: content/tipText.ts.
+import type { ComponentType } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import * as B from '../engine/balance'
 import type { BurnBreakdown, GameState, HudWidget } from '../engine/types'
@@ -147,3 +148,13 @@ export function widgetTip(id: HudWidget, label: string, value?: string): TipCont
   const line = (k: string) => (UI_TEXT[k] !== undefined ? t(k) : undefined)
   return { name: label, value, up: line(`tip.${id}.up`), down: line(`tip.${id}.down`) }
 }
+
+/** A project's progress % (Projeler, desk bubbles). */
+export function projectTip(projectId: string): ComponentType {
+  return function ProjectTip() {
+    const perDay = useGameStore((st) => st.state.derived.maturityPerDay?.[projectId] ?? 0)
+    return <TipBody name={t('tip.project.name')} up={t('tip.project.up')} down={t('tip.project.down')} live={perDay > 0 ? t('tip.project.live', { v: fixed(perDay * 100, 1) }) : undefined} />
+  }
+}
+
+export const VERSION_TIP: TipContent = { name: t('tip.version.name'), up: t('tip.version.up') }

@@ -13,6 +13,7 @@ import { Icon, type IconName } from './icons'
 import { fixed, money, num, pct } from './format'
 import { t } from './i18n'
 import { cx } from './primitives'
+import { Tip } from './Tip'
 
 export interface Chip {
   icon: IconName
@@ -79,10 +80,10 @@ export function ChipRow({ chips, className, faded }: { chips: readonly Chip[]; c
   return (
     <span className={cx('flex flex-wrap items-center gap-1', faded && 'opacity-70', className)}>
       {chips.map((c, i) => (
+        // P5: hover names what the number moves (a tap stays the option's: chips sit inside answer buttons).
+        <Tip key={i} hoverOnly content={{ name: c.title, value: [c.label, c.text, c.tail].filter(Boolean).join(' ') }}>
         <span
-          key={i}
           data-chip=""
-          title={c.title}
           className={cx(
             'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-[3px]',
             c.good === true ? 'bg-positive/10 text-positive-ink' : c.good === false ? 'bg-negative/10 text-negative-ink' : 'bg-surface-2 text-ink',
@@ -93,6 +94,7 @@ export function ChipRow({ chips, className, faded }: { chips: readonly Chip[]; c
           <span className="tabular text-[13px] font-bold leading-none">{c.text}</span>
           {c.tail && <span className="text-[10px] font-medium leading-none opacity-70">{c.tail}</span>}
         </span>
+        </Tip>
       ))}
     </span>
   )

@@ -6,7 +6,7 @@ import { candidateSkill, dailyEffort, effortOn, isBreakDay, nearCommonArea, onLe
 import type { Rng } from './rng'
 import { DEPTS, type Candidate, type Dept, type Employee, type GameState, type LeaveCause } from './types'
 import { decisionSlotFree } from './pace'
-import { incCounter, newId, policyHas, policyMult, policyQualityCap, policySum, pushActivity, pushEvent, type EngineContent } from './util'
+import { headcount, incCounter, newId, policyHas, policyMult, policyQualityCap, policySum, pushActivity, pushEvent, type EngineContent } from './util'
 
 /** Pool size: base + stage up to the max, plus what the policies add on top of the max (hire-fast +2, GAMEPLAY V2 §7.2: the law's point is a bigger pool than any stage gives). */
 export function candidatePoolSize(s: GameState, content?: EngineContent): number {
@@ -186,6 +186,11 @@ export function layoff(s: GameState, content: EngineContent, share: number): num
     incCounter(s, 'fires')
     pushActivity(s, 'fired', { name: e.name, id: e.id })
     pushEvent(s, { kind: 'fired', refId: e.id })
+  }
+  // From Series A the leads do not hire the cut back (staffing.ts): every target drops to what is left.
+  if (s.staffing) {
+    const left = headcount(s)
+    for (const d of DEPTS) s.staffing.targets[d] = Math.min(s.staffing.targets[d] ?? left[d], left[d])
   }
   return n
 }

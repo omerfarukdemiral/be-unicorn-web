@@ -38,7 +38,7 @@ import {
   type PolicyId,
   type Slot,
 } from './types'
-import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, staffingOf, type EngineContent } from './util'
+import { clone, furnitureById, incCounter, newId, payLaterOpen, policiesOf, policyMult, pushActivity, pushEvent, headcount, staffingOf, type EngineContent } from './util'
 import { acquireError, acquireRival, openSegment, segmentError } from './world'
 
 export type { Action, ActionType, ActionOf, TimedAction, ActionResult, ActionErrorCode } from './types'
@@ -127,6 +127,11 @@ function deskError(s: GameState, slot: Slot | undefined): ActionErrorCode | null
 const fire: Handler<'fire'> = ({ s, content }, a) => {
   const e = removeEmployee(s, a.employeeId)
   if (!e) return 'notFound'
+  // From Series A a let-go seat is not refilled by its lead (a resignation is: the target stays).
+  if (s.staffing) {
+    const left = headcount(s)[e.dept]
+    s.staffing.targets[e.dept] = Math.min(s.staffing.targets[e.dept] ?? left, left)
+  }
   // layoff-round (§7.2): once signed, nobody gets severance again.
   s.stats.cash -= e.salary * B.SEVERANCE_MONTHS * policyMult(s, content, 'severance')
   applyMorale(s, B.FIRE_TEAM_MORALE)

@@ -101,7 +101,8 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     for (const [id, need] of staffAttention(s)) if ((need === 'tired' || need === 'burnout') && s.employees.find((e) => e.id === id)?.pace !== 'calm') act({ type: 'setPace', employeeId: id, pace: 'calm' })
     // Desk bubbles (render/WorldBubbles deskTopics): a free desk and a non-red offer asks "N aday bekliyor" (first
     // non-red row: hired); a finished product with room asks for its module (first row: "Ekle").
-    if (!solo && firstFreeDesk(s.office) !== undefined) {
+    // 2026-10-21: from Series A the leads hire (engine staffing.ts); the desk bubble asks no more there.
+    if (!solo && s.stage < balance.STAFFING_FROM_STAGE && firstFreeDesk(s.office) !== undefined) {
       const c = s.candidates.find((x) => !hireIsRed(s, x.salary))
       if (c && act({ type: 'hire', candidateId: c.id })) hires++
     }
@@ -141,7 +142,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     // The round bubble lists Küçük first: the first option is the small round.
     if (step?.id === 'round' || s.derived.canStartRound) act({ type: 'startRound', size: 'small' })
     // Ekip now and then: the cheapest offer that is not red.
-    if (!solo && LOOK && s.time.day - lastLook >= HIRE_LOOK_DAYS) {
+    if (!solo && LOOK && s.stage < balance.STAFFING_FROM_STAGE && s.time.day - lastLook >= HIRE_LOOK_DAYS) {
       lastLook = s.time.day
       const c = [...s.candidates].sort((x, y) => x.salary - y.salary)[0]
       const rw = s.derived.hireRunway
@@ -153,6 +154,7 @@ export function playNaive(seed: number, maxDays = DAYS, solo = SOLO, trace = fal
     minCash = Math.min(minCash, s.stats.cash)
     for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed' && s.stage === 0) garageMissed++
     for (const e of s.events) if (e.id > seen && e.kind === 'payrollMissed') moves.payrollMissed = (moves.payrollMissed ?? 0) + 1
+    for (const e of s.events) if (e.id > seen && e.kind === 'notice') moves[`notice:${e.refId}`] = (moves[`notice:${e.refId}`] ?? 0) + 1
     if (s.stage >= 1 && !s.derived.nextStep?.move) moves.noChipDays = (moves.noChipDays ?? 0) + 0.5
     if (s.stage === 5 && s.derived.nextStep?.move) moves[`C:${s.derived.nextStep.move}`] = (moves[`C:${s.derived.nextStep.move}`] ?? 0) + 0.5
     for (const e of s.events) if (e.id > seen && e.kind === 'resigned' && s.stage < 3) moves.resigned = (moves.resigned ?? 0) + 1

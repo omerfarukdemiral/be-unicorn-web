@@ -684,6 +684,11 @@ function hiring(c: Ctx, cfg: BotConfig): void {
   }
   const order = neededDept(c.s, cfg, c.mem)
   const want = order[0]!
+  // 2026-10-21: from Series A the department leads hire (engine staffing.ts); the bot sets the targets instead.
+  if (c.s.stage >= balance.STAFFING_FROM_STAGE) {
+    teamTargets(c, order, cap)
+    return
+  }
   const pickFor = (d: Dept) => c.s.candidates.filter((c) => c.dept === d).sort((a, b) => b.quality - a.quality)[0]
   let pick = pickFor(want)
   if (!pick && c.s.stats.cash > reserve * 2) {
@@ -692,6 +697,20 @@ function hiring(c: Ctx, cfg: BotConfig): void {
   }
   pick ??= order.slice(1, 3).map(pickFor).find((c) => c)
   if (pick) act({ type: 'hire', candidateId: pick.id })
+}
+
+/**
+ * From Series A: one more seat on the wanted department's target (the next in `order` while that lead still fills
+ * BOT_TARGET_PENDING seats), counting the seats not yet filled against the cap; the engine hires on its weekly pass.
+ */
+const BOT_TARGET_PENDING = 2
+function teamTargets(c: Ctx, order: readonly Dept[], cap: number): void {
+  const v = c.s.derived.staffing?.depts
+  if (!v) return
+  const pending = (Object.keys(v) as Dept[]).reduce((a, d) => a + Math.max(0, v[d].target - v[d].count), 0)
+  if (c.s.employees.length + pending >= cap) return
+  const d = order.slice(0, 3).find((x) => v[x].target - v[x].count < BOT_TARGET_PENDING && v[x].blocked === null)
+  if (d) c.act({ type: 'setHireTarget', dept: d, target: Math.max(v[d].target, v[d].count) + 1 })
 }
 
 /** Office full and products built: swap one surplus builder for a growth hire (at most monthly). */

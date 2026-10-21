@@ -14,7 +14,7 @@ import { lbScore, parseSubmission } from '../_lib/leaderboard.js'
 import { RIVAL_EPOCH, RIVALS, rivalRow } from '../_lib/rivals.js'
 import { acceptCompanyName, maskEmail, normalizeEmail, resetLimitsForTests, sanitizeCompanyName } from '../_lib/auth.js'
 import { pepperMissing } from '../_lib/kv.js'
-import { MIN_DAY_FOR_STAGE as MIN_DAY } from '../../src/net/stageRules.js'
+import { MAX_SPEED, MIN_DAY_FOR_STAGE as MIN_DAY, SECONDS_PER_DAY } from '../../src/net/stageRules.js'
 
 let t = 1_800_000_000_000
 let kv: MemoryKv
@@ -59,9 +59,9 @@ function saveData(day: number, stage = 0, runIndex = 0): string {
 const metrics = (o: Partial<Record<string, unknown>> = {}) => ({
   stage: 0, valuation: 50_000, cash: 12_000, day: 10, team: 1, companyName: 'Helio Studio', runIndex: 0, ...o,
 })
-/** Advances wall time enough for `days` game days at 4× (2 s per day ⇒ 0.5 s real per day). */
+/** Advances wall time enough for `days` game days at 4× (SECONDS_PER_DAY 2.8 ⇒ 0.7 s real per day). */
 function playDays(days: number): void {
-  t += days * 500
+  t += (days * SECONDS_PER_DAY * 1000) / MAX_SPEED
 }
 type Step = Partial<Record<string, unknown>> & { day: number }
 /** Submits a run step by step, with the wall time a 4× player needs between steps; every step must pass. */

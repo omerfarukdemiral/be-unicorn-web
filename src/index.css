@@ -259,6 +259,13 @@
     70% { opacity: 1; }
     100% { opacity: 0; transform: translateY(-14px); }
   }
+  /* Work float over a person's head (render/WorkFloats.tsx): pops in, holds, drifts up slowly and fades. */
+  @keyframes work-float {
+    0% { opacity: 0; transform: translateY(6px) scale(0.92); }
+    10% { opacity: 1; transform: translateY(0) scale(1); }
+    78% { opacity: 1; transform: translateY(-10px); }
+    100% { opacity: 0; transform: translateY(-16px); }
+  }
   /* Screen frame: a faint glow runs along the viewport edge once per game day while time flows. */
   @keyframes frame-beat {
     0% { opacity: 0.9; }

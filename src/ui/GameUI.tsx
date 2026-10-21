@@ -20,6 +20,8 @@ import { installMock, mockRequested } from './mock'
 import { PauseVeil, ScreenFrame, StartCall } from './time'
 import { usePinnedMetrics } from './widgets'
 import { TopBar } from './layout/TopBar'
+// P5 first-run hints: a store watcher, no component of its own.
+import './firstHints'
 import { BottomStack } from './layout/BottomBar'
 import { useSceneInset } from './layout/useSceneInset'
 

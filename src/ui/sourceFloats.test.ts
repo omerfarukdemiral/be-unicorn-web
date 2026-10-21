@@ -62,3 +62,23 @@ describe('source floats', () => {
     expect(detectFloats(a, b, null, emptyAcc()).floats).toEqual([{ gauge: 'users', text: 'Sürüm +60', good: true }])
   })
 })
+
+describe('first-run hints (P5)', async () => {
+  const { hintBase, hintDue } = await import('./firstHints')
+  it('each of the five fires on its own meaningful move only', () => {
+    const a = base()
+    const b0 = hintBase(a)
+    const b = clone(a)
+    expect(['cash', 'users', 'energy', 'morale', 'runway'].map((id) => hintDue(id as never, b0, b))).toEqual([false, false, false, false, false])
+    b.stats.cash -= 1000
+    b.stats.users += 3
+    b.founder.energy -= 15
+    b.stats.morale += 2
+    expect(hintDue('cash', b0, b)).toBe(true)
+    expect(hintDue('users', b0, b)).toBe(true)
+    expect(hintDue('energy', b0, b)).toBe(true)
+    expect(hintDue('morale', b0, b)).toBe(false)
+    b.unlockedWidgets = [...b.unlockedWidgets, 'runway']
+    expect(hintDue('runway', b0, b)).toBe(true)
+  })
+})

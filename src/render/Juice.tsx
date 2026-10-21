@@ -37,8 +37,8 @@ const TOAST_GAP = 8
 /** The wave (banner + figures) unmounts after this long. */
 const WAVE_MS = 9000
 const PULSE_MS = 1400
-/** A scene float's life (ms); several stack upwards. */
-const FLOAT_MS = 1800
+/** A scene float's life (ms; P5: ≥ 2 s and a slow rise, the work floats' keyframes). */
+const FLOAT_MS = 2600
 /** At most a users float and a payday float at once: several "+N" stacked over a desk covered its plates (round 3). */
 const MAX_FLOATS = 2
 
@@ -173,7 +173,8 @@ export function JuiceLayer() {
   )
 }
 
-const TONE_COLOR: Record<SceneFloat['tone'], string> = { users: 'var(--color-g-users)', cash: 'var(--color-g-cash)', ink: 'var(--color-ink)' }
+// Payday is money out: red, with a real minus (P5: every delta shows its sign and colour).
+const TONE_COLOR: Record<SceneFloat['tone'], string> = { users: 'var(--color-g-users)', cash: 'var(--color-g-cash)', ink: 'var(--color-negative)' }
 
 /** CSS animations follow the scene clock: paused while a bubble holds the world. */
 function usePlayState(): 'paused' | 'running' {
@@ -203,7 +204,7 @@ function Floats({ items, at, hidden }: { items: readonly SceneFloat[]; at: XZ; h
               display: 'flex',
               alignItems: 'center',
               gap: 4,
-              animation: `rise-float ${FLOAT_MS}ms ease-out both`,
+              animation: `work-float ${FLOAT_MS}ms ease-out both`,
               animationPlayState: play,
             }}
           >

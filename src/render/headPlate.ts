@@ -35,6 +35,15 @@ export function fatigueTone(f: number): 'ok' | 'warn' | 'bad' {
   return f >= B.FATIGUE_TIRED ? 'bad' : f >= 40 ? 'warn' : 'ok'
 }
 
+/**
+ * From this many seated people on (Series A+, 20–36 people) a plate shows only when it has something to say (P5: a
+ * plate over every head read as a wall of labels): a project lead, a state glyph, or fatigue past green. The hovered
+ * or selected person still shows theirs, and the work floats name whoever just did something.
+ */
+export const BIG_TEAM_PLATES = 16
+
+export const plateNotable = (p: { lead: boolean; glyph: unknown; fatigue: number }): boolean => p.lead || !!p.glyph || fatigueTone(p.fatigue) !== 'ok'
+
 export const shortName = (name: string): string => {
   const first = name.trim().split(/\s+/)[0] ?? ''
   return first.length > NAME_MAX ? `${first.slice(0, NAME_MAX - 1)}…` : first

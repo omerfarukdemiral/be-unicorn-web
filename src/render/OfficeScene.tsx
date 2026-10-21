@@ -29,6 +29,7 @@ import { Surroundings } from './Surroundings'
 import { useGS, useUi } from './source'
 import { panelSelection } from '../store/gameStore'
 import { WorldBubbles } from './WorldBubbles'
+import { WorkFloats } from './WorkFloats'
 
 export interface OfficeSceneProps {
   /** Overrides ui.zoom (e.g. previews). */
@@ -354,6 +355,8 @@ export function OfficeScene({ zoom, lowPower = false, renderBubble, ambientBubbl
         <JuiceLayer />
       </group>
       <HeadPlates />
+      {/* Who did what: one person's work result over their head now and then (P5). */}
+      <WorkFloats />
       <WorldBubbles renderBubble={renderBubble} ambient={ambientBubbles} />
       {REAL_LOOK && !lowPower && (
         <Suspense fallback={null}>

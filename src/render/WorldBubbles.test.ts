@@ -6,6 +6,7 @@ import { modulePromptFlag, projectVersion } from '../engine/modules'
 import type { Employee, GameState, PendingPayday, RenewalView, RoundState } from '../engine/types'
 import {
   BubbleTimeline,
+  AMBIENT_GAP_MS,
   DECISION_DELAY_MS,
   EXIT_MS,
   IDLE_DELAY_MS,
@@ -249,6 +250,16 @@ describe('BubbleTimeline', () => {
     expect(shown(tl.step(c, null, 0))).toEqual(['desk:round'])
     expect(shown(tl.step(c, null, IDLE_SHOW_MS))).toEqual(['desk:hire'])
     expect(shown(tl.step(c, null, IDLE_SHOW_MS + IDLE_SNOOZE_MS))).toEqual(['desk:round'])
+  })
+
+  it('office lines keep a gap: a new one in the gap stays unsaid, the next after it speaks (P5)', () => {
+    const tl = new BubbleTimeline()
+    expect(shown(tl.step([L('ambient', 'amb:1', 'b1', 'e1')], null, 0))).toEqual(['amb:1'])
+    expect(shown(tl.step([L('ambient', 'amb:1', 'b1', 'e1'), L('ambient', 'amb:2', 'b2', 'e2')], null, 1000))).toEqual(['amb:1'])
+    const r = tl.step([L('ambient', 'amb:2', 'b2', 'e2')], null, 2000)
+    expect(shown(r)).toEqual([])
+    expect(r.nextAt).toBe(AMBIENT_GAP_MS)
+    expect(shown(tl.step([L('ambient', 'amb:2', 'b2', 'e2')], null, AMBIENT_GAP_MS))).toEqual(['amb:2'])
   })
 
   it('the open bubble skips its delay', () => {

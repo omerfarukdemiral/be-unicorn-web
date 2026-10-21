@@ -1,7 +1,8 @@
 // Icon badges over the desks (T20, Two Point's "A+ / $" pops): what the office is doing, read without a panel.
-//   production: a builder on a project now and then pops their dept's ▲ above the desk (output is happening);
 //   bug: from tech debt TECH_DEBT_BADGE up, engineers on a project pop a red bug, more often the higher the debt;
-//   flow (E3): the production pop in gold; sprint (E3): desks of a sprinting project pop every 5 s with a red arrow.
+//   flow (E3): a gold ▲ now and then; sprint (E3): desks of a sprinting project pop a red arrow every SPRINT_PERIOD s.
+// The plain production pop (every builder's dept ▲ every 9–13 s) is gone (P5): with 20–36 people it was a few pops a
+// second that said nothing; WorkFloats.tsx names who did what instead. At most MAX_POPS pops run at once.
 // Pops rise and fade (never blink in / out). All on scene time: a held world holds them, a paused game starts no new
 // pops. One sprite per desk and kind, drawn from canvas textures. The persistent state badges (tired / morale / bored)
 // and the lead star live on the head plate now (HeadPlates.tsx, H1); a pop is never smaller than POP_MIN_PX on screen.
@@ -11,7 +12,6 @@ import * as THREE from 'three'
 import type { Dept, Employee, GameState, PersonEffort } from '../engine/types'
 import { hash01 } from './constants'
 import { popScale } from './headPlate'
-import { DEPT_COLORS } from './palette'
 import { sceneTime, useLayout } from './sceneRegistry'
 import { useGS } from './source'
 
@@ -19,9 +19,13 @@ import { useGS } from './source'
 export const TECH_DEBT_BADGE = 6
 
 const POP_S = 1.5
-const PRODUCTION_PERIOD = 9
+const FLOW_PERIOD = 16
 const BUG_PERIOD = 16
-const SPRINT_PERIOD = 5
+/** Fastest bug pop per desk (s), however deep the debt. */
+const BUG_MIN_PERIOD = 10
+const SPRINT_PERIOD = 8
+/** Pops running at once over the whole office: a big team's desks no longer flicker all over (P5). */
+export const MAX_POPS = 3
 /** Height of a badge over the floor: above a seated head (~1.15) and its status icon. */
 const Y = 1.62
 const RISE = 0.35
@@ -29,7 +33,7 @@ const SIZE = 0.4
 /** Smallest projected size of a pop (CSS px): 10 px badges were unreadable on a phone. */
 const POP_MIN_PX = 20
 
-export type BadgeKind = 'production' | 'bug' | 'flow' | 'sprint'
+export type BadgeKind = 'bug' | 'flow' | 'sprint'
 
 /** What effort adds to the badges (E3); without it (the garage, old callers) there are no effort badges. */
 export interface BadgeFx {
@@ -55,10 +59,11 @@ export function deskBadges(employees: readonly Employee[], techDebt: number, fx?
     const kinds: BadgeKind[] = []
     const building = e.status === 'working' && !!e.projectId
     const effort = fx?.people?.[e.id]
-    // One production pop: sprint (red, quicker) > flow (gold) > the dept's own.
-    if (building) kinds.push(effort?.pace === 'sprint' ? 'sprint' : effort?.flow ? 'flow' : 'production')
+    // One output pop, only for a state worth seeing: sprint (red, quicker) > flow (gold).
+    if (building && effort?.pace === 'sprint') kinds.push('sprint')
+    else if (building && effort?.flow) kinds.push('flow')
     if (building && e.dept === 'eng' && techDebt >= TECH_DEBT_BADGE) kinds.push('bug')
-    if (kinds.length) out.push({ employeeId: e.id, slotId: e.deskSlotId, dept: e.dept, kinds, bugPeriod: Math.max(5, BUG_PERIOD * (TECH_DEBT_BADGE / Math.max(techDebt, TECH_DEBT_BADGE))) })
+    if (kinds.length) out.push({ employeeId: e.id, slotId: e.deskSlotId, dept: e.dept, kinds, bugPeriod: Math.max(BUG_MIN_PERIOD, BUG_PERIOD * (TECH_DEBT_BADGE / Math.max(techDebt, TECH_DEBT_BADGE))) })
   }
   return out
 }
@@ -103,7 +108,7 @@ function badgeTexture(kind: BadgeKind, color: string): THREE.Texture | null {
   if (!ctx) return null
   drawDisc(ctx, color)
   const m = PX / 2
-  if (kind === 'production' || kind === 'flow' || kind === 'sprint') {
+  if (kind === 'flow' || kind === 'sprint') {
     // ▲ output arrow
     ctx.beginPath()
     ctx.moveTo(m, 30)
@@ -139,10 +144,10 @@ function badgeTexture(kind: BadgeKind, color: string): THREE.Texture | null {
   return tex
 }
 
-const BADGE_COLOR: Record<Exclude<BadgeKind, 'production'>, string> = { bug: '#e0533d', flow: '#f5c542', sprint: '#e2574c' }
+const BADGE_COLOR: Record<BadgeKind, string> = { bug: '#e0533d', flow: '#f5c542', sprint: '#e2574c' }
 
-function material(kind: BadgeKind, dept: Dept): THREE.SpriteMaterial {
-  const color = kind === 'production' ? DEPT_COLORS[dept] : BADGE_COLOR[kind]
+function material(kind: BadgeKind): THREE.SpriteMaterial {
+  const color = BADGE_COLOR[kind]
   return new THREE.SpriteMaterial({ map: badgeTexture(kind, color), transparent: true, depthWrite: false, opacity: 0 })
 }
 
@@ -157,8 +162,8 @@ interface Live {
   popping: boolean
 }
 
-function Badge({ id, dept, kind, pos, register }: { id: string; dept: Dept; kind: BadgeKind; pos: [number, number]; register: (key: string, kind: BadgeKind, s: THREE.Sprite | null) => void }) {
-  const mat = useMemo(() => material(kind, dept), [kind, dept])
+function Badge({ id, kind, pos, register }: { id: string; kind: BadgeKind; pos: [number, number]; register: (key: string, kind: BadgeKind, s: THREE.Sprite | null) => void }) {
+  const mat = useMemo(() => material(kind), [kind])
   // The material is this badge's own (its map is the shared cached texture, left alone): freed with the badge (F5).
   useEffect(() => () => mat.dispose(), [mat])
   const key = `${id}|${kind}`
@@ -176,7 +181,7 @@ function Badge({ id, dept, kind, pos, register }: { id: string; dept: Dept; kind
 
 /** Kinds a seated employee can ever show here: sprites stay mounted so a badge fades rather than unmounting. */
 function kindsFor(dept: Dept): BadgeKind[] {
-  const all: BadgeKind[] = ['production', 'flow', 'sprint']
+  const all: BadgeKind[] = ['flow', 'sprint']
   return dept === 'eng' ? ['bug', ...all] : all
 }
 
@@ -202,7 +207,7 @@ export function DeskBadges() {
   useMemo(() => {
     on.current.clear()
     for (const b of deskBadges(employees, techDebt, { day, people }))
-      for (const kind of b.kinds) on.current.set(`${b.employeeId}|${kind}`, kind === 'bug' ? b.bugPeriod : kind === 'sprint' ? SPRINT_PERIOD : PRODUCTION_PERIOD + hash01(b.employeeId, 5) * 4)
+      for (const kind of b.kinds) on.current.set(`${b.employeeId}|${kind}`, kind === 'bug' ? b.bugPeriod : kind === 'sprint' ? SPRINT_PERIOD : FLOW_PERIOD + hash01(b.employeeId, 5) * 4)
   }, [employees, techDebt, people, day])
 
   const seats = useMemo(() => {
@@ -227,6 +232,8 @@ export function DeskBadges() {
     base.set(0, Y + 1, 0).project(camera)
     const pxPerUnit = Math.abs(y0 - (1 - base.y) * (size.height / 2))
     const floor = popScale(SIZE, pxPerUnit, POP_MIN_PX)
+    let popping = 0
+    for (const l of live.current.values()) if (l.popping) popping++
     for (const [key, l] of live.current) {
       const s = l.sprite
       if (!s) {
@@ -235,10 +242,13 @@ export function DeskBadges() {
       }
       const mat = s.material
       const period = on.current.get(key)
-      const ph = popPhase(t, period ?? (l.kind === 'bug' ? BUG_PERIOD : l.kind === 'sprint' ? SPRINT_PERIOD : PRODUCTION_PERIOD), key)
+      const ph = popPhase(t, period ?? (l.kind === 'bug' ? BUG_PERIOD : l.kind === 'sprint' ? SPRINT_PERIOD : FLOW_PERIOD), key)
       if (ph === null) l.popping = false
       // A pop starts only while its reason holds and time runs; once started it runs to its end.
-      else if (!l.popping) l.popping = period !== undefined && running.current && ph < 0.1
+      else if (!l.popping && period !== undefined && running.current && ph < 0.1 && popping < MAX_POPS) {
+        l.popping = true
+        popping++
+      }
       if (!l.popping || ph === null) {
         s.visible = false
         continue
@@ -256,7 +266,7 @@ export function DeskBadges() {
   return (
     <group>
       {seats.flatMap((seat) =>
-        kindsFor(seat.dept).map((kind) => <Badge key={`${seat.id}|${kind}`} id={seat.id} dept={seat.dept} kind={kind} pos={seat.pos} register={register} />),
+        kindsFor(seat.dept).map((kind) => <Badge key={`${seat.id}|${kind}`} id={seat.id} kind={kind} pos={seat.pos} register={register} />),
       )}
     </group>
   )

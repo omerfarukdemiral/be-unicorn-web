@@ -249,6 +249,11 @@ export const REFLECTION_MS = 4_000
 export const EXIT_MS = 200
 /** A pill above someone walking in waits for them to stand still (a moving 44px target slides under the thumb), at most this long, ms. */
 export const ARRIVE_MAX_MS = 5_000
+/**
+ * An office line starts no sooner than this after the previous one started (P5: with 20–36 people the lines, the work
+ * floats and the asks all spoke at once). Lines that come in the gap are skipped, not queued (they are chatter), ms.
+ */
+export const AMBIENT_GAP_MS = 10_000
 /** How often a pill waiting for its speaker to arrive checks again, ms. */
 const ARRIVE_POLL_MS = 250
 
@@ -288,6 +293,8 @@ export class BubbleTimeline {
   private shown = new Map<string, RoutedLine>()
   private exits = new Map<string, { line: RoutedLine; until: number }>()
   private primed = false
+  private ambientKey: string | null = null
+  private ambientAt = -Infinity
 
   step(
     cands: readonly RoutedLine[],
@@ -359,7 +366,16 @@ export class BubbleTimeline {
     const pos = new Map(cands.map((c, i) => [c.key, i]))
     live.sort((a, b) => (pos.get(a.key) ?? cands.length) - (pos.get(b.key) ?? cands.length))
 
-    const capped = capBubbles(live, open)
+    // One office line per AMBIENT_GAP_MS: a new one in the gap stays unsaid.
+    const gapEnd = this.ambientAt + AMBIENT_GAP_MS
+    const quiet = live.filter((l) => l.kind !== 'ambient' || l.key === this.ambientKey || l.key === open || now >= gapEnd)
+    if (quiet.length < live.length) wake(gapEnd)
+    const capped = capBubbles(quiet, open)
+    const said = capped.find((l) => l.kind === 'ambient' && l.key !== this.ambientKey)
+    if (said) {
+      this.ambientKey = said.key
+      this.ambientAt = now
+    }
     const next = new Map<string, RoutedLine>()
     for (const l of capped) if (l.kind !== 'ambient') next.set(l.key, l)
     // Ambient lines fade by their own 3 s animation; everything else fades out over EXIT_MS.

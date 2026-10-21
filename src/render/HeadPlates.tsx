@@ -10,7 +10,7 @@ import { memo, useMemo, useRef } from 'react'
 import { Vector3 } from 'three'
 import type { GameState } from '../engine/types'
 import { DEPT_COLORS } from './palette'
-import { declutterPlates, fatigueTone, plateGlyph, plateSalary, plateShown, plateWidths, shortName, type PlateBox, type PlateGlyph, type PlateLevel, type PlateRect } from './headPlate'
+import { BIG_TEAM_PLATES, declutterPlates, fatigueTone, plateGlyph, plateNotable, plateSalary, plateShown, plateWidths, shortName, type PlateBox, type PlateGlyph, type PlateLevel, type PlateRect } from './headPlate'
 import { useHtmlPortal } from './htmlPortal'
 import { DEPT_PATH, GLYPH_PATH } from './plateIcons'
 import { hoveredPerson, seatedRegistry, speakerPositions } from './sceneRegistry'
@@ -74,6 +74,8 @@ interface Refs {
   salary: HTMLElement | null
   /** Widths per level, from the plate's text. */
   w: PlateBox['w'] | null
+  /** Has something to say (plateNotable): the only plates a big team shows. */
+  notable: boolean
   /** Measured state, so the DOM is written only when it changes. */
   shown: boolean
   level: PlateLevel
@@ -86,7 +88,7 @@ const PlateView = memo(function PlateView({ plate, reg }: { plate: Plate; reg: (
   return (
     <div
       data-head-plate={plate.id}
-      ref={(el) => reg(plate.id, el ? { root: el, w: plateWidths(plate) } : null)}
+      ref={(el) => reg(plate.id, el ? { root: el, w: plateWidths(plate), notable: plateNotable(plate) } : null)}
       className="absolute left-0 top-0 w-max rounded-lg bg-surface/85 px-1.5 pb-1 pt-1 backdrop-blur-sm"
       style={{ opacity: 0, transition: 'opacity 150ms ease-out', willChange: 'transform' }}
     >
@@ -146,7 +148,7 @@ export function HeadPlates() {
       // A fresh text / salary element shows everything: the level is written again on the next frame.
       if (r.text || r.salary) (fresh as Partial<Refs>).level = 'full'
       if (cur) Object.assign(cur, fresh)
-      else refs.current.set(id, { root: null, text: null, salary: null, w: null, shown: false, level: 'full', seen: false, ...fresh })
+      else refs.current.set(id, { root: null, text: null, salary: null, w: null, notable: true, shown: false, level: 'full', seen: false, ...fresh })
     },
     [],
   )
@@ -166,7 +168,7 @@ export function HeadPlates() {
         const r = el.getBoundingClientRect()
         if (r.width > 0 && r.height > 0) obs.push({ l: r.left - c.left, r: r.right - c.left, t: r.top - c.top, b: r.bottom - c.top })
       }
-      for (const el of document.querySelectorAll<HTMLElement>('[data-juice-float] > *')) {
+      for (const el of document.querySelectorAll<HTMLElement>('[data-juice-float] > *, [data-work-float] > *')) {
         const r = el.getBoundingClientRect()
         if (r.width > 0 && r.height > 0) obs.push({ l: r.left - c.left, r: r.right - c.left, t: r.top - c.top, b: r.bottom - c.top })
       }
@@ -176,6 +178,7 @@ export function HeadPlates() {
     const pos = new Map<string, [number, number]>()
     const boxes: PlateBox[] = []
     const pinned = (id: string) => id === gate.current.selected || id === hoveredPerson.id
+    const big = refs.current.size >= BIG_TEAM_PLATES
     for (const [id, r] of refs.current) {
       const sp = speakerPositions.get(id)
       if (!r.root || !r.w || !sp || !seatedRegistry.get(id)) continue
@@ -184,6 +187,7 @@ export function HeadPlates() {
       const y = (1 - tmp.y) * (size.height / 2)
       pos.set(id, [x, y])
       if (owners.current.has(id)) continue
+      if (big && !r.notable && !pinned(id)) continue
       boxes.push({ id, x, y, w: r.w, h: PLATE_H, pinned: pinned(id) })
     }
     const laid = declutterPlates(boxes, gate.current.zoom === 0 ? 'icon' : 'full', obstacles.current, { minX: EDGE, maxX: size.width - EDGE })

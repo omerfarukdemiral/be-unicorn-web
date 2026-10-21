@@ -18,6 +18,8 @@ import { cx, Dot } from './primitives'
 import { iconTone, Legend, ramp, RUNWAY_DANGER_MONTHS, soft, WIDGET_COLOR, type LegendPart } from './theme'
 import { cashFlow } from './cashflow'
 import { InfoTip, type InfoAction } from './InfoTip'
+import { Tip } from './Tip'
+import { widgetTip } from './hudTips'
 
 /** 'panel' = Metrikler card (default), 'bar' = top-bar pin (h40, value only). */
 export type WidgetVariant = 'panel' | 'bar'
@@ -102,7 +104,8 @@ export function WidgetChip({
     // Money island pin: a bare duotone sticker + the value (the fixed gauges' grammar, T08: no word label, the name is
     // the tooltip and the button's aria-label), 40px tall. No sub, no bars.
     return (
-      <div className={cx('flex h-10 min-w-0 items-center gap-2 rounded-control px-1.5', className)} title={title ?? label}>
+      // No native title: the pin's Tip (PinnedMetric) names it on hover.
+      <div className={cx('flex h-10 min-w-0 items-center gap-2 rounded-control px-1.5', className)}>
         <Icon name={icon} tone={color} size={20} className="shrink-0" />
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1">
@@ -602,6 +605,7 @@ export function PinnedMetric({ id, className }: { id: HudWidget; className?: str
   const W = def.Component
   const label = t(def.labelKey)
   return (
+    <Tip hoverOnly content={widgetTip(card, label)}>
     <button
       type="button"
       data-pinned-metric={card}
@@ -611,5 +615,6 @@ export function PinnedMetric({ id, className }: { id: HudWidget; className?: str
     >
       <W variant="bar" />
     </button>
+    </Tip>
   )
 }

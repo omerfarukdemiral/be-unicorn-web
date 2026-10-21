@@ -4,6 +4,8 @@
 // action, the hue only on the icon, the name only in the tooltip.
 // Colours (docs/LAYOUT.md §4.1): low energy is a WARNING (energy / energy-ink), never red.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Tip } from './Tip'
+import { EnergyTip, MovesTip } from './hudTips'
 import { useShallow } from 'zustand/react/shallow'
 import { FOUNDER_ACTION_DEFS } from '../engine/balance'
 import { focusAction, founderActionError, refactorDebtCut } from '../engine/founder'
@@ -370,7 +372,7 @@ export function MovesMeter({ moves, day, compact }: { moves: MovesView; day: num
   const title = t('moves.title', { l: moves.left, t: moves.total, d })
   const empty = moves.left <= 0
   return (
-    <div className="flex shrink-0 items-center gap-1.5" title={title} aria-label={title}>
+    <Tip block content={MovesTip} ariaLabel={title} className="flex shrink-0 items-center gap-1.5">
       {!compact && (
         <span aria-hidden="true" className="flex items-center gap-[3px]">
           {Array.from({ length: moves.total }, (_, i) => (
@@ -379,7 +381,7 @@ export function MovesMeter({ moves, day, compact }: { moves: MovesView; day: num
         </span>
       )}
       <span className={cx('tabular text-[13px] font-semibold', empty ? 'text-ink-3' : 'text-ink')}>{t('moves.count', { l: moves.left, t: moves.total })}</span>
-    </div>
+    </Tip>
   )
 }
 
@@ -387,7 +389,7 @@ export function MovesMeter({ moves, day, compact }: { moves: MovesView; day: num
 export function EnergyMeter({ energy, low, compact }: { energy: number; low: boolean; compact?: boolean }) {
   const v = Math.round(Math.max(0, Math.min(100, energy)))
   return (
-    <div className={cx('flex shrink-0 items-center gap-1.5', compact ? 'w-auto' : 'w-[104px]')} title={low ? t('founder.energyLow') : t('founder.energyValue', { v })} aria-label={t('founder.energyValue', { v })}>
+    <Tip block id="energy" content={EnergyTip} ariaLabel={low ? t('founder.energyLow') : t('founder.energyValue', { v })} className={cx('flex shrink-0 items-center gap-1.5', compact ? 'w-auto' : 'w-[104px]')}>
       <Icon name={low ? 'warning' : 'bolt'} size={16} className={cx('shrink-0', low ? 'text-energy-ink' : 'text-energy')} fill={low ? 'none' : 'currentColor'} />
       {!compact && (
         <div className="min-w-0 flex-1">
@@ -395,6 +397,6 @@ export function EnergyMeter({ energy, low, compact }: { energy: number; low: boo
         </div>
       )}
       <span className={cx('tabular min-w-[2ch] text-right text-[13px] font-semibold', low ? 'font-bold text-energy-ink' : 'text-ink')}>{v}</span>
-    </div>
+    </Tip>
   )
 }

@@ -352,8 +352,9 @@ describe('center screens (H5b)', () => {
       for (let i = 0; i < 800 && !store().state.decisions.active; i++) store().tick(SECONDS_PER_DAY / 8)
       expect(store().state.decisions.active).toBeDefined()
       expect(store().ui.overlay).toBeNull()
-      // A card never drops the chosen 4× (F1).
-      expect(store().state.time.speed).toBe(4)
+      // P5: a card waiting runs 1× and keeps the chosen 4× to hand back.
+      expect(store().state.time.speed).toBe(1)
+      expect(store().ui.decisionSlow).toBe(4)
     }
   })
 

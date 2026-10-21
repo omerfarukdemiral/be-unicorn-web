@@ -11,7 +11,8 @@ import { t } from '../i18n'
 import { money } from '../format'
 import { cx } from '../primitives'
 import { DayClock } from '../time'
-import { valuationLine } from '../loopUi'
+import { Tip } from '../Tip'
+import { DateTip, StageTip } from '../hudTips'
 import { Ghost, openRoadmap, roadmapTitle, RoadmapStepper, type RivalNotch } from './RoadmapStepper'
 
 /** Round chip / button → Büyüme panel scrolled to the round block (again closes it, like the dock tabs). */
@@ -82,12 +83,6 @@ function withArrow(text: string): ReactNode {
   )
 }
 
-function progressTitle(s: ReturnType<typeof useStage>): string {
-  const next = STAGES[s.stage + 1]
-  if (!next) return t('top.lastStage')
-  const head = t('top.progressTitle', { stage: next.name, v: money(s.valuation), target: money(next.targetValuation ?? 0) })
-  return s.parts ? `${head}\n${valuationLine(s.parts)}` : head
-}
 
 /** Segmented Unicorn-yolu line (phones: 4px under row 1, no figures; the "n/7" chip sits by the stage name): one segment per stage step, the next stage's ghost at its right end (§9.4). */
 export function StageProgressLine({ className }: { className?: string }) {
@@ -96,7 +91,10 @@ export function StageProgressLine({ className }: { className?: string }) {
   const next = STAGES[s.stage + 1]
   return (
     <div className={cx('flex items-center gap-1', className)}>
-      <RoadmapStepper size="line" stage={s.stage} progress={next ? s.progress : 1} notch={notch} className="flex-1" />
+      {/* P5: the line is the stage bar's tip on phones (a tap toggles it). py-1 widens the finger's target, not the look. */}
+      <Tip block id="stage" content={StageTip} className="-my-1 flex flex-1 items-center py-1">
+        <RoadmapStepper size="line" stage={s.stage} progress={next ? s.progress : 1} notch={notch} className="flex-1" />
+      </Tip>
       {next && <Ghost size={10} ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
     </div>
   )
@@ -245,9 +243,9 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
         {/* While the round key / week chip holds the row the date gives way (QA 390px: "Pre-se…", "S…"): the stage
             name is what the player must read, and the round chip already counts the time that matters. */}
         {!roundSlot && (
-          <span className="flex shrink-0">
+          <Tip content={DateTip} className="shrink-0">
             <DayClock compact />
-          </span>
+          </Tip>
         )}
         <RoundSlot variant="mobile" />
       </div>
@@ -260,18 +258,20 @@ export function StageSection({ variant = 'wide' }: { variant?: StageVariant }) {
       <div className={cx('flex-1', variant === 'wide' ? 'min-w-72' : 'min-w-0')}>
         <div className="flex h-5 min-w-0 items-center gap-2">
           {nameEl}
-          <DayClock />
+          <Tip content={DateTip}>
+            <DayClock />
+          </Tip>
         </div>
-        <div className="mt-1 flex items-center gap-2" title={progressTitle(s)}>
+        <div className="mt-1 flex items-center gap-2">
           <RoadmapStepper stage={s.stage} progress={next ? s.progress : 1} notch={notch} />
           {/* The next stop by name: "$12K → Pre-seed $500K" (narrow: just "→ Pre-seed"). */}
-          <span className="tabular shrink-0 text-[12px] font-bold text-ink-2">
+          <Tip id="stage" content={StageTip} className="tabular shrink-0 text-[12px] font-bold text-ink-2">
             {!next
               ? t('top.lastStage')
               : variant === 'wide'
                 ? withArrow(t('top.progressNext', { v: money(s.valuation), next: next.name, target: money(next.targetValuation ?? 0) }))
                 : withArrow(t('top.nextShort', { next: next.name }))}
-          </span>
+          </Tip>
           {next && <Ghost ghost={{ stage: next.index as StageIndex, teaser: TEASERS[s.stage as StageIndex] }} />}
           {next && <MilestonePop stage={s.stage} progress={s.progress} target={next.targetValuation ?? 0} />}
         </div>

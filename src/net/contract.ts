@@ -12,6 +12,7 @@ export type ApiErrorCode =
   | 'emailTaken'
   | 'wrongCredentials'
   | 'unknownEmail' // login with an e-mail that never registered: the client offers "new company"
+  | 'banned' // the e-mail was banned from the board (scripts/ban.ts)
   | 'locked' // too many wrong PINs for this e-mail
   | 'rateLimited' // too many requests from this IP
   | 'unauthorized' // missing / expired token

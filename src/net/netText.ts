@@ -13,6 +13,7 @@ export const NET_ERROR_TEXT: Record<ApiErrorCode, string> = {
   emailTaken: 'Bu e-posta zaten bir şirket kurmuş. PIN\'inle gir.',
   wrongCredentials: 'PIN tutmadı.',
   unknownEmail: 'Bu e-postayla kayıt yok. Yeni şirket mi kuruyoruz?',
+  banned: 'Bu e-posta ile oynanamıyor.',
   locked: 'Çok fazla yanlış PIN. Biraz bekle.',
   rateLimited: 'Biraz yavaş. Birkaç saniye sonra tekrar dene.',
   unauthorized: 'Oturum düştü. Tekrar gir.',

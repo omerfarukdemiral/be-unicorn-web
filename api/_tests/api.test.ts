@@ -14,6 +14,7 @@ import { lbScore, parseSubmission } from '../_lib/leaderboard.js'
 import { RIVAL_EPOCH, RIVALS, rivalRow } from '../_lib/rivals.js'
 import { acceptCompanyName, maskEmail, normalizeEmail, resetLimitsForTests, sanitizeCompanyName } from '../_lib/auth.js'
 import { pepperMissing } from '../_lib/kv.js'
+import { banAccount, findByName } from '../_lib/ban.js'
 import { MAX_SPEED, MIN_DAY_FOR_STAGE as MIN_DAY, SECONDS_PER_DAY } from '../../src/net/stageRules.js'
 
 let t = 1_800_000_000_000
@@ -471,6 +472,35 @@ describe('leaderboard', () => {
     playDays(5)
     const huge = { seed: 1, actions: ['x'.repeat(210 * 1024)] }
     expect((await call(submitLb, 'POST', { token: a, body: metrics({ day: 12, replay: huge }) })).status).toBe(413)
+  })
+})
+
+describe('ban', () => {
+  it('a banned player leaves the board, loses the account and cannot register again', async () => {
+    const token = await signUp('yu@gmail.com', 'Kovan Labs')
+    playDays(100)
+    await call(submitLb, 'POST', { token, body: metrics({ companyName: 'Kovan Labs' }) })
+    const [hit] = await findByName(kv, 'kovan labs')
+    expect(hit?.email).toBe('yu@gmail.com')
+    await banAccount(kv, hit!.h, 'test')
+    expect((await call(me, 'GET', { token })).status).toBe(401)
+    expect((await call<LeaderboardOk>(board, 'GET')).body.rows.some((r) => r.companyName === 'Kovan Labs')).toBe(false)
+    const again = await call<{ error: string }>(register, 'POST', { body: { email: 'yu@gmail.com', pin: '1234', companyName: 'Yeni Ad' } })
+    expect(again.status).toBe(403)
+    expect(again.body.error).toBe('banned')
+  })
+
+  it('a bad name already stored shows as Gizli Şirket', async () => {
+    const token = await signUp('a@b.co', 'Kovan Labs')
+    playDays(100)
+    await call(submitLb, 'POST', { token, body: metrics({ companyName: 'Kovan Labs' }) })
+    const [hit] = await findByName(kv, 'kovan labs')
+    const raw = JSON.parse((await kv.get(`lb:row:${hit!.h}`))!)
+    await kv.set(`lb:row:${hit!.h}`, JSON.stringify({ ...raw, companyName: 'MILFZIGER' }))
+    t += 10_000
+    const rows = (await call<LeaderboardOk>(board, 'GET')).body.rows
+    expect(rows.some((r) => r.companyName === 'MILFZIGER')).toBe(false)
+    expect(rows.some((r) => r.companyName === 'Gizli Şirket')).toBe(true)
   })
 })
 

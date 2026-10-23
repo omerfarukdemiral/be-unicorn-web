@@ -34,6 +34,8 @@ export const keys = {
   lb: 'lb',
   lbRow: (h: string) => `lb:row:${h}`,
   lbReplay: (h: string) => `lb:replay:${h}`,
+  /** Set by scripts/ban.ts: this e-mail may not register again. */
+  ban: (h: string) => `ban:${h}`,
 }
 
 export interface UserRecord {
@@ -229,7 +231,7 @@ interface SessionRef {
   at: number
 }
 
-async function readSessions(kv: Kv, h: string): Promise<SessionRef[]> {
+export async function readSessions(kv: Kv, h: string): Promise<SessionRef[]> {
   const raw = await kv.get(keys.sessions(h))
   if (!raw) return []
   try {
@@ -326,6 +328,7 @@ export async function register(kv: Kv, body: Record<string, unknown>): Promise<A
   const companyName = acceptCompanyName(body.companyName)
   if (!companyName) throw new ApiError(400, 'invalidCompanyName')
   const h = emailHash(email)
+  if (await kv.get(keys.ban(h))) throw new ApiError(403, 'banned')
   const { pinHash, salt } = await hashPin(body.pin)
   const user: UserRecord = { email, pinHash, salt, companyName, createdAt: now() }
   // NX: two tabs registering the same e-mail at once — only one wins.

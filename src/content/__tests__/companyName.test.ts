@@ -48,6 +48,16 @@ describe('company name', () => {
     expect(checkCompanyName('Helio <b>')).toEqual({ ok: false, issue: 'chars' })
     for (const n of ['Siktir Labs', 'amk studio', 'F.u.c.k AI', 'Orosp0 Labs']) expect(checkCompanyName(n).ok).toBe(false)
   })
+
+  it('catches slang spelled with z, repeats and glued words', () => {
+    for (const n of ['MILFZIGER', 'Zikerim AI', 'Yarrrrak Labs', 'Amına Koyim', 'Ananı Studio', 'Pussy Pay', 'Tassak.io', 'Göt Labs', 'Seks Hub'])
+      expect(checkCompanyName(n).ok, n).toBe(false)
+  })
+
+  it('keeps innocent names that contain those letters', () => {
+    for (const n of ['Analog Labs', 'Kanal AI', 'Fizikerler', 'Cumhur Tech', 'Document Hub', 'Amazonia', 'Meme Studio', 'Grape Pay', 'Klasik Labs', 'Massive Games', 'Assist AI', 'Kısık Ses'])
+      expect(checkCompanyName(n).ok, n).toBe(true)
+  })
 })
 
 describe('roadmap', () => {

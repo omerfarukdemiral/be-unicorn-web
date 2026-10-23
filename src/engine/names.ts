@@ -21,9 +21,21 @@ function fold(s: string): string {
 }
 
 /** Whole-word matches only (short roots hide inside innocent words: "Klasik", "Gotik"). */
-const BAD_WORDS = new Set(['amk', 'aq', 'sik', 'sikik', 'got', 'pic', 'ibne', 'oc', 'mk', 'yarak', 'yarrak', 'dick', 'cock', 'fag', 'nazi', 'hitler'])
-/** Distinctive enough to match anywhere in the folded name. */
-const BAD_PARTS: readonly string[] = ['orosp', 'siktir', 'amcik', 'pezevenk', 'kahpe', 'yavsak', 'gavat', 'fuck', 'shit', 'bitch', 'cunt', 'nigg', 'whore', 'porn']
+const BAD_WORDS = new Set([
+  'amk', 'aq', 'sik', 'sikik', 'got', 'pic', 'ibne', 'oc', 'mk', 'yarak', 'yarrak', 'dick', 'cock', 'fag', 'nazi', 'hitler',
+  'am', 'amin', 'amina', 'anan', 'anani', 'avrat', 'sex', 'seks', 'tits', 'ass', 'pipi', 'cum', 'anal', 'rape',
+])
+/** Distinctive enough to match anywhere in the folded name. Checked on the name with repeats squeezed ("yarrrak") and
+ * again with z read as s ("zikerim", "MILFZIGER"). */
+const BAD_PARTS: readonly string[] = [
+  'orosp', 'orspu', 'oruspu', 'siktir', 'sikis', 'sikim', 'siker', 'sikec', 'siger', 'sigis', 'sigim',
+  'amcik', 'aminako', 'aminak', 'aminoglu', 'anani', 'ananis', 'pezeven', 'kahpe', 'yavsak', 'gavat', 'kaltak', 'surtuk', 'kevase',
+  'yarak', 'yarra', 'dalyar', 'tasak', 'tasag', 'gotver', 'gotun', 'gotlek', 'puust', 'ibneh',
+  'fuck', 'shit', 'bitch', 'cunt', 'nigg', 'whore', 'porn', 'milf', 'pussy', 'slut', 'dildo', 'penis', 'vagin', 'vajin',
+  'boob', 'jizz', 'horny', 'nude', 'naked', 'hentai', 'tecavuz', 'sperm', 'mastur', 'orgasm',
+]
+/** Inside a longer word these innocent names would trip a part above: matched first and blanked out. */
+const SAFE_WORDS: readonly string[] = ['fizik', 'physik', 'musik']
 
 /** Validates a typed name. Returns the cleaned value (trimmed, spaces collapsed) when it can go on the leaderboard. */
 export function checkName(raw: string, min: number, max: number): CompanyNameCheck {
@@ -33,11 +45,24 @@ export function checkName(raw: string, min: number, max: number): CompanyNameChe
   if (len > max) return { ok: false, issue: 'long' }
   if (URL_LIKE.test(value)) return { ok: false, issue: 'url' }
   if (!ALLOWED.test(value)) return { ok: false, issue: 'chars' }
-  const folded = fold(value)
-  const joined = folded.replace(/[^a-z]/g, '')
-  if (BAD_PARTS.some((w) => joined.includes(w))) return { ok: false, issue: 'bad' }
-  if (folded.split(/[^a-z]+/).some((w) => BAD_WORDS.has(w))) return { ok: false, issue: 'bad' }
+  if (isBadName(value)) return { ok: false, issue: 'bad' }
   return { ok: true, value }
+}
+
+/** Swear words, slurs and sexual words, after folding leetspeak, Turkish letters, repeats and z/s. */
+export function isBadName(value: string): boolean {
+  const folded = fold(value)
+  const words = folded.split(/[^a-z]+/)
+  for (const w of words) if (BAD_WORDS.has(w) || BAD_WORDS.has(squeeze(w))) return true
+  let joined = folded.replace(/[^a-z]/g, '')
+  for (const safe of SAFE_WORDS) joined = joined.split(safe).join('_')
+  const forms = [joined, squeeze(joined), joined.replace(/z/g, 's'), squeeze(joined.replace(/z/g, 's'))]
+  return BAD_PARTS.some((w) => forms.some((f) => f.includes(w)))
+}
+
+/** "yarrrak" → "yarak", "fuuuck" → "fuck". */
+function squeeze(s: string): string {
+  return s.replace(/(.)\1+/g, '$1')
 }
 
 export function checkCompanyName(raw: string): CompanyNameCheck {

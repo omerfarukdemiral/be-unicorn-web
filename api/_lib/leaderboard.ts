@@ -10,6 +10,7 @@ import type { LeaderboardGap, LeaderboardOk, LeaderboardRow, LeaderboardSubmitOk
 import { ApiError, now } from './http.js'
 import type { Kv } from './kv.js'
 import { acceptCompanyName, keys, maskEmail, writeUser, type AuthedUser } from './auth.js'
+import { isBadName } from '../../src/net/companyRules.js'
 import { MAX_SPEED, MIN_DAY_FOR_STAGE, SECONDS_PER_DAY, STAGE_COUNT, STAGE_SLOTS, STAGE_TARGET, UNICORN_STAGE as UNICORN } from '../../src/net/stageRules.js'
 
 // Plausibility limits (lenient: they stop edited numbers, not good play).
@@ -52,7 +53,7 @@ interface Track {
   runDay?: number
 }
 
-const trackKey = (h: string) => `lb:track:${h}`
+export const trackKey = (h: string) => `lb:track:${h}`
 
 /** Stage first; within Unicorn fewer days first; then valuation. Always < 7e12, exact in a double. */
 export function lbScore(stage: number, valuation: number, day: number): number {
@@ -153,10 +154,13 @@ async function readJson<T>(kv: Kv, key: string): Promise<T | null> {
   }
 }
 
+const HIDDEN_NAME = 'Gizli Şirket'
+
 function toRow(r: StoredRow, rank: number, mine: boolean): LeaderboardRow {
   const row: LeaderboardRow = {
     rank,
-    companyName: r.companyName,
+    // Names that passed an older, looser word list stay stored but never show.
+    companyName: isBadName(r.companyName) ? HIDDEN_NAME : r.companyName,
     email: mine ? r.email : maskEmail(r.email),
     stage: r.stage,
     valuation: r.valuation,

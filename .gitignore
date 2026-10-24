@@ -20,3 +20,6 @@ sim/out
 .agents/
 .claude/
 skills-lock.json
+
+# Jev (tools/jev) run logs
+tools/jev/runs/

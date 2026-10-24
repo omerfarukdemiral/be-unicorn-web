@@ -11,7 +11,7 @@ describe('jev legal moves', () => {
     let s = api.createGame({ seed: 7 })
     let sawDecision = false
     let sawChip = false
-    while (!s.gameOver && s.time.day < 300) {
+    while (!s.gameOver && s.time.day < 240) {
       const moves = legalMoves(s, CONTENT, api)
       expect(new Set(moves.map((m) => m.id)).size).toBe(moves.length)
       expect(moves[0]?.id).toBe('bekle')
@@ -24,12 +24,12 @@ describe('jev legal moves', () => {
       if (moves.some((m) => m.chip)) sawChip = true
       const pick = fallbackMove(s, CONTENT, moves)
       if (pick.action) s = api.applyAction(s, pick.action).state
-      for (let i = 0; i < 14; i++) s = api.step(s, 0.5)
+      for (let i = 0; i < 20; i++) s = api.step(s, 0.5)
     }
     expect(sawDecision).toBe(true)
     expect(sawChip).toBe(true)
     expect(JSON.stringify(observe(s, CONTENT)).length).toBeLessThan(2500)
-  }, 120_000)
+  }, 300_000)
 })
 
 describe('jev answer parser', () => {

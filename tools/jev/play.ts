@@ -92,7 +92,7 @@ interface PwChromium {
 }
 
 async function loadPlaywright(): Promise<PwChromium> {
-  const dirs = [flag('pw'), process.env.JEV_PW, ROOT].filter((d): d is string => !!d)
+  const dirs = [flag('pw'), process.env.JEV_PW, ROOT, `${ROOT}/tools/jev/pw`].filter((d): d is string => !!d)
   for (const d of dirs) {
     try {
       const req = createRequire(join(resolve(d), 'package.json'))

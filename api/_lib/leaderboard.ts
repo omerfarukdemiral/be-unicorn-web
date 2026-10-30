@@ -29,7 +29,7 @@ const REPLAY_TTL_S = 30 * 24 * 3600
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 100
 
-interface StoredRow {
+export interface StoredRow {
   email: string
   companyName: string
   stage: number
@@ -144,7 +144,7 @@ export function checkProgress(s: Submission, prev: Track | null, createdAt: numb
   if (s.valuation > cap) bad('valuationJump')
 }
 
-async function readJson<T>(kv: Kv, key: string): Promise<T | null> {
+export async function readJson<T>(kv: Kv, key: string): Promise<T | null> {
   const raw = await kv.get(key)
   if (!raw) return null
   try {
@@ -188,7 +188,7 @@ export async function submit(kv: Kv, me: AuthedUser, body: Record<string, unknow
   }
 
   const newRun = !prev || s.runIndex > prev.runIndex
-  if (s.companyName && s.companyName !== me.user.companyName) {
+  if (s.companyName && s.companyName !== me.user.companyName && !me.user.nameLocked) {
     // A new run may bring a new name; within a run, one change a day (the board is not a chat).
     if (newRun || !me.user.renamedAt || t - me.user.renamedAt >= RENAME_EVERY_MS) {
       me.user.companyName = s.companyName

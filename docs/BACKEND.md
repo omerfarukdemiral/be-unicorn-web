@@ -31,6 +31,8 @@ Değişken listesi: `.env.example`. Yerelde `vercel env pull .env.local` (git'e 
 | `/api/save` | GET / PUT | Bearer | `SaveGetOk` / `{data, baseRev, force?}` → `SavePutOk` · 409 `conflict` + `server` |
 | `/api/leaderboard` | GET `?limit=50` | Bearer (isteğe bağlı) | `LeaderboardOk` (+ `me`, `above`, `gap`) |
 | `/api/leaderboard/submit` | POST | Bearer | `LeaderboardSubmitBody` → `LeaderboardSubmitOk` · 422 `invalidMetrics` (+`detail`) · 409 `staleRun` |
+| `/api/admin/login` | POST / DELETE | – / admin Bearer | `{password}` → `AdminLoginOk` · 401 `wrongCredentials` · 503 `notConfigured` / admin çıkışı |
+| `/api/admin/users` | GET `?id=` / POST | admin Bearer | `AdminUsersOk` (`id` ile `AdminUserDetail`) / `{id, action, value?}` → `AdminActionOk` |
 
 Tipler: `src/net/contract.ts` (sunucu ve istemci aynı dosyayı kullanır). Hata kodlarının Türkçe metni: `src/net/netText.ts`.
 
@@ -58,7 +60,7 @@ Tipler: `src/net/contract.ts` (sunucu ve istemci aynı dosyayı kullanır). Hata
 
 | Anahtar | İçerik | TTL |
 |---|---|---|
-| `user:{h}` | `{email, pinHash, salt, companyName, createdAt}` (scrypt N=16384, 16 bayt tuz) | – |
+| `user:{h}` | `{email, pinHash, salt, companyName, createdAt}` (scrypt N=16384, 16 bayt tuz); admin alanları `bannedAt`, `banReason`, `nameLocked` | – |
 | `session:{sha256(token)}` | `{h, createdAt}` | 90 gün, uygulama açılışında (`/me`) yenilenir; `createdAt`'ten 180 gün sonra her durumda ölür |
 | `sessions:{h}` | hesabın oturumları `[{th, at}]` (en çok 10; fazlası en eskiden silinir) | 180 gün |
 | `save:{h}` | `{rev, updatedAt, day, stage, runIndex, data}` (data ≤ 160 KB) | – |
@@ -70,12 +72,27 @@ Tipler: `src/net/contract.ts` (sunucu ve istemci aynı dosyayı kullanır). Hata
 | `rl:pin:{h}` | giriş denemesi sayacı, PIN'e bakmadan önce artar (5 → kilit; pencere her denemede yeniden 15 dk) | 15 dk |
 | `rl:pinday:{h}` | günlük giriş denemesi sayacı (30) | 24 saat |
 | `rl:{bucket}:{sha256(id)}:{window}` | sabit pencere sayacı; `id` imzalı rotalarda hesap, diğerlerinde IP | pencere |
+| `admin:session:{sha256(token)}` | admin oturumu | 8 saat |
 
 `h = sha256("be-unicorn:" + normalize(email))`.
 
 **Skor:** önce aşama, sonra değerleme: `aşama × 1e12 + değerleme`. Unicorn'da daha az oyun günü önde: `6e12 + (1e6 − gün) × 1e5 + değerleme/1e5`. Hepsi 2^53 altında, tam sayı.
 
 **Koşular:** gönderimde `runIndex` var. Yeni koşu satırı değiştirir; eski koşudan gelen 409 `staleRun`. Unicorn'la biten koşu, daha iyi bir koşu gelene kadar tabloda kalır, kazandığı şirket adıyla.
+
+## Admin paneli (`/admin`, `api/_lib/admin.ts`, `src/admin/`)
+
+`admin.html` ayrı giriş noktasıdır, oyun paketini yüklemez. Giriş tek şifre: `ADMIN_PASSWORD` (en az 16 karakter, yoksa panel 503 `notConfigured`). 4 haneli PIN bütün hesapları açmasın diye oyuncu hesabıyla bağı yok. Şifre denemesi IP başına 15 dakikada 10.
+
+- **Liste:** hesapların indeksi yok, `SCAN user:*` + `MGET` ile okunur. Yalnız panel açılınca çalışır. Kayıtlar (160 KB) listede okunmaz, detay yalnızca özetini döner. Ev rakipleri hesap olmadığı için listede yoktur ama sıra numarasına dahildir.
+- **Ban:** `bannedAt` yazılır, tüm oturumlar kapanır, sıralama satırı silinir. Doğru PIN'le giriş 403 `banned` alır (yanlış PIN normal 401, ban yalnızca sahibine görünür). E-posta kayıtta kalır, aynı adresle yeniden kayıt olunamaz. Oyun yerel kayıtla çevrimdışı oynanmaya devam eder: ban buluta ve sıralamaya erişimi keser. Ban kalkınca satır sonraki gönderimde döner.
+- **Ad:** `nameLocked` yazılır, çünkü istemci her gönderimde kendi yerel adını yollar ve aksi hâlde admin değişikliğini ezer. Kilitli hesapta gönderimdeki ad yok sayılır (oyunun içinde oyuncu eski adı görmeye devam eder).
+- **E-posta:** anahtar e-postanın hash'i olduğu için hesap taşınır: `user`, `save`, `lb:track`, `lb:replay`, `lb:row` yeni anahtara kopyalanır, eskileri silinir, oturumlar kapanır. PIN aynı kalır.
+- **PIN:** yeni PIN yazılır, oturumlar kapanır, deneme kilitleri sıfırlanır (oyuncunun PIN sıfırlama akışı yok, tek yol budur).
+- **Silme:** hesabın tüm anahtarları gider, geri dönüşü yok. Aynı e-posta yeniden kayıt olabilir; banlı hesap silinirse e-posta `ban:{h}` ile kara listede kalır (ban silmeyle aşılmasın).
+- **Komut satırı banı (`api/_dev/ban.ts`):** ayrı ve daha sert: hesabı siler, `ban:{h}` bırakır. Hesap kalmadığı için panelde görünmez, panelden kaldırılamaz. Kara listedeki e-postaya taşıma 403 `banned` alır.
+
+Yerelde: `ADMIN_PASSWORD=... MOCK_API=1 npm run dev`, sonra `/admin`.
 
 ## Ev rakipleri (`api/_lib/rivals.ts`)
 
@@ -92,6 +109,7 @@ Tablo boşken ilk oyuncuların kovalayacağı biri olsun diye 8 uydurma şirket.
 - **Giriş denemeleri PIN'e bakılmadan önce sayılır** (atomik `INCR`): e-posta başına 15 dakikada 5 (pencere her denemede yeniden başlar), günde 30. Sınırı geçen istek scrypt'e hiç girmez, doğru PIN de 429 `locked` alır; paralel istekler kilidi aşamaz. Kayıtlı olmayan e-posta da aynı sayaçtan düşer ve sahte bir scrypt çalıştırır (yanıt süresi hesabın varlığını ele vermez). 404 `unknownEmail` bilerek duruyor: kayıt akışı bununla açılıyor.
 - Oturumlar: token 32 rastgele bayt (base64url), Redis'te yalnızca SHA-256'sı. Açılışta 90 gün yenilenir, 180 günde kesin ölür. "Tüm cihazlardan çık" hepsini siler.
 - Rate limit: imzalı rotalarda (save, submit, imzalı leaderboard) **hesap başına** (aynı NAT/ofis ağındaki oyuncular birbirini kesmesin): save 60/dk, submit 30/dk, board 30/dk. İmzasız: login 60/10 dk, register 30/saat, `/me` 120/dk, anonim board 120/dk (IP başına). Sınırı geçmiş anahtar, pencere bitene kadar fonksiyon belleğinden reddedilir (Redis komutu harcamaz).
+- Admin: `ADMIN_PASSWORD` yalnız ortam değişkeninde, karşılaştırma SHA-256 üstünden `timingSafeEqual`. Oturum token'ı 32 rastgele bayt, Redis'te SHA-256'sı, 8 saat; tarayıcıda `sessionStorage`.
 - Boyut: gövde ≤ 400 KB, kayıt ≤ 160 KB, replay ≤ 200 KB. Kayıt v4 (`SAVE_VERSION 4`) aylık fiş geçmişini taşır (`finance.receipts`, en çok `HISTORY_MAX_MONTHS` = 120 ay, yuvarlanmış, ay başına ~300-400 B): 3000 günlük sim koşularında kayıt medyanı 57.5 KB, en büyüğü 75 KB (v3'te ~36 KB); Faz I ölçümünde (24 seed × 4500 gün, 264 koşu, tüm V2 alanları dolu) medyan **77.3 KB**, en büyüğü **99.5 KB**: 160 KB sınırının içinde, §15 hedefinin (medyan < 70 KB) üstünde. Fiş başına ~430 B'nin çoğu anahtar adıdır; `HISTORY_MAX_MONTHS` 96'ya inmek yetmez (Unicorn koşuları ~88 ay), açık öneri fiş biçimini kısaltmak ya da 60 ay (DECISIONS #29). `npm run sim` her raporda kayıt boyutu satırını yazar (hedef medyan < 70 KB, maks < 120 KB).
 - Aynı origin: CORS başlığı hiç gönderilmez; başka bir `Origin`'den gelen istek 403. `vercel.json` Content-Security-Policy gönderir (yalnız `'self'`; dış script yok).
 - Şirket adı: NFC, kontrol / sıfır genişlik / bidi karakterleri ve `<>\`"\\{}` silinir, sonra başlangıç ekranıyla aynı kural (`src/net/companyRules.ts`: 2–32 karakter, link yok, küfür yok). Kayıtta kurala uymayan ad 400; skor gönderiminde yok sayılır (hesap eski adını korur). Aynı koşuda ad günde bir kez değişebilir, yeni koşu yeni ad getirebilir.

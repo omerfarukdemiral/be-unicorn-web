@@ -36,6 +36,7 @@ export const keys = {
   lbReplay: (h: string) => `lb:replay:${h}`,
   /** Set by scripts/ban.ts: this e-mail may not register again. */
   ban: (h: string) => `ban:${h}`,
+  adminSession: (tokenHash: string) => `admin:session:${tokenHash}`,
 }
 
 export interface UserRecord {
@@ -46,6 +47,11 @@ export interface UserRecord {
   createdAt: number
   /** Last company-name change made through a leaderboard submission (ms). */
   renamedAt?: number
+  /** Banned by an admin (ms): no login, no session, no board row. */
+  bannedAt?: number
+  banReason?: string
+  /** Named by an admin: game submissions (which always carry the device's name) no longer change it. */
+  nameLocked?: boolean
 }
 
 interface SessionRecord {
@@ -162,6 +168,8 @@ export const LIMITS = {
   board: { max: 30, windowS: 60 },
   save: { max: 60, windowS: 60 },
   submit: { max: 30, windowS: 60 },
+  /** admin password tries, per IP */
+  adminLogin: { max: 10, windowS: 900 },
 } as const
 export type LimitBucket = keyof typeof LIMITS
 
@@ -277,7 +285,7 @@ export async function optionalUser(kv: Kv, req: ApiRequest, opts: { renew?: bool
     return null
   }
   const user = await readUser(kv, rec.h)
-  if (!user) return null
+  if (!user || user.bannedAt) return null
   if (opts.renew) await kv.expire(key, SESSION_TTL_S)
   return { emailHash: rec.h, user }
 }
@@ -286,6 +294,12 @@ export async function requireUser(kv: Kv, req: ApiRequest, opts: { renew?: boole
   const u = await optionalUser(kv, req, opts)
   if (!u) throw new ApiError(401, 'unauthorized')
   return u
+}
+
+/** Ends every session of the account. */
+export async function dropSessions(kv: Kv, h: string): Promise<void> {
+  for (const s of await readSessions(kv, h)) await kv.del(keys.session(s.th))
+  await kv.del(keys.sessions(h))
 }
 
 /** Log out: this token, or with `all` every session of the account (a PIN seen by someone else). */
@@ -302,12 +316,8 @@ export async function endSession(kv: Kv, req: ApiRequest, all = false): Promise<
   } catch {
     return
   }
+  if (all) return dropSessions(kv, h)
   const list = await readSessions(kv, h)
-  if (all) {
-    for (const s of list) await kv.del(keys.session(s.th))
-    await kv.del(keys.sessions(h))
-    return
-  }
   const rest = list.filter((s) => s.th !== th)
   if (rest.length !== list.length) await kv.set(keys.sessions(h), JSON.stringify(rest), { ex: Math.ceil(SESSION_MAX_AGE_MS / 1000) })
 }
@@ -361,6 +371,8 @@ export async function login(kv: Kv, body: Record<string, unknown>): Promise<Auth
     }
     throw new ApiError(401, 'wrongCredentials', { attemptsLeft: left })
   }
+  // After the PIN check: only the owner learns the account was closed.
+  if (user.bannedAt) throw new ApiError(403, 'banned')
   await kv.del(keys.pinFails(h))
   const token = await createSession(kv, h)
   return { token, email: user.email, companyName: user.companyName, expiresIn: SESSION_TTL_S }

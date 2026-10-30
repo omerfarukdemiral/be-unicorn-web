@@ -12,7 +12,7 @@ export type ApiErrorCode =
   | 'emailTaken'
   | 'wrongCredentials'
   | 'unknownEmail' // login with an e-mail that never registered: the client offers "new company"
-  | 'banned' // the e-mail was banned from the board (scripts/ban.ts)
+  | 'banned' // the e-mail was banned from the board (api/_dev/ban.ts) or the account by an admin
   | 'locked' // too many wrong PINs for this e-mail
   | 'rateLimited' // too many requests from this IP
   | 'unauthorized' // missing / expired token
@@ -23,6 +23,7 @@ export type ApiErrorCode =
   | 'invalidSave'
   | 'invalidMetrics' // leaderboard submission failed the plausibility checks
   | 'staleRun' // submission from an older run than the one on the board
+  | 'notFound' // admin: no such account
   | 'server'
 
 export interface ApiErrorBody {
@@ -164,4 +165,61 @@ export interface LeaderboardSubmitOk {
 
 export interface HealthOk {
   ok: true
+}
+
+// --- admin (api/admin/**, src/admin) --------------------------------------------------------------------------------
+
+export interface AdminLoginOk {
+  token: string
+  expiresIn: number
+}
+
+export interface AdminBoardInfo {
+  /** Rank among everyone on the board, house rivals included. */
+  rank: number | null
+  stage: number
+  valuation: number
+  cash: number
+  day: number
+  team: number
+  status: RunStatus
+  updatedAt: number
+}
+
+export interface AdminUser {
+  /** The account key (e-mail hash). */
+  id: string
+  email: string
+  companyName: string
+  createdAt: number
+  bannedAt: number | null
+  banReason: string | null
+  nameLocked: boolean
+  /** null: never on the board, or taken off by a ban. */
+  board: AdminBoardInfo | null
+}
+
+export interface AdminUsersOk {
+  users: AdminUser[]
+}
+
+export interface AdminUserDetail extends AdminUser {
+  /** Sessions still alive (devices signed in). */
+  sessions: number
+  /** Summary of the cloud save; null when there is none. */
+  save: SaveMeta | null
+}
+
+export type AdminAction = 'rename' | 'email' | 'pin' | 'logout' | 'ban' | 'unban' | 'delete'
+
+export interface AdminActionBody {
+  id: string
+  action: AdminAction
+  /** New name / e-mail / PIN, or the ban reason. */
+  value?: string
+}
+
+export interface AdminActionOk {
+  /** The account after the action (its id changes with the e-mail); null after a delete. */
+  user: AdminUserDetail | null
 }

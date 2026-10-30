@@ -88,4 +88,7 @@ export class MemoryKv implements Kv {
   async zcard(key: string) {
     return this.zsets.get(key)?.size ?? 0
   }
+  async scan(prefix: string) {
+    return this.keys().filter((k) => k.startsWith(prefix))
+  }
 }

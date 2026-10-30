@@ -49,7 +49,11 @@ function mockApi(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), mockApi()],
-  build: { chunkSizeWarningLimit: 2000 },
+  build: {
+    chunkSizeWarningLimit: 2000,
+    // admin.html (/admin) is its own entry, so the panel never loads the game bundle.
+    rolldownOptions: { input: ['index.html', 'admin.html'] },
+  },
   test: {
     include: ['src/**/*.test.{ts,tsx}', 'sim/**/*.test.ts', 'api/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',

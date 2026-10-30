@@ -24,6 +24,7 @@ export const NET_ERROR_TEXT: Record<ApiErrorCode, string> = {
   invalidSave: 'Kayıt bozuk görünüyor.',
   invalidMetrics: 'Bu sayılar sıralamaya fazla iyi geldi.',
   staleRun: 'Bu eski bir oyundan kalma.',
+  notFound: 'Bu hesap artık yok.',
   server: 'Sunucu tökezledi. Birazdan tekrar dene.',
 }
 

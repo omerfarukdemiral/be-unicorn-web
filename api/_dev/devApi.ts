@@ -11,6 +11,8 @@ import { handler as me } from '../auth/me.js'
 import { handler as save } from '../save.js'
 import { handler as board } from '../leaderboard/index.js'
 import { handler as submit } from '../leaderboard/submit.js'
+import { handler as adminLogin } from '../admin/login.js'
+import { handler as adminUsers } from '../admin/users.js'
 import { emailHash, keys, normalizeEmail } from '../_lib/auth.js'
 import { lbScore } from '../_lib/leaderboard.js'
 
@@ -22,6 +24,8 @@ const ROUTES: Record<string, (req: ApiRequest) => Promise<ApiResult>> = {
   '/api/save': save,
   '/api/leaderboard': board,
   '/api/leaderboard/submit': submit,
+  '/api/admin/login': adminLogin,
+  '/api/admin/users': adminUsers,
 }
 
 let kv: MemoryKv | null = null

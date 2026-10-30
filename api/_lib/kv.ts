@@ -25,6 +25,8 @@ export interface Kv {
   /** 0-based rank, highest score first; null when absent. */
   zrevrank(key: string, member: string): Promise<number | null>
   zcard(key: string): Promise<number>
+  /** Every key starting with `prefix` (admin list only: walks the keyspace). */
+  scan(prefix: string): Promise<string[]>
 }
 
 export interface RedisEnv {
@@ -93,6 +95,16 @@ class UpstashKv implements Kv {
   }
   async zcard(key: string) {
     return this.r.zcard(key)
+  }
+  async scan(prefix: string) {
+    const found = new Set<string>()
+    let cursor = '0'
+    do {
+      const [next, batch] = await this.r.scan(cursor, { match: `${prefix}*`, count: 500 })
+      cursor = String(next)
+      for (const k of batch) found.add(k)
+    } while (cursor !== '0')
+    return [...found]
   }
 }
 
